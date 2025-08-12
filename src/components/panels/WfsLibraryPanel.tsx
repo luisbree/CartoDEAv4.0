@@ -86,7 +86,6 @@ const WfsLibraryPanel: React.FC<WfsLibraryPanelProps> = ({
       style={style}
       zIndex={style?.zIndex as number | undefined}
       initialSize={{ width: 350, height: 500 }}
-      overflowY="visible" // Allow dropdown to overflow
     >
       <div className="space-y-3 flex flex-col h-full">
         <div className="space-y-1">

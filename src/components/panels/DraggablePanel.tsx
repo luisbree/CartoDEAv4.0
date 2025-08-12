@@ -80,7 +80,7 @@ const DraggablePanel: React.FC<DraggablePanelProps> = ({
         maxWidth: maxSize.width ? `${maxSize.width}px` : '90vw',
         maxHeight: maxSize.height ? `${maxSize.height}px` : '80vh',
         resize: isCollapsed ? 'none' : 'both',
-        overflow: overflowY === 'visible' || overflowX === 'visible' ? 'visible' : 'auto',
+        overflow: isCollapsed ? 'hidden' : 'visible', // Change this line
       }}
       onMouseUpCapture={handleResizeStop}
     >
