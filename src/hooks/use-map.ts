@@ -15,6 +15,7 @@ import VectorLayer from 'ol/layer/Vector';
 import XYZ from 'ol/source/XYZ';
 import type VectorSource from 'ol/source/Vector';
 import View from 'ol/View';
+import OSM from 'ol/source/OSM';
 
 interface MapLayers {
   userLayer: VectorLayer<VectorSource>;
@@ -62,7 +63,7 @@ export const MapProvider = ({ children }: { children: ReactNode }) => {
       } else {
         // Default to OSM
         baseLayer = new TileLayer({
-            source: new (require('ol/source/OSM').default)(),
+            source: new OSM(),
         });
         baseLayer.set('name', 'osm');
       }
@@ -132,22 +133,22 @@ export const MapProvider = ({ children }: { children: ReactNode }) => {
     [map]
   );
 
+  const contextValue: MapContextType = {
+    map,
+    setMap,
+    layers,
+    setLayers,
+    setBaseLayer,
+    addUserFeatures,
+    clearUserFeatures,
+    addPoiFeatures,
+    clearPoiFeatures,
+    downloadMapImage,
+    centerOnFeature,
+  };
+
   return (
-    <MapContext.Provider
-      value={{
-        map,
-        setMap,
-        layers,
-        setLayers,
-        setBaseLayer,
-        addUserFeatures,
-        clearUserFeatures,
-        addPoiFeatures,
-        clearPoiFeatures,
-        downloadMapImage,
-        centerOnFeature,
-      }}
-    >
+    <MapContext.Provider value={contextValue}>
       {children}
     </MapContext.Provider>
   );
