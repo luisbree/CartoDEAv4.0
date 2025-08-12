@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
@@ -106,7 +107,7 @@ const AttributesPanelComponent: React.FC<AttributesPanelComponentProps> = ({
   const currentVisibleFeatures = sortedFeatures?.slice(startIndex, endIndex) || [];
 
   const allKeys = useMemo(() => Array.from(
-    new Set(currentVisibleFeatures.flatMap(item => Object.keys(item.attributes)))
+    new Set(currentVisibleFeatures.flatMap(item => (item.attributes ? Object.keys(item.attributes) : [])))
   )
   .filter(key => key !== 'description' && key !== 'gmlgeometry' && key !== 'geometry')
   .sort((a, b) => {
@@ -172,7 +173,7 @@ const AttributesPanelComponent: React.FC<AttributesPanelComponentProps> = ({
                       {currentVisibleFeatures.map((item) => {
                         const featureId = item.id;
                         const isSelected = selectedFeatureIds.includes(featureId);
-                        const attrs = item.attributes;
+                        const attrs = item.attributes || {};
 
                         return (
                           <TableRow 
