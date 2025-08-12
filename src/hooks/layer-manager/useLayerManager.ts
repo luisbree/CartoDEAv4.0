@@ -212,11 +212,11 @@ export const useLayerManager = ({
           
           updateGeoServerDiscoveredLayerState(layerName, true, 'wfs');
           updateGeoServerDiscoveredLayerState(layerName, true, 'wms');
-          toast({ description: `Capa "${layerTitle}" añadida.` });
+          setTimeout(() => toast({ description: `Capa "${layerTitle}" añadida.` }), 0);
 
       } catch (error: any) {
           console.error("Error adding hybrid WMS/WFS layer:", error);
-          toast({ description: `Error al añadir capa: ${error.message}`, variant: 'destructive' });
+          setTimeout(() => toast({ description: `Error al añadir capa: ${error.message}`, variant: 'destructive' }), 0);
           setIsWfsLoading(false); // Ensure loading is stopped on initial setup error
       }
   }, [isMapReady, mapRef, addLayer, updateGeoServerDiscoveredLayerState, toast, setIsWfsLoading]);
@@ -249,7 +249,7 @@ export const useLayerManager = ({
       type: 'gee'
     });
     
-    toast({ description: `Capa de Google Earth Engine "${layerName}" añadida.` });
+    setTimeout(() => toast({ description: `Capa de Google Earth Engine "${layerName}" añadida.` }), 0);
 
   }, [mapRef, addLayer, toast]);
 
@@ -279,9 +279,9 @@ export const useLayerManager = ({
         });
     
         if (layersToRemove.length === 1) {
-          toast({ description: `Capa "${layersToRemove[0].name}" eliminada.` });
+          setTimeout(() => toast({ description: `Capa "${layersToRemove[0].name}" eliminada.` }), 0);
         } else {
-          toast({ description: `${layersToRemove.length} capa(s) eliminada(s).` });
+          setTimeout(() => toast({ description: `${layersToRemove.length} capa(s) eliminada(s).` }), 0);
         }
         
         return prevLayers.filter(l => !layerIds.includes(l.id));
@@ -359,7 +359,7 @@ export const useLayerManager = ({
     setLayers(prevLayers => {
         const layer = prevLayers.find(l => l.id === layerId);
         if (!layer || !(layer.olLayer instanceof VectorLayer)) {
-            toast({ description: "Solo se puede cambiar el estilo de capas vectoriales." });
+            setTimeout(() => toast({ description: "Solo se puede cambiar el estilo de capas vectoriales." }), 0);
             return prevLayers;
         }
     
@@ -368,7 +368,7 @@ export const useLayerManager = ({
             const wmsLayer = mapRef.current.getLayers().getArray().find(l => l.get('id') === linkedWmsId);
             if (wmsLayer) {
                 wmsLayer.setVisible(false);
-                toast({ description: `Se ocultó la capa WMS para mostrar el nuevo estilo.` });
+                setTimeout(() => toast({ description: `Se ocultó la capa WMS para mostrar el nuevo estilo.` }), 0);
             }
         }
     
@@ -439,7 +439,7 @@ export const useLayerManager = ({
         if (styleChanged) {
             const newStyle = new Style({ stroke, fill, image });
             olLayer.setStyle(newStyle);
-            toast({ description: `Estilo de la capa "${layer.name}" actualizado.` });
+            setTimeout(() => toast({ description: `Estilo de la capa "${layer.name}" actualizado.` }), 0);
         }
         return prevLayers;
     });
@@ -457,7 +457,7 @@ export const useLayerManager = ({
         if (source && source.getFeatures().length > 0) {
             extent = source.getExtent();
         } else {
-            toast({ description: "La capa no tiene entidades para hacer zoom." });
+            setTimeout(() => toast({ description: "La capa no tiene entidades para hacer zoom." }), 0);
             return;
         }
     } else {
@@ -476,7 +476,7 @@ export const useLayerManager = ({
             maxZoom: 16,
         });
     } else {
-        toast({ description: "No se puede determinar la extensión de esta capa." });
+        setTimeout(() => toast({ description: "No se puede determinar la extensión de esta capa." }), 0);
     }
   }, [mapRef, layers, toast]);
 
@@ -490,11 +490,11 @@ export const useLayerManager = ({
                 if (features.length > 0) {
                     onShowTableRequest(features, layer.name);
                 } else {
-                    toast({ description: `La capa "${layer.name}" no tiene entidades para mostrar en la tabla.` });
+                    setTimeout(() => toast({ description: `La capa "${layer.name}" no tiene entidades para mostrar en la tabla.` }), 0);
                 }
             }
         } else {
-            toast({ description: "Solo se puede mostrar la tabla de atributos para capas vectoriales." });
+            setTimeout(() => toast({ description: "Solo se puede mostrar la tabla de atributos para capas vectoriales." }), 0);
         }
         return prevLayers;
     });
@@ -524,7 +524,7 @@ export const useLayerManager = ({
         const polygonFeature = drawingFeatures.find(f => f.getGeometry()?.getType() === 'Polygon');
     
         if (!targetLayer || !polygonFeature) {
-            toast({ description: "Se requiere una capa vectorial y un polígono dibujado." });
+            setTimeout(() => toast({ description: "Se requiere una capa vectorial y un polígono dibujado." }), 0);
             return prevLayers;
         }
         const polygonGeometry = polygonFeature.getGeometry();
@@ -539,7 +539,7 @@ export const useLayerManager = ({
         });
     
         if (intersectingFeatures.length === 0) {
-            toast({ description: "No se encontraron entidades dentro del polígono." });
+            setTimeout(() => toast({ description: "No se encontraron entidades dentro del polígono." }), 0);
             return prevLayers;
         }
         
@@ -566,7 +566,7 @@ export const useLayerManager = ({
         };
 
         mapRef.current?.addLayer(newOlLayer);
-        toast({ description: `${intersectingFeatures.length} entidades extraídas a una nueva capa.` });
+        setTimeout(() => toast({ description: `${intersectingFeatures.length} entidades extraídas a una nueva capa.` }), 0);
         onSuccess?.();
         
         return [newMapLayer, ...prevLayers];
@@ -576,7 +576,7 @@ export const useLayerManager = ({
   const handleExtractBySelection = useCallback((selectedFeaturesForExtraction: Feature<Geometry>[], onSuccess?: () => void) => {
     setLayers(prevLayers => {
         if (selectedFeaturesForExtraction.length === 0) {
-            toast({ description: "No hay entidades seleccionadas para extraer." });
+            setTimeout(() => toast({ description: "No hay entidades seleccionadas para extraer." }), 0);
             return prevLayers;
         }
     
@@ -618,7 +618,7 @@ export const useLayerManager = ({
         };
     
         mapRef.current?.addLayer(newOlLayer);
-        toast({ description: `${clonedFeatures.length} entidades extraídas a la capa "${newSourceName}".` });
+        setTimeout(() => toast({ description: `${clonedFeatures.length} entidades extraídas a la capa "${newSourceName}".` }), 0);
         
         clearSelectionAfterExtraction();
         onSuccess?.();
@@ -630,12 +630,12 @@ export const useLayerManager = ({
   const handleExportLayer = useCallback(async (layerId: string, format: 'geojson' | 'kml' | 'shp') => {
     const layer = layers.find(l => l.id === layerId) as VectorMapLayer | undefined;
     if (!layer || !(layer.olLayer instanceof VectorLayer)) {
-      toast({ description: "Solo se pueden exportar capas vectoriales." });
+      setTimeout(() => toast({ description: "Solo se pueden exportar capas vectoriales." }), 0);
       return;
     }
     const source = layer.olLayer.getSource();
     if (!source || source.getFeatures().length === 0) {
-      toast({ description: "La capa no tiene entidades para exportar." });
+      setTimeout(() => toast({ description: "La capa no tiene entidades para exportar." }), 0);
       return;
     }
     const features = source.getFeatures();
@@ -687,10 +687,10 @@ export const useLayerManager = ({
         document.body.removeChild(link);
         URL.revokeObjectURL(link.href);
       }
-      toast({ description: `Capa "${layer.name}" exportada como ${format.toUpperCase()}.` });
+      setTimeout(() => toast({ description: `Capa "${layer.name}" exportada como ${format.toUpperCase()}.` }), 0);
     } catch (error) {
       console.error(`Error exporting as ${format}:`, error);
-      toast({ description: `Error al exportar la capa como ${format.toUpperCase()}.`, variant: "destructive" });
+      setTimeout(() => toast({ description: `Error al exportar la capa como ${format.toUpperCase()}.`, variant: "destructive" }), 0);
     }
   }, [layers, toast]);
 
@@ -703,7 +703,7 @@ export const useLayerManager = ({
         const features = await findSentinel2Footprints(extent, view.getProjection(), dateRange?.startDate, dateRange?.completionDate);
         
         if (features.length === 0) {
-            toast({ description: "No se encontraron escenas de Sentinel-2 en la vista actual para el rango de fechas especificado." });
+            setTimeout(() => toast({ description: "No se encontraron escenas de Sentinel-2 en la vista actual para el rango de fechas especificado." }), 0);
             return;
         }
 
@@ -712,7 +712,7 @@ export const useLayerManager = ({
             if (existingLayer) {
                 existingLayer.olLayer.getSource()?.clear();
                 existingLayer.olLayer.getSource()?.addFeatures(features);
-                toast({ description: `Capa de Sentinel-2 actualizada con ${features.length} footprints.` });
+                setTimeout(() => toast({ description: `Capa de Sentinel-2 actualizada con ${features.length} footprints.` }), 0);
                 return [...prevLayers]; // Return a new array to trigger re-render
             } else {
                 const sentinelSource = new VectorSource({ features });
@@ -734,13 +734,13 @@ export const useLayerManager = ({
                     type: 'sentinel'
                 };
                 mapRef.current?.addLayer(sentinelLayer);
-                toast({ description: `${features.length} footprints de Sentinel-2 añadidos al mapa.` });
+                setTimeout(() => toast({ description: `${features.length} footprints de Sentinel-2 añadidos al mapa.` }), 0);
                 return [newMapLayer, ...prevLayers];
             }
         });
     } catch (error: any) {
         console.error("Error finding Sentinel-2 footprints:", error);
-        toast({ description: `Error al buscar escenas: ${error.message}` });
+        setTimeout(() => toast({ description: `Error al buscar escenas: ${error.message}` }), 0);
     } finally {
         setIsFindingSentinelFootprints(false);
     }
@@ -751,7 +751,7 @@ export const useLayerManager = ({
     if (sentinelLayer) {
         removeLayer(sentinelLayer.id);
     } else {
-        toast({ description: "No hay capa de footprints de Sentinel-2 para limpiar." });
+        setTimeout(() => toast({ description: "No hay capa de footprints de Sentinel-2 para limpiar." }), 0);
     }
   }, [layers, removeLayer, toast]);
 
@@ -764,7 +764,7 @@ export const useLayerManager = ({
         const features = await findLandsatFootprints(extent, view.getProjection(), dateRange?.startDate, dateRange?.completionDate);
         
         if (features.length === 0) {
-            toast({ description: "No se encontraron escenas de Landsat en la vista actual para el rango de fechas especificado." });
+            setTimeout(() => toast({ description: "No se encontraron escenas de Landsat en la vista actual para el rango de fechas especificado." }), 0);
             return;
         }
 
@@ -773,7 +773,7 @@ export const useLayerManager = ({
             if (existingLayer) {
                 existingLayer.olLayer.getSource()?.clear();
                 existingLayer.olLayer.getSource()?.addFeatures(features);
-                toast({ description: `Capa de Landsat actualizada con ${features.length} footprints.` });
+                setTimeout(() => toast({ description: `Capa de Landsat actualizada con ${features.length} footprints.` }), 0);
                 return [...prevLayers];
             } else {
                 const landsatSource = new VectorSource({ features });
@@ -795,13 +795,13 @@ export const useLayerManager = ({
                     type: 'landsat'
                 };
                 mapRef.current?.addLayer(landsatLayer);
-                toast({ description: `${features.length} footprints de Landsat añadidos al mapa.` });
+                setTimeout(() => toast({ description: `${features.length} footprints de Landsat añadidos al mapa.` }), 0);
                 return [newMapLayer, ...prevLayers];
             }
         });
     } catch (error: any) {
         console.error("Error finding Landsat footprints:", error);
-        toast({ description: `Error al buscar escenas de Landsat: ${error.message}` });
+        setTimeout(() => toast({ description: `Error al buscar escenas de Landsat: ${error.message}` }), 0);
     } finally {
         setIsFindingLandsatFootprints(false);
     }
@@ -812,7 +812,7 @@ export const useLayerManager = ({
     if (landsatLayer) {
         removeLayer(landsatLayer.id);
     } else {
-        toast({ description: "No hay capa de footprints de Landsat para limpiar." });
+        setTimeout(() => toast({ description: "No hay capa de footprints de Landsat para limpiar." }), 0);
     }
   }, [layers, removeLayer, toast]);
 
