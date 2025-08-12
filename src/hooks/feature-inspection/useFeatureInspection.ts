@@ -75,7 +75,7 @@ export const useFeatureInspection = ({
     setInspectedFeatureData(plainData);
     setCurrentInspectedLayerName(layerName);
     if (plainData.length > 0) {
-       toast({ description: `${plainData.length} entidad(es) de "${layerName}" inspeccionada(s).` });
+       setTimeout(() => toast({ description: `${plainData.length} entidad(es) de "${layerName}" inspeccionada(s).` }), 0);
     }
     
     onNewSelectionRef.current();
