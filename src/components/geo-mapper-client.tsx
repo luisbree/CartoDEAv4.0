@@ -680,33 +680,33 @@ export default function GeoMapperClient() {
           <h1 className="text-xl font-semibold">Departamento de Estudios Ambientales y Sociales</h1>
         </div>
         <div className="flex flex-row space-x-1">
-           {/* This is a standalone button now, not part of the mapped config */}
-            <TooltipProvider delayDuration={200}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant={"outline"}
-                    size="icon"
-                    className={`h-8 w-8 focus-visible:ring-primary ${
-                      !panels.legend.isMinimized
-                        ? 'bg-primary text-primary-foreground hover:bg-primary/90 border-primary/80'
-                        : 'bg-gray-700/80 text-white hover:bg-gray-600/90 border-gray-600/70'
-                    }`}
-                    onClick={() => togglePanelMinimize('legend')}
-                    aria-label={"Capas"}
-                  >
-                    <ListTree className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="bg-gray-700 text-white border-gray-600">
-                  <p className="text-xs">{"Capas"}</p>
-                </TooltipContent>
-              </Tooltip>
-          </TooltipProvider>
+          {/* Panel buttons moved to the second toolbar */}
         </div>
       </header>
 
       <div className="bg-gray-700/90 backdrop-blur-sm shadow-md p-2 z-20 flex items-center gap-2">
+        <TooltipProvider delayDuration={200}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant={"outline"}
+                size="icon"
+                className={`h-8 w-8 focus-visible:ring-primary ${
+                  !panels.legend.isMinimized
+                    ? 'bg-primary text-primary-foreground hover:bg-primary/90 border-primary/80'
+                    : 'bg-gray-700/80 text-white hover:bg-gray-600/90 border-gray-600/70'
+                }`}
+                onClick={() => togglePanelMinimize('legend')}
+                aria-label={"Capas"}
+              >
+                <ListTree className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="bg-gray-700 text-white border-gray-600">
+              <p className="text-xs">{"Capas"}</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
         <LocationSearch onLocationSelect={handleLocationSelection} className="max-w-sm" />
         <div className="max-w-sm w-full">
             <BaseLayerSelector
