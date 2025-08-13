@@ -36,6 +36,7 @@ interface UseLayerManagerProps {
 }
 
 const LAYER_START_Z_INDEX = 10;
+const GEE_LAYER_Z_INDEX = 5; // Lower z-index for GEE layers
 
 const colorMap: { [key: string]: string } = {
   rojo: '#e63946',
@@ -75,9 +76,19 @@ export const useLayerManager = ({
   useEffect(() => {
     // This effect ensures z-ordering is correct whenever the layers array changes.
     // UI has top layer at index 0. Map has top layer at highest z-index.
-    const layerCount = layers.length;
+    const operationalLayers = layers.filter(l => l.type !== 'gee');
+    const layer_count = operationalLayers.length;
+    
     layers.forEach((layer, index) => {
-      layer.olLayer.setZIndex(LAYER_START_Z_INDEX + (layerCount - 1 - index));
+      if (layer.type === 'gee') {
+        layer.olLayer.setZIndex(GEE_LAYER_Z_INDEX);
+      } else {
+        // Find its index among non-GEE layers to determine z-index
+        const operationalIndex = operationalLayers.findIndex(opLayer => opLayer.id === layer.id);
+        if (operationalIndex !== -1) {
+            layer.olLayer.setZIndex(LAYER_START_Z_INDEX + (layer_count - 1 - operationalIndex));
+        }
+      }
     });
   }, [layers]);
 
