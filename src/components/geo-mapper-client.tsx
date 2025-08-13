@@ -122,7 +122,6 @@ const PANEL_WIDTH = 350;
 const PANEL_PADDING = 8;
 
 const panelToggleConfigs = [
-  { id: 'legend', IconComponent: ListTree, name: "Capas" },
   { id: 'wfsLibrary', IconComponent: Library, name: "Biblioteca de Servidores" },
   { id: 'tools', IconComponent: Wrench, name: "Herramientas" },
   { id: 'trello', IconComponent: ClipboardCheck, name: "Trello" },
@@ -681,43 +680,28 @@ export default function GeoMapperClient() {
           <h1 className="text-xl font-semibold">Departamento de Estudios Ambientales y Sociales</h1>
         </div>
         <div className="flex flex-row space-x-1">
-          <TooltipProvider delayDuration={200}>
-            {panelToggleConfigs.map((panelConfig) => {
-              const panelState = panels[panelConfig.id as keyof typeof panels];
-              if (!panelState) return null;
-
-              const isPanelOpen = !panelState.isMinimized;
-              const tooltipText = panelConfig.name;
-              
-              return (
-                <Tooltip key={panelConfig.id}>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant={"outline"}
-                      size="icon"
-                      className={`h-8 w-8 focus-visible:ring-primary ${
-                        isPanelOpen
-                          ? 'bg-primary text-primary-foreground hover:bg-primary/90 border-primary/80'
-                          : 'bg-gray-700/80 text-white hover:bg-gray-600/90 border-gray-600/70'
-                      }`}
-                      onClick={() => {
-                        if (panelConfig.id === 'printComposer') {
-                          handleTogglePrintComposer();
-                        } else {
-                          togglePanelMinimize(panelConfig.id as any);
-                        }
-                      }}
-                      aria-label={tooltipText}
-                    >
-                      <panelConfig.IconComponent className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom" className="bg-gray-700 text-white border-gray-600">
-                    <p className="text-xs">{tooltipText}</p>
-                  </TooltipContent>
-                </Tooltip>
-              );
-            })}
+           {/* This is a standalone button now, not part of the mapped config */}
+            <TooltipProvider delayDuration={200}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant={"outline"}
+                    size="icon"
+                    className={`h-8 w-8 focus-visible:ring-primary ${
+                      !panels.legend.isMinimized
+                        ? 'bg-primary text-primary-foreground hover:bg-primary/90 border-primary/80'
+                        : 'bg-gray-700/80 text-white hover:bg-gray-600/90 border-gray-600/70'
+                    }`}
+                    onClick={() => togglePanelMinimize('legend')}
+                    aria-label={"Capas"}
+                  >
+                    <ListTree className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="bg-gray-700 text-white border-gray-600">
+                  <p className="text-xs">{"Capas"}</p>
+                </TooltipContent>
+              </Tooltip>
           </TooltipProvider>
         </div>
       </header>
@@ -769,6 +753,48 @@ export default function GeoMapperClient() {
         >
           {isCapturing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
         </Button>
+
+         {/* The rest of the panel buttons */}
+        <div className="flex flex-row space-x-1 ml-auto">
+          <TooltipProvider delayDuration={200}>
+            {panelToggleConfigs.map((panelConfig) => {
+              const panelState = panels[panelConfig.id as keyof typeof panels];
+              if (!panelState) return null;
+
+              const isPanelOpen = !panelState.isMinimized;
+              const tooltipText = panelConfig.name;
+              
+              return (
+                <Tooltip key={panelConfig.id}>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant={"outline"}
+                      size="icon"
+                      className={`h-8 w-8 focus-visible:ring-primary ${
+                        isPanelOpen
+                          ? 'bg-primary text-primary-foreground hover:bg-primary/90 border-primary/80'
+                          : 'bg-gray-700/80 text-white hover:bg-gray-600/90 border-gray-600/70'
+                      }`}
+                      onClick={() => {
+                        if (panelConfig.id === 'printComposer') {
+                          handleTogglePrintComposer();
+                        } else {
+                          togglePanelMinimize(panelConfig.id as any);
+                        }
+                      }}
+                      aria-label={tooltipText}
+                    >
+                      <panelConfig.IconComponent className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="bg-gray-700 text-white border-gray-600">
+                    <p className="text-xs">{tooltipText}</p>
+                  </TooltipContent>
+                </Tooltip>
+              );
+            })}
+          </TooltipProvider>
+        </div>
       </div>
 
       <div ref={mapAreaRef} className="relative flex-1 overflow-visible">
