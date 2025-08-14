@@ -35,6 +35,26 @@ interface GeeProcessingPanelProps {
 
 type BandCombination = GeeTileLayerInput['bandCombination'];
 
+const DYNAMIC_WORLD_LEGEND = [
+    { color: '#419BDF', label: 'Agua' },
+    { color: '#397D49', label: 'Árboles' },
+    { color: '#88B053', label: 'Césped' },
+    { color: '#7A87C6', label: 'Vegetación Inundada' },
+    { color: '#E49635', label: 'Cultivos' },
+    { color: '#DFC35A', label: 'Arbustos' },
+    { color: '#C4281B', label: 'Área Construida' },
+    { color: '#A59B8F', label: 'Suelo Desnudo' },
+    { color: '#B39FE1', label: 'Nieve y Hielo' },
+];
+
+const LegendItem: React.FC<{ color: string; label: string }> = ({ color, label }) => (
+    <div className="flex items-center space-x-2">
+        <div className="w-4 h-4 rounded-sm border border-white/20" style={{ backgroundColor: color }} />
+        <span className="text-xs text-white/90">{label}</span>
+    </div>
+);
+
+
 const GeeProcessingPanel: React.FC<GeeProcessingPanelProps> = ({
   panelRef,
   isCollapsed,
@@ -138,6 +158,7 @@ const GeeProcessingPanel: React.FC<GeeProcessingPanelProps> = ({
 
   const isDateSelectionDisabled = ['JRC_WATER_OCCURRENCE', 'OPENLANDMAP_SOC', 'NASADEM_ELEVATION'].includes(selectedCombination);
   const showElevationControls = selectedCombination === 'NASADEM_ELEVATION';
+  const showDynamicWorldLegend = selectedCombination === 'DYNAMIC_WORLD';
 
   return (
     <DraggablePanel
@@ -195,6 +216,17 @@ const GeeProcessingPanel: React.FC<GeeProcessingPanelProps> = ({
               </div>
             </RadioGroup>
         </div>
+        
+        {showDynamicWorldLegend && (
+            <div className="pt-2 border-t border-white/10 space-y-2">
+                <Label className="text-sm font-semibold text-white">Leyenda de Dynamic World</Label>
+                <div className="grid grid-cols-2 gap-2 p-2 bg-black/10 rounded-md">
+                    {DYNAMIC_WORLD_LEGEND.map(item => (
+                        <LegendItem key={item.label} color={item.color} label={item.label} />
+                    ))}
+                </div>
+            </div>
+        )}
 
         {showElevationControls && (
           <div className="pt-2 border-t border-white/10 space-y-3">
