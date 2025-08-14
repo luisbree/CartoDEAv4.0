@@ -165,6 +165,8 @@ const geeVectorizationFlow = ai.defineFlow(
             eightConnected: false,
             labelProperty: 'landcover_class',
             reducer: ee.Reducer.mode(),
+            maxPixels: 1e10, // Increase pixel limit
+            bestEffort: true, // Auto-adjust scale if needed
         });
         
         return new Promise((resolve, reject) => {
