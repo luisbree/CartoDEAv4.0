@@ -77,7 +77,11 @@ export const handleFileUpload = async ({
     toast,
 }: FileUploadParams): Promise<void> => {
 
-    const geojsonFormat = new GeoJSON({ featureProjection: 'EPSG:3857' });
+    const geojsonFormat = new GeoJSON({ 
+        featureProjection: 'EPSG:3857',
+        // Let OpenLayers detect the CRS from the GeoJSON file itself if present
+        dataProjection: undefined 
+    });
     const kmlFormat = new KML({ extractStyles: true, showPointNames: true });
 
     // This function processes a single file content and adds it to the map
