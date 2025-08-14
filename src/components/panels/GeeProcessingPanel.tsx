@@ -10,12 +10,12 @@ import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { BrainCircuit, Loader2, Image as ImageIcon, CheckCircle, AlertTriangle, Calendar as CalendarIcon } from 'lucide-react';
+import { BrainCircuit, Loader2, Image as ImageIcon, CheckCircle, AlertTriangle, Calendar as CalendarIcon, Shapes } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
-import { getGeeTileLayer } from '@/ai/flows/gee-flow';
+import { getGeeTileLayer, getGeeVectorDownloadUrl } from '@/ai/flows/gee-flow';
 import type { Map } from 'ol';
 import { transformExtent } from 'ol/proj';
-import type { GeeTileLayerInput } from '@/ai/flows/gee-types';
+import type { GeeTileLayerInput, GeeVectorizationInput } from '@/ai/flows/gee-types';
 import { cn } from '@/lib/utils';
 import { Slider } from '@/components/ui/slider';
 
@@ -68,6 +68,7 @@ const GeeProcessingPanel: React.FC<GeeProcessingPanelProps> = ({
   style,
 }) => {
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isVectorizing, setIsVectorizing] = useState(false);
   const [selectedCombination, setSelectedCombination] = useState<BandCombination>('URBAN_FALSE_COLOR');
   const [date, setDate] = useState<DateRange | undefined>({
     from: addDays(new Date(), -365),
@@ -129,6 +130,39 @@ const GeeProcessingPanel: React.FC<GeeProcessingPanelProps> = ({
       setIsProcessing(false);
     }
   };
+
+  const handleVectorizeAndDownload = async () => {
+    if (!mapRef.current || !isAuthenticated || !date?.from || !date?.to) {
+        toast({ description: "Asegúrese de estar autenticado y de haber seleccionado un rango de fechas.", variant: "destructive" });
+        return;
+    }
+    setIsVectorizing(true);
+    toast({ description: "Iniciando vectorización en GEE. Esto puede tardar varios segundos..." });
+
+    const view = mapRef.current.getView();
+    const extent = view.calculateExtent(mapRef.current.getSize()!);
+    const extent4326 = transformExtent(extent, view.getProjection(), 'EPSG:4326');
+    
+    try {
+        const result = await getGeeVectorDownloadUrl({
+            aoi: { minLon: extent4326[0], minLat: extent4326[1], maxLon: extent4326[2], maxLat: extent4326[3] },
+            startDate: format(date.from, 'yyyy-MM-dd'),
+            endDate: format(date.to, 'yyyy-MM-dd'),
+        });
+        
+        if (result && result.downloadUrl) {
+            toast({ description: "Proceso completado. Iniciando descarga..." });
+            window.open(result.downloadUrl, '_blank');
+        } else {
+            throw new Error("No se recibió una URL de descarga del servidor.");
+        }
+    } catch (error: any) {
+        console.error("Error vectorizing GEE layer:", error);
+        toast({ title: "Error de Vectorización", description: error.message || "No se pudo vectorizar la capa.", variant: "destructive" });
+    } finally {
+        setIsVectorizing(false);
+    }
+  };
   
 
   const getAuthStatusContent = () => {
@@ -159,6 +193,7 @@ const GeeProcessingPanel: React.FC<GeeProcessingPanelProps> = ({
   const isDateSelectionDisabled = ['JRC_WATER_OCCURRENCE', 'OPENLANDMAP_SOC', 'NASADEM_ELEVATION'].includes(selectedCombination);
   const showElevationControls = selectedCombination === 'NASADEM_ELEVATION';
   const showDynamicWorldLegend = selectedCombination === 'DYNAMIC_WORLD';
+  const showVectorizeButton = selectedCombination === 'DYNAMIC_WORLD';
 
   return (
     <DraggablePanel
@@ -307,7 +342,7 @@ const GeeProcessingPanel: React.FC<GeeProcessingPanelProps> = ({
         <div className="flex items-center gap-2 pt-2 border-t border-white/10">
           <Button 
              onClick={handleGenerateLayer} 
-             disabled={isProcessing || isAuthenticating || !isAuthenticated || (isDateSelectionDisabled ? false : (!date?.from || !date?.to))} 
+             disabled={isProcessing || isVectorizing || isAuthenticating || !isAuthenticated || (isDateSelectionDisabled ? false : (!date?.from || !date?.to))} 
              className="w-full"
            >
             {isProcessing ? (
@@ -318,6 +353,24 @@ const GeeProcessingPanel: React.FC<GeeProcessingPanelProps> = ({
             Añadir como Capa
           </Button>
         </div>
+        
+        {showVectorizeButton && (
+          <div className="flex items-center gap-2 pt-2 border-t border-white/10">
+            <Button 
+               onClick={handleVectorizeAndDownload} 
+               disabled={isProcessing || isVectorizing || isAuthenticating || !isAuthenticated || !date?.from || !date?.to} 
+               className="w-full"
+               variant="secondary"
+             >
+              {isVectorizing ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Shapes className="mr-2 h-4 w-4" />
+              )}
+              Vectorizar y Descargar (GeoJSON)
+            </Button>
+          </div>
+        )}
       </div>
     </DraggablePanel>
   );

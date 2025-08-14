@@ -31,3 +31,12 @@ export const GeeTileLayerOutputSchema = z.object({
   tileUrl: z.string().describe("The XYZ tile URL template for the generated GEE layer."),
 });
 export type GeeTileLayerOutput = z.infer<typeof GeeTileLayerOutputSchema>;
+
+
+// New schema for vectorization input
+export const GeeVectorizationInputSchema = z.object({
+    aoi: GeeAoiSchema.describe("The Area of Interest as a bounding box for vectorization."),
+    startDate: z.string().describe("The start date for the Dynamic World image search in YYYY-MM-DD format."),
+    endDate: z.string().describe("The end date for the Dynamic World image search in YYYY-MM-DD format."),
+});
+export type GeeVectorizationInput = z.infer<typeof GeeVectorizationInputSchema>;

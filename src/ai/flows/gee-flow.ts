@@ -1,22 +1,29 @@
 
 'use server';
 /**
- * @fileOverview A flow for generating Google Earth Engine tile layers.
+ * @fileOverview A flow for generating Google Earth Engine tile layers and vector data.
  *
  * - getGeeTileLayer - Generates a tile layer URL for a given Area of Interest.
+ * - getGeeVectorDownloadUrl - Generates a download URL for vectorized GEE data.
  */
 
 import { ai } from '@/ai/genkit';
 import ee from '@google/earthengine';
 import { promisify } from 'util';
-import type { GeeTileLayerInput, GeeTileLayerOutput } from './gee-types';
-import { GeeTileLayerInputSchema, GeeTileLayerOutputSchema } from './gee-types';
+import type { GeeTileLayerInput, GeeTileLayerOutput, GeeVectorizationInput } from './gee-types';
+import { GeeTileLayerInputSchema, GeeTileLayerOutputSchema, GeeVectorizationInputSchema } from './gee-types';
 import { z } from 'zod';
 
 // Main exported function for the frontend to call
 export async function getGeeTileLayer(input: GeeTileLayerInput): Promise<GeeTileLayerOutput> {
   return geeTileLayerFlow(input);
 }
+
+// New exported function for vectorization
+export async function getGeeVectorDownloadUrl(input: GeeVectorizationInput): Promise<{ downloadUrl: string }> {
+    return geeVectorizationFlow(input);
+}
+
 
 // New exported function for authentication
 export async function authenticateWithGee(): Promise<{ success: boolean; message: string; }> {
@@ -98,7 +105,7 @@ const getImageForProcessing = (input: GeeTileLayerInput) => {
 };
 
 
-// Define the Genkit flow
+// Define the Genkit flow for raster tiles
 const geeTileLayerFlow = ai.defineFlow(
   {
     name: 'geeTileLayerFlow',
@@ -128,6 +135,58 @@ const geeTileLayerFlow = ai.defineFlow(
         });
     });
   }
+);
+
+
+// Define the Genkit flow for vectorization
+const geeVectorizationFlow = ai.defineFlow(
+    {
+        name: 'geeVectorizationFlow',
+        inputSchema: GeeVectorizationInputSchema,
+        outputSchema: z.object({ downloadUrl: z.string() }),
+    },
+    async (input) => {
+        await initializeEe();
+        
+        const { aoi, startDate, endDate } = input;
+        const geometry = ee.Geometry.Rectangle([aoi.minLon, aoi.minLat, aoi.maxLon, aoi.maxLat]);
+
+        const dwCollection = ee.ImageCollection('GOOGLE/DYNAMICWORLD/V1')
+            .filterBounds(geometry)
+            .filterDate(startDate, endDate);
+
+        const dwImage = ee.Image(dwCollection.mode()).select('label');
+        const dwImageClipped = dwImage.clip(geometry);
+
+        const vectors = dwImageClipped.reduceToVectors({
+            geometry: geometry,
+            scale: 10, // Dynamic World native resolution
+            geometryType: 'polygon',
+            eightConnected: false,
+            labelProperty: 'landcover_class',
+            reducer: ee.Reducer.mode(),
+        });
+        
+        return new Promise((resolve, reject) => {
+            vectors.getDownloadURL({
+                format: 'geojson',
+                filename: 'cobertura_suelo_dynamic_world',
+                callback: (url, error) => {
+                    if (error) {
+                        console.error("Earth Engine getDownloadURL Error:", error);
+                        if (error.includes && error.includes('computation timed out')) {
+                            return reject(new Error('La vectorización tardó demasiado. Intente con un área más pequeña.'));
+                        }
+                        return reject(new Error(`Ocurrió un error durante la vectorización en GEE: ${error}`));
+                    }
+                    if (!url) {
+                        return reject(new Error('GEE no devolvió una URL de descarga.'));
+                    }
+                    resolve({ downloadUrl: url });
+                }
+            });
+        });
+    }
 );
 
 
