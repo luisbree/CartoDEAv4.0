@@ -164,7 +164,7 @@ const geeVectorizationFlow = ai.defineFlow(
             geometryType: 'polygon',
             eightConnected: false,
             labelProperty: 'landcover_class',
-            reducer: ee.Reducer.mode(),
+            reducer: ee.Reducer.first(),
             maxPixels: 1e10, // Increase pixel limit
             bestEffort: true, // Auto-adjust scale if needed
         });
