@@ -28,7 +28,7 @@ export async function searchTrelloCard(input: SearchCardInput): Promise<SearchCa
     const TRELLO_BOARD_IDS = process.env.TRELLO_BOARD_IDS;
 
     if (!TRELLO_API_KEY || !TRELLO_API_TOKEN || !TRELLO_BOARD_IDS) {
-        throw new Error('Las credenciales de la API de Trello o los IDs de tablero no están configurados en las variables de entorno.');
+        throw new Error('La integración con Trello no está configurada. Por favor, configure las variables de entorno TRELLO_API_KEY, TRELLO_API_TOKEN y TRELLO_BOARD_IDS.');
     }
 
     const authParams = `key=${TRELLO_API_KEY}&token=${TRELLO_API_TOKEN}`;

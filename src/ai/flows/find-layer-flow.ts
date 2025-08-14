@@ -52,7 +52,7 @@ const searchLocationTool = ai.defineTool(
 const searchTrelloCardTool = ai.defineTool(
     {
         name: 'searchTrelloCard',
-        description: 'Searches for an existing card on the Trello board by its title or keywords and returns its URL to be opened.',
+        description: 'Searches for an existing card on the Trello board by its title or keywords and returns its URL to be opened. This tool is only available if Trello credentials are configured in the environment.',
         inputSchema: z.object({
             query: z.string().describe('The title or keywords to search for in the card name or description.'),
         }),
@@ -266,4 +266,5 @@ const mapAssistantFlow = ai.defineFlow(
     return output;
   }
 );
+
 
