@@ -144,15 +144,15 @@ export const useOSMData = ({ mapRef, drawingSourceRef, addLayer, osmCategoryConf
               return;
           }
 
-          const geojsonFormat = new GeoJSON({
-              featureProjection: 'EPSG:3857',
-              dataProjection: 'EPSG:4326'
-          });
+          const geojsonFormat = new GeoJSON();
 
           if (format === 'shp') {
-              const zip = new JSZip();
-              const geoJson = JSON.parse(geojsonFormat.writeFeatures(allFeatures));
+              const geoJson = JSON.parse(geojsonFormat.writeFeatures(allFeatures, {
+                  featureProjection: 'EPSG:4326', // SHP.js expects WGS84
+                  dataProjection: 'EPSG:3857' // The features are in Web Mercator
+              }));
               const shpBuffer = await shp.write(geoJson.features, 'GEOMETRY', {});
+              const zip = new JSZip();
               zip.file(`osm_layers.zip`, shpBuffer);
               const content = await zip.generateAsync({ type: "blob" });
               const link = document.createElement("a");
@@ -167,11 +167,18 @@ export const useOSMData = ({ mapRef, drawingSourceRef, addLayer, osmCategoryConf
               let mimeType = 'text/plain';
 
               if (format === 'geojson') {
-                  textData = geojsonFormat.writeFeatures(allFeatures);
+                  textData = geojsonFormat.writeFeatures(allFeatures, {
+                      featureProjection: 'EPSG:4326', // Target projection for file
+                      dataProjection: 'EPSG:3857',   // Source projection of features
+                      writecrs: true,               // Explicitly write CRS info
+                  });
                   mimeType = 'application/geo+json';
               } else { // kml
                   const kmlFormat = new KML({ extractStyles: true });
-                  textData = kmlFormat.writeFeatures(allFeatures);
+                  textData = kmlFormat.writeFeatures(allFeatures, {
+                      featureProjection: 'EPSG:4326',
+                      dataProjection: 'EPSG:3857'
+                  });
                   mimeType = 'application/vnd.google-earth.kml+xml';
               }
               
