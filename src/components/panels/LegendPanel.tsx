@@ -8,8 +8,9 @@ import FileUploadControl from '@/components/layer-manager/FileUploadControl';
 import FeatureInteractionToolbar from '@/components/feature-inspection/FeatureInteractionToolbar';
 import { Separator } from '@/components/ui/separator';
 import type { MapLayer, GeoServerDiscoveredLayer } from '@/lib/types';
-import { ListTree, Trash2, Database } from 'lucide-react'; 
+import { ListTree, Trash2, Database, Search } from 'lucide-react'; 
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import {
   Tooltip,
   TooltipContent,
@@ -74,9 +75,21 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
 }) => {
   const [selectedLayerIds, setSelectedLayerIds] = useState<string[]>([]);
   const [lastClickedIndex, setLastClickedIndex] = useState<number | null>(null);
+  const [deasSearchTerm, setDeasSearchTerm] = useState('');
+
+  const filteredDeasLayers = useMemo(() => {
+    if (!deasSearchTerm) {
+      return discoveredDeasLayers;
+    }
+    const lowercasedFilter = deasSearchTerm.toLowerCase();
+    return discoveredDeasLayers.filter(layer => 
+      layer.title.toLowerCase().includes(lowercasedFilter) ||
+      layer.name.split(':')[0].toLowerCase().includes(lowercasedFilter)
+    );
+  }, [discoveredDeasLayers, deasSearchTerm]);
 
   const groupedDeasLayers = useMemo(() => {
-    return discoveredDeasLayers.reduce<Record<string, GeoServerDiscoveredLayer[]>>((acc, layer) => {
+    return filteredDeasLayers.reduce<Record<string, GeoServerDiscoveredLayer[]>>((acc, layer) => {
         const [workspace, ...rest] = layer.name.split(':');
         if (!acc[workspace]) {
             acc[workspace] = [];
@@ -85,7 +98,7 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
         acc[workspace].push({ ...layer, title: layerTitle });
         return acc;
     }, {});
-  }, [discoveredDeasLayers]);
+  }, [filteredDeasLayers]);
 
   const sortedWorkspaces = Object.keys(groupedDeasLayers).sort((a, b) => a.localeCompare(b));
 
@@ -212,14 +225,23 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
             <div className="flex flex-col pt-2 basis-1/3">
                 <Separator className="bg-white/10 mb-2" />
                 <h3 className="text-sm font-semibold text-white px-2 pb-2 flex-shrink-0">Capas Predefinidas (DEAS)</h3>
+                 <div className="relative mb-2 px-2">
+                    <Input
+                        placeholder="Buscar capa o grupo..."
+                        value={deasSearchTerm}
+                        onChange={(e) => setDeasSearchTerm(e.target.value)}
+                        className="text-xs h-8 border-white/30 bg-black/20 text-white/90 focus:ring-primary pl-8"
+                    />
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                </div>
                 <ScrollArea className="flex-grow min-h-0 border-t border-gray-700/50">
                 <div className="pr-3">
                   {discoveredDeasLayers.length > 0 ? (
-                      <Accordion type="multiple" className="w-full">
+                      <Accordion type="multiple" className="w-full" defaultValue={sortedWorkspaces}>
                         {sortedWorkspaces.map((workspace) => (
                           <AccordionItem value={workspace} key={workspace} className="border-b border-gray-700/50">
                             <AccordionTrigger className="p-2 text-xs font-semibold text-white/90 hover:no-underline hover:bg-gray-700/30 rounded-t-md">
-                              {workspace}
+                              {workspace} ({groupedDeasLayers[workspace].length})
                             </AccordionTrigger>
                             <AccordionContent className="p-1 pl-4 bg-black/20">
                               <div className="space-y-1">
@@ -262,6 +284,7 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
 };
 
 export default LegendPanel;
+
 
 
 
