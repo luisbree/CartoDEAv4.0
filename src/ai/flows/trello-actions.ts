@@ -5,6 +5,7 @@
  *
  * - searchTrelloCard - Searches for a card and returns its details. Used by the AI assistant.
  * - searchTrelloCards - Searches for multiple cards and returns a list. Used by the UI.
+ * - checkTrelloCredentials - Verifies that the Trello API credentials are valid.
  * - SearchCardInput - The input type for the search functions.
  * - SearchCardOutput - The return type for the single card search function.
  * - TrelloCard - Represents a single card result for the list search.
@@ -31,20 +32,74 @@ const TrelloCardSchema = z.object({
 });
 export type TrelloCard = z.infer<typeof TrelloCardSchema>;
 
-// Shared search logic
-async function performTrelloSearch(query: string) {
+// Function to get credentials and common parameters
+function getTrelloAuth() {
     const TRELLO_API_KEY = process.env.TRELLO_API_KEY;
     const TRELLO_API_TOKEN = process.env.TRELLO_API_TOKEN;
     const TRELLO_BOARD_IDS = process.env.TRELLO_BOARD_IDS;
 
     if (!TRELLO_API_KEY || !TRELLO_API_TOKEN || !TRELLO_BOARD_IDS) {
-        throw new Error('La integración con Trello no está configurada. Por favor, configure las variables de entorno TRELLO_API_KEY, TRELLO_API_TOKEN y TRELLO_BOARD_IDS.');
+        return null;
     }
 
     const authParams = `key=${TRELLO_API_KEY}&token=${TRELLO_API_TOKEN}`;
+    const boardIds = TRELLO_BOARD_IDS.split(',').map(id => id.trim().replace(/['"]/g, '')).join(',');
+
+    return { authParams, boardIds };
+}
+
+
+/**
+ * Verifies that the Trello API credentials are valid by fetching board details.
+ */
+export async function checkTrelloCredentials(): Promise<{ success: boolean; message: string; }> {
+    const auth = getTrelloAuth();
+    if (!auth) {
+        // Silently fail if no credentials are set up at all.
+        // The UI won't show the Trello panel in this case.
+        return { success: false, message: 'Credenciales de Trello no configuradas.' };
+    }
+    
+    const { authParams, boardIds } = auth;
+    // We check the first board ID to see if it's valid.
+    const firstBoardId = boardIds.split(',')[0];
+
+    try {
+        const response = await fetch(`https://api.trello.com/1/boards/${firstBoardId}?${authParams}`);
+
+        if (!response.ok) {
+            if (response.status === 401) {
+                throw new Error('La API Key o el Token de Trello no son válidos.');
+            }
+            if (response.status === 404) {
+                 throw new Error(`El tablero de Trello con ID '${firstBoardId}' no fue encontrado.`);
+            }
+            const errorText = await response.text();
+            throw new Error(`Error de Trello (${response.status}): ${errorText}`);
+        }
+        
+        await response.json(); // Verify the response is valid JSON
+        return { success: true, message: 'La conexión con Trello se ha establecido correctamente.' };
+
+    } catch (error: any) {
+        console.error("Trello credential check failed:", error);
+        throw new Error(`Fallo en la verificación de Trello: ${error.message}`);
+    }
+}
+
+
+// Shared search logic
+async function performTrelloSearch(query: string) {
+    const auth = getTrelloAuth();
+    if (!auth) {
+        throw new Error('La integración con Trello no está configurada. Por favor, configure las variables de entorno TRELLO_API_KEY, TRELLO_API_TOKEN y TRELLO_BOARD_IDS.');
+    }
+
+    const { authParams, boardIds } = auth;
+    
     const searchParams = new URLSearchParams({
         query,
-        idBoards: TRELLO_BOARD_IDS.split(',').map(id => id.trim().replace(/['"]/g, '')).join(','),
+        idBoards: boardIds,
         modelTypes: 'cards',
         card_fields: 'id,name,shortUrl',
         cards_limit: '20',
@@ -95,7 +150,10 @@ export async function searchTrelloCard(input: SearchCardInput): Promise<SearchCa
     const searchData = await performTrelloSearch(query);
 
     if (!searchData.cards || searchData.cards.length === 0) {
-        throw new Error(`No se encontró ninguna tarjeta que coincida con "${query}".`);
+        return {
+            cardUrl: '', // Return an empty URL
+            message: `No se encontró ninguna tarjeta que coincida con "${query}".`
+        };
     }
 
     // AI assistant needs the best match
