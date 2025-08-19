@@ -57,7 +57,6 @@ import { useToast } from "@/hooks/use-toast";
 
 import type { OSMCategoryConfig, GeoServerDiscoveredLayer, BaseLayerOptionForSelect, MapLayer, ChatMessage, BaseLayerSettings, NominatimResult, PlainFeatureData } from '@/lib/types';
 import { chatWithMapAssistant, type MapAssistantOutput } from '@/ai/flows/find-layer-flow';
-import { checkTrelloCredentials } from '@/ai/flows/trello-actions';
 import { authenticateWithGee } from '@/ai/flows/gee-flow';
 
 
@@ -298,34 +297,6 @@ export default function GeoMapperClient() {
     }
   }, [isMapReady, toast]);
   
-  // Effect for Trello authentication check on load
-  useEffect(() => {
-      const runTrelloAuthCheck = async () => {
-          try {
-              const result = await checkTrelloCredentials();
-              // Only toast on success. Failure cases (not configured) are silent.
-              // Real errors (bad credentials) will throw and be caught.
-              if (result.success) {
-                  toast({
-                      title: "Trello Conectado",
-                      description: result.message,
-                  });
-              }
-          } catch (error: any) {
-              console.error("Error de verificación de Trello:", error);
-              toast({
-                  title: "Error de Conexión con Trello",
-                  description: error.message,
-                  variant: "destructive",
-                  duration: 8000,
-              });
-          }
-      };
-
-      if (isMapReady) {
-          runTrelloAuthCheck();
-      }
-  }, [isMapReady, toast]);
 
   const osmDataHook = useOSMData({ 
     mapRef, 
