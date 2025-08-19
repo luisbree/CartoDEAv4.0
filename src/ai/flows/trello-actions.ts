@@ -3,9 +3,11 @@
 /**
  * @fileOverview Trello integration server actions.
  *
- * - searchTrelloCard - Searches for a card and returns its details.
- * - SearchCardInput - The input type for the searchTrelloCard function.
- * - SearchCardOutput - The return type for the searchTrelloCard function.
+ * - searchTrelloCard - Searches for a card and returns its details. Used by the AI assistant.
+ * - searchTrelloCards - Searches for multiple cards and returns a list. Used by the UI.
+ * - SearchCardInput - The input type for the search functions.
+ * - SearchCardOutput - The return type for the single card search function.
+ * - TrelloCard - Represents a single card result for the list search.
  */
 import { z } from 'zod';
 
@@ -21,8 +23,16 @@ const SearchCardOutputSchema = z.object({
 export type SearchCardOutput = z.infer<typeof SearchCardOutputSchema>;
 
 
-export async function searchTrelloCard(input: SearchCardInput): Promise<SearchCardOutput> {
-    const { query } = input;
+// New type for individual card results
+const TrelloCardSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  url: z.string().url(),
+});
+export type TrelloCard = z.infer<typeof TrelloCardSchema>;
+
+// Shared search logic
+async function performTrelloSearch(query: string) {
     const TRELLO_API_KEY = process.env.TRELLO_API_KEY;
     const TRELLO_API_TOKEN = process.env.TRELLO_API_TOKEN;
     const TRELLO_BOARD_IDS = process.env.TRELLO_BOARD_IDS;
@@ -36,7 +46,7 @@ export async function searchTrelloCard(input: SearchCardInput): Promise<SearchCa
         query,
         idBoards: TRELLO_BOARD_IDS.split(',').map(id => id.trim().replace(/['"]/g, '')).join(','),
         modelTypes: 'cards',
-        card_fields: 'name,shortUrl',
+        card_fields: 'id,name,shortUrl',
         cards_limit: '20',
         partial: 'true',
     });
@@ -54,12 +64,41 @@ export async function searchTrelloCard(input: SearchCardInput): Promise<SearchCa
         throw new Error(`Error al buscar en Trello. El servidor respondió: "${errorText || searchResponse.statusText}". Por favor, revisa que tus credenciales (API Key, Token) y el ID del tablero sean correctos.`);
     }
     
-    const searchData = await searchResponse.json();
+    return await searchResponse.json();
+}
+
+
+/**
+ * Searches for multiple Trello cards and returns a list.
+ * Used by the interactive UI.
+ */
+export async function searchTrelloCards(input: SearchCardInput): Promise<TrelloCard[]> {
+    const searchData = await performTrelloSearch(input.query);
+
+    if (!searchData.cards || searchData.cards.length === 0) {
+        return [];
+    }
+    
+    return searchData.cards.map((card: { id: string; name: string; shortUrl: string; }) => ({
+        id: card.id,
+        name: card.name,
+        url: card.shortUrl,
+    }));
+}
+
+
+/**
+ * Searches for a single Trello card and returns its URL for the AI assistant to open.
+ */
+export async function searchTrelloCard(input: SearchCardInput): Promise<SearchCardOutput> {
+    const { query } = input;
+    const searchData = await performTrelloSearch(query);
 
     if (!searchData.cards || searchData.cards.length === 0) {
         throw new Error(`No se encontró ninguna tarjeta que coincida con "${query}".`);
     }
 
+    // AI assistant needs the best match
     const bestMatch = searchData.cards.find((card: { name: string }) => 
         card.name.toLowerCase().includes(query.toLowerCase())
     );
