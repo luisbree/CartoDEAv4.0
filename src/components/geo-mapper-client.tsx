@@ -58,6 +58,7 @@ import { useToast } from "@/hooks/use-toast";
 import type { OSMCategoryConfig, GeoServerDiscoveredLayer, BaseLayerOptionForSelect, MapLayer, ChatMessage, BaseLayerSettings, NominatimResult, PlainFeatureData } from '@/lib/types';
 import { chatWithMapAssistant, type MapAssistantOutput } from '@/ai/flows/find-layer-flow';
 import { authenticateWithGee } from '@/ai/flows/gee-flow';
+import { checkTrelloCredentials } from '@/ai/flows/trello-actions';
 
 
 const osmCategoryConfig: OSMCategoryConfig[] = [
@@ -266,7 +267,7 @@ export default function GeoMapperClient() {
     }
   }, [isMapReady, handleFetchGeoServerLayers, toast]);
 
-  // Effect for automatic GEE authentication on load
+  // Effect for automatic GEE and Trello authentication on load
   useEffect(() => {
     const runGeeAuth = async () => {
         setIsGeeAuthenticating(true);
@@ -292,8 +293,32 @@ export default function GeoMapperClient() {
         }
     };
 
+    const runTrelloAuth = async () => {
+        try {
+            const result = await checkTrelloCredentials();
+            if (result.success) {
+                toast({
+                    title: "Trello Conectado",
+                    description: result.message,
+                });
+            } else if (result.configured) {
+                // This case handles errors for configured credentials, but the action now throws on error.
+                // It's kept for logical completeness. The catch block will handle it.
+            }
+            // If not configured, do nothing (no toast).
+        } catch (error: any) {
+            console.error("Error de verificación automática de Trello:", error);
+            toast({
+                title: "Error de Conexión con Trello",
+                description: error.message,
+                variant: "destructive",
+            });
+        }
+    };
+
     if (isMapReady) {
         runGeeAuth();
+        runTrelloAuth();
     }
   }, [isMapReady, toast]);
   

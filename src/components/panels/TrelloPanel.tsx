@@ -4,13 +4,10 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import DraggablePanel from './DraggablePanel';
 import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { Loader2, ClipboardCheck, Search, ExternalLink, CheckCircle, AlertTriangle, HelpCircle } from 'lucide-react';
-import { Label } from '../ui/label';
+import { Loader2, ClipboardCheck, Search, ExternalLink } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { searchTrelloCards, checkTrelloCredentials, type TrelloCard } from '@/ai/flows/trello-actions';
+import { searchTrelloCards, type TrelloCard } from '@/ai/flows/trello-actions';
 import { ScrollArea } from '../ui/scroll-area';
-import { Separator } from '../ui/separator';
 
 interface TrelloPanelProps {
   panelRef: React.RefObject<HTMLDivElement>;
@@ -20,8 +17,6 @@ interface TrelloPanelProps {
   onMouseDownHeader: (e: React.MouseEvent<HTMLDivElement>) => void;
   style?: React.CSSProperties;
 }
-
-type AuthStatus = 'unchecked' | 'success' | 'error' | 'not_configured' | 'loading';
 
 const TrelloPanel: React.FC<TrelloPanelProps> = ({
   panelRef,
@@ -34,31 +29,8 @@ const TrelloPanel: React.FC<TrelloPanelProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [results, setResults] = useState<TrelloCard[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [authStatus, setAuthStatus] = useState<AuthStatus>('unchecked');
-  const [authMessage, setAuthMessage] = useState<string>('Verifique la conexión para empezar.');
   const { toast } = useToast();
   const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  const handleVerifyConnection = useCallback(async () => {
-    setAuthStatus('loading');
-    setAuthMessage('Verificando...');
-    try {
-        const result = await checkTrelloCredentials();
-        if (result.success) {
-            setAuthStatus('success');
-            setAuthMessage(result.message);
-            toast({ title: "Trello Conectado", description: result.message });
-        } else if (!result.configured) {
-            setAuthStatus('not_configured');
-            setAuthMessage(result.message);
-            toast({ title: "Trello no Configurado", description: result.message, variant: 'destructive' });
-        }
-    } catch (error: any) {
-        setAuthStatus('error');
-        setAuthMessage(error.message || 'Ocurrió un error desconocido.');
-        toast({ title: "Error de Conexión con Trello", description: error.message, variant: "destructive" });
-    }
-  }, [toast]);
 
   const handleSearch = useCallback(async (query: string) => {
     if (query.trim().length < 3) {
@@ -100,16 +72,6 @@ const TrelloPanel: React.FC<TrelloPanelProps> = ({
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 
-  const getStatusIcon = () => {
-    switch (authStatus) {
-        case 'loading': return <Loader2 className="h-4 w-4 mr-2 animate-spin text-yellow-400" />;
-        case 'success': return <CheckCircle className="h-4 w-4 mr-2 text-green-400" />;
-        case 'error': return <AlertTriangle className="h-4 w-4 mr-2 text-red-400" />;
-        case 'not_configured': return <AlertTriangle className="h-4 w-4 mr-2 text-yellow-500" />;
-        default: return <HelpCircle className="h-4 w-4 mr-2 text-gray-400" />;
-    }
-  };
-
   return (
     <DraggablePanel
       title="Integración con Trello"
@@ -123,26 +85,10 @@ const TrelloPanel: React.FC<TrelloPanelProps> = ({
       showCloseButton={true}
       style={style}
       zIndex={style?.zIndex as number | undefined}
-      initialSize={{ width: 350, height: "auto" }}
+      initialSize={{ width: 350, height: 400 }}
     >
       <div className="flex flex-col h-full bg-white/5 rounded-md p-3 space-y-3">
         
-        <div>
-            <h3 className="text-sm font-semibold text-white mb-2">Conexión (Opcional)</h3>
-            <div className="flex items-center gap-2">
-                <Button onClick={handleVerifyConnection} disabled={authStatus === 'loading'} className="flex-grow">
-                    {authStatus === 'loading' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                    Verificar Conexión
-                </Button>
-            </div>
-            <div className="flex items-center p-2 mt-2 rounded-md bg-black/20 text-xs text-gray-300">
-                {getStatusIcon()}
-                <span className="flex-1">{authMessage}</span>
-            </div>
-        </div>
-
-        <Separator className="bg-white/10"/>
-
         <div>
             <h3 className="text-sm font-semibold text-white mb-2">Buscar Tarjetas</h3>
             <div className="relative">
