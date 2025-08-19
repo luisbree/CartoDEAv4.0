@@ -256,6 +256,14 @@ export default function GeoMapperClient() {
         const discovered = await handleFetchGeoServerLayers(initialGeoServerUrl);
         if (discovered && discovered.length > 0) {
           setDiscoveredGeoServerLayers(discovered);
+          // Find and add the specific layer
+          const cuencasLayer = discovered.find(l => l.name === 'deas:cuencas_pba');
+          if (cuencasLayer) {
+            // Use a timeout to ensure this runs after the initial state has settled
+            setTimeout(() => {
+              layerManagerHook.handleAddHybridLayer(cuencasLayer.name, cuencasLayer.title, initialGeoServerUrl, cuencasLayer.bbox);
+            }, 100);
+          }
         }
       } catch (error) {
         console.error("Failed to load initial DEAS layers:", error);
@@ -266,7 +274,7 @@ export default function GeoMapperClient() {
     if (isMapReady) {
        loadInitialLayers();
     }
-  }, [isMapReady, handleFetchGeoServerLayers, toast]);
+  }, [isMapReady, handleFetchGeoServerLayers, toast, layerManagerHook]);
 
   // Effect for automatic GEE authentication on load
   useEffect(() => {
@@ -545,7 +553,7 @@ export default function GeoMapperClient() {
         layerManagerHook.findLandsatFootprintsInCurrentView(action.findLandsatFootprints);
       }
       if (action.fetchOsmForView) {
-        osmDataHook.fetchOSMForCurrentView(action.fetchOsmForView);
+        osmDataHook.fetchOSMData();
       }
     };
     
@@ -976,7 +984,6 @@ export default function GeoMapperClient() {
             onToggleCollapse={() => togglePanelCollapse('trello')}
             onClosePanel={() => togglePanelMinimize('trello')}
             onMouseDownHeader={(e) => handlePanelMouseDown(e, 'trello')}
-            onSearchCard={handleSearchTrelloCard}
             isLoading={isTrelloLoading}
             style={{ top: `${panels.trello.position.y}px`, left: `${panels.trello.position.x}px`, zIndex: panels.trello.zIndex }}
           />

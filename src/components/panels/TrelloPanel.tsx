@@ -17,6 +17,7 @@ interface TrelloPanelProps {
   onToggleCollapse: () => void;
   onClosePanel: () => void;
   onMouseDownHeader: (e: React.MouseEvent<HTMLDivElement>) => void;
+  isLoading: boolean;
   style?: React.CSSProperties;
 }
 
