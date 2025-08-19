@@ -237,7 +237,7 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
                 <ScrollArea className="flex-grow min-h-0 border-t border-gray-700/50">
                 <div className="pr-3">
                   {discoveredDeasLayers.length > 0 ? (
-                      <Accordion type="multiple" className="w-full" defaultValue={sortedWorkspaces}>
+                      <Accordion type="multiple" className="w-full">
                         {sortedWorkspaces.map((workspace) => (
                           <AccordionItem value={workspace} key={workspace} className="border-b border-gray-700/50">
                             <AccordionTrigger className="p-2 text-xs font-semibold text-white/90 hover:no-underline hover:bg-gray-700/30 rounded-t-md">
@@ -284,6 +284,7 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
 };
 
 export default LegendPanel;
+
 
 
 
