@@ -57,7 +57,7 @@ import { useToast } from "@/hooks/use-toast";
 
 import type { OSMCategoryConfig, GeoServerDiscoveredLayer, BaseLayerOptionForSelect, MapLayer, ChatMessage, BaseLayerSettings, NominatimResult, PlainFeatureData } from '@/lib/types';
 import { chatWithMapAssistant, type MapAssistantOutput } from '@/ai/flows/find-layer-flow';
-import { checkTrelloCredentials, searchTrelloCard } from '@/ai/flows/trello-actions';
+import { checkTrelloCredentials } from '@/ai/flows/trello-actions';
 import { authenticateWithGee } from '@/ai/flows/gee-flow';
 
 
@@ -194,7 +194,6 @@ export default function GeoMapperClient() {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
     { role: 'assistant', content: "¡Buenas! Soy Drax, tu asistente de mapas. Pedime que cargue una capa, que la saque o que le haga zoom." }
   ]);
-  const [isTrelloLoading, setIsTrelloLoading] = useState(false);
   const [printLayoutData, setPrintLayoutData] = useState<MapCaptureData | null>(null);
   const [isGeeAuthenticated, setIsGeeAuthenticated] = useState(false);
   const [isGeeAuthenticating, setIsGeeAuthenticating] = useState(true); // Start as true
@@ -257,7 +256,7 @@ export default function GeoMapperClient() {
         if (discovered && discovered.length > 0) {
           setDiscoveredGeoServerLayers(discovered);
           // Find and add the specific layer
-          const cuencasLayer = discovered.find(l => l.name === 'deas:cuencas_pba');
+          const cuencasLayer = discovered.find(l => l.name === 'cartobase:cuencas');
           if (cuencasLayer) {
             // Use a timeout to ensure this runs after the initial state has settled
             setTimeout(() => {
@@ -586,23 +585,6 @@ export default function GeoMapperClient() {
     }
 
   }, [discoveredGeoServerLayers, layerManagerHook, toast, zoomToBoundingBox, handleChangeBaseLayer, osmDataHook, initialGeoServerUrl, panels, togglePanelMinimize]);
-
-  const handleSearchTrelloCard = useCallback(async (searchTerm: string) => {
-    setIsTrelloLoading(true);
-    try {
-      const result = await searchTrelloCard({ query: searchTerm });
-      toast({ description: result.message });
-      if (result.cardUrl) {
-        window.open(result.cardUrl, '_blank', 'noopener,noreferrer');
-        toast({ description: `Abriendo Trello en una nueva pestaña...` });
-      }
-    } catch (error: any) {
-      console.error("Trello card search error:", error);
-      toast({ description: error.message || 'Error al buscar la tarjeta en Trello.', variant: 'destructive' });
-    } finally {
-      setIsTrelloLoading(false);
-    }
-  }, [toast]);
 
   const handleDeasAddWfsLayer = useCallback((layer: GeoServerDiscoveredLayer) => {
     layerManagerHook.handleAddHybridLayer(layer.name, layer.title, initialGeoServerUrl, layer.bbox);
@@ -984,7 +966,6 @@ export default function GeoMapperClient() {
             onToggleCollapse={() => togglePanelCollapse('trello')}
             onClosePanel={() => togglePanelMinimize('trello')}
             onMouseDownHeader={(e) => handlePanelMouseDown(e, 'trello')}
-            isLoading={isTrelloLoading}
             style={{ top: `${panels.trello.position.y}px`, left: `${panels.trello.position.x}px`, zIndex: panels.trello.zIndex }}
           />
         )}
