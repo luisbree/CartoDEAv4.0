@@ -36,14 +36,17 @@ export type TrelloCard = z.infer<typeof TrelloCardSchema>;
 function getTrelloAuth() {
     const TRELLO_API_KEY = process.env.TRELLO_API_KEY;
     const TRELLO_API_TOKEN = process.env.TRELLO_API_TOKEN;
-    const TRELLO_BOARD_IDS = process.env.TRELLO_BOARD_IDS;
+    
+    // Dynamically find all board ID environment variables
+    const boardIdKeys = Object.keys(process.env).filter(key => key.startsWith('NEXT_PUBLIC_TRELLO_BOARD_ID_'));
+    const boardIdsList = boardIdKeys.map(key => process.env[key]).filter(Boolean) as string[];
+    const boardIds = boardIdsList.map(id => id.trim().replace(/['"]/g, '')).join(',');
 
-    if (!TRELLO_API_KEY || !TRELLO_API_TOKEN || !TRELLO_BOARD_IDS) {
+    if (!TRELLO_API_KEY || !TRELLO_API_TOKEN || boardIds.length === 0) {
         return null;
     }
 
     const authParams = `key=${TRELLO_API_KEY}&token=${TRELLO_API_TOKEN}`;
-    const boardIds = TRELLO_BOARD_IDS.split(',').map(id => id.trim().replace(/['"]/g, '')).join(',');
 
     return { authParams, boardIds };
 }
@@ -56,7 +59,7 @@ export async function checkTrelloCredentials(): Promise<{ success: boolean; mess
     const auth = getTrelloAuth();
     if (!auth) {
         // Indicate that Trello is not configured, but don't treat as an error.
-        return { success: false, message: 'Credenciales de Trello no configuradas.', configured: false };
+        return { success: false, message: 'Credenciales de Trello no configuradas. Verifique las variables de entorno.', configured: false };
     }
     
     const { authParams, boardIds } = auth;
@@ -91,7 +94,7 @@ export async function checkTrelloCredentials(): Promise<{ success: boolean; mess
 async function performTrelloSearch(query: string) {
     const auth = getTrelloAuth();
     if (!auth) {
-        throw new Error('La integración con Trello no está configurada. Por favor, configure las variables de entorno TRELLO_API_KEY, TRELLO_API_TOKEN y TRELLO_BOARD_IDS.');
+        throw new Error('La integración con Trello no está configurada. Por favor, configure las variables de entorno TRELLO_API_KEY, TRELLO_API_TOKEN y los IDs de los tableros.');
     }
 
     const { authParams, boardIds } = auth;
