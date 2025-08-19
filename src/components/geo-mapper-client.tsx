@@ -304,14 +304,14 @@ export default function GeoMapperClient() {
       const runTrelloAuthCheck = async () => {
           try {
               const result = await checkTrelloCredentials();
+              // Only toast on success. Failure cases (not configured) are silent.
+              // Real errors (bad credentials) will throw and be caught.
               if (result.success) {
                   toast({
                       title: "Trello Conectado",
                       description: result.message,
                   });
               }
-              // We don't toast on failure because it might just not be configured,
-              // which is not an error state. The function throws for real errors.
           } catch (error: any) {
               console.error("Error de verificación de Trello:", error);
               toast({

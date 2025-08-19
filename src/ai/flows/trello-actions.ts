@@ -52,12 +52,11 @@ function getTrelloAuth() {
 /**
  * Verifies that the Trello API credentials are valid by fetching board details.
  */
-export async function checkTrelloCredentials(): Promise<{ success: boolean; message: string; }> {
+export async function checkTrelloCredentials(): Promise<{ success: boolean; message: string; configured: boolean; }> {
     const auth = getTrelloAuth();
     if (!auth) {
-        // Silently fail if no credentials are set up at all.
-        // The UI won't show the Trello panel in this case.
-        return { success: false, message: 'Credenciales de Trello no configuradas.' };
+        // Indicate that Trello is not configured, but don't treat as an error.
+        return { success: false, message: 'Credenciales de Trello no configuradas.', configured: false };
     }
     
     const { authParams, boardIds } = auth;
@@ -79,7 +78,7 @@ export async function checkTrelloCredentials(): Promise<{ success: boolean; mess
         }
         
         await response.json(); // Verify the response is valid JSON
-        return { success: true, message: 'La conexión con Trello se ha establecido correctamente.' };
+        return { success: true, message: 'La conexión con Trello se ha establecido correctamente.', configured: true };
 
     } catch (error: any) {
         console.error("Trello credential check failed:", error);
@@ -147,6 +146,15 @@ export async function searchTrelloCards(input: SearchCardInput): Promise<TrelloC
  */
 export async function searchTrelloCard(input: SearchCardInput): Promise<SearchCardOutput> {
     const { query } = input;
+    
+    const auth = getTrelloAuth();
+    if (!auth) {
+        return {
+            cardUrl: '',
+            message: 'Lo siento, la integración con Trello no está configurada. No puedo realizar esta acción.'
+        };
+    }
+
     const searchData = await performTrelloSearch(query);
 
     if (!searchData.cards || searchData.cards.length === 0) {
