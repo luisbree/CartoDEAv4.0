@@ -255,14 +255,6 @@ export default function GeoMapperClient() {
         const discovered = await handleFetchGeoServerLayers(initialGeoServerUrl);
         if (discovered && discovered.length > 0) {
           setDiscoveredGeoServerLayers(discovered);
-          // Find and add the specific layer
-          const cuencasLayer = discovered.find(l => l.name === 'cartobase:cuencas');
-          if (cuencasLayer) {
-            // Use a timeout to ensure this runs after the initial state has settled
-            setTimeout(() => {
-              layerManagerHook.handleAddHybridLayer(cuencasLayer.name, cuencasLayer.title, initialGeoServerUrl, cuencasLayer.bbox);
-            }, 100);
-          }
         }
       } catch (error) {
         console.error("Failed to load initial DEAS layers:", error);
@@ -273,7 +265,7 @@ export default function GeoMapperClient() {
     if (isMapReady) {
        loadInitialLayers();
     }
-  }, [isMapReady, handleFetchGeoServerLayers, toast, layerManagerHook]);
+  }, [isMapReady, handleFetchGeoServerLayers, toast]);
 
   // Effect for automatic GEE authentication on load
   useEffect(() => {
