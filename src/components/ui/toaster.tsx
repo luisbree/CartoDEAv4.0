@@ -27,7 +27,8 @@ export function Toaster() {
           </Toast>
         )
       })}
-      <ToastViewport />
+      {/* The pointer-events-none class is added here to allow clicks to pass through the viewport to the map below */}
+      <ToastViewport className="pointer-events-none" />
     </ToastProvider>
   )
 }
