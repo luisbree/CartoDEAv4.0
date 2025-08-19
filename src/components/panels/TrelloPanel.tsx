@@ -128,7 +128,7 @@ const TrelloPanel: React.FC<TrelloPanelProps> = ({
       <div className="flex flex-col h-full bg-white/5 rounded-md p-3 space-y-3">
         
         <div>
-            <h3 className="text-sm font-semibold text-white mb-2">Conexión</h3>
+            <h3 className="text-sm font-semibold text-white mb-2">Conexión (Opcional)</h3>
             <div className="flex items-center gap-2">
                 <Button onClick={handleVerifyConnection} disabled={authStatus === 'loading'} className="flex-grow">
                     {authStatus === 'loading' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
@@ -153,7 +153,6 @@ const TrelloPanel: React.FC<TrelloPanelProps> = ({
                 placeholder="Escribe para buscar..."
                 className="text-xs h-8 border-white/30 bg-black/20 text-white/90 focus:ring-primary pl-8"
                 autoComplete="off"
-                disabled={authStatus !== 'success'}
               />
               <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
             </div>
@@ -161,11 +160,7 @@ const TrelloPanel: React.FC<TrelloPanelProps> = ({
         
         <div className="flex-grow min-h-[150px]">
           <ScrollArea className="h-full border border-white/10 p-2 rounded-md bg-black/10">
-            {authStatus !== 'success' ? (
-                <p className="text-center text-xs text-gray-400 pt-4">
-                    La conexión con Trello debe ser exitosa para buscar tarjetas.
-                </p>
-            ) : isLoading ? (
+            {isLoading ? (
               <div className="flex items-center justify-center h-full text-xs text-gray-300">
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 Buscando...
