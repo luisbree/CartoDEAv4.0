@@ -8,6 +8,11 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -18,6 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
+import { cn } from "@/lib/utils";
 
 export interface StyleOptions {
   strokeColor: string;
@@ -34,7 +40,7 @@ interface StyleEditorDialogProps {
 }
 
 const colorOptions = [
-  { value: 'transparent', label: 'Sin color', hex: 'rgba(0,0,0,0)' },
+  { value: 'transparent', label: 'Sin color', hex: 'rgba(0,0,0,0)', iconClass: "bg-transparent border border-dashed border-white/50 bg-[conic-gradient(from_90deg_at_1px_1px,#fff_90deg,rgb(228,228,231)_0)]" },
   { value: 'rojo', label: 'Rojo', hex: '#e63946' },
   { value: 'verde', label: 'Verde', hex: '#2a9d8f' },
   { value: 'azul', label: 'Azul', hex: '#0077b6' },
@@ -48,12 +54,43 @@ const colorOptions = [
   { value: 'magenta', label: 'Magenta', hex: '#ff00ff' },
 ];
 
-const ColorSelectItem: React.FC<{ hex: string; label: string }> = ({ hex, label }) => (
-  <div className="flex items-center">
-    <div className="w-4 h-4 rounded-full mr-2 border border-white/20" style={{ backgroundColor: hex }} />
-    <span>{label}</span>
-  </div>
-);
+
+interface ColorPickerProps {
+  value: string;
+  onChange: (value: string) => void;
+}
+
+const ColorPicker: React.FC<ColorPickerProps> = ({ value, onChange }) => {
+  const selectedColor = colorOptions.find(c => c.value === value) || colorOptions[0];
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button variant="outline" className="h-8 w-8 p-0 border-white/30 bg-black/20">
+            <div className={cn("w-5 h-5 rounded-full border border-white/20", selectedColor.iconClass)} style={{ backgroundColor: selectedColor.hex }} />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent side="right" align="start" className="w-auto p-2 bg-gray-700/90 backdrop-blur-sm border-gray-600">
+        <div className="grid grid-cols-6 gap-2">
+          {colorOptions.map(color => (
+            <Button
+              key={color.value}
+              variant="outline"
+              className={cn(
+                "h-7 w-7 p-0",
+                value === color.value ? "ring-2 ring-offset-2 ring-offset-gray-700 ring-white" : "border-white/30"
+              )}
+              onClick={() => onChange(color.value)}
+            >
+              <div className={cn("w-5 h-5 rounded-full border border-white/20", color.iconClass)} style={{ backgroundColor: color.hex }} />
+            </Button>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+};
+
 
 const StyleEditorDialog: React.FC<StyleEditorDialogProps> = ({
   isOpen,
@@ -73,8 +110,6 @@ const StyleEditorDialog: React.FC<StyleEditorDialogProps> = ({
   };
   
   const isPolygon = layerType.includes('Polygon');
-  const isLine = layerType.includes('LineString');
-  const isPoint = layerType.includes('Point');
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -87,21 +122,12 @@ const StyleEditorDialog: React.FC<StyleEditorDialogProps> = ({
             <Label htmlFor="stroke-color" className="text-right text-xs">
               Contorno
             </Label>
-            <Select
-              value={styleOptions.strokeColor}
-              onValueChange={(value) => setStyleOptions(prev => ({ ...prev, strokeColor: value }))}
-            >
-              <SelectTrigger id="stroke-color" className="col-span-3 h-8 text-xs bg-black/20">
-                <SelectValue placeholder="Seleccionar color" />
-              </SelectTrigger>
-              <SelectContent className="bg-gray-700 text-white border-gray-600">
-                {colorOptions.map(c => (
-                  <SelectItem key={c.value} value={c.value} className="text-xs">
-                    <ColorSelectItem hex={c.hex} label={c.label} />
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="col-span-3">
+              <ColorPicker 
+                value={styleOptions.strokeColor}
+                onChange={(value) => setStyleOptions(prev => ({ ...prev, strokeColor: value }))}
+              />
+            </div>
           </div>
 
           {isPolygon && (
@@ -109,21 +135,12 @@ const StyleEditorDialog: React.FC<StyleEditorDialogProps> = ({
               <Label htmlFor="fill-color" className="text-right text-xs">
                 Relleno
               </Label>
-              <Select
-                value={styleOptions.fillColor}
-                onValueChange={(value) => setStyleOptions(prev => ({ ...prev, fillColor: value }))}
-              >
-                <SelectTrigger id="fill-color" className="col-span-3 h-8 text-xs bg-black/20">
-                  <SelectValue placeholder="Seleccionar color" />
-                </SelectTrigger>
-                <SelectContent className="bg-gray-700 text-white border-gray-600">
-                  {colorOptions.map(c => (
-                    <SelectItem key={c.value} value={c.value} className="text-xs">
-                      <ColorSelectItem hex={c.hex} label={c.label} />
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+               <div className="col-span-3">
+                <ColorPicker 
+                  value={styleOptions.fillColor}
+                  onChange={(value) => setStyleOptions(prev => ({ ...prev, fillColor: value }))}
+                />
+               </div>
             </div>
           )}
 
