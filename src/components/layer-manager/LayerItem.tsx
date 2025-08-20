@@ -86,6 +86,7 @@ const LayerItem: React.FC<LayerItemProps> = ({
   const [isEditing, setIsEditing] = useState(false);
   const [editingName, setEditingName] = useState(layer.name);
   const [isStyleEditorOpen, setIsStyleEditorOpen] = useState(false);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -131,6 +132,7 @@ const LayerItem: React.FC<LayerItemProps> = ({
   const handleStyleChange = (styleOptions: StyleOptions) => {
     onChangeLayerStyle(layer.id, styleOptions);
     setIsStyleEditorOpen(false);
+    setIsDropdownOpen(false); // Close the main dropdown menu
   };
 
 
@@ -191,7 +193,7 @@ const LayerItem: React.FC<LayerItemProps> = ({
           </span>
         )}
         <div className="flex items-center space-x-0.5 flex-shrink-0">
-          <DropdownMenu>
+          <DropdownMenu open={isDropdownOpen} onOpenChange={setIsDropdownOpen}>
             <DropdownMenuTrigger asChild>
               <Button
                 variant="ghost"

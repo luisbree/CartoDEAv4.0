@@ -61,10 +61,11 @@ interface ColorPickerProps {
 }
 
 const ColorPicker: React.FC<ColorPickerProps> = ({ value, onChange }) => {
+  const [isOpen, setIsOpen] = useState(false);
   const selectedColor = colorOptions.find(c => c.value === value) || colorOptions[0];
 
   return (
-    <Popover>
+    <Popover open={isOpen} onOpenChange={setIsOpen}>
       <PopoverTrigger asChild>
         <Button variant="outline" className="h-8 w-8 p-0 border-white/30 bg-black/20">
             <div className={cn("w-5 h-5 rounded-full border border-white/20", selectedColor.iconClass)} style={{ backgroundColor: selectedColor.hex }} />
@@ -80,7 +81,10 @@ const ColorPicker: React.FC<ColorPickerProps> = ({ value, onChange }) => {
                 "h-7 w-7 p-0",
                 value === color.value ? "ring-2 ring-offset-2 ring-offset-gray-700 ring-white" : "border-white/30"
               )}
-              onClick={() => onChange(color.value)}
+              onClick={() => {
+                onChange(color.value);
+                setIsOpen(false);
+              }}
             >
               <div className={cn("w-5 h-5 rounded-full border border-white/20", color.iconClass)} style={{ backgroundColor: color.hex }} />
             </Button>
@@ -117,7 +121,8 @@ const StyleEditorDialog: React.FC<StyleEditorDialogProps> = ({
         <DialogHeader>
           <DialogTitle>Estilo</DialogTitle>
         </DialogHeader>
-        <div className="grid grid-cols-4 gap-4 py-2 items-end">
+        <div className="grid grid-cols-1 gap-4 py-2">
+            <div className="flex items-end gap-3 w-full justify-around">
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="stroke-color" className="text-xs">
                   Contorno
@@ -148,7 +153,7 @@ const StyleEditorDialog: React.FC<StyleEditorDialogProps> = ({
                   value={styleOptions.lineStyle}
                   onValueChange={(value: StyleOptions['lineStyle']) => setStyleOptions(prev => ({ ...prev, lineStyle: value }))}
                 >
-                  <SelectTrigger id="line-style" className="h-8 text-xs bg-black/20">
+                  <SelectTrigger id="line-style" className="h-8 text-xs bg-black/20 w-28">
                     <SelectValue placeholder="Seleccionar estilo" />
                   </SelectTrigger>
                   <SelectContent className="bg-gray-700 text-white border-gray-600">
@@ -170,11 +175,12 @@ const StyleEditorDialog: React.FC<StyleEditorDialogProps> = ({
                   max="20"
                   value={styleOptions.lineWidth}
                   onChange={(e) => setStyleOptions(prev => ({ ...prev, lineWidth: Number(e.target.value) }))}
-                  className="h-8 text-xs bg-black/20"
+                  className="h-8 text-xs bg-black/20 w-20"
                 />
               </div>
+            </div>
         </div>
-        <DialogFooter>
+        <DialogFooter className="justify-center">
           <Button variant="outline" onClick={onClose} className="h-8 text-xs bg-gray-200 text-black hover:bg-gray-300">Cancelar</Button>
           <Button onClick={handleApply} className="h-8 text-xs bg-primary hover:bg-primary/90">Aplicar</Button>
         </DialogFooter>
