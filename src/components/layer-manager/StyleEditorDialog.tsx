@@ -113,11 +113,11 @@ const StyleEditorDialog: React.FC<StyleEditorDialogProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="bg-gray-800 text-white border-gray-700 sm:max-w-md">
+      <DialogContent className="bg-gray-800 text-white border-gray-700 sm:max-w-xs p-4">
         <DialogHeader>
-          <DialogTitle>Editor de Estilo</DialogTitle>
+          {/* Title removed as requested */}
         </DialogHeader>
-        <div className="grid gap-4 py-4">
+        <div className="grid gap-4 py-2">
           <div className="flex items-end gap-3">
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="stroke-color" className="text-xs">
@@ -176,7 +176,7 @@ const StyleEditorDialog: React.FC<StyleEditorDialogProps> = ({
               </div>
           </div>
         </div>
-        <DialogFooter>
+        <DialogFooter className="justify-start">
           <Button variant="outline" onClick={onClose} className="h-8 text-xs bg-gray-200 text-black hover:bg-gray-300">Cancelar</Button>
           <Button onClick={handleApply} className="h-8 text-xs bg-primary hover:bg-primary/90">Aplicar</Button>
         </DialogFooter>
