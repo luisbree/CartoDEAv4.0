@@ -301,9 +301,6 @@ export default function GeoMapperClient() {
                     title: "Trello Conectado",
                     description: result.message,
                 });
-            } else if (result.configured) {
-                // This case handles errors for configured credentials, but the action now throws on error.
-                // It's kept for logical completeness. The catch block will handle it.
             }
             // If not configured, do nothing (no toast).
         } catch (error: any) {
@@ -681,17 +678,9 @@ export default function GeoMapperClient() {
 
   return (
     <div className="flex h-screen w-screen flex-col bg-background text-foreground">
-      <header className="bg-gray-800/80 backdrop-blur-md text-white p-2 shadow-md flex items-center justify-between z-30">
-        <div className="flex items-center">
-          <MapPin className="mr-2 h-6 w-6 text-primary" />
-          <h1 className="text-xl font-semibold">Departamento de Estudios Ambientales y Sociales</h1>
-        </div>
-        <div className="flex flex-row space-x-1">
-          {/* Panel buttons moved to the second toolbar */}
-        </div>
-      </header>
 
       <div className="bg-gray-700/90 backdrop-blur-sm shadow-md p-2 z-20 flex items-center gap-2">
+        <div className="w-8 h-8 bg-gray-600/50 rounded-md flex-shrink-0" title="Placeholder para Logo"></div>
         <TooltipProvider delayDuration={200}>
           <Tooltip>
             <TooltipTrigger asChild>
