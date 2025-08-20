@@ -13,8 +13,8 @@ import {
 import { Separator } from '@/components/ui/separator';
 
 interface FeatureInteractionToolbarProps {
-  activeTool: 'inspect' | 'selectClick' | 'selectBox' | null;
-  onSetActiveTool: (tool: 'inspect' | 'selectClick' | 'selectBox' | null) => void;
+  activeTool: 'inspect' | 'selectBox' | null;
+  onSetActiveTool: (tool: 'inspect' | 'selectBox' | null) => void;
   onClearSelection: () => void;
 }
 
@@ -28,7 +28,7 @@ const FeatureInteractionToolbar: React.FC<FeatureInteractionToolbarProps> = ({
   const activeClass = "bg-primary hover:bg-primary/90 text-primary-foreground";
   const inactiveClass = "border border-white/30 text-white/90 bg-black/20 hover:bg-black/40";
   
-  const handleToggleTool = (tool: 'inspect' | 'selectClick' | 'selectBox') => {
+  const handleToggleTool = (tool: 'inspect' | 'selectBox') => {
     onSetActiveTool(activeTool === tool ? null : tool);
   };
 
@@ -57,34 +57,17 @@ const FeatureInteractionToolbar: React.FC<FeatureInteractionToolbarProps> = ({
         <Tooltip>
           <TooltipTrigger asChild>
             <Button 
-              onClick={() => handleToggleTool('selectClick')}
-              className={`${iconButtonBaseClass} ${
-                activeTool === 'selectClick' ? activeClass : inactiveClass
-              }`}
-              aria-label={activeTool === 'selectClick' ? "Desactivar Selección" : "Activar Selección"}
-            >
-              <MousePointerClick className="h-4 w-4" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom" className="bg-gray-700 text-white border-gray-600">
-            <p className="text-xs">Seleccionar entidad (clic)</p>
-          </TooltipContent>
-        </Tooltip>
-
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button 
               onClick={() => handleToggleTool('selectBox')}
               className={`${iconButtonBaseClass} ${
                 activeTool === 'selectBox' ? activeClass : inactiveClass
               }`}
-              aria-label={activeTool === 'selectBox' ? "Desactivar Selección por Caja" : "Activar Selección por Caja"}
+              aria-label={activeTool === 'selectBox' ? "Desactivar Selección" : "Activar Selección (clic o caja)"}
             >
               <BoxSelect className="h-4 w-4" />
             </Button>
           </TooltipTrigger>
           <TooltipContent side="bottom" className="bg-gray-700 text-white border-gray-600">
-            <p className="text-xs">Seleccionar por caja</p>
+            <p className="text-xs">Seleccionar por clic o caja</p>
           </TooltipContent>
         </Tooltip>
 

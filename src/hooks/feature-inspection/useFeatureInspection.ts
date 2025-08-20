@@ -20,7 +20,7 @@ interface UseFeatureInspectionProps {
   onNewSelection: () => void;
 }
 
-export type ActiveInteractionTool = 'inspect' | 'selectClick' | 'selectBox' | null;
+export type ActiveInteractionTool = 'inspect' | 'selectBox' | null;
 
 const highlightStyle = new Style({
   stroke: new Stroke({
@@ -120,8 +120,7 @@ export const useFeatureInspection = ({
     
     const toolMessages = {
       inspect: 'Modo Inspección activado. Haga clic en una entidad.',
-      selectClick: 'Modo Selección por Clic activado.',
-      selectBox: 'Modo Selección por Caja activado.',
+      selectBox: 'Modo Selección activado. Haga clic o dibuje una caja.',
     };
 
     if (tool && toolMessages[tool]) {
@@ -150,7 +149,7 @@ export const useFeatureInspection = ({
          mapElementRef.current.style.cursor = isBoxMode ? 'crosshair' : 'help';
       }
 
-      // --- Select interaction for clicks ---
+      // --- Select interaction for clicks (used by both inspect and selectBox) ---
       const select = new Select({
         style: highlightStyle,
         multi: true, // Always allow multi for simplicity, Ctrl key will handle it
@@ -161,16 +160,14 @@ export const useFeatureInspection = ({
       map.addInteraction(select);
       
       select.on('select', (e: SelectEvent) => {
-        if (isBoxMode) return; // Ignore click events when in box mode
-
         const newlySelectedFeatures = e.target.getFeatures().getArray();
         setSelectedFeatures(newlySelectedFeatures);
 
         if (activeTool === 'inspect') {
             const plainData = extractPlainAttributes(newlySelectedFeatures);
             processAndDisplayFeatures(plainData, 'Inspección');
-        } else if (activeTool === 'selectClick') {
-            if (e.selected.length > 0 || e.deselected.length > 0) {
+        } else if (activeTool === 'selectBox') {
+             if (e.selected.length > 0 || e.deselected.length > 0) {
                toast({ description: `${newlySelectedFeatures.length} entidad(es) seleccionada(s).` });
             }
         }
