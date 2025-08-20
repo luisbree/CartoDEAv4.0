@@ -1,3 +1,4 @@
+
 "use client";
 
 import React from 'react';
@@ -46,7 +47,7 @@ const OSMDownloadOptions: React.FC<OSMDownloadOptionsProps> = ({
 
   return (
     <TooltipProvider delayDuration={300}>
-      <div className="flex items-center justify-end gap-1">
+      <div className="flex items-center justify-start gap-1">
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
