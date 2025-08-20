@@ -7,7 +7,7 @@ import FileUploadControl from '@/components/layer-manager/FileUploadControl';
 import FeatureInteractionToolbar from '@/components/feature-inspection/FeatureInteractionToolbar';
 import { Separator } from '@/components/ui/separator';
 import type { MapLayer, GeoServerDiscoveredLayer } from '@/lib/types';
-import { ListTree, Trash2, Database, Search } from 'lucide-react'; 
+import { ListTree, Trash2, Database, Search, X as ClearIcon } from 'lucide-react'; 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -229,13 +229,22 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
                 <Separator className="bg-white/10 mb-2" />
                 <h3 className="text-sm font-semibold text-white px-2 pb-2 flex-shrink-0">Capas Predefinidas (DEAS)</h3>
                  <div className="relative mb-2 px-2">
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
                     <Input
                         placeholder="Buscar capa o grupo..."
                         value={deasSearchTerm}
                         onChange={(e) => setDeasSearchTerm(e.target.value)}
-                        className="text-xs h-8 border-white/30 bg-black/20 text-white/90 focus:ring-primary pl-8"
+                        className="text-xs h-8 border-white/30 bg-black/20 text-white/90 focus:ring-primary pl-8 pr-8"
                     />
-                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                    {deasSearchTerm && (
+                        <button
+                            onClick={() => setDeasSearchTerm('')}
+                            className="absolute right-4 top-1/2 -translate-y-1/2 p-1 text-gray-400/80 hover:text-white"
+                            aria-label="Limpiar búsqueda"
+                        >
+                            <ClearIcon className="h-3.5 w-3.5" />
+                        </button>
+                    )}
                 </div>
                 <ScrollArea className="flex-grow min-h-0 border-t border-gray-700/50">
                 <div className="pr-3">
