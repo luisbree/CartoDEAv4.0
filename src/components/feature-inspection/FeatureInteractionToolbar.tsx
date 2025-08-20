@@ -1,16 +1,14 @@
-
 "use client";
 
 import React from 'react';
 import { Button } from '@/components/ui/button';
-import { MousePointerClick, BoxSelect, Eraser, Info } from 'lucide-react';
+import { BoxSelect, Eraser, Info } from 'lucide-react';
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Separator } from '@/components/ui/separator';
 
 interface FeatureInteractionToolbarProps {
   activeTool: 'inspect' | 'selectBox' | null;
@@ -52,8 +50,6 @@ const FeatureInteractionToolbar: React.FC<FeatureInteractionToolbarProps> = ({
           </TooltipContent>
         </Tooltip>
         
-        <Separator orientation="vertical" className="h-6 bg-white/20 mx-1" />
-
         <Tooltip>
           <TooltipTrigger asChild>
             <Button 
