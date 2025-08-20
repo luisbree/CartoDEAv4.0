@@ -118,41 +118,40 @@ const StyleEditorDialog: React.FC<StyleEditorDialogProps> = ({
           <DialogTitle>Editor de Estilo</DialogTitle>
         </DialogHeader>
         <div className="grid gap-4 py-4">
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="stroke-color" className="text-right text-xs">
-              Contorno
-            </Label>
-            <div className="col-span-3">
+
+          <div className="flex items-center gap-4">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="stroke-color" className="text-xs">
+                Contorno
+              </Label>
               <ColorPicker 
                 value={styleOptions.strokeColor}
                 onChange={(value) => setStyleOptions(prev => ({ ...prev, strokeColor: value }))}
               />
             </div>
-          </div>
-
-          {isPolygon && (
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="fill-color" className="text-right text-xs">
-                Relleno
-              </Label>
-               <div className="col-span-3">
+            
+            {isPolygon && (
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="fill-color" className="text-xs">
+                  Relleno
+                </Label>
                 <ColorPicker 
                   value={styleOptions.fillColor}
                   onChange={(value) => setStyleOptions(prev => ({ ...prev, fillColor: value }))}
                 />
-               </div>
-            </div>
-          )}
+              </div>
+            )}
+          </div>
 
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="line-style" className="text-right text-xs">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="line-style" className="text-xs">
               Estilo Línea
             </Label>
             <Select
               value={styleOptions.lineStyle}
               onValueChange={(value: StyleOptions['lineStyle']) => setStyleOptions(prev => ({ ...prev, lineStyle: value }))}
             >
-              <SelectTrigger id="line-style" className="col-span-3 h-8 text-xs bg-black/20">
+              <SelectTrigger id="line-style" className="w-full h-8 text-xs bg-black/20">
                 <SelectValue placeholder="Seleccionar estilo" />
               </SelectTrigger>
               <SelectContent className="bg-gray-700 text-white border-gray-600">
@@ -163,8 +162,8 @@ const StyleEditorDialog: React.FC<StyleEditorDialogProps> = ({
             </Select>
           </div>
 
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="line-width" className="text-right text-xs">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="line-width" className="text-xs">
               Grosor ({styleOptions.lineWidth}px)
             </Label>
             <Slider
@@ -177,7 +176,6 @@ const StyleEditorDialog: React.FC<StyleEditorDialogProps> = ({
               className="col-span-3"
             />
           </div>
-
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose} className="h-8 text-xs">Cancelar</Button>
