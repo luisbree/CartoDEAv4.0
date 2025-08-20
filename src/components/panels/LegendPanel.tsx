@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useMemo } from 'react';
@@ -25,6 +24,7 @@ import {
 } from "@/components/ui/accordion";
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Label } from '@/components/ui/label';
+import type { StyleOptions } from '../layer-manager/StyleEditorDialog';
 
 interface LegendPanelProps {
   panelRef: React.RefObject<HTMLDivElement>;
@@ -47,6 +47,7 @@ interface LegendPanelProps {
   onSetLayerOpacity: (layerId: string, opacity: number) => void; 
   onReorderLayers: (draggedIds: string[], targetId: string | null) => void;
   onRenameLayer: (layerId: string, newName: string) => void;
+  onChangeLayerStyle: (layerId: string, styleOptions: StyleOptions) => void;
 
   onAddLayer: (layer: MapLayer) => void;
 
@@ -68,6 +69,7 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
   panelRef, isCollapsed, onToggleCollapse, onClosePanel, onMouseDownHeader,
   layers, onToggleLayerVisibility, onRemoveLayer, onRemoveLayers, onZoomToLayerExtent, onShowLayerTable,
   onExtractByPolygon, onExtractBySelection, onExportLayer, isDrawingSourceEmptyOrNotPolygon, isSelectionEmpty, onSetLayerOpacity, onReorderLayers, onRenameLayer,
+  onChangeLayerStyle,
   onAddLayer, 
   isInteractionActive, onToggleInteraction, selectionMode, onSetSelectionMode, onClearSelection,
   discoveredDeasLayers, onAddDeasLayer,
@@ -210,6 +212,7 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
                             onExtractBySelection={() => onExtractBySelection(clearLayerSelection)}
                             onExportLayer={onExportLayer}
                             onRenameLayer={onRenameLayer}
+                            onChangeLayerStyle={onChangeLayerStyle}
                             isDrawingSourceEmptyOrNotPolygon={isDrawingSourceEmptyOrNotPolygon}
                             isSelectionEmpty={isSelectionEmpty}
                             onSetLayerOpacity={onSetLayerOpacity}
@@ -284,8 +287,3 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
 };
 
 export default LegendPanel;
-
-
-
-
-
