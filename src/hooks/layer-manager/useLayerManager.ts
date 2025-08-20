@@ -17,7 +17,7 @@ import type { MapLayer, VectorMapLayer } from '@/lib/types';
 import { nanoid } from 'nanoid';
 import { Style, Stroke, Fill, Circle as CircleStyle } from 'ol/style';
 import { transformExtent } from 'ol/proj';
-import { asArray as asOlColorArray } from 'ol/color';
+import { asArray as asOlColorArray, asString as asOlColorString } from 'ol/color';
 import GeoJSON from 'ol/format/GeoJSON';
 import KML from 'ol/format/KML';
 import shp from 'shpjs';
@@ -50,6 +50,7 @@ const colorMap: { [key: string]: string } = {
   gris: '#adb5bd',
   cian: '#00ffff',
   magenta: '#ff00ff',
+  transparent: 'rgba(0,0,0,0)',
 };
 
 // A completely transparent style for the invisible WFS layer
@@ -414,22 +415,28 @@ export const useLayerManager = ({
         let styleChanged = false;
     
         if (styleOptions.strokeColor) {
-            const colorHex = colorMap[styleOptions.strokeColor.toLowerCase()];
-            if (colorHex) {
+            const colorValue = colorMap[styleOptions.strokeColor.toLowerCase()];
+            if (colorValue) {
                 styleChanged = true;
-                stroke.setColor(colorHex);
-                if (image.getStroke()) image.getStroke().setColor(colorHex);
+                const newStrokeColor = colorValue === 'rgba(0,0,0,0)' ? undefined : colorValue;
+                stroke.setColor(newStrokeColor);
+                if (image.getStroke()) image.getStroke().setColor(newStrokeColor);
             }
         }
     
         if (styleOptions.fillColor) {
-            const colorHex = colorMap[styleOptions.fillColor.toLowerCase()];
-            if (colorHex) {
+            const colorValue = colorMap[styleOptions.fillColor.toLowerCase()];
+            if (colorValue) {
                 styleChanged = true;
-                const olColor = asOlColorArray(colorHex);
-                const fillColorRgba = [...olColor.slice(0, 3), 0.6] as [number, number, number, number];
-                fill.setColor(fillColorRgba);
-                if (image.getFill()) image.getFill().setColor(fillColorRgba);
+                let newFillColor: string | undefined = colorValue;
+                if (colorValue !== 'rgba(0,0,0,0)') {
+                    const olColor = asOlColorArray(colorValue);
+                    newFillColor = asOlColorString([...olColor.slice(0, 3), 0.6]);
+                } else {
+                    newFillColor = undefined;
+                }
+                fill.setColor(newFillColor);
+                if (image.getFill()) image.getFill().setColor(newFillColor);
             }
         }
     

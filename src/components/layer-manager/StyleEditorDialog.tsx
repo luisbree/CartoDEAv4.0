@@ -34,6 +34,7 @@ interface StyleEditorDialogProps {
 }
 
 const colorOptions = [
+  { value: 'transparent', label: 'Sin color', hex: 'rgba(0,0,0,0)' },
   { value: 'rojo', label: 'Rojo', hex: '#e63946' },
   { value: 'verde', label: 'Verde', hex: '#2a9d8f' },
   { value: 'azul', label: 'Azul', hex: '#0077b6' },
