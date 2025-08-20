@@ -399,7 +399,7 @@ export const useLayerManager = ({
                 image: new CircleStyle({
                     radius: 5,
                     fill: new Fill({ color: 'rgba(51, 153, 204, 0.2)' }),
-                    stroke: new Stroke({ color: '#3399CC', width: 1 })
+                    stroke: new Stroke({ color: '#3399CC', width: 1.5 })
                 })
             });
         }
@@ -418,9 +418,8 @@ export const useLayerManager = ({
             const colorValue = colorMap[styleOptions.strokeColor.toLowerCase()];
             if (colorValue) {
                 styleChanged = true;
-                const newStrokeColor = colorValue === 'rgba(0,0,0,0)' ? undefined : colorValue;
-                stroke.setColor(newStrokeColor);
-                if (image.getStroke()) image.getStroke().setColor(newStrokeColor);
+                stroke.setColor(colorValue);
+                if (image.getStroke()) image.getStroke().setColor(colorValue);
             }
         }
     
@@ -428,12 +427,10 @@ export const useLayerManager = ({
             const colorValue = colorMap[styleOptions.fillColor.toLowerCase()];
             if (colorValue) {
                 styleChanged = true;
-                let newFillColor: string | undefined = colorValue;
-                if (colorValue !== 'rgba(0,0,0,0)') {
-                    const olColor = asOlColorArray(colorValue);
+                let newFillColor = colorValue;
+                if (newFillColor !== 'rgba(0,0,0,0)') {
+                    const olColor = asOlColorArray(newFillColor);
                     newFillColor = asOlColorString([...olColor.slice(0, 3), 0.6]);
-                } else {
-                    newFillColor = 'rgba(0,0,0,0)'; // Explicitly set to transparent
                 }
                 fill.setColor(newFillColor);
                 if (image.getFill()) image.getFill().setColor(newFillColor);
