@@ -113,73 +113,76 @@ const StyleEditorDialog: React.FC<StyleEditorDialogProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="bg-gray-800 text-white border-gray-700">
+      <DialogContent className="bg-gray-800 text-white border-gray-700 sm:max-w-[480px]">
         <DialogHeader>
           <DialogTitle>Editor de Estilo</DialogTitle>
         </DialogHeader>
-        <div className="grid gap-4 py-4">
-          <div className="flex items-end gap-4">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="stroke-color" className="text-xs">
-                Contorno
-              </Label>
-              <ColorPicker 
-                value={styleOptions.strokeColor}
-                onChange={(value) => setStyleOptions(prev => ({ ...prev, strokeColor: value }))}
-              />
-            </div>
-            
-            {isPolygon && (
+        <div className="flex flex-col gap-4 pt-4">
+          <div className="flex items-end justify-between gap-4">
+            <div className="flex items-end gap-3">
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="fill-color" className="text-xs">
-                  Relleno
+                <Label htmlFor="stroke-color" className="text-xs">
+                  Contorno
                 </Label>
                 <ColorPicker 
-                  value={styleOptions.fillColor}
-                  onChange={(value) => setStyleOptions(prev => ({ ...prev, fillColor: value }))}
+                  value={styleOptions.strokeColor}
+                  onChange={(value) => setStyleOptions(prev => ({ ...prev, strokeColor: value }))}
                 />
               </div>
-            )}
+              
+              {isPolygon && (
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="fill-color" className="text-xs">
+                    Relleno
+                  </Label>
+                  <ColorPicker 
+                    value={styleOptions.fillColor}
+                    onChange={(value) => setStyleOptions(prev => ({ ...prev, fillColor: value }))}
+                  />
+                </div>
+              )}
 
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="line-style" className="text-xs">
-                Estilo Línea
-              </Label>
-              <Select
-                value={styleOptions.lineStyle}
-                onValueChange={(value: StyleOptions['lineStyle']) => setStyleOptions(prev => ({ ...prev, lineStyle: value }))}
-              >
-                <SelectTrigger id="line-style" className="w-[120px] h-8 text-xs bg-black/20">
-                  <SelectValue placeholder="Seleccionar estilo" />
-                </SelectTrigger>
-                <SelectContent className="bg-gray-700 text-white border-gray-600">
-                  <SelectItem value="solid" className="text-xs">Continua</SelectItem>
-                  <SelectItem value="dashed" className="text-xs">Trazos</SelectItem>
-                  <SelectItem value="dotted" className="text-xs">Puntos</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="line-style" className="text-xs">
+                  Estilo Línea
+                </Label>
+                <Select
+                  value={styleOptions.lineStyle}
+                  onValueChange={(value: StyleOptions['lineStyle']) => setStyleOptions(prev => ({ ...prev, lineStyle: value }))}
+                >
+                  <SelectTrigger id="line-style" className="w-[120px] h-8 text-xs bg-black/20">
+                    <SelectValue placeholder="Seleccionar estilo" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-gray-700 text-white border-gray-600">
+                    <SelectItem value="solid" className="text-xs">Continua</SelectItem>
+                    <SelectItem value="dashed" className="text-xs">Trazos</SelectItem>
+                    <SelectItem value="dotted" className="text-xs">Puntos</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="line-width" className="text-xs">
+                  Grosor (px)
+                </Label>
+                <Input
+                  id="line-width"
+                  type="number"
+                  min="1"
+                  max="20"
+                  value={styleOptions.lineWidth}
+                  onChange={(e) => setStyleOptions(prev => ({ ...prev, lineWidth: Number(e.target.value) }))}
+                  className="w-[70px] h-8 text-xs bg-black/20"
+                />
+              </div>
             </div>
 
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="line-width" className="text-xs">
-                Grosor (px)
-              </Label>
-              <Input
-                id="line-width"
-                type="number"
-                min="1"
-                max="20"
-                value={styleOptions.lineWidth}
-                onChange={(e) => setStyleOptions(prev => ({ ...prev, lineWidth: Number(e.target.value) }))}
-                className="w-[70px] h-8 text-xs bg-black/20"
-              />
+            <div className="flex items-end gap-2">
+              <Button variant="outline" onClick={onClose} className="h-8 text-xs bg-gray-200 text-black hover:bg-gray-300">Cancelar</Button>
+              <Button onClick={handleApply} className="h-8 text-xs bg-primary hover:bg-primary/90">Aplicar</Button>
             </div>
           </div>
         </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose} className="h-8 text-xs bg-gray-200 text-black hover:bg-gray-300">Cancelar</Button>
-          <Button onClick={handleApply} className="h-8 text-xs bg-primary hover:bg-primary/90">Aplicar</Button>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
