@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useMemo } from 'react';
@@ -25,6 +26,7 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Label } from '@/components/ui/label';
 import type { StyleOptions } from '../layer-manager/StyleEditorDialog';
+import type { ActiveInteractionTool } from '@/hooks/feature-inspection/useFeatureInspection';
 
 interface LegendPanelProps {
   panelRef: React.RefObject<HTMLDivElement>;
@@ -51,10 +53,8 @@ interface LegendPanelProps {
 
   onAddLayer: (layer: MapLayer) => void;
 
-  isInteractionActive: boolean;
-  onToggleInteraction: () => void;
-  selectionMode: 'click' | 'box';
-  onSetSelectionMode: (mode: 'click' | 'box') => void;
+  activeTool: ActiveInteractionTool;
+  onSetActiveTool: (tool: ActiveInteractionTool) => void;
   onClearSelection: () => void;
 
   // DEAS props
@@ -71,7 +71,7 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
   onExtractByPolygon, onExtractBySelection, onExportLayer, isDrawingSourceEmptyOrNotPolygon, isSelectionEmpty, onSetLayerOpacity, onReorderLayers, onRenameLayer,
   onChangeLayerStyle,
   onAddLayer, 
-  isInteractionActive, onToggleInteraction, selectionMode, onSetSelectionMode, onClearSelection,
+  activeTool, onSetActiveTool, onClearSelection,
   discoveredDeasLayers, onAddDeasLayer,
   style,
 }) => {
@@ -187,10 +187,8 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
                 </Tooltip>
             </TooltipProvider>
             <FeatureInteractionToolbar
-              isInteractionActive={isInteractionActive}
-              onToggleInteraction={onToggleInteraction}
-              selectionMode={selectionMode}
-              onSetSelectionMode={onSetSelectionMode}
+              activeTool={activeTool}
+              onSetActiveTool={onSetActiveTool}
               onClearSelection={onClearSelection}
             />
           </div>

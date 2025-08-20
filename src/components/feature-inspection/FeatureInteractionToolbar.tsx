@@ -13,18 +13,14 @@ import {
 import { Separator } from '@/components/ui/separator';
 
 interface FeatureInteractionToolbarProps {
-  isInteractionActive: boolean;
-  onToggleInteraction: () => void;
-  selectionMode: 'click' | 'box';
-  onSetSelectionMode: (mode: 'click' | 'box') => void;
+  activeTool: 'inspect' | 'selectClick' | 'selectBox' | null;
+  onSetActiveTool: (tool: 'inspect' | 'selectClick' | 'selectBox' | null) => void;
   onClearSelection: () => void;
 }
 
 const FeatureInteractionToolbar: React.FC<FeatureInteractionToolbarProps> = ({
-  isInteractionActive,
-  onToggleInteraction,
-  selectionMode,
-  onSetSelectionMode,
+  activeTool,
+  onSetActiveTool,
   onClearSelection,
 }) => {
   const iconButtonBaseClass = "h-8 w-8 p-0 flex items-center justify-center focus-visible:ring-primary";
@@ -32,7 +28,9 @@ const FeatureInteractionToolbar: React.FC<FeatureInteractionToolbarProps> = ({
   const activeClass = "bg-primary hover:bg-primary/90 text-primary-foreground";
   const inactiveClass = "border border-white/30 text-white/90 bg-black/20 hover:bg-black/40";
   
-  const masterTooltipText = isInteractionActive ? 'Desactivar modo interactivo' : 'Activar modo interactivo';
+  const handleToggleTool = (tool: 'inspect' | 'selectClick' | 'selectBox') => {
+    onSetActiveTool(activeTool === tool ? null : tool);
+  };
 
   return (
     <TooltipProvider delayDuration={300}>
@@ -40,74 +38,70 @@ const FeatureInteractionToolbar: React.FC<FeatureInteractionToolbarProps> = ({
         <Tooltip>
           <TooltipTrigger asChild>
             <Button 
-              onClick={onToggleInteraction} 
+              onClick={() => handleToggleTool('inspect')}
               className={`${iconButtonBaseClass} ${
-                isInteractionActive ? activeClass : inactiveClass
+                activeTool === 'inspect' ? activeClass : inactiveClass
               }`}
-              aria-label={masterTooltipText}
+              aria-label={activeTool === 'inspect' ? "Desactivar Inspección" : "Activar Inspección"}
             >
               <Info className="h-4 w-4" />
             </Button>
           </TooltipTrigger>
           <TooltipContent side="bottom" className="bg-gray-700 text-white border-gray-600">
-            <p className="text-xs">{masterTooltipText}</p>
+            <p className="text-xs">Inspeccionar entidad (clic)</p>
+          </TooltipContent>
+        </Tooltip>
+        
+        <Separator orientation="vertical" className="h-6 bg-white/20 mx-1" />
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button 
+              onClick={() => handleToggleTool('selectClick')}
+              className={`${iconButtonBaseClass} ${
+                activeTool === 'selectClick' ? activeClass : inactiveClass
+              }`}
+              aria-label={activeTool === 'selectClick' ? "Desactivar Selección" : "Activar Selección"}
+            >
+              <MousePointerClick className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" className="bg-gray-700 text-white border-gray-600">
+            <p className="text-xs">Seleccionar entidad (clic)</p>
           </TooltipContent>
         </Tooltip>
 
-        {isInteractionActive && (
-          <>
-            <Separator orientation="vertical" className="h-6 bg-white/20 mx-1" />
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button 
+              onClick={() => handleToggleTool('selectBox')}
+              className={`${iconButtonBaseClass} ${
+                activeTool === 'selectBox' ? activeClass : inactiveClass
+              }`}
+              aria-label={activeTool === 'selectBox' ? "Desactivar Selección por Caja" : "Activar Selección por Caja"}
+            >
+              <BoxSelect className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" className="bg-gray-700 text-white border-gray-600">
+            <p className="text-xs">Seleccionar por caja</p>
+          </TooltipContent>
+        </Tooltip>
 
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button 
-                  onClick={() => onSetSelectionMode('click')}
-                  className={`${iconButtonBaseClass} ${
-                    selectionMode === 'click' ? activeClass : inactiveClass
-                  }`}
-                  aria-label="Modo Inspección"
-                >
-                  <MousePointerClick className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" className="bg-gray-700 text-white border-gray-600">
-                <p className="text-xs">Inspeccionar para ver atributos</p>
-              </TooltipContent>
-            </Tooltip>
-
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button 
-                  onClick={() => onSetSelectionMode('box')}
-                  className={`${iconButtonBaseClass} ${
-                    selectionMode === 'box' ? activeClass : inactiveClass
-                  }`}
-                  aria-label="Modo Selección"
-                >
-                  <BoxSelect className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" className="bg-gray-700 text-white border-gray-600">
-                <p className="text-xs">Seleccionar para acciones</p>
-              </TooltipContent>
-            </Tooltip>
-
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button 
-                  onClick={onClearSelection}
-                  className={`${iconButtonBaseClass} border border-white/30 text-white/90 bg-black/20 hover:bg-red-500/20 hover:text-red-300`}
-                  aria-label="Limpiar selección e inspección"
-                >
-                  <Eraser className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" className="bg-gray-700 text-white border-gray-600">
-                <p className="text-xs">Limpiar selección actual</p>
-              </TooltipContent>
-            </Tooltip>
-          </>
-        )}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button 
+              onClick={onClearSelection}
+              className={`${iconButtonBaseClass} border border-white/30 text-white/90 bg-black/20 hover:bg-red-500/20 hover:text-red-300`}
+              aria-label="Limpiar selección e inspección"
+            >
+              <Eraser className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" className="bg-gray-700 text-white border-gray-600">
+            <p className="text-xs">Limpiar selección actual</p>
+          </TooltipContent>
+        </Tooltip>
       </div>
     </TooltipProvider>
   );

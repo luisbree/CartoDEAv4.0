@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from 'react';
@@ -6,21 +7,22 @@ import type VectorSource from 'ol/source/Vector';
 import Draw, { createBox } from 'ol/interaction/Draw';
 import KML from 'ol/format/KML';
 import { useToast } from "@/hooks/use-toast";
+import type { ActiveInteractionTool } from '../feature-inspection/useFeatureInspection';
 
 interface UseDrawingInteractionsProps {
   mapRef: React.RefObject<Map | null>;
   isMapReady: boolean;
   drawingSourceRef: React.RefObject<VectorSource>;
-  isInspectModeActive: boolean;
-  toggleInspectMode: () => void;
+  activeInteractionTool: ActiveInteractionTool;
+  setActiveInteractionTool: (tool: ActiveInteractionTool) => void;
 }
 
 export const useDrawingInteractions = ({
   mapRef,
   isMapReady,
   drawingSourceRef,
-  isInspectModeActive,
-  toggleInspectMode,
+  activeInteractionTool,
+  setActiveInteractionTool,
 }: UseDrawingInteractionsProps) => {
   const { toast } = useToast();
   const [activeDrawTool, setActiveDrawTool] = useState<string | null>(null);
@@ -45,8 +47,8 @@ export const useDrawingInteractions = ({
 
     // Stop any existing drawing or inspection tool
     stopDrawingTool();
-    if (isInspectModeActive) {
-      toggleInspectMode(); 
+    if (activeInteractionTool) {
+      setActiveInteractionTool(null);
     }
 
     const drawOptions: any = {
@@ -76,7 +78,7 @@ export const useDrawingInteractions = ({
     
     toast({ description: toastMessage });
 
-  }, [mapRef, drawingSourceRef, activeDrawTool, stopDrawingTool, isInspectModeActive, toggleInspectMode, toast]);
+  }, [mapRef, drawingSourceRef, activeDrawTool, stopDrawingTool, activeInteractionTool, setActiveInteractionTool, toast]);
 
   const clearDrawnFeatures = useCallback(() => {
     stopDrawingTool(); // Stop any active drawing tool first

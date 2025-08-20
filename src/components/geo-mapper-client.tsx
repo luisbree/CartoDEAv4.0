@@ -331,8 +331,8 @@ export default function GeoMapperClient() {
   // Orchestration between drawing and feature inspection tools
   const drawingInteractions = useDrawingInteractions({
     mapRef, isMapReady, drawingSourceRef: drawingSourceRef,
-    isInspectModeActive: featureInspectionHook.isInspectModeActive,
-    toggleInspectMode: featureInspectionHook.toggleInspectMode,
+    activeInteractionTool: featureInspectionHook.activeTool,
+    setActiveInteractionTool: featureInspectionHook.setActiveTool,
   });
 
   const measurementHook = useMeasurement({ mapRef, isMapReady });
@@ -579,12 +579,6 @@ export default function GeoMapperClient() {
   }, [layerManagerHook, initialGeoServerUrl]);
 
   const handleAttributeTableFeatureSelect = useCallback((featureId: string, isCtrlOrMeta: boolean) => {
-      // NEW: Automatically enable inspection mode if it's off
-      if (!featureInspectionHook.isInspectModeActive) {
-        featureInspectionHook.toggleInspectMode();
-        toast({ description: 'Modo Inspección activado para mostrar selección.' });
-      }
-
       const currentSelectedIds = featureInspectionHook.selectedFeatures.map(f => f.getId() as string);
       let newSelectedIds: string[];
 
@@ -596,7 +590,7 @@ export default function GeoMapperClient() {
           newSelectedIds = [featureId];
       }
       featureInspectionHook.selectFeaturesById(newSelectedIds);
-  }, [featureInspectionHook, toast]);
+  }, [featureInspectionHook]);
 
   const handleOpenStreetView = useCallback(() => {
     if (!mapRef.current) {
@@ -863,10 +857,8 @@ export default function GeoMapperClient() {
             onSetLayerOpacity={layerManagerHook.setLayerOpacity}
             onReorderLayers={layerManagerHook.reorderLayers}
             onAddLayer={layerManagerHook.addLayer as (layer: MapLayer) => void}
-            isInteractionActive={featureInspectionHook.isInspectModeActive}
-            onToggleInteraction={featureInspectionHook.toggleInspectMode}
-            selectionMode={featureInspectionHook.selectionMode}
-            onSetSelectionMode={featureInspectionHook.setSelectionMode}
+            activeTool={featureInspectionHook.activeTool}
+            onSetActiveTool={featureInspectionHook.setActiveTool}
             onClearSelection={featureInspectionHook.clearSelection}
             style={{ top: `${panels.legend.position.y}px`, left: `${panels.legend.position.x}px`, zIndex: panels.legend.zIndex }}
             discoveredDeasLayers={discoveredGeoServerLayers}
