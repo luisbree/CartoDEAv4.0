@@ -113,12 +113,11 @@ const StyleEditorDialog: React.FC<StyleEditorDialogProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="bg-gray-800 text-white border-gray-700 sm:max-w-xs p-4">
+      <DialogContent className="bg-gray-800 text-white border-gray-700 sm:max-w-md p-4">
         <DialogHeader>
-          {/* Title removed as requested */}
+          <DialogTitle>Estilo</DialogTitle>
         </DialogHeader>
-        <div className="grid gap-4 py-2">
-          <div className="flex items-end gap-3">
+        <div className="grid grid-cols-4 gap-4 py-2 items-end">
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="stroke-color" className="text-xs">
                   Contorno
@@ -149,7 +148,7 @@ const StyleEditorDialog: React.FC<StyleEditorDialogProps> = ({
                   value={styleOptions.lineStyle}
                   onValueChange={(value: StyleOptions['lineStyle']) => setStyleOptions(prev => ({ ...prev, lineStyle: value }))}
                 >
-                  <SelectTrigger id="line-style" className="w-[120px] h-8 text-xs bg-black/20">
+                  <SelectTrigger id="line-style" className="h-8 text-xs bg-black/20">
                     <SelectValue placeholder="Seleccionar estilo" />
                   </SelectTrigger>
                   <SelectContent className="bg-gray-700 text-white border-gray-600">
@@ -171,12 +170,11 @@ const StyleEditorDialog: React.FC<StyleEditorDialogProps> = ({
                   max="20"
                   value={styleOptions.lineWidth}
                   onChange={(e) => setStyleOptions(prev => ({ ...prev, lineWidth: Number(e.target.value) }))}
-                  className="w-[70px] h-8 text-xs bg-black/20"
+                  className="h-8 text-xs bg-black/20"
                 />
               </div>
-          </div>
         </div>
-        <DialogFooter className="justify-start">
+        <DialogFooter>
           <Button variant="outline" onClick={onClose} className="h-8 text-xs bg-gray-200 text-black hover:bg-gray-300">Cancelar</Button>
           <Button onClick={handleApply} className="h-8 text-xs bg-primary hover:bg-primary/90">Aplicar</Button>
         </DialogFooter>
