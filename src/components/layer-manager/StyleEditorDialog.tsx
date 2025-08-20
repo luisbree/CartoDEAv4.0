@@ -63,16 +63,13 @@ interface ColorPickerProps {
 
 const ColorPicker: React.FC<ColorPickerProps> = ({ value, onChange }) => {
   const [isOpen, setIsOpen] = useState(false);
-  // This state now specifically tracks the text in the input field.
-  const [customColorInput, setCustomColorInput] = useState(isValidHex(value) ? value : '#000000');
+  const [customColorInput, setCustomColorInput] = useState('');
   
-  // When the popover opens, sync the input field with the current selected color.
   useEffect(() => {
     if (isOpen) {
       if (isValidHex(value)) {
         setCustomColorInput(value);
       } else {
-        // If the current value is a name like "rojo", default the input to black
         setCustomColorInput('#000000');
       }
     }
@@ -121,7 +118,7 @@ const ColorPicker: React.FC<ColorPickerProps> = ({ value, onChange }) => {
                     type="text" 
                     value={customColorInput}
                     onChange={(e) => setCustomColorInput(e.target.value)}
-                    className="h-8 text-xs bg-black/20 w-24"
+                    className="h-8 text-xs bg-black/20 w-24 text-white/90"
                     placeholder="#RRGGBB"
                  />
                  <Button onClick={handleCustomColorApply} size="sm" className="h-8 text-xs" disabled={!isValidHex(customColorInput)}>
