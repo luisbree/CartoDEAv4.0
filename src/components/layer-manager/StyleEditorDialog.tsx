@@ -63,20 +63,26 @@ interface ColorPickerProps {
 
 const ColorPicker: React.FC<ColorPickerProps> = ({ value, onChange }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const [customColor, setCustomColor] = useState(isValidHex(value) ? value : '#000000');
+  // This state now specifically tracks the text in the input field.
+  const [customColorInput, setCustomColorInput] = useState(isValidHex(value) ? value : '#000000');
   
+  // When the popover opens, sync the input field with the current selected color.
   useEffect(() => {
-    // Sync custom color state if the external value is a valid hex
-    if (isValidHex(value)) {
-        setCustomColor(value);
+    if (isOpen) {
+      if (isValidHex(value)) {
+        setCustomColorInput(value);
+      } else {
+        // If the current value is a name like "rojo", default the input to black
+        setCustomColorInput('#000000');
+      }
     }
-  }, [value]);
+  }, [isOpen, value]);
 
   const selectedColor = colorOptions.find(c => c.value === value) || { hex: isValidHex(value) ? value : '#000000', iconClass: '' };
   
   const handleCustomColorApply = () => {
-      if (isValidHex(customColor)) {
-          onChange(customColor);
+      if (isValidHex(customColorInput)) {
+          onChange(customColorInput);
           setIsOpen(false);
       }
   };
@@ -110,15 +116,15 @@ const ColorPicker: React.FC<ColorPickerProps> = ({ value, onChange }) => {
         <div className="mt-3 pt-3 border-t border-gray-600 space-y-2">
             <Label className="text-xs font-medium text-white/90">Color Hex</Label>
             <div className="flex items-center gap-2">
-                 <div className="w-6 h-6 rounded-md border border-white/30" style={{ backgroundColor: isValidHex(customColor) ? customColor : 'transparent' }} />
+                 <div className="w-6 h-6 rounded-md border border-white/30" style={{ backgroundColor: isValidHex(customColorInput) ? customColorInput : 'transparent' }} />
                  <Input 
                     type="text" 
-                    value={customColor}
-                    onChange={(e) => setCustomColor(e.target.value)}
+                    value={customColorInput}
+                    onChange={(e) => setCustomColorInput(e.target.value)}
                     className="h-8 text-xs bg-black/20 w-24"
                     placeholder="#RRGGBB"
                  />
-                 <Button onClick={handleCustomColorApply} size="sm" className="h-8 text-xs" disabled={!isValidHex(customColor)}>
+                 <Button onClick={handleCustomColorApply} size="sm" className="h-8 text-xs" disabled={!isValidHex(customColorInput)}>
                     Aplicar
                  </Button>
             </div>
