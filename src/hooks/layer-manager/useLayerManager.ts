@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useCallback, useEffect } from 'react';
@@ -419,7 +420,7 @@ export const useLayerManager = ({
         if (styleOptions.strokeColor) {
             const colorName = styleOptions.strokeColor.toLowerCase();
             const colorValue = colorMap[colorName] || (isValidHex(colorName) ? colorName : undefined);
-            if (colorValue) {
+            if (colorValue !== undefined) {
                 styleChanged = true;
                 stroke.setColor(colorValue);
                 if (image.getStroke()) image.getStroke().setColor(colorValue);
@@ -429,15 +430,10 @@ export const useLayerManager = ({
         if (styleOptions.fillColor) {
             const colorName = styleOptions.fillColor.toLowerCase();
             const colorValue = colorMap[colorName] || (isValidHex(colorName) ? colorName : undefined);
-            if (colorValue) {
+             if (colorValue !== undefined) {
                 styleChanged = true;
-                let newFillColor = colorValue;
-                if (newFillColor !== 'rgba(0,0,0,0)' && isValidHex(newFillColor)) {
-                    const olColor = asOlColorArray(newFillColor);
-                    newFillColor = asOlColorString([...olColor.slice(0, 3), 0.6]);
-                }
-                fill.setColor(newFillColor);
-                if (image.getFill()) image.getFill().setColor(newFillColor);
+                fill.setColor(colorValue);
+                if (image.getFill()) image.getFill().setColor(colorValue);
             }
         }
     
