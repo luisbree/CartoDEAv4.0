@@ -54,6 +54,7 @@ const colorOptions = [
   { value: 'magenta', label: 'Magenta', hex: '#ff00ff' },
 ];
 
+const isValidHex = (color: string) => /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/.test(color);
 
 interface ColorPickerProps {
   value: string;
@@ -62,7 +63,23 @@ interface ColorPickerProps {
 
 const ColorPicker: React.FC<ColorPickerProps> = ({ value, onChange }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const selectedColor = colorOptions.find(c => c.value === value) || colorOptions[0];
+  const [customColor, setCustomColor] = useState(isValidHex(value) ? value : '#000000');
+  
+  useEffect(() => {
+    // Sync custom color state if the external value is a valid hex
+    if (isValidHex(value)) {
+        setCustomColor(value);
+    }
+  }, [value]);
+
+  const selectedColor = colorOptions.find(c => c.value === value) || { hex: isValidHex(value) ? value : '#000000', iconClass: '' };
+  
+  const handleCustomColorApply = () => {
+      if (isValidHex(customColor)) {
+          onChange(customColor);
+          setIsOpen(false);
+      }
+  };
 
   return (
     <Popover open={isOpen} onOpenChange={setIsOpen}>
@@ -89,6 +106,22 @@ const ColorPicker: React.FC<ColorPickerProps> = ({ value, onChange }) => {
               <div className={cn("w-5 h-5 rounded-full border border-white/20", color.iconClass)} style={{ backgroundColor: color.hex }} />
             </Button>
           ))}
+        </div>
+        <div className="mt-3 pt-3 border-t border-gray-600 space-y-2">
+            <Label className="text-xs font-medium text-white/90">Color Hex</Label>
+            <div className="flex items-center gap-2">
+                 <div className="w-6 h-6 rounded-md border border-white/30" style={{ backgroundColor: isValidHex(customColor) ? customColor : 'transparent' }} />
+                 <Input 
+                    type="text" 
+                    value={customColor}
+                    onChange={(e) => setCustomColor(e.target.value)}
+                    className="h-8 text-xs bg-black/20 w-24"
+                    placeholder="#RRGGBB"
+                 />
+                 <Button onClick={handleCustomColorApply} size="sm" className="h-8 text-xs" disabled={!isValidHex(customColor)}>
+                    Aplicar
+                 </Button>
+            </div>
         </div>
       </PopoverContent>
     </Popover>

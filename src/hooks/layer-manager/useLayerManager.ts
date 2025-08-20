@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useCallback, useEffect } from 'react';
@@ -52,6 +51,9 @@ const colorMap: { [key: string]: string } = {
   magenta: '#ff00ff',
   transparent: 'rgba(0,0,0,0)',
 };
+
+const isValidHex = (color: string) => /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/.test(color);
+
 
 // A completely transparent style for the invisible WFS layer
 const transparentStyle = new Style({
@@ -415,7 +417,8 @@ export const useLayerManager = ({
         let styleChanged = false;
     
         if (styleOptions.strokeColor) {
-            const colorValue = colorMap[styleOptions.strokeColor.toLowerCase()];
+            const colorName = styleOptions.strokeColor.toLowerCase();
+            const colorValue = colorMap[colorName] || (isValidHex(colorName) ? colorName : undefined);
             if (colorValue) {
                 styleChanged = true;
                 stroke.setColor(colorValue);
@@ -424,11 +427,12 @@ export const useLayerManager = ({
         }
     
         if (styleOptions.fillColor) {
-            const colorValue = colorMap[styleOptions.fillColor.toLowerCase()];
+            const colorName = styleOptions.fillColor.toLowerCase();
+            const colorValue = colorMap[colorName] || (isValidHex(colorName) ? colorName : undefined);
             if (colorValue) {
                 styleChanged = true;
                 let newFillColor = colorValue;
-                if (newFillColor !== 'rgba(0,0,0,0)') {
+                if (newFillColor !== 'rgba(0,0,0,0)' && isValidHex(newFillColor)) {
                     const olColor = asOlColorArray(newFillColor);
                     newFillColor = asOlColorString([...olColor.slice(0, 3), 0.6]);
                 }
