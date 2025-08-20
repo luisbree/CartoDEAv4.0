@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import DraggablePanel from './DraggablePanel';
 import { Input } from '@/components/ui/input';
-import { Loader2, ClipboardCheck, Search, ExternalLink } from 'lucide-react';
+import { Loader2, ClipboardCheck, Search, ExternalLink, X as ClearIcon } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { searchTrelloCards, type TrelloCard } from '@/ai/flows/trello-actions';
 import { ScrollArea } from '../ui/scroll-area';
@@ -72,6 +72,12 @@ const TrelloPanel: React.FC<TrelloPanelProps> = ({
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 
+  const clearSearch = () => {
+    setSearchTerm('');
+    setResults([]);
+  };
+
+
   return (
     <DraggablePanel
       title="Integración con Trello"
@@ -91,16 +97,25 @@ const TrelloPanel: React.FC<TrelloPanelProps> = ({
         
         <div>
             <h3 className="text-sm font-semibold text-white mb-2">Buscar Tarjetas</h3>
-            <div className="relative">
+            <div className="relative flex items-center">
+              <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 pointer-events-none" />
               <Input
                 id="trello-search"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="Escribe para buscar..."
-                className="text-xs h-8 border-white/30 bg-black/20 text-white/90 focus:ring-primary pl-8"
+                className="text-xs h-8 border-white/30 bg-black/20 text-white/90 focus:ring-primary pl-8 pr-8"
                 autoComplete="off"
               />
-              <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+              {searchTerm && !isLoading && (
+                  <button
+                    onClick={clearSearch}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400/80 hover:text-white"
+                    aria-label="Limpiar búsqueda"
+                  >
+                    <ClearIcon className="h-3.5 w-3.5" />
+                  </button>
+              )}
             </div>
         </div>
         
