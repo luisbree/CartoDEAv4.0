@@ -47,6 +47,7 @@ import { useOpenLayersMap } from '@/hooks/map-core/useOpenLayersMap';
 import { useLayerManager } from '@/hooks/layer-manager/useLayerManager';
 import { useFeatureInspection } from '@/hooks/feature-inspection/useFeatureInspection';
 import { useDrawingInteractions } from '@/hooks/drawing-tools/useDrawingInteractions';
+import { useMeasurement } from '@/hooks/map-tools/useMeasurement';
 import { useOSMData } from '@/hooks/osm-integration/useOSMData';
 import { useGeoServerLayers } from '@/hooks/geoserver-connection/useGeoServerLayers';
 import { useFloatingPanels } from '@/hooks/panels/useFloatingPanels';
@@ -333,6 +334,8 @@ export default function GeoMapperClient() {
     isInspectModeActive: featureInspectionHook.isInspectModeActive,
     toggleInspectMode: featureInspectionHook.toggleInspectMode,
   });
+
+  const measurementHook = useMeasurement({ mapRef, isMapReady });
 
   const { captureMapDataUrl } = useMapCapture({ mapRef, activeBaseLayerId });
 
@@ -819,6 +822,7 @@ export default function GeoMapperClient() {
             onToggleDrawingTool={drawingInteractions.toggleDrawingTool}
             onClearDrawnFeatures={drawingInteractions.clearDrawnFeatures}
             onSaveDrawnFeaturesAsKML={drawingInteractions.saveDrawnFeaturesAsKML}
+            measurementHook={measurementHook}
             isFetchingOSM={osmDataHook.isFetchingOSM}
             onFetchOSMDataTrigger={osmDataHook.fetchOSMData}
             osmCategoriesForSelection={osmCategoriesForSelection}

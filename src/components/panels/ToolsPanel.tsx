@@ -1,8 +1,10 @@
+
 "use client";
 
 import React from 'react';
 import DraggablePanel from './DraggablePanel';
 import DrawingToolbar from '@/components/drawing-tools/DrawingToolbar';
+import MeasurementToolbar from '@/components/map-tools/MeasurementToolbar';
 import OSMCategorySelector from '@/components/osm-integration/OSMCategorySelector';
 import OSMDownloadOptions from '@/components/osm-integration/OSMDownloadOptions';
 import { Wrench, Map as MapIcon } from 'lucide-react';
@@ -14,6 +16,7 @@ import {
 } from "@/components/ui/accordion";
 import { Separator } from '@/components/ui/separator';
 import type { useOsmQuery } from '@/hooks/osm-integration/useOsmQuery';
+import type { useMeasurement } from '@/hooks/map-tools/useMeasurement';
 
 
 interface OSMCategory {
@@ -33,6 +36,9 @@ interface ToolsPanelProps {
   onToggleDrawingTool: (toolType: 'Polygon' | 'LineString' | 'Point' | 'Rectangle' | 'FreehandPolygon') => void;
   onClearDrawnFeatures: () => void;
   onSaveDrawnFeaturesAsKML: () => void;
+  
+  // Measurement props
+  measurementHook: ReturnType<typeof useMeasurement>;
 
   // OSM props
   isFetchingOSM: boolean;
@@ -59,6 +65,7 @@ const SectionHeader: React.FC<{ title: string; description?: string; icon: React
 const ToolsPanel: React.FC<ToolsPanelProps> = ({
   panelRef, isCollapsed, onToggleCollapse, onClosePanel, onMouseDownHeader,
   activeDrawTool, onToggleDrawingTool, onClearDrawnFeatures, onSaveDrawnFeaturesAsKML,
+  measurementHook,
   isFetchingOSM, onFetchOSMDataTrigger, osmCategoriesForSelection, selectedOSMCategoryIds, 
   onSelectedOSMCategoriesChange,
   isDownloading, onDownloadOSMLayers,
@@ -82,12 +89,17 @@ const ToolsPanel: React.FC<ToolsPanelProps> = ({
       style={style}
       zIndex={style?.zIndex as number | undefined}
     >
-        <div className="w-full bg-white/5 rounded-md p-2">
+        <div className="w-full bg-white/5 rounded-md p-2 space-y-1">
             <DrawingToolbar
                 activeDrawTool={activeDrawTool}
                 onToggleDrawingTool={onToggleDrawingTool}
                 onClearDrawnFeatures={onClearDrawnFeatures}
                 onSaveDrawnFeaturesAsKML={onSaveDrawnFeaturesAsKML}
+            />
+            <MeasurementToolbar
+                activeMeasureTool={measurementHook.activeMeasureTool}
+                onToggleMeasureTool={measurementHook.toggleMeasureTool}
+                onClearMeasurements={measurementHook.clearMeasurements}
             />
         </div>
 
@@ -109,15 +121,17 @@ const ToolsPanel: React.FC<ToolsPanelProps> = ({
               </AccordionTrigger>
               <AccordionContent className="p-3 pt-2 space-y-3 border-t border-white/10 bg-transparent rounded-b-md">
                 <div className="space-y-2">
-                  <h4 className="text-xs font-semibold text-white">Obtener Datos OSM por Área</h4>
-                  <OSMDownloadOptions
-                    isFetchingOSM={isFetchingOSM}
-                    onFetchOSMDataTrigger={onFetchOSMDataTrigger}
-                    isDownloading={isDownloading}
-                    onDownloadOSMLayers={onDownloadOSMLayers}
-                    isQueryToolActive={osmQueryHook.isActive}
-                    onToggleQueryTool={osmQueryHook.toggle}
-                  />
+                   <h4 className="text-xs font-semibold text-white">Obtener Datos OSM por Área</h4>
+                   <div className="flex items-center justify-start gap-1">
+                      <OSMDownloadOptions
+                        isFetchingOSM={isFetchingOSM}
+                        onFetchOSMDataTrigger={onFetchOSMDataTrigger}
+                        isDownloading={isDownloading}
+                        onDownloadOSMLayers={onDownloadOSMLayers}
+                        isQueryToolActive={osmQueryHook.isActive}
+                        onToggleQueryTool={osmQueryHook.toggle}
+                      />
+                    </div>
                   <OSMCategorySelector
                       osmCategoriesForSelection={osmCategoriesForSelection}
                       selectedOSMCategoryIds={selectedOSMCategoryIds}
