@@ -853,6 +853,7 @@ export default function GeoMapperClient() {
             onExtractBySelection={() => layerManagerHook.handleExtractBySelection(featureInspectionHook.selectedFeatures)}
             onExportLayer={layerManagerHook.handleExportLayer}
             onRenameLayer={layerManagerHook.renameLayer}
+            onChangeLayerStyle={layerManagerHook.changeLayerStyle}
             isDrawingSourceEmptyOrNotPolygon={layerManagerHook.isDrawingSourceEmptyOrNotPolygon}
             isSelectionEmpty={featureInspectionHook.selectedFeatures.length === 0}
             onSetLayerOpacity={layerManagerHook.setLayerOpacity}
@@ -977,3 +978,5 @@ export default function GeoMapperClient() {
     </div>
   );
 }
+
+      
