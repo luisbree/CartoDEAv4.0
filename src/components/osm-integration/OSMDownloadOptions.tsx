@@ -46,7 +46,7 @@ const OSMDownloadOptions: React.FC<OSMDownloadOptionsProps> = ({
 
   return (
     <TooltipProvider delayDuration={300}>
-      <div className="flex items-center gap-1">
+      <div className="flex items-center justify-end gap-1">
         <Tooltip>
           <TooltipTrigger asChild>
             <Button

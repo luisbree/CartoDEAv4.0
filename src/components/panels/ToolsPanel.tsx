@@ -108,23 +108,21 @@ const ToolsPanel: React.FC<ToolsPanelProps> = ({
                 />
               </AccordionTrigger>
               <AccordionContent className="p-3 pt-2 space-y-3 border-t border-white/10 bg-transparent rounded-b-md">
-                <div className="space-y-1">
+                <div className="space-y-2">
                   <h4 className="text-xs font-semibold text-white">Obtener Datos OSM por Área</h4>
-                  <div className="flex items-start gap-3">
-                    <OSMCategorySelector
-                        osmCategoriesForSelection={osmCategoriesForSelection}
-                        selectedOSMCategoryIds={selectedOSMCategoryIds}
-                        onSelectedOSMCategoriesChange={onSelectedOSMCategoriesChange} 
-                    />
-                    <OSMDownloadOptions
-                        isFetchingOSM={isFetchingOSM}
-                        onFetchOSMDataTrigger={onFetchOSMDataTrigger}
-                        isDownloading={isDownloading}
-                        onDownloadOSMLayers={onDownloadOSMLayers}
-                        isQueryToolActive={osmQueryHook.isActive}
-                        onToggleQueryTool={osmQueryHook.toggle}
-                    />
-                  </div>
+                  <OSMDownloadOptions
+                    isFetchingOSM={isFetchingOSM}
+                    onFetchOSMDataTrigger={onFetchOSMDataTrigger}
+                    isDownloading={isDownloading}
+                    onDownloadOSMLayers={onDownloadOSMLayers}
+                    isQueryToolActive={osmQueryHook.isActive}
+                    onToggleQueryTool={osmQueryHook.toggle}
+                  />
+                  <OSMCategorySelector
+                      osmCategoriesForSelection={osmCategoriesForSelection}
+                      selectedOSMCategoryIds={selectedOSMCategoryIds}
+                      onSelectedOSMCategoriesChange={onSelectedOSMCategoriesChange} 
+                  />
                 </div>
               </AccordionContent>
             </AccordionItem>
