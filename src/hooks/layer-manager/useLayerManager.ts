@@ -428,12 +428,12 @@ export const useLayerManager = ({
             const colorValue = colorMap[styleOptions.fillColor.toLowerCase()];
             if (colorValue) {
                 styleChanged = true;
-                let newFillColor: string | undefined = colorValue;
+                let newFillColor: string | undefined | null = colorValue;
                 if (colorValue !== 'rgba(0,0,0,0)') {
                     const olColor = asOlColorArray(colorValue);
                     newFillColor = asOlColorString([...olColor.slice(0, 3), 0.6]);
                 } else {
-                    newFillColor = undefined;
+                    newFillColor = null; // Correctly handle transparent
                 }
                 fill.setColor(newFillColor);
                 if (image.getFill()) image.getFill().setColor(newFillColor);
