@@ -51,7 +51,7 @@ import { useMeasurement } from '@/hooks/map-tools/useMeasurement';
 import { useOSMData } from '@/hooks/osm-integration/useOSMData';
 import { useGeoServerLayers } from '@/hooks/geoserver-connection/useGeoServerLayers';
 import { useFloatingPanels } from '@/hooks/panels/useFloatingPanels';
-import { useMapCapture, type MapCaptureData } from '@/hooks/map-tools/useMapCapture';
+import { useMapCapture } from '@/hooks/map-tools/useMapCapture';
 import { useWfsLibrary } from '@/hooks/wfs-library/useWfsLibrary';
 import { useOsmQuery } from '@/hooks/osm-integration/useOsmQuery';
 import { useToast } from "@/hooks/use-toast";
@@ -195,7 +195,7 @@ export default function GeoMapperClient() {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
     { role: 'assistant', content: "¡Buenas! Soy Drax, tu asistente de mapas. Pedime que cargue una capa, que la saque o que le haga zoom." }
   ]);
-  const [printLayoutData, setPrintLayoutData] = useState<MapCaptureData | null>(null);
+  const [printLayoutImage, setPrintLayoutImage] = useState<string | null>(null);
   const [isGeeAuthenticated, setIsGeeAuthenticated] = useState(false);
   const [isGeeAuthenticating, setIsGeeAuthenticating] = useState(true); // Start as true
   const [isCapturing, setIsCapturing] = useState(false);
@@ -337,49 +337,13 @@ export default function GeoMapperClient() {
 
   const measurementHook = useMeasurement({ mapRef, isMapReady });
 
-  const { captureMapDataUrl } = useMapCapture({ mapRef, activeBaseLayerId });
-
-  // This effect sets up and cleans up the event listener for map movement.
-  // It re-attaches the listener when dependencies change, ensuring it never has a "stale" state.
-  useEffect(() => {
-    if (!isMapReady || !mapRef.current) return;
-
-    const view = mapRef.current.getView();
-
-    const handleMoveEnd = async () => {
-      // Logic is directly inside the listener, using the latest state from the component's render scope.
-      if (panels.printComposer.isMinimized || isCapturing) {
-        return;
-      }
-
-      const layoutData = await captureMapDataUrl();
-      if (layoutData) {
-        setPrintLayoutData(layoutData);
-      } else {
-        toast({
-          title: "Error de Captura",
-          description: "No se pudo actualizar la imagen del mapa.",
-          variant: "destructive",
-        });
-      }
-    };
-
-    view.on('moveend', handleMoveEnd);
-
-    // The cleanup function removes the exact listener that was added.
-    return () => {
-      if (view && typeof view.un === 'function') { // Ensure view and .un are available on cleanup
-        view.un('moveend', handleMoveEnd);
-      }
-    };
-  }, [isMapReady, mapRef, panels, isCapturing, captureMapDataUrl, toast]); // Dependency array ensures the listener is always fresh.
-
+  const { captureMapAsDataUrl } = useMapCapture({ mapRef, activeBaseLayerId });
 
   const handleTogglePrintComposer = async () => {
     if (panels.printComposer.isMinimized) {
-        const layoutData = await captureMapDataUrl();
-        if (layoutData) {
-            setPrintLayoutData(layoutData);
+        const imageUrl = await captureMapAsDataUrl();
+        if (imageUrl) {
+            setPrintLayoutImage(imageUrl);
             togglePanelMinimize('printComposer');
         } else {
             toast({
@@ -884,18 +848,15 @@ export default function GeoMapperClient() {
           />
         )}
         
-        {panels.printComposer && !panels.printComposer.isMinimized && printLayoutData && (
+        {panels.printComposer && !panels.printComposer.isMinimized && printLayoutImage && (
             <PrintComposerPanel
-                mapImage={printLayoutData.image}
-                mapExtent={printLayoutData.extent}
-                scale={printLayoutData.scale}
+                mapImage={printLayoutImage}
                 panelRef={printComposerPanelRef}
                 isCollapsed={panels.printComposer.isCollapsed}
                 onToggleCollapse={() => togglePanelCollapse('printComposer')}
                 onClosePanel={() => togglePanelMinimize('printComposer')}
                 onMouseDownHeader={(e) => handlePanelMouseDown(e, 'printComposer')}
                 style={{ top: `${panels.printComposer.position.y}px`, left: `${panels.printComposer.position.x}px`, zIndex: panels.printComposer.zIndex }}
-                isRefreshing={isCapturing}
             />
         )}
 

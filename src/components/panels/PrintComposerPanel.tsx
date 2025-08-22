@@ -20,172 +20,41 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { Extent } from 'ol/extent';
 import * as htmlToImage from 'html-to-image';
 import { useToast } from '@/hooks/use-toast';
 
-// Helper to format degree labels
-const formatCoord = (coord: number): string => {
-    const absCoord = Math.abs(coord);
-    if (absCoord > 10) return coord.toFixed(2);
-    if (absCoord > 1) return coord.toFixed(3);
-    return coord.toFixed(4);
-};
-
-interface GraticuleProps {
-    extent: Extent; // [minLon, minLat, maxLon, maxLat]
-}
-
-const Graticule: React.FC<GraticuleProps> = ({ extent }) => {
-    const [minLon, minLat, maxLon, maxLat] = extent;
-    const lonSpan = maxLon - minLon;
-    const latSpan = maxLat - minLat;
-
-    // Calculate positions for exactly two lines per axis, creating a 3x3 grid
-    const lonLines: number[] = [
-        minLon + lonSpan / 3,
-        minLon + (2 * lonSpan) / 3,
-    ];
-    const latLines: number[] = [
-        minLat + latSpan / 3,
-        minLat + (2 * latSpan) / 3,
-    ];
-
-    const lonToX = (lon: number) => ((lon - minLon) / lonSpan) * 100;
-    const latToY = (lat: number) => (1 - (lat - minLat) / latSpan) * 100;
-
-    return (
-        <svg
-            width="100%"
-            height="100%"
-            className="absolute top-0 left-0 overflow-visible pointer-events-none"
-        >
-            <g stroke="rgba(0,0,0,0.3)" strokeWidth="0.5" strokeDasharray="2 3">
-                {lonLines.map(lon => (
-                    <line key={`lon-${lon}`} x1={`${lonToX(lon)}%`} y1="0%" x2={`${lonToX(lon)}%`} y2="100%" />
-                ))}
-                {latLines.map(lat => (
-                    <line key={`lat-${lat}`} x1="0%" y1={`${latToY(lat)}%`} x2="100%" y2={`${latToY(lat)}%`} />
-                ))}
-            </g>
-
-            <g fill="#333" fontSize="8px" className="font-headline font-medium">
-                {/* Top labels (Longitude) */}
-                {lonLines.map(lon => (
-                    <text key={`lon-top-${lon}`} x={`${lonToX(lon)}%`} y="-5" textAnchor="middle">
-                        {formatCoord(lon)}°
-                    </text>
-                ))}
-                
-                {/* Left labels (Latitude), rotated */}
-                {latLines.map(lat => (
-                    <text 
-                        key={`lat-left-${lat}`}
-                        x="-12" // Move text slightly left of the map edge
-                        y={`${latToY(lat)}%`} // Vertical center for the text block
-                        textAnchor="middle" // Center the vertical text line on the y-coordinate
-                        style={{ writingMode: 'vertical-rl', textOrientation: 'mixed' }} // CSS for vertical text
-                    >
-                        {formatCoord(lat)}°
-                    </text>
-                ))}
-            </g>
-        </svg>
-    );
-};
-
-
-// Graphical components for the layout
-const NorthArrow = () => (
-    <svg width="40" height="60" viewBox="0 0 40 60" xmlns="http://www.w3.org/2000/svg">
-        <polygon points="20,0 30,35 20,30 10,35" fill="#333"/>
-        <text x="16" y="12" fontFamily="Arial, sans-serif" fontSize="12" fontWeight="bold" fill="#333">N</text>
-    </svg>
-);
-
-const ScaleBar = ({ scale }: { scale: { barWidth: number; text: string } }) => {
-    if (!scale || !scale.barWidth) {
-        return null; // Don't render if scale info is not available
-    }
-
-    const segments = 4;
-    const segmentWidth = scale.barWidth / segments;
-    const totalDistanceText = scale.text;
-    
-    return (
-        <div className="flex flex-col items-center">
-            {/* The bar itself */}
-            <div className="flex items-end h-2 border border-black" style={{ width: `${scale.barWidth}px` }}>
-                {Array.from({ length: segments }).map((_, i) => (
-                    <div
-                        key={i}
-                        className={`h-full ${i % 2 !== 0 ? 'bg-black' : 'bg-white'}`}
-                        style={{ width: `${segmentWidth}px`, borderRight: i < segments - 1 ? '1px solid black' : 'none' }}
-                    />
-                ))}
-            </div>
-            {/* The labels */}
-            <div className="flex justify-between w-full text-[9px] font-medium mt-1" style={{ width: `${scale.barWidth}px` }}>
-                 <span>0</span>
-                 <span>{totalDistanceText}</span>
-            </div>
-        </div>
-    );
-};
-
 interface PrintComposerPanelProps {
     mapImage: string;
-    mapExtent: Extent | null;
-    scale: { barWidth: number; text: string; };
     panelRef: React.RefObject<HTMLDivElement>;
     isCollapsed: boolean;
     onToggleCollapse: () => void;
     onClosePanel: () => void;
     onMouseDownHeader: (e: React.MouseEvent<HTMLDivElement>) => void;
     style?: React.CSSProperties;
-    isRefreshing: boolean;
 }
 
 // Reusable Layout Component
-const PrintLayout = React.forwardRef<HTMLDivElement, { mapImage: string; mapExtent: Extent | null; title: string; subtitle: string; scale: { barWidth: number; text: string; } }>(
-  ({ mapImage, mapExtent, title, subtitle, scale }, ref) => {
+const PrintLayout = React.forwardRef<HTMLDivElement, { mapImage: string; title: string; subtitle: string }>(
+  ({ mapImage, title, subtitle }, ref) => {
     return (
-      <div ref={ref} className="bg-white shadow-lg p-4 flex flex-col text-black font-body h-full w-full">
+      <div ref={ref} id="print-layout-content" className="bg-white shadow-lg p-4 flex flex-col text-black h-full w-full">
         {/* Main Content Area */}
         <div className="flex-grow flex border border-black min-h-0">
           {/* Map Area */}
-          <div className="flex-grow h-full border-r border-black relative">
+          <div className="flex-grow h-full relative">
             {mapImage ? (
-                <>
-                    <img src={mapImage} alt="Mapa Capturado" className="w-full h-full object-cover" />
-                    {mapExtent && <Graticule extent={mapExtent} />}
-                </>
+                <img src={mapImage} alt="Mapa Capturado" className="w-full h-full object-cover" />
             ) : (
                 <div className="w-full h-full bg-gray-200 flex items-center justify-center text-gray-500">Cargando imagen del mapa...</div>
             )}
           </div>
-          {/* Right Gutter */}
-          <div className="w-32 flex-shrink-0 flex flex-col justify-start items-center p-2">
-            <NorthArrow />
-          </div>
         </div>
         {/* Footer Area */}
-        <div className="h-28 flex-shrink-0 flex pt-2">
+        <div className="h-20 flex-shrink-0 flex pt-2">
           {/* Titles */}
           <div className="flex-grow flex flex-col justify-start overflow-hidden">
-            <h1 className="font-headline text-xl font-bold uppercase truncate" title={title}>{title}</h1>
-            <h2 className="font-body text-lg truncate" title={subtitle}>{subtitle}</h2>
-          </div>
-          {/* Right Footer */}
-          <div className="w-80 flex-shrink-0 flex flex-col items-end justify-between">
-            <div /> {/* Top spacer for justify-between */}
-            <div className="self-center">
-              <ScaleBar scale={scale} />
-            </div>
-            <div className="text-right text-[8px] text-gray-600">
-              <p>Sistema de Coordenadas: POSGAR 2007 Argentina Faja 5</p>
-              <p>Fuente: DEAS, elaborado en base a...</p>
-            </div>
+            <h1 className="text-xl font-bold uppercase truncate" title={title}>{title}</h1>
+            <h2 className="text-lg truncate" title={subtitle}>{subtitle}</h2>
           </div>
         </div>
       </div>
@@ -197,18 +66,15 @@ PrintLayout.displayName = "PrintLayout";
 
 const PrintComposerPanel: React.FC<PrintComposerPanelProps> = ({
   mapImage,
-  mapExtent,
-  scale,
   panelRef,
   isCollapsed,
   onToggleCollapse,
   onClosePanel,
   onMouseDownHeader,
   style,
-  isRefreshing,
 }) => {
-  const [title, setTitle] = useState("TÍTULO DEL MAPA ENCODE SANS BOLD 16PT MAYÚSCULA");
-  const [subtitle, setSubtitle] = useState("Subtítulo del mapa - ENCODE SANS Medium 14pt Mayúscula - minúscula");
+  const [title, setTitle] = useState("TÍTULO DEL MAPA");
+  const [subtitle, setSubtitle] = useState("Subtítulo del mapa");
   const [dpi, setDpi] = useState(150);
   const [isExporting, setIsExporting] = useState(false);
   const { toast } = useToast();
@@ -216,9 +82,6 @@ const PrintComposerPanel: React.FC<PrintComposerPanelProps> = ({
 
 
   const handlePrint = () => {
-    // A small delay is necessary to allow the dropdown menu to close
-    // before the browser's print dialog is triggered. This prevents
-    // a race condition where the print dialog opens too quickly.
     setTimeout(() => {
         window.print();
     }, 100);
@@ -235,9 +98,8 @@ const PrintComposerPanel: React.FC<PrintComposerPanelProps> = ({
     try {
         const dataUrl = await htmlToImage.toJpeg(printLayoutRef.current, {
             quality: 0.98,
-            pixelRatio: dpi / 96, // Standard screen DPI is 96.
+            pixelRatio: dpi / 96, 
             backgroundColor: '#ffffff',
-            // Increase canvas size to improve quality for higher DPI
             canvasWidth: printLayoutRef.current.offsetWidth * (dpi / 96),
             canvasHeight: printLayoutRef.current.offsetHeight * (dpi / 96),
         });
@@ -320,17 +182,12 @@ const PrintComposerPanel: React.FC<PrintComposerPanelProps> = ({
             </div>
             
             <div className="relative flex-grow overflow-auto bg-gray-900 p-2 rounded-md border border-gray-700 flex items-center justify-center">
-                {isRefreshing && (
-                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-10">
-                        <Loader2 className="h-8 w-8 animate-spin text-white" />
-                    </div>
-                )}
                 {/* Scaled preview */}
                 <div 
                     className="w-[1058px] h-[748px] transform-origin-top-left flex-shrink-0" 
                     style={{ transform: `scale(0.45)` }}
                 >
-                    <PrintLayout mapImage={mapImage} mapExtent={mapExtent} title={title} subtitle={subtitle} scale={scale} />
+                    <PrintLayout mapImage={mapImage} title={title} subtitle={subtitle} />
                 </div>
             </div>
         </div>
@@ -339,7 +196,7 @@ const PrintComposerPanel: React.FC<PrintComposerPanelProps> = ({
       {/* Hidden, full-size div for printing and exporting */}
       <div id="print-layout-container" className="fixed top-0 left-[-9999px] z-[-1] bg-white">
         <div ref={printLayoutRef} className="w-[29.7cm] h-[21cm] bg-white">
-          <PrintLayout mapImage={mapImage} mapExtent={mapExtent} title={title} subtitle={subtitle} scale={scale} />
+          <PrintLayout mapImage={mapImage} title={title} subtitle={subtitle} />
         </div>
       </div>
     </>
