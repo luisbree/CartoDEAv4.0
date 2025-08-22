@@ -11,10 +11,14 @@ import { getArea, getLength } from 'ol/sphere';
 import Overlay from 'ol/Overlay';
 import type { LineString, Polygon } from 'ol/geom';
 import type Feature from 'ol/Feature';
+import type { MeasureToolId } from '@/lib/types';
+import { useToast } from '@/hooks/use-toast';
 
 interface UseMeasurementProps {
   mapRef: React.RefObject<Map | null>;
   isMapReady: boolean;
+  activeTool: MeasureToolId | null;
+  setActiveTool: (toolId: MeasureToolId | null) => void;
 }
 
 const measureStyle = new Style({
@@ -26,8 +30,8 @@ const measureStyle = new Style({
   }),
 });
 
-export const useMeasurement = ({ mapRef, isMapReady }: UseMeasurementProps) => {
-  const [activeMeasureTool, setActiveMeasureTool] = useState<'LineString' | 'Polygon' | null>(null);
+export const useMeasurement = ({ mapRef, isMapReady, activeTool, setActiveTool }: UseMeasurementProps) => {
+  const { toast } = useToast();
   const measureSourceRef = useRef<VectorSource | null>(null);
   const measureLayerRef = useRef<VectorLayer<VectorSource> | null>(null);
   const drawInteractionRef = useRef<Draw | null>(null);
@@ -54,7 +58,6 @@ export const useMeasurement = ({ mapRef, isMapReady }: UseMeasurementProps) => {
     const featureId = feature.get('measure_id');
     if (!featureId || !mapRef.current) return;
 
-    // Remove existing tooltip if it exists
     if (tooltipsRef.current[featureId]) {
       mapRef.current.removeOverlay(tooltipsRef.current[featureId]);
       delete tooltipsRef.current[featureId];
@@ -85,18 +88,16 @@ export const useMeasurement = ({ mapRef, isMapReady }: UseMeasurementProps) => {
     mapRef.current.addOverlay(tooltip);
 };
 
-
-  const stopMeasureTool = useCallback(() => {
+  const stopTool = useCallback(() => {
     if (drawInteractionRef.current && mapRef.current) {
       mapRef.current.removeInteraction(drawInteractionRef.current);
       drawInteractionRef.current = null;
     }
-    setActiveMeasureTool(null);
     currentDrawingFeatureRef.current = null;
   }, [mapRef]);
   
   const clearMeasurements = useCallback(() => {
-    stopMeasureTool();
+    setActiveTool(null);
     if (measureSourceRef.current) {
         measureSourceRef.current.clear();
     }
@@ -104,52 +105,55 @@ export const useMeasurement = ({ mapRef, isMapReady }: UseMeasurementProps) => {
         Object.values(tooltipsRef.current).forEach(overlay => mapRef.current!.removeOverlay(overlay));
     }
     tooltipsRef.current = {};
-  }, [stopMeasureTool, mapRef]);
+  }, [setActiveTool, mapRef]);
 
-  const toggleMeasureTool = useCallback((toolType: 'LineString' | 'Polygon') => {
-    if (!mapRef.current) return;
+  const toggleTool = useCallback((toolId: MeasureToolId) => {
+    setActiveTool(toolId);
+  }, [setActiveTool]);
 
-    if (activeMeasureTool === toolType) {
-      stopMeasureTool();
-      return;
+  useEffect(() => {
+    if (!isMapReady || !mapRef.current) return;
+    
+    stopTool();
+
+    if (activeTool) {
+        const newDrawInteraction = new Draw({
+            source: measureSourceRef.current!,
+            type: activeTool,
+            style: measureStyle,
+        });
+        
+        newDrawInteraction.on('drawstart', (evt) => {
+            currentDrawingFeatureRef.current = evt.feature;
+            const featureId = `measure_${Date.now()}`;
+            evt.feature.set('measure_id', featureId);
+
+            evt.feature.getGeometry()?.on('change', (e) => {
+                const geom = e.target;
+                let output = '';
+                if (geom.getType() === 'LineString') {
+                    output = formatLength(geom as LineString);
+                } else if (geom.getType() === 'Polygon') {
+                    output = formatArea(geom as Polygon);
+                }
+                addTooltip(evt.feature, output);
+            });
+        });
+
+        newDrawInteraction.on('drawend', () => {
+            currentDrawingFeatureRef.current = null;
+        });
+
+        mapRef.current.addInteraction(newDrawInteraction);
+        drawInteractionRef.current = newDrawInteraction;
+        toast({description: `Herramienta de medición de ${activeTool === 'LineString' ? 'distancia' : 'área'} activada.`});
     }
 
-    stopMeasureTool();
-    
-    const newDrawInteraction = new Draw({
-        source: measureSourceRef.current!,
-        type: toolType,
-        style: measureStyle,
-    });
-    
-    newDrawInteraction.on('drawstart', (evt) => {
-        currentDrawingFeatureRef.current = evt.feature;
-        const featureId = `measure_${Date.now()}`;
-        evt.feature.set('measure_id', featureId);
-
-        evt.feature.getGeometry()?.on('change', (e) => {
-            const geom = e.target;
-            let output = '';
-            if (geom.getType() === 'LineString') {
-                output = formatLength(geom as LineString);
-            } else if (geom.getType() === 'Polygon') {
-                output = formatArea(geom as Polygon);
-            }
-            addTooltip(evt.feature, output);
-        });
-    });
-
-    newDrawInteraction.on('drawend', () => {
-        currentDrawingFeatureRef.current = null;
-        // The tooltip is already placed, just finalize
-    });
-
-    mapRef.current.addInteraction(newDrawInteraction);
-    drawInteractionRef.current = newDrawInteraction;
-    setActiveMeasureTool(toolType);
-  }, [mapRef, activeMeasureTool, stopMeasureTool]);
+    return () => {
+      stopTool();
+    }
+  }, [activeTool, isMapReady, mapRef, stopTool, toast]);
   
-  // Initialize layer and source
   useEffect(() => {
     if (isMapReady && mapRef.current && !measureLayerRef.current) {
       measureSourceRef.current = new VectorSource();
@@ -162,7 +166,6 @@ export const useMeasurement = ({ mapRef, isMapReady }: UseMeasurementProps) => {
     }
   }, [isMapReady, mapRef]);
 
-  // Cleanup effect
   useEffect(() => {
     const map = mapRef.current;
     const layer = measureLayerRef.current;
@@ -180,47 +183,8 @@ export const useMeasurement = ({ mapRef, isMapReady }: UseMeasurementProps) => {
   }, [mapRef]);
 
   return {
-    activeMeasureTool,
-    toggleMeasureTool,
+    activeTool,
+    toggleTool,
     clearMeasurements,
   };
 };
-
-// Add this CSS to your globals.css to style the tooltips
-/*
-.ol-tooltip {
-  position: relative;
-  background: rgba(0, 0, 0, 0.5);
-  border-radius: 4px;
-  color: white;
-  padding: 4px 8px;
-  opacity: 0.7;
-  white-space: nowrap;
-  font-size: 12px;
-  cursor: default;
-  user-select: none;
-}
-.ol-tooltip-measure {
-  opacity: 1;
-  font-weight: bold;
-}
-.ol-tooltip-static {
-  background-color: #ffcc33;
-  color: black;
-  border: 1px solid white;
-}
-.ol-tooltip-measure:before,
-.ol-tooltip-static:before {
-  border-top: 6px solid rgba(0, 0, 0, 0.5);
-  border-right: 6px solid transparent;
-  border-left: 6px solid transparent;
-  content: "";
-  position: absolute;
-  bottom: -6px;
-  margin-left: -7px;
-  left: 50%;
-}
-.ol-tooltip-static:before {
-  border-top-color: #ffcc33;
-}
-*/

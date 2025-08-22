@@ -17,6 +17,7 @@ import {
 import { Separator } from '@/components/ui/separator';
 import type { useOsmQuery } from '@/hooks/osm-integration/useOsmQuery';
 import type { useMeasurement } from '@/hooks/map-tools/useMeasurement';
+import type { DrawToolId } from '@/lib/types';
 
 
 interface OSMCategory {
@@ -32,8 +33,8 @@ interface ToolsPanelProps {
   onMouseDownHeader: (e: React.MouseEvent<HTMLDivElement>) => void;
 
   // Drawing props
-  activeDrawTool: string | null;
-  onToggleDrawingTool: (toolType: 'Polygon' | 'LineString' | 'Point' | 'Rectangle' | 'FreehandPolygon') => void;
+  activeDrawTool: DrawToolId | null;
+  onToggleDrawingTool: (toolType: DrawToolId) => void;
   onClearDrawnFeatures: () => void;
   onSaveDrawnFeaturesAsKML: () => void;
   
@@ -97,8 +98,8 @@ const ToolsPanel: React.FC<ToolsPanelProps> = ({
                 onSaveDrawnFeaturesAsKML={onSaveDrawnFeaturesAsKML}
             />
             <MeasurementToolbar
-                activeMeasureTool={measurementHook.activeMeasureTool}
-                onToggleMeasureTool={measurementHook.toggleMeasureTool}
+                activeMeasureTool={measurementHook.activeTool}
+                onToggleMeasureTool={measurementHook.toggleTool}
                 onClearMeasurements={measurementHook.clearMeasurements}
             />
         </div>

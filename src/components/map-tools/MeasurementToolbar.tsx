@@ -10,6 +10,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import type { MeasureToolId } from '@/lib/types';
 
 // A simple square-with-dots icon for area
 const AreaIcon = () => (
@@ -24,8 +25,8 @@ const AreaIcon = () => (
 
 
 interface MeasurementToolbarProps {
-  activeMeasureTool: 'LineString' | 'Polygon' | null;
-  onToggleMeasureTool: (toolType: 'LineString' | 'Polygon') => void;
+  activeMeasureTool: MeasureToolId | null;
+  onToggleMeasureTool: (toolType: MeasureToolId) => void;
   onClearMeasurements: () => void;
 }
 

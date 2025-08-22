@@ -7,86 +7,88 @@ import type VectorSource from 'ol/source/Vector';
 import Draw, { createBox } from 'ol/interaction/Draw';
 import KML from 'ol/format/KML';
 import { useToast } from "@/hooks/use-toast";
-import type { ActiveInteractionTool } from '../feature-inspection/useFeatureInspection';
+import type { DrawToolId } from '@/lib/types';
 
 interface UseDrawingInteractionsProps {
   mapRef: React.RefObject<Map | null>;
   isMapReady: boolean;
   drawingSourceRef: React.RefObject<VectorSource>;
-  activeInteractionTool: ActiveInteractionTool;
-  setActiveInteractionTool: (tool: ActiveInteractionTool) => void;
+  activeTool: DrawToolId | null;
+  setActiveTool: (toolId: DrawToolId | null) => void;
 }
 
 export const useDrawingInteractions = ({
   mapRef,
   isMapReady,
   drawingSourceRef,
-  activeInteractionTool,
-  setActiveInteractionTool,
+  activeTool,
+  setActiveTool,
 }: UseDrawingInteractionsProps) => {
   const { toast } = useToast();
-  const [activeDrawTool, setActiveDrawTool] = useState<string | null>(null);
   const drawInteractionRef = useRef<Draw | null>(null);
 
-  const stopDrawingTool = useCallback(() => {
+  const stopTool = useCallback(() => {
     if (drawInteractionRef.current && mapRef.current) {
       mapRef.current.removeInteraction(drawInteractionRef.current);
       drawInteractionRef.current = null;
     }
-    setActiveDrawTool(null);
   }, [mapRef]);
+  
+  const toggleTool = useCallback((toolId: DrawToolId) => {
+    setActiveTool(toolId);
+  }, [setActiveTool]);
 
-  const toggleDrawingTool = useCallback((toolType: 'Polygon' | 'LineString' | 'Point' | 'Rectangle' | 'FreehandPolygon') => {
-    if (!mapRef.current || !drawingSourceRef.current) return;
 
-    // If the same tool is clicked again, stop it
-    if (activeDrawTool === toolType) {
-      stopDrawingTool();
-      return;
+  useEffect(() => {
+    // This effect manages the OpenLayers interaction based on the activeTool state
+    if (!isMapReady || !mapRef.current || !drawingSourceRef.current) {
+        return;
     }
+    
+    stopTool(); // Stop any existing draw interaction first
 
-    // Stop any existing drawing or inspection tool
-    stopDrawingTool();
-    if (activeInteractionTool) {
-      setActiveInteractionTool(null);
+    if (activeTool) {
+        const drawOptions: any = {
+          source: drawingSourceRef.current,
+          type: activeTool,
+        };
+        
+        let toastMessage = `Herramienta de dibujo de ${activeTool} activada.`;
+    
+        if (activeTool === 'Rectangle') {
+          drawOptions.type = 'Circle';
+          drawOptions.geometryFunction = createBox();
+          toastMessage = `Herramienta de dibujo de Rectángulo activada.`;
+        }
+    
+        if (activeTool === 'FreehandPolygon') {
+            drawOptions.type = 'Polygon';
+            drawOptions.freehand = true;
+            toastMessage = `Herramienta de dibujo a Mano Alzada activada.`;
+        }
+    
+        const newDrawInteraction = new Draw(drawOptions);
+        mapRef.current.addInteraction(newDrawInteraction);
+        drawInteractionRef.current = newDrawInteraction;
+        
+        toast({ description: toastMessage });
     }
-
-    const drawOptions: any = {
-      source: drawingSourceRef.current,
-      type: toolType,
+    
+    // Cleanup function to remove the interaction when the component unmounts or the tool changes
+    return () => {
+        stopTool();
     };
-    
-    let toastMessage = `Herramienta de dibujo de ${toolType} activada.`;
 
-    if (toolType === 'Rectangle') {
-      drawOptions.type = 'Circle'; // OL uses 'Circle' type with a geometry function for boxes
-      drawOptions.geometryFunction = createBox();
-      toastMessage = `Herramienta de dibujo de Rectángulo activada.`;
-    }
+  }, [activeTool, isMapReady, mapRef, drawingSourceRef, stopTool, toast]);
 
-    if (toolType === 'FreehandPolygon') {
-        drawOptions.type = 'Polygon';
-        drawOptions.freehand = true;
-        toastMessage = `Herramienta de dibujo a Mano Alzada activada.`;
-    }
-
-    const newDrawInteraction = new Draw(drawOptions);
-
-    mapRef.current.addInteraction(newDrawInteraction);
-    drawInteractionRef.current = newDrawInteraction;
-    setActiveDrawTool(toolType);
-    
-    toast({ description: toastMessage });
-
-  }, [mapRef, drawingSourceRef, activeDrawTool, stopDrawingTool, activeInteractionTool, setActiveInteractionTool, toast]);
 
   const clearDrawnFeatures = useCallback(() => {
-    stopDrawingTool(); // Stop any active drawing tool first
+    setActiveTool(null);
     if (drawingSourceRef.current) {
       drawingSourceRef.current.clear();
       toast({ description: 'Dibujos borrados del mapa.' });
     }
-  }, [drawingSourceRef, toast, stopDrawingTool]);
+  }, [drawingSourceRef, toast, setActiveTool]);
 
   const saveDrawnFeaturesAsKML = useCallback(() => {
     if (!drawingSourceRef.current || drawingSourceRef.current.getFeatures().length === 0) {
@@ -121,21 +123,9 @@ export const useDrawingInteractions = ({
     }
   }, [drawingSourceRef, mapRef, toast]);
 
-  // Cleanup effect
-  useEffect(() => {
-    const map = mapRef.current;
-    return () => {
-      if (drawInteractionRef.current && map) {
-        map.removeInteraction(drawInteractionRef.current);
-      }
-    };
-  }, [mapRef]);
-
-
   return {
-    activeDrawTool,
-    toggleDrawingTool,
-    stopDrawingTool,
+    activeTool,
+    toggleTool,
     clearDrawnFeatures,
     saveDrawnFeaturesAsKML,
   };

@@ -1,13 +1,14 @@
+
 "use client";
 
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import { Square, PenLine, Dot, Eraser, Save, RectangleVertical, Brush } from 'lucide-react'; 
+import type { DrawToolId } from '@/lib/types';
 
 interface DrawingToolbarProps {
-  activeDrawTool: string | null;
-  onToggleDrawingTool: (toolType: 'Polygon' | 'LineString' | 'Point' | 'Rectangle' | 'FreehandPolygon') => void;
-  // onStopDrawingTool prop removed as it's no longer directly used by this component
+  activeDrawTool: DrawToolId | null;
+  onToggleDrawingTool: (toolType: DrawToolId) => void;
   onClearDrawnFeatures: () => void;
   onSaveDrawnFeaturesAsKML: () => void;
 }

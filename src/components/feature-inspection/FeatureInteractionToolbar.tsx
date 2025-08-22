@@ -1,3 +1,4 @@
+
 "use client";
 
 import React from 'react';
@@ -9,10 +10,11 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import type { InteractionToolId } from '@/lib/types';
 
 interface FeatureInteractionToolbarProps {
-  activeTool: 'inspect' | 'selectBox' | null;
-  onSetActiveTool: (tool: 'inspect' | 'selectBox' | null) => void;
+  activeTool: InteractionToolId | null;
+  onSetActiveTool: (tool: InteractionToolId | null) => void;
   onClearSelection: () => void;
 }
 
@@ -26,7 +28,7 @@ const FeatureInteractionToolbar: React.FC<FeatureInteractionToolbarProps> = ({
   const activeClass = "bg-primary hover:bg-primary/90 text-primary-foreground";
   const inactiveClass = "border border-white/30 text-white/90 bg-black/20 hover:bg-black/40";
   
-  const handleToggleTool = (tool: 'inspect' | 'selectBox') => {
+  const handleToggleTool = (tool: InteractionToolId) => {
     onSetActiveTool(activeTool === tool ? null : tool);
   };
 

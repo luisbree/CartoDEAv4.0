@@ -1,3 +1,4 @@
+
 import type { default as Layer } from 'ol/layer/Layer';
 import type VectorLayer from 'ol/layer/Vector';
 import type VectorSource from 'ol/source/Vector';
@@ -70,4 +71,14 @@ export interface NominatimResult {
 export interface PlainFeatureData {
   id: string;
   attributes: Record<string, any>;
+}
+
+// Types for tool management
+export type DrawToolId = 'Polygon' | 'LineString' | 'Point' | 'Rectangle' | 'FreehandPolygon';
+export type MeasureToolId = 'LineString' | 'Polygon';
+export type InteractionToolId = 'inspect' | 'selectBox';
+
+export interface ActiveTool {
+  type: 'draw' | 'measure' | 'interaction' | null;
+  id: DrawToolId | MeasureToolId | InteractionToolId | null;
 }

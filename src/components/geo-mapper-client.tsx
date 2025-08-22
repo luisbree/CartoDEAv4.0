@@ -56,7 +56,7 @@ import { useWfsLibrary } from '@/hooks/wfs-library/useWfsLibrary';
 import { useOsmQuery } from '@/hooks/osm-integration/useOsmQuery';
 import { useToast } from "@/hooks/use-toast";
 
-import type { OSMCategoryConfig, GeoServerDiscoveredLayer, BaseLayerOptionForSelect, MapLayer, ChatMessage, BaseLayerSettings, NominatimResult, PlainFeatureData } from '@/lib/types';
+import type { OSMCategoryConfig, GeoServerDiscoveredLayer, BaseLayerOptionForSelect, MapLayer, ChatMessage, BaseLayerSettings, NominatimResult, PlainFeatureData, ActiveTool } from '@/lib/types';
 import { chatWithMapAssistant, type MapAssistantOutput } from '@/ai/flows/find-layer-flow';
 import { authenticateWithGee } from '@/ai/flows/gee-flow';
 import { checkTrelloCredentials } from '@/ai/flows/trello-actions';
@@ -149,6 +149,9 @@ export default function GeoMapperClient() {
   const { mapRef, mapElementRef, setMapInstanceAndElement, isMapReady, drawingSourceRef } = useOpenLayersMap();
   const { toast } = useToast();
 
+  const [activeTool, setActiveTool] = useState<ActiveTool>({ type: null, id: null });
+  const lastActiveToolRef = useRef<ActiveTool>({ type: 'interaction', id: 'inspect' });
+
   const { panels, handlePanelMouseDown, togglePanelCollapse, togglePanelMinimize } = useFloatingPanels({
     toolsPanelRef,
     legendPanelRef,
@@ -178,11 +181,28 @@ export default function GeoMapperClient() {
   const handleChangeBaseLayer = useCallback((newBaseLayerId: string) => {
     setActiveBaseLayerId(newBaseLayerId);
   }, []);
+  
+  const handleSetActiveTool = useCallback((tool: ActiveTool) => {
+    setActiveTool(currentTool => {
+      // If the new tool is not null, it becomes the last active tool
+      if (tool.type !== null) {
+        lastActiveToolRef.current = tool;
+      }
+      // If toggling the same tool off
+      if (currentTool.type === tool.type && currentTool.id === tool.id) {
+        return { type: null, id: null }; // Deactivate
+      }
+      return tool; // Activate new tool
+    });
+  }, []);
+  
 
   const featureInspectionHook = useFeatureInspection({
     mapRef, 
     mapElementRef, 
     isMapReady,
+    activeTool: activeTool.type === 'interaction' ? activeTool.id : null,
+    setActiveTool: (id) => handleSetActiveTool({ type: 'interaction', id }),
     onNewSelection: () => {
       if (panels.attributes.isMinimized) {
         togglePanelMinimize('attributes');
@@ -327,15 +347,18 @@ export default function GeoMapperClient() {
     addLayer: layerManagerHook.addLayer, 
     osmCategoryConfigs: osmCategoryConfig 
   });
-
-  // Orchestration between drawing and feature inspection tools
+  
   const drawingInteractions = useDrawingInteractions({
     mapRef, isMapReady, drawingSourceRef: drawingSourceRef,
-    activeInteractionTool: featureInspectionHook.activeTool,
-    setActiveInteractionTool: featureInspectionHook.setActiveTool,
+    activeTool: activeTool.type === 'draw' ? activeTool.id : null,
+    setActiveTool: (id) => handleSetActiveTool({ type: 'draw', id }),
   });
 
-  const measurementHook = useMeasurement({ mapRef, isMapReady });
+  const measurementHook = useMeasurement({ 
+    mapRef, isMapReady,
+    activeTool: activeTool.type === 'measure' ? activeTool.id : null,
+    setActiveTool: (id) => handleSetActiveTool({ type: 'measure', id }),
+  });
 
   const { captureMapAsDataUrl } = useMapCapture({ mapRef, activeBaseLayerId });
 
@@ -635,6 +658,27 @@ export default function GeoMapperClient() {
 
     map.renderSync();
   }, [mapRef, isCapturing, toast, activeBaseLayerId]);
+  
+  // Effect for right-click tool toggling
+  useEffect(() => {
+    const mapEl = mapElementRef.current;
+    if (!mapEl) return;
+
+    const handleContextMenu = (e: MouseEvent) => {
+        e.preventDefault();
+        if (activeTool.type !== null) {
+            handleSetActiveTool({ type: null, id: null });
+        } else {
+            handleSetActiveTool(lastActiveToolRef.current);
+        }
+    };
+
+    mapEl.addEventListener('contextmenu', handleContextMenu);
+
+    return () => {
+        mapEl.removeEventListener('contextmenu', handleContextMenu);
+    };
+  }, [activeTool, handleSetActiveTool, mapElementRef]);
 
 
   return (
@@ -776,8 +820,8 @@ export default function GeoMapperClient() {
             onToggleCollapse={() => togglePanelCollapse('tools')}
             onClosePanel={() => togglePanelMinimize('tools')}
             onMouseDownHeader={(e) => handlePanelMouseDown(e, 'tools')}
-            activeDrawTool={drawingInteractions.activeDrawTool}
-            onToggleDrawingTool={drawingInteractions.toggleDrawingTool}
+            activeDrawTool={drawingInteractions.activeTool}
+            onToggleDrawingTool={drawingInteractions.toggleTool}
             onClearDrawnFeatures={drawingInteractions.clearDrawnFeatures}
             onSaveDrawnFeaturesAsKML={drawingInteractions.saveDrawnFeaturesAsKML}
             measurementHook={measurementHook}

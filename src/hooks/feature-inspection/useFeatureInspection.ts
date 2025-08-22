@@ -11,16 +11,16 @@ import type { Geometry } from 'ol/geom';
 import Select, { type SelectEvent } from 'ol/interaction/Select';
 import DragBox from 'ol/interaction/DragBox';
 import { singleClick } from 'ol/events/condition';
-import type { PlainFeatureData } from '@/lib/types';
+import type { PlainFeatureData, InteractionToolId } from '@/lib/types';
 
 interface UseFeatureInspectionProps {
   mapRef: React.RefObject<Map | null>;
   mapElementRef: React.RefObject<HTMLDivElement | null>;
   isMapReady: boolean;
+  activeTool: InteractionToolId | null;
+  setActiveTool: (toolId: InteractionToolId | null) => void;
   onNewSelection: () => void;
 }
-
-export type ActiveInteractionTool = 'inspect' | 'selectBox' | null;
 
 const highlightStyle = new Style({
   stroke: new Stroke({
@@ -42,10 +42,11 @@ export const useFeatureInspection = ({
   mapRef,
   mapElementRef,
   isMapReady,
+  activeTool,
+  setActiveTool,
   onNewSelection,
 }: UseFeatureInspectionProps) => {
   const { toast } = useToast();
-  const [activeTool, setActiveTool] = useState<ActiveInteractionTool>(null);
   const [selectedFeatures, setSelectedFeatures] = useState<Feature<Geometry>[]>([]);
   const [inspectedFeatureData, setInspectedFeatureData] = useState<PlainFeatureData[] | null>([]);
   const [currentInspectedLayerName, setCurrentInspectedLayerName] = useState<string | null>(null);
@@ -101,106 +102,87 @@ export const useFeatureInspection = ({
     setSelectedFeatures(featuresToSelect);
   }, [mapRef]);
   
-  const handleSetActiveTool = useCallback((tool: ActiveInteractionTool) => {
-    setActiveTool(tool);
-    clearSelection();
-    
-    const toolMessages = {
-      inspect: 'Modo Inspección activado. Haga clic o dibuje una caja.',
-      selectBox: 'Modo Selección activado. Haga clic o dibuje una caja.',
-    };
 
-    if (tool && toolMessages[tool]) {
-      toast({ description: toolMessages[tool] });
-    } else {
-      toast({ description: 'Modo interactivo desactivado.' });
-    }
-  }, [clearSelection, toast]);
-
-  
-  // Effect to manage interactions based on active state and mode
   useEffect(() => {
     if (!isMapReady || !mapRef.current) return;
     const map = mapRef.current;
 
-    // Clean up previous interactions to avoid duplicates
     if (selectInteractionRef.current) map.removeInteraction(selectInteractionRef.current);
     if (dragBoxInteractionRef.current) map.removeInteraction(dragBoxInteractionRef.current);
     selectInteractionRef.current = null;
     dragBoxInteractionRef.current = null;
     if (mapElementRef.current) mapElementRef.current.style.cursor = 'default';
 
-    if (activeTool) {
-        if (mapElementRef.current) {
-            mapElementRef.current.style.cursor = 'crosshair'; // Use crosshair for both
-        }
-
-        const select = new Select({
-            style: highlightStyle,
-            multi: true,
-            condition: singleClick,
-            filter: (feature, layer) => !layer.get('isBaseLayer') && !layer.get('isDrawingLayer'),
-        });
-        selectInteractionRef.current = select;
-        map.addInteraction(select);
-
-        select.on('select', (e: SelectEvent) => {
-            const currentSelectedFeatures = e.target.getFeatures().getArray();
-            setSelectedFeatures(currentSelectedFeatures);
-
-            if (activeTool === 'inspect') {
-                const plainData: PlainFeatureData[] = currentSelectedFeatures.map(f => ({
-                    id: f.getId() as string,
-                    attributes: f.getProperties()
-                }));
-                processAndDisplayFeatures(plainData, 'Inspección');
-            } else if (activeTool === 'selectBox' && (e.selected.length > 0 || e.deselected.length > 0)) {
-                toast({ description: `${currentSelectedFeatures.length} entidad(es) seleccionada(s).` });
-            }
-        });
-        
-        // --- NEW LOGIC: Add DragBox for 'inspect' as well as 'selectBox' ---
-        if (activeTool === 'inspect' || activeTool === 'selectBox') {
-            const dragBox = new DragBox({});
-            dragBoxInteractionRef.current = dragBox;
-            map.addInteraction(dragBox);
-
-            dragBox.on('boxend', () => {
-                const extent = dragBox.getGeometry().getExtent();
-                const featuresInBox: Feature<Geometry>[] = [];
-                
-                map.getLayers().forEach(layer => {
-                  if (layer instanceof VectorLayer && layer.getVisible() && !layer.get('isBaseLayer') && !layer.get('isDrawingLayer')) {
-                    const source = layer.getSource();
-                    if (source) {
-                      source.forEachFeatureIntersectingExtent(extent, (feature) => {
-                        featuresInBox.push(feature as Feature<Geometry>);
-                      });
-                    }
-                  }
-                });
-              
-                const currentSelectedInSelect = select.getFeatures();
-                currentSelectedInSelect.clear();
-                currentSelectedInSelect.extend(featuresInBox);
-              
-                setSelectedFeatures(featuresInBox);
-                
-                // --- BEHAVIOR CHANGE: Process features for inspect tool ---
-                if (activeTool === 'inspect') {
-                  const plainData: PlainFeatureData[] = featuresInBox.map(f => ({
-                    id: f.getId() as string,
-                    attributes: f.getProperties()
-                  }));
-                  processAndDisplayFeatures(plainData, 'Inspección por área');
-                } else {
-                  toast({ description: `${featuresInBox.length} entidad(es) seleccionada(s).` });
-                }
-            });
-        }
+    if (!activeTool) {
+      clearSelection();
+      return;
     }
 
-    // This is the cleanup function for the effect
+    if (mapElementRef.current) {
+        mapElementRef.current.style.cursor = 'crosshair';
+    }
+
+    const select = new Select({
+        style: highlightStyle,
+        multi: true,
+        condition: singleClick,
+        filter: (feature, layer) => !layer.get('isBaseLayer') && !layer.get('isDrawingLayer'),
+    });
+    selectInteractionRef.current = select;
+    map.addInteraction(select);
+
+    select.on('select', (e: SelectEvent) => {
+        const currentSelectedFeatures = e.target.getFeatures().getArray();
+        setSelectedFeatures(currentSelectedFeatures);
+
+        if (activeTool === 'inspect') {
+            const plainData: PlainFeatureData[] = currentSelectedFeatures.map(f => ({
+                id: f.getId() as string,
+                attributes: f.getProperties()
+            }));
+            processAndDisplayFeatures(plainData, 'Inspección');
+        } else if (activeTool === 'selectBox' && (e.selected.length > 0 || e.deselected.length > 0)) {
+            toast({ description: `${currentSelectedFeatures.length} entidad(es) seleccionada(s).` });
+        }
+    });
+    
+    const dragBox = new DragBox({});
+    dragBoxInteractionRef.current = dragBox;
+    map.addInteraction(dragBox);
+
+    dragBox.on('boxend', () => {
+        const extent = dragBox.getGeometry().getExtent();
+        const featuresInBox: Feature<Geometry>[] = [];
+        
+        map.getLayers().forEach(layer => {
+          if (layer instanceof VectorLayer && layer.getVisible() && !layer.get('isBaseLayer') && !layer.get('isDrawingLayer')) {
+            const source = layer.getSource();
+            if (source) {
+              source.forEachFeatureIntersectingExtent(extent, (feature) => {
+                featuresInBox.push(feature as Feature<Geometry>);
+              });
+            }
+          }
+        });
+      
+        const currentSelectedInSelect = select.getFeatures();
+        currentSelectedInSelect.clear();
+        currentSelectedInSelect.extend(featuresInBox);
+      
+        setSelectedFeatures(featuresInBox);
+        
+        if (activeTool === 'inspect') {
+          const plainData: PlainFeatureData[] = featuresInBox.map(f => ({
+            id: f.getId() as string,
+            attributes: f.getProperties()
+          }));
+          processAndDisplayFeatures(plainData, 'Inspección por área');
+        } else {
+          toast({ description: `${featuresInBox.length} entidad(es) seleccionada(s).` });
+        }
+    });
+
+
     return () => {
         if (map) {
             if (selectInteractionRef.current) map.removeInteraction(selectInteractionRef.current);
@@ -208,12 +190,12 @@ export const useFeatureInspection = ({
             if (mapElementRef.current) mapElementRef.current.style.cursor = 'default';
         }
     };
-  }, [activeTool, isMapReady, mapRef, mapElementRef, processAndDisplayFeatures, toast]);
+  }, [activeTool, isMapReady, mapRef, mapElementRef, processAndDisplayFeatures, toast, clearSelection]);
 
 
   return {
     activeTool,
-    setActiveTool: handleSetActiveTool,
+    setActiveTool: (tool) => setActiveTool(tool),
     selectedFeatures,
     inspectedFeatureData,
     currentInspectedLayerName,
