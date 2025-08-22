@@ -8,9 +8,11 @@ import TileLayer from 'ol/layer/Tile';
 import OSM from 'ol/source/OSM';
 import XYZ from 'ol/source/XYZ';
 import {defaults as defaultControls} from 'ol/control';
+import {defaults as defaultInteractions, DragPan} from 'ol/interaction';
 import { fromLonLat } from 'ol/proj';
 import type { Layer } from 'ol/layer';
 import type { BaseLayerSettings } from '@/lib/types';
+import type { MapBrowserEvent } from 'ol';
 
 interface MapViewProps {
   setMapInstanceAndElement: (map: OLMap, element: HTMLDivElement) => void;
@@ -224,6 +226,13 @@ const MapView: React.FC<MapViewProps> = ({ setMapInstanceAndElement, onMapClick,
         projection: 'EPSG:3857', 
         constrainResolution: true, 
       }),
+      interactions: defaultInteractions().extend([
+        new DragPan({
+          condition: (event: MapBrowserEvent<any>) => {
+            return event.originalEvent.button === 1;
+          },
+        }),
+      ]),
       controls: defaultControls({
         attributionOptions: {
           collapsible: false,
