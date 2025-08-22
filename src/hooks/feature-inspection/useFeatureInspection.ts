@@ -114,7 +114,7 @@ export const useFeatureInspection = ({
     clearSelection();
     
     const toolMessages = {
-      inspect: 'Modo Inspección activado. Haga clic en una entidad.',
+      inspect: 'Modo Inspección activado. Haga clic o dibuje una caja.',
       selectBox: 'Modo Selección activado. Haga clic o dibuje una caja.',
     };
 
@@ -140,7 +140,7 @@ export const useFeatureInspection = ({
 
     if (activeTool) {
         if (mapElementRef.current) {
-            mapElementRef.current.style.cursor = activeTool === 'selectBox' ? 'crosshair' : 'help';
+            mapElementRef.current.style.cursor = 'crosshair'; // Use crosshair for both
         }
 
         const select = new Select({
@@ -163,8 +163,9 @@ export const useFeatureInspection = ({
                 toast({ description: `${currentSelectedFeatures.length} entidad(es) seleccionada(s).` });
             }
         });
-
-        if (activeTool === 'selectBox') {
+        
+        // --- NEW LOGIC: Add DragBox for 'inspect' as well as 'selectBox' ---
+        if (activeTool === 'inspect' || activeTool === 'selectBox') {
             const dragBox = new DragBox({});
             dragBoxInteractionRef.current = dragBox;
             map.addInteraction(dragBox);
@@ -189,7 +190,14 @@ export const useFeatureInspection = ({
                 currentSelectedInSelect.extend(featuresInBox);
               
                 setSelectedFeatures(featuresInBox);
-                toast({ description: `${featuresInBox.length} entidad(es) seleccionada(s).` });
+                
+                // --- BEHAVIOR CHANGE: Process features for inspect tool ---
+                if (activeTool === 'inspect') {
+                  const plainData = extractPlainAttributes(featuresInBox);
+                  processAndDisplayFeatures(plainData, 'Inspección');
+                } else {
+                  toast({ description: `${featuresInBox.length} entidad(es) seleccionada(s).` });
+                }
             });
         }
     }
@@ -202,7 +210,7 @@ export const useFeatureInspection = ({
             if (mapElementRef.current) mapElementRef.current.style.cursor = 'default';
         }
     };
-}, [activeTool, isMapReady, mapRef, mapElementRef, processAndDisplayFeatures, toast]); // Re-run when activeTool changes
+  }, [activeTool, isMapReady, mapRef, mapElementRef, processAndDisplayFeatures, toast]);
 
 
   return {
