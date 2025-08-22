@@ -87,8 +87,10 @@ export const useMapCapture = ({ mapRef }: UseMapCaptureProps) => {
                   Array.from(canvases).forEach(canvas => {
                       if (canvas instanceof HTMLCanvasElement && canvas.width > 0) {
                           const opacity = parseFloat(canvas.style.opacity) || 1.0;
+                          const filter = (canvas.style as any).filter || 'none';
                           mapContext.globalAlpha = opacity;
-                          mapContext.drawImage(canvas, 0, 0);
+                          mapContext.filter = filter;
+                          mapContext.drawImage(canvas, 0, 0, canvas.width, canvas.height);
                       }
                   });
   
