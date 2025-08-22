@@ -974,5 +974,3 @@ export default function GeoMapperClient() {
     </div>
   );
 }
-
-      

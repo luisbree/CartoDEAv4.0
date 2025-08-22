@@ -13,7 +13,7 @@ import type { Geometry } from 'ol/geom';
 import { useToast } from "@/hooks/use-toast";
 import { findSentinel2Footprints } from '@/services/sentinel';
 import { findLandsatFootprints } from '@/services/landsat';
-import type { MapLayer, VectorMapLayer } from '@/lib/types';
+import type { MapLayer, VectorMapLayer, PlainFeatureData } from '@/lib/types';
 import { nanoid } from 'nanoid';
 import { Style, Stroke, Fill, Circle as CircleStyle } from 'ol/style';
 import { transformExtent } from 'ol/proj';
@@ -29,7 +29,7 @@ interface UseLayerManagerProps {
   mapRef: React.RefObject<Map | null>;
   isMapReady: boolean;
   drawingSourceRef: React.RefObject<VectorSource>;
-  onShowTableRequest: (features: Feature[], layerName: string) => void;
+  onShowTableRequest: (plainData: PlainFeatureData[], layerName: string) => void;
   updateGeoServerDiscoveredLayerState: (layerName: string, added: boolean, type: 'wms' | 'wfs') => void;
   clearSelectionAfterExtraction: () => void;
   setIsWfsLoading: (isLoading: boolean) => void;
@@ -496,24 +496,26 @@ export const useLayerManager = ({
   }, [mapRef, layers, toast]);
 
   const handleShowLayerTable = useCallback((layerId: string) => {
-    setLayers(prevLayers => {
-        const layer = prevLayers.find(l => l.id === layerId);
-        if (layer && layer.olLayer instanceof VectorLayer) {
-            const source = layer.olLayer.getSource();
-            if (source) {
-                const features = source.getFeatures();
-                if (features.length > 0) {
-                    onShowTableRequest(features, layer.name);
-                } else {
-                    setTimeout(() => toast({ description: `La capa "${layer.name}" no tiene entidades para mostrar en la tabla.` }), 0);
-                }
+    const layer = layers.find(l => l.id === layerId);
+    if (layer && layer.olLayer instanceof VectorLayer) {
+        const source = layer.olLayer.getSource();
+        if (source) {
+            const features = source.getFeatures();
+            if (features.length > 0) {
+                // Convert features to plain data before passing to the panel
+                const plainData: PlainFeatureData[] = features.map(feature => ({
+                    id: feature.getId() as string,
+                    attributes: feature.getProperties(),
+                }));
+                onShowTableRequest(plainData, layer.name);
+            } else {
+                setTimeout(() => toast({ description: `La capa "${layer.name}" no tiene entidades para mostrar en la tabla.` }), 0);
             }
-        } else {
-            setTimeout(() => toast({ description: "Solo se puede mostrar la tabla de atributos para capas vectoriales." }), 0);
         }
-        return prevLayers;
-    });
-  }, [onShowTableRequest, toast]);
+    } else {
+        setTimeout(() => toast({ description: "Solo se puede mostrar la tabla de atributos para capas vectoriales." }), 0);
+    }
+  }, [layers, onShowTableRequest, toast]);
 
   const renameLayer = useCallback((layerId: string, newName: string) => {
     setLayers(prev =>

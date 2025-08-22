@@ -47,7 +47,7 @@ export const useFeatureInspection = ({
   const { toast } = useToast();
   const [activeTool, setActiveTool] = useState<ActiveInteractionTool>(null);
   const [selectedFeatures, setSelectedFeatures] = useState<Feature<Geometry>[]>([]);
-  const [inspectedFeatureData, setInspectedFeatureData] = useState<PlainFeatureData[] | null>(null);
+  const [inspectedFeatureData, setInspectedFeatureData] = useState<PlainFeatureData[] | null>([]);
   const [currentInspectedLayerName, setCurrentInspectedLayerName] = useState<string | null>(null);
 
   const selectInteractionRef = useRef<Select | null>(null);
@@ -58,24 +58,16 @@ export const useFeatureInspection = ({
     onNewSelectionRef.current = onNewSelection;
   }, [onNewSelection]);
 
-  const extractPlainAttributes = (features: Feature<Geometry>[]): PlainFeatureData[] => {
-    if (!features) return [];
-    return features.map(feature => ({
-        id: feature.getId() as string,
-        attributes: feature.getProperties(),
-    }));
-  };
-
   const processAndDisplayFeatures = useCallback((plainData: PlainFeatureData[], layerName: string) => {
     setInspectedFeatureData(plainData);
     setCurrentInspectedLayerName(layerName);
     
     if (plainData && plainData.length > 0) {
-       setTimeout(() => toast({ description: `${plainData.length} entidad(es) de "${layerName}" inspeccionada(s).` }), 0);
+       setTimeout(() => toast({ description: `${plainData.length} entidad(es) de "${layerName}" cargada(s) en la tabla.` }), 0);
        onNewSelectionRef.current();
     }
     
-  }, [toast, onNewSelectionRef]);
+  }, [toast]);
   
   const clearSelection = useCallback(() => {
     if (selectInteractionRef.current) {
@@ -157,7 +149,10 @@ export const useFeatureInspection = ({
             setSelectedFeatures(currentSelectedFeatures);
 
             if (activeTool === 'inspect') {
-                const plainData = extractPlainAttributes(currentSelectedFeatures);
+                const plainData: PlainFeatureData[] = currentSelectedFeatures.map(f => ({
+                    id: f.getId() as string,
+                    attributes: f.getProperties()
+                }));
                 processAndDisplayFeatures(plainData, 'Inspección');
             } else if (activeTool === 'selectBox' && (e.selected.length > 0 || e.deselected.length > 0)) {
                 toast({ description: `${currentSelectedFeatures.length} entidad(es) seleccionada(s).` });
@@ -193,8 +188,11 @@ export const useFeatureInspection = ({
                 
                 // --- BEHAVIOR CHANGE: Process features for inspect tool ---
                 if (activeTool === 'inspect') {
-                  const plainData = extractPlainAttributes(featuresInBox);
-                  processAndDisplayFeatures(plainData, 'Inspección');
+                  const plainData: PlainFeatureData[] = featuresInBox.map(f => ({
+                    id: f.getId() as string,
+                    attributes: f.getProperties()
+                  }));
+                  processAndDisplayFeatures(plainData, 'Inspección por área');
                 } else {
                   toast({ description: `${featuresInBox.length} entidad(es) seleccionada(s).` });
                 }
@@ -222,6 +220,5 @@ export const useFeatureInspection = ({
     clearSelection,
     processAndDisplayFeatures,
     selectFeaturesById,
-    extractPlainAttributes, // Export helper function
   };
 };
