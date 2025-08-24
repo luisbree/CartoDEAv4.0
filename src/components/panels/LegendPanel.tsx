@@ -101,20 +101,8 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
         const [workspace, layerNameOnly] = layer.name.split(':');
         if (!layerNameOnly) return orgs;
 
-        const match = layerNameOnly.match(/^([a-zA-Z]{3,4})(\d{3,4})?_?/);
-        
-        let orgCode: string;
-        let projectCode: string;
-        
-        if (match) {
-            orgCode = match[1].toUpperCase();
-            // If there's a numeric part, use it to form the project code, otherwise use the org code
-            projectCode = match[2] ? `${orgCode}${match[2]}` : orgCode;
-        } else {
-            // Fallback for layers that don't match the pattern
-            orgCode = workspace.toUpperCase() || 'OTROS';
-            projectCode = layerNameOnly.split('_')[0] || 'General';
-        }
+        const orgCode = workspace.toUpperCase() || 'OTROS';
+        const projectCode = layerNameOnly.split('_')[0] || 'General';
 
         if (!orgs[orgCode]) orgs[orgCode] = {};
         if (!orgs[orgCode][projectCode]) orgs[orgCode][projectCode] = [];
