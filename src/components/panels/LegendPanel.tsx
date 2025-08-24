@@ -26,7 +26,7 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Label } from '@/components/ui/label';
 import type { StyleOptions } from '../layer-manager/StyleEditorDialog';
-import type { ActiveInteractionTool } from '@/hooks/feature-inspection/useFeatureInspection';
+import type { InteractionToolId } from '@/lib/types';
 
 interface LegendPanelProps {
   panelRef: React.RefObject<HTMLDivElement>;
@@ -53,8 +53,8 @@ interface LegendPanelProps {
 
   onAddLayer: (layer: MapLayer) => void;
 
-  activeTool: ActiveInteractionTool;
-  onSetActiveTool: (tool: ActiveInteractionTool) => void;
+  activeTool: InteractionToolId | null;
+  onSetActiveTool: (tool: InteractionToolId | null) => void;
   onClearSelection: () => void;
 
   // DEAS props
@@ -90,11 +90,11 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
     // First, filter the layers based on the search term
     const filteredLayers = discoveredDeasLayers.filter(layer => {
         if (!deasSearchTerm) return true;
-        const [workspace, layerNameOnly] = layer.name.split(':');
+        const [workspace = '', layerNameOnly = ''] = layer.name.split(':');
         return (
             layer.title.toLowerCase().includes(lowercasedFilter) ||
             workspace.toLowerCase().includes(lowercasedFilter) ||
-            (layerNameOnly && layerNameOnly.toLowerCase().includes(lowercasedFilter))
+            layerNameOnly.toLowerCase().includes(lowercasedFilter)
         );
     });
 
@@ -103,17 +103,28 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
         const [workspace, layerNameOnly] = layer.name.split(':');
         if (!layerNameOnly) return orgs;
 
+        // Try to match the pattern ORGCODE(NUMBERS)_LAYERNAME
         const match = layerNameOnly.match(/^([a-zA-Z]{3,4})(\d{3})_/);
+        
+        let orgCode: string;
+        let projectName: string;
+
         if (match) {
-            const orgCode = match[1].toUpperCase();
+            orgCode = match[1].toUpperCase();
             const projectCode = match[2];
-            const projectName = `${orgCode}-${projectCode}`;
-
-            if (!orgs[orgCode]) orgs[orgCode] = {};
-            if (!orgs[orgCode][projectName]) orgs[orgCode][projectName] = [];
-
-            orgs[orgCode][projectName].push(layer);
+            projectName = `${orgCode}-${projectCode}`;
+        } else {
+            // Fallback for layers that don't match the pattern
+            // Group them by their workspace name
+            orgCode = workspace.toUpperCase() || 'OTROS';
+            projectName = 'Capas Generales';
         }
+
+        if (!orgs[orgCode]) orgs[orgCode] = {};
+        if (!orgs[orgCode][projectName]) orgs[orgCode][projectName] = [];
+
+        orgs[orgCode][projectName].push(layer);
+        
         return orgs;
     }, {});
   }, [discoveredDeasLayers, deasSearchTerm]);
