@@ -103,16 +103,14 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
         const [workspace, layerNameOnly] = layer.name.split(':');
         if (!layerNameOnly) return orgs;
 
-        // Try to match the pattern ORGCODE(NUMBERS)_LAYERNAME
-        const match = layerNameOnly.match(/^([a-zA-Z]{3,4})(\d{3})_/);
+        const match = layerNameOnly.match(/^([a-zA-Z]{3,4})(\d{3,})/);
         
         let orgCode: string;
         let projectName: string;
 
         if (match) {
             orgCode = match[1].toUpperCase();
-            const projectCode = match[2];
-            projectName = `${orgCode}-${projectCode}`;
+            projectName = `${orgCode}${match[2]}`;
         } else {
             // Fallback for layers that don't match the pattern
             // Group them by their workspace name
