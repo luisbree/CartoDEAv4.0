@@ -66,7 +66,8 @@ interface LegendPanelProps {
 
 // Type definitions for the hierarchical structure
 type DeasLayerNode = GeoServerDiscoveredLayer;
-type DeasOrgNode = { [orgName: string]: DeasLayerNode[] };
+type DeasProjectNode = { [projectName: string]: DeasLayerNode[] };
+type DeasOrgNode = { [orgName: string]: DeasProjectNode };
 
 
 const LegendPanel: React.FC<LegendPanelProps> = ({
@@ -100,19 +101,25 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
         const [workspace, layerNameOnly] = layer.name.split(':');
         if (!layerNameOnly) return orgs;
 
-        const match = layerNameOnly.match(/^([a-zA-Z]{3,4})/);
+        const match = layerNameOnly.match(/^([a-zA-Z]{3,4})(\d{3,4})?_?/);
         
         let orgCode: string;
-
+        let projectCode: string;
+        
         if (match) {
             orgCode = match[1].toUpperCase();
+            // If there's a numeric part, use it to form the project code, otherwise use the org code
+            projectCode = match[2] ? `${orgCode}${match[2]}` : orgCode;
         } else {
+            // Fallback for layers that don't match the pattern
             orgCode = workspace.toUpperCase() || 'OTROS';
+            projectCode = layerNameOnly.split('_')[0] || 'General';
         }
 
-        if (!orgs[orgCode]) orgs[orgCode] = [];
+        if (!orgs[orgCode]) orgs[orgCode] = {};
+        if (!orgs[orgCode][projectCode]) orgs[orgCode][projectCode] = [];
         
-        orgs[orgCode].push(layer);
+        orgs[orgCode][projectCode].push(layer);
         
         return orgs;
     }, {});
@@ -257,34 +264,45 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
                 <div className="pr-3">
                   {Object.keys(hierarchicalDeasLayers).length > 0 ? (
                       <Accordion type="multiple" className="w-full">
-                        {Object.entries(hierarchicalDeasLayers).sort(([orgA], [orgB]) => orgA.localeCompare(orgB)).map(([orgName, orgLayers]) => (
+                        {Object.entries(hierarchicalDeasLayers).sort(([orgA], [orgB]) => orgA.localeCompare(orgB)).map(([orgName, projects]) => (
                           <AccordionItem value={orgName} key={orgName} className="border-b border-gray-700/50">
                             <AccordionTrigger className="p-2 text-xs font-semibold text-white/90 hover:no-underline hover:bg-gray-700/30 rounded-t-md">
-                              {orgName} ({orgLayers.length})
+                              {orgName} ({Object.values(projects).reduce((acc, p) => acc + p.length, 0)})
                             </AccordionTrigger>
                             <AccordionContent className="p-1 pl-2 bg-black/20">
-                                <div className="space-y-1">
-                                  {orgLayers.sort((a,b) => a.title.localeCompare(b.title)).map(layer => (
-                                    <div key={layer.name} className="flex items-center space-x-2 p-1 rounded-md hover:bg-white/5">
-                                        <Button 
-                                          variant="outline" 
-                                          size="icon" 
-                                          className="h-6 w-6 p-0"
-                                          title={`Añadir capa de datos interactiva`}
-                                          onClick={() => onAddDeasLayer(layer)}
-                                          disabled={layer.wfsAddedToMap}
-                                          >
-                                          <Database className="h-3.5 w-3.5" />
-                                        </Button>
-                                        <Label
-                                          className="text-xs font-medium text-white/80 cursor-pointer flex-1 capitalize"
-                                          title={layer.name}
-                                        >
-                                          {layer.title.toLowerCase()}
-                                        </Label>
-                                    </div>
-                                  ))}
-                                </div>
+                                <Accordion type="multiple" className="w-full">
+                                    {Object.entries(projects).sort(([projA], [projB]) => projA.localeCompare(projB)).map(([projectName, projectLayers]) => (
+                                        <AccordionItem value={projectName} key={projectName} className="border-b-0">
+                                            <AccordionTrigger className="p-1.5 text-xs font-medium text-white/70 hover:no-underline hover:bg-white/5 rounded-md">
+                                                {projectName} ({projectLayers.length})
+                                            </AccordionTrigger>
+                                            <AccordionContent className="p-1 pl-4">
+                                                <div className="space-y-1">
+                                                  {projectLayers.sort((a,b) => a.title.localeCompare(b.title)).map(layer => (
+                                                    <div key={layer.name} className="flex items-center space-x-2 p-1 rounded-md hover:bg-white/5">
+                                                        <Button 
+                                                          variant="outline" 
+                                                          size="icon" 
+                                                          className="h-6 w-6 p-0"
+                                                          title={`Añadir capa de datos interactiva`}
+                                                          onClick={() => onAddDeasLayer(layer)}
+                                                          disabled={layer.wfsAddedToMap}
+                                                          >
+                                                          <Database className="h-3.5 w-3.5" />
+                                                        </Button>
+                                                        <Label
+                                                          className="text-xs font-medium text-white/80 cursor-pointer flex-1 capitalize"
+                                                          title={layer.name}
+                                                        >
+                                                          {layer.title.toLowerCase()}
+                                                        </Label>
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                            </AccordionContent>
+                                        </AccordionItem>
+                                    ))}
+                                </Accordion>
                             </AccordionContent>
                           </AccordionItem>
                         ))}
