@@ -66,8 +66,7 @@ interface LegendPanelProps {
 
 // Type definitions for the hierarchical structure
 type DeasLayerNode = GeoServerDiscoveredLayer;
-type DeasProjectNode = { [projectName: string]: DeasLayerNode[] };
-type DeasOrgNode = { [orgName: string]: DeasProjectNode };
+type DeasOrgNode = { [orgName: string]: DeasLayerNode[] };
 
 
 const LegendPanel: React.FC<LegendPanelProps> = ({
@@ -87,7 +86,6 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
   const hierarchicalDeasLayers = useMemo(() => {
     const lowercasedFilter = deasSearchTerm.toLowerCase();
     
-    // First, filter the layers based on the search term
     const filteredLayers = discoveredDeasLayers.filter(layer => {
         if (!deasSearchTerm) return true;
         const [workspace = '', layerNameOnly = ''] = layer.name.split(':');
@@ -98,30 +96,23 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
         );
     });
 
-    // Then, build the hierarchy from the filtered list
     return filteredLayers.reduce<DeasOrgNode>((orgs, layer) => {
         const [workspace, layerNameOnly] = layer.name.split(':');
         if (!layerNameOnly) return orgs;
 
-        const match = layerNameOnly.match(/^([a-zA-Z]{3,4})(\d{3,})/);
+        const match = layerNameOnly.match(/^([a-zA-Z]{3,4})/);
         
         let orgCode: string;
-        let projectName: string;
 
         if (match) {
             orgCode = match[1].toUpperCase();
-            projectName = `${orgCode}${match[2]}`;
         } else {
-            // Fallback for layers that don't match the pattern
-            // Group them by their workspace name
             orgCode = workspace.toUpperCase() || 'OTROS';
-            projectName = 'Capas Generales';
         }
 
-        if (!orgs[orgCode]) orgs[orgCode] = {};
-        if (!orgs[orgCode][projectName]) orgs[orgCode][projectName] = [];
-
-        orgs[orgCode][projectName].push(layer);
+        if (!orgs[orgCode]) orgs[orgCode] = [];
+        
+        orgs[orgCode].push(layer);
         
         return orgs;
     }, {});
@@ -266,45 +257,34 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
                 <div className="pr-3">
                   {Object.keys(hierarchicalDeasLayers).length > 0 ? (
                       <Accordion type="multiple" className="w-full">
-                        {Object.entries(hierarchicalDeasLayers).sort(([orgA], [orgB]) => orgA.localeCompare(orgB)).map(([orgName, projects]) => (
+                        {Object.entries(hierarchicalDeasLayers).sort(([orgA], [orgB]) => orgA.localeCompare(orgB)).map(([orgName, orgLayers]) => (
                           <AccordionItem value={orgName} key={orgName} className="border-b border-gray-700/50">
                             <AccordionTrigger className="p-2 text-xs font-semibold text-white/90 hover:no-underline hover:bg-gray-700/30 rounded-t-md">
-                              {orgName}
+                              {orgName} ({orgLayers.length})
                             </AccordionTrigger>
                             <AccordionContent className="p-1 pl-2 bg-black/20">
-                              <Accordion type="multiple" className="w-full">
-                                {Object.entries(projects).sort(([projA], [projB]) => projA.localeCompare(projB)).map(([projectName, projectLayers]) => (
-                                  <AccordionItem value={projectName} key={projectName} className="border-b-0">
-                                    <AccordionTrigger className="p-1.5 text-xs font-medium text-white/80 hover:no-underline hover:bg-gray-600/30 rounded-md">
-                                      {projectName} ({projectLayers.length})
-                                    </AccordionTrigger>
-                                    <AccordionContent className="p-1 pl-4">
-                                      <div className="space-y-1">
-                                        {projectLayers.sort((a,b) => a.title.localeCompare(b.title)).map(layer => (
-                                          <div key={layer.name} className="flex items-center space-x-2 p-1 rounded-md hover:bg-white/5">
-                                              <Button 
-                                                variant="outline" 
-                                                size="icon" 
-                                                className="h-6 w-6 p-0"
-                                                title={`Añadir capa de datos interactiva`}
-                                                onClick={() => onAddDeasLayer(layer)}
-                                                disabled={layer.wfsAddedToMap}
-                                                >
-                                                <Database className="h-3.5 w-3.5" />
-                                              </Button>
-                                              <Label
-                                                className="text-xs font-medium text-white/80 cursor-pointer flex-1 capitalize"
-                                                title={layer.name}
-                                              >
-                                                {layer.title.toLowerCase()}
-                                              </Label>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    </AccordionContent>
-                                  </AccordionItem>
-                                ))}
-                              </Accordion>
+                                <div className="space-y-1">
+                                  {orgLayers.sort((a,b) => a.title.localeCompare(b.title)).map(layer => (
+                                    <div key={layer.name} className="flex items-center space-x-2 p-1 rounded-md hover:bg-white/5">
+                                        <Button 
+                                          variant="outline" 
+                                          size="icon" 
+                                          className="h-6 w-6 p-0"
+                                          title={`Añadir capa de datos interactiva`}
+                                          onClick={() => onAddDeasLayer(layer)}
+                                          disabled={layer.wfsAddedToMap}
+                                          >
+                                          <Database className="h-3.5 w-3.5" />
+                                        </Button>
+                                        <Label
+                                          className="text-xs font-medium text-white/80 cursor-pointer flex-1 capitalize"
+                                          title={layer.name}
+                                        >
+                                          {layer.title.toLowerCase()}
+                                        </Label>
+                                    </div>
+                                  ))}
+                                </div>
                             </AccordionContent>
                           </AccordionItem>
                         ))}
