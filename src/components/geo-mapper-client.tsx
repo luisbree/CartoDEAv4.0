@@ -95,7 +95,7 @@ const osmCategoryConfig: OSMCategoryConfig[] = [
   },
   {
     id: 'health_centers', name: 'OSM Centros de Salud',
-    overpassQueryFragment: (bboxStr) => `nwr[amenity~"^(hospital|clinic|doctors|pharmacy)$"](${bboxStr});`,
+    overpassQueryFragment: (bboxStr) => `nwr[healthcare](${bboxStr});`,
     style: new Style({ image: new CircleStyle({ radius: 6, fill: new Fill({color: '#d90429'}), stroke: new Stroke({color: 'white', width: 1.5})})}),
   },
   {
