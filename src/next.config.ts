@@ -21,6 +21,9 @@ const nextConfig: NextConfig = {
   // This is required to allow the Next.js dev server to accept requests from the
   // Firebase Studio environment.
   serverExternalPackages: ['@grpc/grpc-js'],
+  experimental: {
+    // Experimental features can be added here if needed in the future.
+  },
 };
 
 export default nextConfig;
