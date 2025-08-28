@@ -3,7 +3,7 @@
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { MapPin, Database, Wrench, ListTree, ListChecks, Sparkles, ClipboardCheck, Library, LifeBuoy, Printer, Server, BrainCircuit, Camera, Loader2, SlidersHorizontal } from 'lucide-react';
-import { Style, Fill, Stroke, Circle as CircleStyle } from 'ol/style';
+import { Style, Fill, Stroke, Circle as CircleStyle, Text as TextStyle } from 'ol/style';
 import { transform, transformExtent } from 'ol/proj';
 import type { Extent } from 'ol/extent';
 import { Button } from '@/components/ui/button';
@@ -860,6 +860,7 @@ export default function GeoMapperClient() {
             onExportLayer={layerManagerHook.handleExportLayer}
             onRenameLayer={layerManagerHook.renameLayer}
             onChangeLayerStyle={layerManagerHook.changeLayerStyle}
+            onChangeLayerLabels={layerManagerHook.changeLayerLabels}
             isDrawingSourceEmptyOrNotPolygon={layerManagerHook.isDrawingSourceEmptyOrNotPolygon}
             isSelectionEmpty={featureInspectionHook.selectedFeatures.length === 0}
             onSetLayerOpacity={layerManagerHook.setLayerOpacity}

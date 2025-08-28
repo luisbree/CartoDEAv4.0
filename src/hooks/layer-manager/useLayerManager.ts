@@ -13,9 +13,9 @@ import type { Geometry } from 'ol/geom';
 import { useToast } from "@/hooks/use-toast";
 import { findSentinel2Footprints } from '@/services/sentinel';
 import { findLandsatFootprints } from '@/services/landsat';
-import type { MapLayer, VectorMapLayer, PlainFeatureData } from '@/lib/types';
+import type { MapLayer, VectorMapLayer, PlainFeatureData, LabelOptions } from '@/lib/types';
 import { nanoid } from 'nanoid';
-import { Style, Stroke, Fill, Circle as CircleStyle } from 'ol/style';
+import { Style, Stroke, Fill, Circle as CircleStyle, Text as TextStyle } from 'ol/style';
 import { transformExtent } from 'ol/proj';
 import { asArray as asOlColorArray, asString as asOlColorString } from 'ol/color';
 import GeoJSON from 'ol/format/GeoJSON';
@@ -460,6 +460,57 @@ export const useLayerManager = ({
     });
   }, [toast, mapRef]);
 
+  const changeLayerLabels = useCallback((layerId: string, labelOptions: LabelOptions) => {
+    const layer = layers.find(l => l.id === layerId);
+    if (!layer || !(layer.olLayer instanceof VectorLayer)) {
+      toast({ description: "Solo se pueden etiquetar capas vectoriales." });
+      return;
+    }
+
+    const olLayer = layer.olLayer as VectorLayer<any>;
+    olLayer.set('labelOptions', labelOptions); // Store options for persistence
+
+    if (labelOptions.enabled && labelOptions.field) {
+      const textColor = colorMap[labelOptions.textColor] || (isValidHex(labelOptions.textColor) ? labelOptions.textColor : '#000000');
+      const outlineColor = colorMap[labelOptions.outlineColor] || (isValidHex(labelOptions.outlineColor) ? labelOptions.outlineColor : '#FFFFFF');
+      
+      olLayer.setStyle((feature) => {
+        // Here, we assume a simple style is already set. For complex cases, this needs to be more robust.
+        const baseStyle = olLayer.getStyle() as Style;
+        const geometryType = feature.getGeometry()?.getType();
+
+        // Create a new text style for the label
+        const textStyle = new TextStyle({
+          text: String(feature.get(labelOptions.field!) || ''),
+          font: `${labelOptions.fontSize}px sans-serif`,
+          fill: new Fill({ color: textColor }),
+          stroke: new Stroke({ color: outlineColor, width: 2 }),
+          textAlign: geometryType === 'Point' ? 'left' : 'center',
+          textBaseline: geometryType === 'Point' ? 'middle' : 'middle',
+          offsetX: geometryType === 'Point' ? 10 : 0,
+        });
+
+        // It's better to create a new style object to avoid modifying the shared base style
+        const newStyle = baseStyle.clone();
+        newStyle.setText(textStyle);
+        return newStyle;
+      });
+      toast({ description: `Etiquetas activadas para "${layer.name}".` });
+    } else {
+      // If disabled, we might need to reset to the original style without text
+      // This is simplified; a better approach would be to store the base style
+      olLayer.setStyle((feature) => {
+          const baseStyle = olLayer.getStyle() as Style;
+          const newStyle = baseStyle.clone();
+          newStyle.setText(undefined); // Remove text style
+          return newStyle;
+      });
+      toast({ description: `Etiquetas desactivadas para "${layer.name}".` });
+    }
+    
+    olLayer.getSource()?.changed(); // Force redraw
+  }, [layers, toast]);
+
   const zoomToLayerExtent = useCallback((layerId: string) => {
     if (!mapRef.current) return;
     const layer = layers.find(l => l.id === layerId);
@@ -845,6 +896,7 @@ export const useLayerManager = ({
     toggleLayerVisibility,
     setLayerOpacity,
     changeLayerStyle,
+    changeLayerLabels,
     zoomToLayerExtent,
     handleShowLayerTable,
     renameLayer,
