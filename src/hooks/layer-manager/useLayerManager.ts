@@ -470,13 +470,22 @@ export const useLayerManager = ({
     const olLayer = layer.olLayer as VectorLayer<any>;
     olLayer.set('labelOptions', labelOptions); // Store options for persistence
 
+    const originalStyle = olLayer.getStyle();
+
     if (labelOptions.enabled && labelOptions.field) {
       const textColor = colorMap[labelOptions.textColor] || (isValidHex(labelOptions.textColor) ? labelOptions.textColor : '#000000');
       const outlineColor = colorMap[labelOptions.outlineColor] || (isValidHex(labelOptions.outlineColor) ? labelOptions.outlineColor : '#FFFFFF');
       
-      olLayer.setStyle((feature) => {
-        // Here, we assume a simple style is already set. For complex cases, this needs to be more robust.
-        const baseStyle = olLayer.getStyle() as Style;
+      olLayer.setStyle((feature, resolution) => {
+        // Resolve the original style first, which could be a function itself
+        const baseStyle = typeof originalStyle === 'function' ? originalStyle(feature, resolution) : originalStyle;
+        if (!baseStyle) return;
+        
+        const styleToClone = Array.isArray(baseStyle) ? baseStyle[0] : baseStyle;
+        if (!(styleToClone instanceof Style)) return baseStyle;
+
+        const newStyle = styleToClone.clone();
+        
         const geometryType = feature.getGeometry()?.getType();
 
         // Create a new text style for the label
@@ -490,21 +499,13 @@ export const useLayerManager = ({
           offsetX: geometryType === 'Point' ? 10 : 0,
         });
 
-        // It's better to create a new style object to avoid modifying the shared base style
-        const newStyle = baseStyle.clone();
         newStyle.setText(textStyle);
         return newStyle;
       });
       toast({ description: `Etiquetas activadas para "${layer.name}".` });
     } else {
-      // If disabled, we might need to reset to the original style without text
-      // This is simplified; a better approach would be to store the base style
-      olLayer.setStyle((feature) => {
-          const baseStyle = olLayer.getStyle() as Style;
-          const newStyle = baseStyle.clone();
-          newStyle.setText(undefined); // Remove text style
-          return newStyle;
-      });
+      // If disabled, reset to the original style function/object
+      olLayer.setStyle(originalStyle);
       toast({ description: `Etiquetas desactivadas para "${layer.name}".` });
     }
     
