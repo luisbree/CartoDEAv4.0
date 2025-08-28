@@ -2,7 +2,7 @@
 
 import React, { useRef, useState } from 'react';
 import LayerItem from './LayerItem';
-import type { MapLayer } from '@/lib/types';
+import type { LabelOptions, MapLayer } from '@/lib/types';
 import { Layers } from 'lucide-react';
 import type { StyleOptions } from './StyleEditorDialog';
 
@@ -21,6 +21,7 @@ interface LayerListProps {
   onReorderLayers?: (draggedIds: string[], targetId: string | null) => void;
   onRenameLayer: (layerId: string, newName: string) => void;
   onChangeLayerStyle: (layerId: string, styleOptions: StyleOptions) => void;
+  onChangeLayerLabels: (layerId: string, labelOptions: LabelOptions) => void;
 
   // Selection props
   selectedLayerIds: string[];
@@ -42,6 +43,7 @@ const LayerList: React.FC<LayerListProps> = ({
   onReorderLayers,
   onRenameLayer,
   onChangeLayerStyle,
+  onChangeLayerLabels,
   selectedLayerIds,
   onLayerClick,
 }) => {
@@ -116,6 +118,7 @@ const LayerList: React.FC<LayerListProps> = ({
           onExportLayer={onExportLayer}
           onRenameLayer={onRenameLayer}
           onChangeLayerStyle={onChangeLayerStyle}
+          onChangeLayerLabels={onChangeLayerLabels}
           isDrawingSourceEmptyOrNotPolygon={isDrawingSourceEmptyOrNotPolygon}
           isSelectionEmpty={isSelectionEmpty}
           onSetLayerOpacity={onSetLayerOpacity}

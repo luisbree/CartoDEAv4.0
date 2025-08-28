@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useMemo } from 'react';
@@ -7,7 +6,7 @@ import LayerList from '@/components/layer-manager/LayerList';
 import FileUploadControl from '@/components/layer-manager/FileUploadControl';
 import FeatureInteractionToolbar from '@/components/feature-inspection/FeatureInteractionToolbar';
 import { Separator } from '@/components/ui/separator';
-import type { MapLayer, GeoServerDiscoveredLayer } from '@/lib/types';
+import type { MapLayer, GeoServerDiscoveredLayer, LabelOptions } from '@/lib/types';
 import { ListTree, Trash2, Database, Search, X as ClearIcon } from 'lucide-react'; 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -50,6 +49,7 @@ interface LegendPanelProps {
   onReorderLayers: (draggedIds: string[], targetId: string | null) => void;
   onRenameLayer: (layerId: string, newName: string) => void;
   onChangeLayerStyle: (layerId: string, styleOptions: StyleOptions) => void;
+  onChangeLayerLabels: (layerId: string, labelOptions: LabelOptions) => void;
 
   onAddLayer: (layer: MapLayer) => void;
 
@@ -74,7 +74,7 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
   panelRef, isCollapsed, onToggleCollapse, onClosePanel, onMouseDownHeader,
   layers, onToggleLayerVisibility, onRemoveLayer, onRemoveLayers, onZoomToLayerExtent, onShowLayerTable,
   onExtractByPolygon, onExtractBySelection, onExportLayer, isDrawingSourceEmptyOrNotPolygon, isSelectionEmpty, onSetLayerOpacity, onReorderLayers, onRenameLayer,
-  onChangeLayerStyle,
+  onChangeLayerStyle, onChangeLayerLabels,
   onAddLayer, 
   activeTool, onSetActiveTool, onClearSelection,
   discoveredDeasLayers, onAddDeasLayer,
@@ -100,14 +100,28 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
     return filteredLayers.reduce<DeasOrgNode>((orgs, layer) => {
         const [workspace, layerNameOnly] = layer.name.split(':');
         if (!layerNameOnly) return orgs;
-
-        const orgCode = workspace.toUpperCase() || 'OTROS';
-        const projectCode = layerNameOnly.split('_')[0] || 'General';
-
-        if (!orgs[orgCode]) orgs[orgCode] = {};
-        if (!orgs[orgCode][projectCode]) orgs[orgCode][projectCode] = [];
         
-        orgs[orgCode][projectCode].push(layer);
+        // Match pattern like: ARR001_some_layer_name
+        const match = layerNameOnly.match(/^([a-zA-Z]+)(\d{3,})(_.*)?$/);
+
+        if (match) {
+            const orgCode = match[1].toUpperCase(); // e.g., ARR
+            const projectCode = `${orgCode}${match[2]}`; // e.g., ARR001
+
+            if (!orgs[orgCode]) orgs[orgCode] = {};
+            if (!orgs[orgCode][projectCode]) orgs[orgCode][projectCode] = [];
+            
+            orgs[orgCode][projectCode].push(layer);
+        } else {
+            // Fallback for layers that don't match the pattern
+            const orgCode = workspace.toUpperCase() || 'OTROS';
+            const projectCode = 'General';
+
+            if (!orgs[orgCode]) orgs[orgCode] = {};
+            if (!orgs[orgCode][projectCode]) orgs[orgCode][projectCode] = [];
+            
+            orgs[orgCode][projectCode].push(layer);
+        }
         
         return orgs;
     }, {});
@@ -215,6 +229,7 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
                             onExportLayer={onExportLayer}
                             onRenameLayer={onRenameLayer}
                             onChangeLayerStyle={onChangeLayerStyle}
+                            onChangeLayerLabels={onChangeLayerLabels}
                             isDrawingSourceEmptyOrNotPolygon={isDrawingSourceEmptyOrNotPolygon}
                             isSelectionEmpty={isSelectionEmpty}
                             onSetLayerOpacity={onSetLayerOpacity}

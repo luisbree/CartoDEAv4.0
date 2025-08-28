@@ -1,4 +1,3 @@
-
 import type { default as Layer } from 'ol/layer/Layer';
 import type VectorLayer from 'ol/layer/Vector';
 import type VectorSource from 'ol/source/Vector';
@@ -81,4 +80,12 @@ export type InteractionToolId = 'inspect' | 'selectBox';
 export interface ActiveTool {
   type: 'draw' | 'measure' | 'interaction' | null;
   id: DrawToolId | MeasureToolId | InteractionToolId | null;
+}
+
+export interface LabelOptions {
+    enabled: boolean;
+    field: string | null;
+    fontSize: number;
+    textColor: string;
+    outlineColor: string;
 }

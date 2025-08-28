@@ -15,12 +15,13 @@ import {
   DropdownMenuPortal
 } from "@/components/ui/dropdown-menu";
 import { Slider } from "@/components/ui/slider"; 
-import { Eye, EyeOff, Settings2, ZoomIn, Table2, Trash2, Scissors, Percent, GripVertical, CopyPlus, Download, Edit, Palette } from 'lucide-react';
-import type { MapLayer } from '@/lib/types';
+import { Eye, EyeOff, Settings2, ZoomIn, Table2, Trash2, Scissors, Percent, GripVertical, CopyPlus, Download, Edit, Palette, Tags } from 'lucide-react';
+import type { LabelOptions, MapLayer } from '@/lib/types';
 import VectorLayer from 'ol/layer/Vector'; 
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import StyleEditorDialog, { type StyleOptions } from './StyleEditorDialog';
+import LabelEditorDialog from './LabelEditorDialog';
 
 
 interface LayerItemProps {
@@ -37,6 +38,7 @@ interface LayerItemProps {
   onExportLayer: (layerId: string, format: 'geojson' | 'kml' | 'shp') => void;
   onRenameLayer: (layerId: string, newName: string) => void;
   onChangeLayerStyle: (layerId: string, styleOptions: StyleOptions) => void;
+  onChangeLayerLabels: (layerId: string, labelOptions: LabelOptions) => void;
   
   // Drag and Drop props
   isDraggable: boolean;
@@ -68,6 +70,7 @@ const LayerItem: React.FC<LayerItemProps> = ({
   onExportLayer,
   onRenameLayer,
   onChangeLayerStyle,
+  onChangeLayerLabels,
   isDraggable,
   onDragStart,
   onDragEnd,
@@ -86,6 +89,7 @@ const LayerItem: React.FC<LayerItemProps> = ({
   const [isEditing, setIsEditing] = useState(false);
   const [editingName, setEditingName] = useState(layer.name);
   const [isStyleEditorOpen, setIsStyleEditorOpen] = useState(false);
+  const [isLabelEditorOpen, setIsLabelEditorOpen] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -133,6 +137,12 @@ const LayerItem: React.FC<LayerItemProps> = ({
     onChangeLayerStyle(layer.id, styleOptions);
     setIsStyleEditorOpen(false);
     setIsDropdownOpen(false); // Close the main dropdown menu
+  };
+  
+  const handleLabelChange = (labelOptions: LabelOptions) => {
+    onChangeLayerLabels(layer.id, labelOptions);
+    setIsLabelEditorOpen(false);
+    setIsDropdownOpen(false);
   };
 
 
@@ -228,7 +238,17 @@ const LayerItem: React.FC<LayerItemProps> = ({
                     onSelect={(e) => { e.preventDefault(); setIsStyleEditorOpen(true); }}
                   >
                     <Palette className="mr-2 h-3.5 w-3.5" />
-                    Estilo
+                    Simbología
+                  </DropdownMenuItem>
+              )}
+              
+               {isVectorLayer && (
+                 <DropdownMenuItem
+                    className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer"
+                    onSelect={(e) => { e.preventDefault(); setIsLabelEditorOpen(true); }}
+                  >
+                    <Tags className="mr-2 h-3.5 w-3.5" />
+                    Etiquetar
                   </DropdownMenuItem>
               )}
 
@@ -318,6 +338,14 @@ const LayerItem: React.FC<LayerItemProps> = ({
           onClose={() => setIsStyleEditorOpen(false)}
           onApply={handleStyleChange}
           layerType={(layer.olLayer as VectorLayer<any>).getSource()?.getFeatures()[0]?.getGeometry()?.getType() || 'Point'}
+        />
+      )}
+      {isVectorLayer && (
+        <LabelEditorDialog
+            isOpen={isLabelEditorOpen}
+            onClose={() => setIsLabelEditorOpen(false)}
+            onApply={handleLabelChange}
+            layer={layer as any}
         />
       )}
     </>
