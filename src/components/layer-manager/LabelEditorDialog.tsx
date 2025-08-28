@@ -35,6 +35,7 @@ interface LabelEditorDialogProps {
 }
 
 const colorOptions = [
+  { value: 'transparent', label: 'Sin color', hex: 'rgba(0,0,0,0)', iconClass: "bg-transparent border border-dashed border-white/50 bg-[conic-gradient(from_90deg_at_1px_1px,#fff_90deg,rgb(228,228,231)_0)]" },
   { value: 'negro', label: 'Negro', hex: '#000000' },
   { value: 'blanco', label: 'Blanco', hex: '#ffffff' },
   { value: 'rojo', label: 'Rojo', hex: '#e63946' },
