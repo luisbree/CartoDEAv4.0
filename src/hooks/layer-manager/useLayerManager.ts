@@ -32,7 +32,6 @@ interface UseLayerManagerProps {
   onShowTableRequest: (plainData: PlainFeatureData[], layerName: string) => void;
   updateGeoServerDiscoveredLayerState: (layerName: string, added: boolean, type: 'wms' | 'wfs') => void;
   clearSelectionAfterExtraction: () => void;
-  setIsWfsLoading: (isLoading: boolean) => void;
 }
 
 const LAYER_START_Z_INDEX = 10;
@@ -69,13 +68,13 @@ export const useLayerManager = ({
   onShowTableRequest,
   updateGeoServerDiscoveredLayerState,
   clearSelectionAfterExtraction,
-  setIsWfsLoading,
 }: UseLayerManagerProps) => {
   const [layers, setLayers] = useState<MapLayer[]>([]);
   const { toast } = useToast();
   const [isFindingSentinelFootprints, setIsFindingSentinelFootprints] = useState(false);
   const [isFindingLandsatFootprints, setIsFindingLandsatFootprints] = useState(false);
   const [isDrawingSourceEmptyOrNotPolygon, setIsDrawingSourceEmptyOrNotPolygon] = useState(true);
+  const [isWfsLoading, setIsWfsLoading] = useState(false);
 
   useEffect(() => {
     // This effect ensures z-ordering is correct whenever the layers array changes.
@@ -234,7 +233,7 @@ export const useLayerManager = ({
           setTimeout(() => toast({ description: `Error al añadir capa: ${error.message}`, variant: 'destructive' }), 0);
           setIsWfsLoading(false); // Ensure loading is stopped on initial setup error
       }
-  }, [isMapReady, mapRef, addLayer, updateGeoServerDiscoveredLayerState, toast, setIsWfsLoading]);
+  }, [isMapReady, mapRef, addLayer, updateGeoServerDiscoveredLayerState, toast]);
 
   const addGeeLayerToMap = useCallback((tileUrl: string, layerName: string) => {
     if (!mapRef.current) return;
@@ -477,7 +476,6 @@ export const useLayerManager = ({
       const outlineColor = colorMap[labelOptions.outlineColor] || (isValidHex(labelOptions.outlineColor) ? labelOptions.outlineColor : '#FFFFFF');
       
       olLayer.setStyle((feature, resolution) => {
-        // Resolve the original style first, which could be a function itself
         const baseStyle = typeof originalStyle === 'function' ? originalStyle(feature, resolution) : originalStyle;
         if (!baseStyle) return;
         
@@ -488,7 +486,6 @@ export const useLayerManager = ({
         
         const geometryType = feature.getGeometry()?.getType();
 
-        // Create a new text style for the label
         const textStyle = new TextStyle({
           text: String(feature.get(labelOptions.field!) || ''),
           font: `${labelOptions.fontSize}px ${labelOptions.fontFamily}`,
@@ -504,12 +501,11 @@ export const useLayerManager = ({
       });
       toast({ description: `Etiquetas activadas para "${layer.name}".` });
     } else {
-      // If disabled, reset to the original style function/object
       olLayer.setStyle(originalStyle);
       toast({ description: `Etiquetas desactivadas para "${layer.name}".` });
     }
     
-    olLayer.getSource()?.changed(); // Force redraw
+    olLayer.getSource()?.changed();
   }, [layers, toast]);
 
   const zoomToLayerExtent = useCallback((layerId: string) => {
@@ -578,9 +574,6 @@ export const useLayerManager = ({
         return l;
       })
     );
-    // The toast needs to be called outside the immediate state update function
-    // to avoid the React warning about updating a component from another's render.
-    // A microtask (setTimeout) ensures this runs after the current render cycle.
     setTimeout(() => {
       toast({ description: `Capa renombrada a "${newName}"` });
     }, 0);
@@ -911,5 +904,6 @@ export const useLayerManager = ({
     findLandsatFootprintsInCurrentView,
     isFindingLandsatFootprints,
     clearLandsatFootprintsLayer,
+    isWfsLoading,
   };
 };

@@ -210,7 +210,6 @@ export default function GeoMapperClient() {
     }
   });
 
-  const [isWfsLoading, setIsWfsLoading] = useState(false);
   const [discoveredGeoServerLayers, setDiscoveredGeoServerLayers] = useState<GeoServerDiscoveredLayer[]>([]);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
     { role: 'assistant', content: "¡Buenas! Soy Drax, tu asistente de mapas. Pedime que cargue una capa, que la saque o que le haga zoom." }
@@ -238,7 +237,6 @@ export default function GeoMapperClient() {
     onShowTableRequest: featureInspectionHook.processAndDisplayFeatures,
     updateGeoServerDiscoveredLayerState: updateDiscoveredLayerState,
     clearSelectionAfterExtraction: featureInspectionHook.clearSelection,
-    setIsWfsLoading,
   });
   
   const {
@@ -811,7 +809,7 @@ export default function GeoMapperClient() {
             <div className="absolute left-1/2 top-0 h-full w-px bg-gray-400/70 -translate-x-1/2"></div>
         </div>
 
-        <WfsLoadingIndicator isVisible={isWfsLoading || wfsLibraryHook.isLoading} />
+        <WfsLoadingIndicator isVisible={layerManagerHook.isWfsLoading || wfsLibraryHook.isLoading} />
 
         {panels.tools && !panels.tools.isMinimized && (
           <ToolsPanel
