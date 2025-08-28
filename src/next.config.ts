@@ -18,8 +18,7 @@ const nextConfig: NextConfig = {
       },
     ],
   },
-  // This is required to allow the Next.js dev server to accept requests from the
-  // Firebase Studio environment.
+  // This is required for Genkit to work correctly in Next.js.
   serverExternalPackages: ['@grpc/grpc-js'],
   experimental: {
     // Experimental features can be added here if needed in the future.
