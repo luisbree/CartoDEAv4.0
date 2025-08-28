@@ -86,6 +86,7 @@ export interface LabelOptions {
     enabled: boolean;
     field: string | null;
     fontSize: number;
+    fontFamily: string;
     textColor: string;
     outlineColor: string;
 }

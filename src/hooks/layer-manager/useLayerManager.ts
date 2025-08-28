@@ -491,7 +491,7 @@ export const useLayerManager = ({
         // Create a new text style for the label
         const textStyle = new TextStyle({
           text: String(feature.get(labelOptions.field!) || ''),
-          font: `${labelOptions.fontSize}px sans-serif`,
+          font: `${labelOptions.fontSize}px ${labelOptions.fontFamily}`,
           fill: new Fill({ color: textColor }),
           stroke: new Stroke({ color: outlineColor, width: 2 }),
           textAlign: geometryType === 'Point' ? 'left' : 'center',

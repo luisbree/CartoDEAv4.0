@@ -27,13 +27,6 @@ import { cn } from "@/lib/utils";
 import type { LabelOptions, VectorMapLayer } from '@/lib/types';
 import { Switch } from '../ui/switch';
 
-interface LabelEditorDialogProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onApply: (options: LabelOptions) => void;
-  layer: VectorMapLayer;
-}
-
 const colorOptions = [
   { value: 'transparent', label: 'Sin color', hex: 'rgba(0,0,0,0)', iconClass: "bg-transparent border border-dashed border-white/50 bg-[conic-gradient(from_90deg_at_1px_1px,#fff_90deg,rgb(228,228,231)_0)]" },
   { value: 'negro', label: 'Negro', hex: '#000000' },
@@ -46,6 +39,17 @@ const colorOptions = [
   { value: 'violeta', label: 'Violeta', hex: '#8338ec' },
   { value: 'gris', label: 'Gris', hex: '#adb5bd' },
 ];
+
+const fontOptions = [
+    { value: 'sans-serif', label: 'Sans-Serif (Predet.)' },
+    { value: 'serif', label: 'Serif' },
+    { value: 'monospace', label: 'Monospace' },
+    { value: 'Arial', label: 'Arial' },
+    { value: 'Verdana', label: 'Verdana' },
+    { value: 'Georgia', label: 'Georgia' },
+    { value: 'Times New Roman', label: 'Times New Roman' },
+];
+
 
 const isValidHex = (color: string) => /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/.test(color);
 
@@ -100,6 +104,7 @@ const LabelEditorDialog: React.FC<LabelEditorDialogProps> = ({
     enabled: false,
     field: null,
     fontSize: 12,
+    fontFamily: 'sans-serif',
     textColor: 'negro',
     outlineColor: 'blanco',
   });
@@ -132,6 +137,7 @@ const LabelEditorDialog: React.FC<LabelEditorDialogProps> = ({
         enabled: false,
         field: attributeFields[0] || null,
         fontSize: 12,
+        fontFamily: 'sans-serif',
         textColor: 'negro',
         outlineColor: 'blanco',
       });
@@ -144,7 +150,7 @@ const LabelEditorDialog: React.FC<LabelEditorDialogProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="bg-gray-800 text-white border-gray-700 sm:max-w-md p-4">
+      <DialogContent className="bg-gray-800 text-white border-gray-700 sm:max-w-[500px] p-4">
         <DialogHeader>
           <DialogTitle>Configurar Etiquetas para "{layer.name}"</DialogTitle>
         </DialogHeader>
@@ -192,6 +198,25 @@ const LabelEditorDialog: React.FC<LabelEditorDialogProps> = ({
                 value={labelOptions.outlineColor}
                 onChange={(value) => setLabelOptions(prev => ({ ...prev, outlineColor: value }))}
               />
+            </div>
+            <div className="flex flex-col gap-1.5">
+                <Label htmlFor="font-family" className="text-xs">Tipografía</Label>
+                <Select
+                  value={labelOptions.fontFamily}
+                  onValueChange={(value) => setLabelOptions(prev => ({ ...prev, fontFamily: value }))}
+                  disabled={!labelOptions.enabled}
+                >
+                  <SelectTrigger id="font-family" className="h-8 text-xs bg-black/20 w-32">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-gray-700 text-white border-gray-600">
+                    {fontOptions.map(font => (
+                      <SelectItem key={font.value} value={font.value} className="text-xs" style={{ fontFamily: font.value }}>
+                        {font.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
             </div>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="font-size" className="text-xs">
