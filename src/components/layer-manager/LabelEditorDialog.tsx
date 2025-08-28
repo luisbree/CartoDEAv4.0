@@ -41,6 +41,8 @@ const colorOptions = [
 ];
 
 const fontOptions = [
+    { value: "'Encode Sans'", label: 'Encode Sans' },
+    { value: "'Encode Sans Condensed'", label: 'Encode Sans Condensed' },
     { value: 'sans-serif', label: 'Sans-Serif (Predet.)' },
     { value: 'serif', label: 'Serif' },
     { value: 'monospace', label: 'Monospace' },
@@ -94,6 +96,14 @@ const ColorPicker: React.FC<ColorPickerProps> = ({ value, onChange }) => {
 };
 
 
+interface LabelEditorDialogProps {
+    isOpen: boolean;
+    onClose: () => void;
+    onApply: (options: LabelOptions) => void;
+    layer: VectorMapLayer;
+}
+
+
 const LabelEditorDialog: React.FC<LabelEditorDialogProps> = ({
   isOpen,
   onClose,
@@ -137,7 +147,7 @@ const LabelEditorDialog: React.FC<LabelEditorDialogProps> = ({
         enabled: false,
         field: attributeFields[0] || null,
         fontSize: 12,
-        fontFamily: 'sans-serif',
+        fontFamily: "'Encode Sans'",
         textColor: 'negro',
         outlineColor: 'blanco',
       });
