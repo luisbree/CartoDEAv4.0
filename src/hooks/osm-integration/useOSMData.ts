@@ -144,17 +144,13 @@ export const useOSMData = ({ mapRef, drawingSourceRef, addLayer, osmCategoryConf
               return;
           }
 
-          // Clone features and transform them to EPSG:4326 for export
-          const featuresForExport = allFeatures.map(f => {
-              const featureClone = f.clone();
-              featureClone.getGeometry()?.transform('EPSG:3857', 'EPSG:4326');
-              return featureClone;
-          });
-
           if (format === 'shp') {
-              const geojsonFormat = new GeoJSON();
-              const geoJson = geojsonFormat.writeFeaturesObject(featuresForExport);
-              // Shapefile library expects features to be an array within the object.
+              // shpjs requires GeoJSON features, so we do the conversion first.
+              const geojsonFormat = new GeoJSON({
+                  featureProjection: 'EPSG:4326', // Target projection for the output
+                  dataProjection: 'EPSG:3857', // Source projection from the map
+              });
+              const geoJson = geojsonFormat.writeFeaturesObject(allFeatures);
               const shpBuffer = await shp.write(geoJson.features, 'GEOMETRY', {});
               const zip = new JSZip();
               zip.file(`osm_layers.zip`, shpBuffer);
@@ -171,15 +167,20 @@ export const useOSMData = ({ mapRef, drawingSourceRef, addLayer, osmCategoryConf
               let mimeType = 'text/plain';
 
               if (format === 'geojson') {
-                  const geojsonFormat = new GeoJSON();
-                  textData = geojsonFormat.writeFeatures(featuresForExport, {
-                      decimals: 7, // Set precision for coordinates
+                  const geojsonFormat = new GeoJSON({
+                      featureProjection: 'EPSG:4326',
+                      dataProjection: 'EPSG:3857'
+                  });
+                  textData = geojsonFormat.writeFeatures(allFeatures, {
+                      decimals: 7,
                   });
                   mimeType = 'application/geo+json';
               } else { // kml
                   const kmlFormat = new KML({ extractStyles: true });
-                   // KML format intrinsically works with EPSG:4326
-                  textData = kmlFormat.writeFeatures(featuresForExport);
+                  textData = kmlFormat.writeFeatures(allFeatures, {
+                      featureProjection: 'EPSG:4326', // KML standard is WGS84
+                      dataProjection: 'EPSG:3857',
+                  });
                   mimeType = 'application/vnd.google-earth.kml+xml';
               }
               
