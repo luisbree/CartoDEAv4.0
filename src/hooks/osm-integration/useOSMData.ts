@@ -15,16 +15,18 @@ import type Feature from 'ol/Feature';
 import type { Geometry } from 'ol/geom';
 import osmtogeojson from 'osmtogeojson';
 
+// Use an alternative, often less busy, Overpass API endpoint.
+const OVERPASS_API_URL = 'https://overpass.kumi.systems/api/interpreter';
 
 interface UseOSMDataProps {
   mapRef: React.RefObject<Map | null>;
   drawingSourceRef: React.RefObject<VectorSource>;
   addLayer: (layer: MapLayer) => void;
   osmCategoryConfigs: Omit<OSMCategoryConfig, 'matcher'>[];
-  handleExportLayer: (layerId: string, format: 'geojson' | 'kml' | 'shp') => Promise<void>;
+  onExportLayers: (layers: VectorLayer<any>[], layerName: string, format: 'geojson' | 'kml' | 'shp') => Promise<void>;
 }
 
-export const useOSMData = ({ mapRef, drawingSourceRef, addLayer, osmCategoryConfigs, handleExportLayer }: UseOSMDataProps) => {
+export const useOSMData = ({ mapRef, drawingSourceRef, addLayer, osmCategoryConfigs, onExportLayers }: UseOSMDataProps) => {
   const { toast } = useToast();
   const [isFetchingOSM, setIsFetchingOSM] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -61,7 +63,7 @@ export const useOSMData = ({ mapRef, drawingSourceRef, addLayer, osmCategoryConf
         dataProjection: 'EPSG:4326'
     });
     
-    const executeQuery = async (queryFragment: string): Promise<Feature<Geometry>[]> => {
+    const executeQuery = async (queryFragment: string, retries = 1): Promise<Feature<Geometry>[]> => {
         const overpassQuery = `
           [out:json][timeout:60];
           (${queryFragment});
@@ -69,14 +71,23 @@ export const useOSMData = ({ mapRef, drawingSourceRef, addLayer, osmCategoryConf
         `;
         
         try {
-            const response = await fetch(`https://overpass-api.de/api/interpreter`, {
+            const response = await fetch(OVERPASS_API_URL, {
                 method: 'POST',
                 body: `data=${encodeURIComponent(overpassQuery)}`,
             });
+
             if (!response.ok) {
+                // Retry logic for server overload errors (504 Gateway Timeout)
+                if (response.status === 504 && retries > 0) {
+                    console.warn(`Overpass API timeout/overload, retrying... (${retries} retries left)`);
+                    toast({ description: `El servidor de OSM está ocupado, reintentando...` });
+                    await new Promise(res => setTimeout(res, 3000)); // Wait 3 seconds before retrying
+                    return executeQuery(queryFragment, retries - 1);
+                }
                 const errorText = await response.text();
                 throw new Error(`Overpass API error: ${response.status} ${errorText}`);
             }
+
             const osmData = await response.json();
             const geojsonData = osmtogeojson(osmData);
             const features = geojsonFormat.readFeatures(geojsonData);
@@ -117,44 +128,17 @@ export const useOSMData = ({ mapRef, drawingSourceRef, addLayer, osmCategoryConf
     }
   }, [selectedOSMCategoryIds, drawingSourceRef, mapRef, addLayer, osmCategoryConfigs, toast]);
 
-  const handleDownloadOSMLayers = useCallback(async (format: 'geojson' | 'kml' | 'shp') => {
+ const handleDownloadOSMLayers = useCallback(async (format: 'geojson' | 'kml' | 'shp') => {
       setIsDownloading(true);
       try {
           const osmLayers = mapRef.current?.getLayers().getArray()
-            .filter(l => l.get('type') === 'osm') as VectorLayer<VectorSource<Feature<Geometry>>>[] | undefined;
+            .filter(l => l.get('type') === 'osm') as VectorLayer<any>[] | undefined;
           
           if (!osmLayers || osmLayers.length === 0) {
               toast({ description: "No hay capas OSM cargadas para descargar." });
               return;
           }
-
-          // Merge all features from all OSM layers into a single array
-          const allOsmFeatures = osmLayers.flatMap(layer => layer.getSource()?.getFeatures() ?? []);
-
-          if (allOsmFeatures.length === 0) {
-               toast({ description: "No hay entidades en las capas OSM para descargar." });
-               return;
-          }
-
-          // Create a temporary, in-memory layer to export from
-          const mergedSource = new VectorSource({ features: allOsmFeatures });
-          const mergedLayerId = `osm-export-merged-${nanoid()}`;
-          const mergedOlLayer = new VectorLayer({
-              source: mergedSource,
-              properties: { id: mergedLayerId, name: 'Capas_OSM_Fusionadas', type: 'vector' }
-          });
-          const mergedMapLayer: MapLayer = {
-              id: mergedLayerId,
-              name: 'Capas_OSM_Fusionadas',
-              olLayer: mergedOlLayer,
-              visible: false, // Doesn't need to be visible
-              opacity: 1,
-              type: 'vector'
-          };
-          
-          // We don't need to add this to the map, just use it for the export function
-          // The export function can be called directly with a MapLayer object
-          await handleExportLayer(mergedMapLayer.id, format);
+          await onExportLayers(osmLayers, 'Capas_OSM_Fusionadas', format);
       
       } catch (error: any) {
           console.error("Error during OSM layer download process:", error);
@@ -162,7 +146,7 @@ export const useOSMData = ({ mapRef, drawingSourceRef, addLayer, osmCategoryConf
       } finally {
           setIsDownloading(false);
       }
-  }, [mapRef, toast, handleExportLayer]);
+  }, [mapRef, toast, onExportLayers]);
 
 
   return {
