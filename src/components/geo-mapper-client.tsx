@@ -343,7 +343,16 @@ export default function GeoMapperClient() {
     mapRef, 
     drawingSourceRef, 
     addLayer: layerManagerHook.addLayer, 
-    osmCategoryConfigs: osmCategoryConfig 
+    osmCategoryConfigs: osmCategoryConfig,
+    handleExportLayer: async (layerId, format) => {
+        // Find the actual layer object from the ID
+        const layerToExport = layerManagerHook.layers.find(l => l.id === layerId);
+        if (layerToExport) {
+            await layerManagerHook.handleExportLayer(layerId, format);
+        } else {
+            toast({ description: "No se pudo encontrar la capa para exportar.", variant: "destructive"});
+        }
+    }
   });
   
   const drawingInteractions = useDrawingInteractions({

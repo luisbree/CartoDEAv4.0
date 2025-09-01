@@ -7,13 +7,10 @@ import VectorSource from 'ol/source/Vector';
 import { useToast } from "@/hooks/use-toast";
 import type { MapLayer, OSMCategoryConfig } from '@/lib/types';
 import { nanoid } from 'nanoid';
-import { transformExtent, type Extent } from 'ol/proj';
-import { get as getProjection, transform } from 'ol/proj';
+import { transformExtent } from 'ol/proj';
+import { get as getProjection } from 'ol/proj';
 import VectorLayer from 'ol/layer/Vector';
 import GeoJSON from 'ol/format/GeoJSON';
-import KML from 'ol/format/KML';
-import shp from 'shpjs';
-import JSZip from 'jszip';
 import type Feature from 'ol/Feature';
 import type { Geometry } from 'ol/geom';
 import osmtogeojson from 'osmtogeojson';
@@ -24,9 +21,10 @@ interface UseOSMDataProps {
   drawingSourceRef: React.RefObject<VectorSource>;
   addLayer: (layer: MapLayer) => void;
   osmCategoryConfigs: Omit<OSMCategoryConfig, 'matcher'>[];
+  handleExportLayer: (layerId: string, format: 'geojson' | 'kml' | 'shp') => Promise<void>;
 }
 
-export const useOSMData = ({ mapRef, drawingSourceRef, addLayer, osmCategoryConfigs }: UseOSMDataProps) => {
+export const useOSMData = ({ mapRef, drawingSourceRef, addLayer, osmCategoryConfigs, handleExportLayer }: UseOSMDataProps) => {
   const { toast } = useToast();
   const [isFetchingOSM, setIsFetchingOSM] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -119,87 +117,52 @@ export const useOSMData = ({ mapRef, drawingSourceRef, addLayer, osmCategoryConf
     }
   }, [selectedOSMCategoryIds, drawingSourceRef, mapRef, addLayer, osmCategoryConfigs, toast]);
 
-  const fetchOSMForCurrentView = useCallback(async (categoryIds: string[]) => {
-    // This function logic can be simplified or merged with fetchOSMData if the primary
-    // trigger is always a drawn polygon. For now, we'll leave it as a distinct path.
-    // If you need this functionality, the implementation would be similar to fetchOSMData
-    // but using the map's current view extent instead of a drawn polygon.
-    toast({ description: "Funcionalidad no implementada en este momento." });
-  }, [toast]);
-
-
   const handleDownloadOSMLayers = useCallback(async (format: 'geojson' | 'kml' | 'shp') => {
-      const osmLayers = mapRef.current?.getLayers().getArray()
-        .filter(l => l.get('type') === 'osm') as VectorLayer<any>[] | undefined;
-      
-      if (!osmLayers || osmLayers.length === 0) {
-          toast({ description: "No hay capas OSM para descargar." });
-          return;
-      }
       setIsDownloading(true);
       try {
-          const allFeatures = osmLayers.flatMap(l => l.getSource()?.getFeatures() ?? []);
-          if (allFeatures.length === 0) {
-              toast({ description: "No hay entidades en las capas OSM para descargar." });
+          const osmLayers = mapRef.current?.getLayers().getArray()
+            .filter(l => l.get('type') === 'osm') as VectorLayer<VectorSource<Feature<Geometry>>>[] | undefined;
+          
+          if (!osmLayers || osmLayers.length === 0) {
+              toast({ description: "No hay capas OSM cargadas para descargar." });
               return;
           }
 
-          if (format === 'shp') {
-              // shpjs requires GeoJSON features, so we do the conversion first.
-              const geojsonFormat = new GeoJSON({
-                  featureProjection: 'EPSG:4326', // Target projection for the output
-                  dataProjection: 'EPSG:3857', // Source projection from the map
-              });
-              const geoJson = geojsonFormat.writeFeaturesObject(allFeatures);
-              const shpBuffer = await shp.write(geoJson.features, 'GEOMETRY', {});
-              const zip = new JSZip();
-              zip.file(`osm_layers.zip`, shpBuffer);
-              const content = await zip.generateAsync({ type: "blob" });
-              const link = document.createElement("a");
-              link.href = URL.createObjectURL(content);
-              link.download = "osm_layers_shp.zip";
-              link.click();
-              URL.revokeObjectURL(link.href);
-              link.remove();
-          } else { 
-              let textData: string;
-              let fileExtension = format;
-              let mimeType = 'text/plain';
+          // Merge all features from all OSM layers into a single array
+          const allOsmFeatures = osmLayers.flatMap(layer => layer.getSource()?.getFeatures() ?? []);
 
-              if (format === 'geojson') {
-                  const geojsonFormat = new GeoJSON({
-                      featureProjection: 'EPSG:4326',
-                      dataProjection: 'EPSG:3857'
-                  });
-                  textData = geojsonFormat.writeFeatures(allFeatures, {
-                      decimals: 7,
-                  });
-                  mimeType = 'application/geo+json';
-              } else { // kml
-                  const kmlFormat = new KML({ extractStyles: true });
-                  textData = kmlFormat.writeFeatures(allFeatures, {
-                      featureProjection: 'EPSG:4326', // KML standard is WGS84
-                      dataProjection: 'EPSG:3857',
-                  });
-                  mimeType = 'application/vnd.google-earth.kml+xml';
-              }
-              
-              const blob = new Blob([textData], { type: mimeType });
-              const link = document.createElement('a');
-              link.href = URL.createObjectURL(blob);
-              link.download = `osm_layers.${fileExtension}`;
-              link.click();
-              URL.revokeObjectURL(link.href);
-              link.remove();
+          if (allOsmFeatures.length === 0) {
+               toast({ description: "No hay entidades en las capas OSM para descargar." });
+               return;
           }
-          toast({ description: `Capas OSM descargadas como ${format.toUpperCase()}.` });
+
+          // Create a temporary, in-memory layer to export from
+          const mergedSource = new VectorSource({ features: allOsmFeatures });
+          const mergedLayerId = `osm-export-merged-${nanoid()}`;
+          const mergedOlLayer = new VectorLayer({
+              source: mergedSource,
+              properties: { id: mergedLayerId, name: 'Capas_OSM_Fusionadas', type: 'vector' }
+          });
+          const mergedMapLayer: MapLayer = {
+              id: mergedLayerId,
+              name: 'Capas_OSM_Fusionadas',
+              olLayer: mergedOlLayer,
+              visible: false, // Doesn't need to be visible
+              opacity: 1,
+              type: 'vector'
+          };
+          
+          // We don't need to add this to the map, just use it for the export function
+          // The export function can be called directly with a MapLayer object
+          await handleExportLayer(mergedMapLayer.id, format);
+      
       } catch (error: any) {
-          console.error("Error downloading OSM layers:", error);
-          toast({ description: `Error al descargar: ${error.message}`, variant: 'destructive' });
+          console.error("Error during OSM layer download process:", error);
+          toast({ description: `Error al preparar la descarga: ${error.message}`, variant: 'destructive' });
       } finally {
           setIsDownloading(false);
       }
-  }, [mapRef, toast]);
+  }, [mapRef, toast, handleExportLayer]);
 
 
   return {
@@ -207,8 +170,7 @@ export const useOSMData = ({ mapRef, drawingSourceRef, addLayer, osmCategoryConf
     selectedOSMCategoryIds,
     setSelectedOSMCategoryIds,
     fetchOSMData,
-    fetchOSMForCurrentView,
     isDownloading,
-    handleDownloadOSMLayers: handleDownloadOSMLayers,
+    handleDownloadOSMLayers,
   };
 };

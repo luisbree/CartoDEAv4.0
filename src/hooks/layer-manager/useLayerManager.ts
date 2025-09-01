@@ -17,7 +17,6 @@ import type { MapLayer, VectorMapLayer, PlainFeatureData, LabelOptions } from '@
 import { nanoid } from 'nanoid';
 import { Style, Stroke, Fill, Circle as CircleStyle, Text as TextStyle } from 'ol/style';
 import { transformExtent } from 'ol/proj';
-import { asArray as asOlColorArray, asString as asOlColorString } from 'ol/color';
 import GeoJSON from 'ol/format/GeoJSON';
 import KML from 'ol/format/KML';
 import shp from 'shpjs';
@@ -82,7 +81,7 @@ export const useLayerManager = ({
     const operationalLayers = layers.filter(l => l.type !== 'gee');
     const layer_count = operationalLayers.length;
     
-    layers.forEach((layer, index) => {
+    layers.forEach((layer) => {
       if (layer.type === 'gee') {
         layer.olLayer.setZIndex(GEE_LAYER_Z_INDEX);
       } else {
@@ -475,10 +474,12 @@ export const useLayerManager = ({
       const textColor = colorMap[labelOptions.textColor] || (isValidHex(labelOptions.textColor) ? labelOptions.textColor : '#000000');
       const outlineColor = colorMap[labelOptions.outlineColor] || (isValidHex(labelOptions.outlineColor) ? labelOptions.outlineColor : '#FFFFFF');
       
-      olLayer.setStyle((feature, resolution) => {
-        const baseStyle = typeof originalStyle === 'function' ? originalStyle(feature, resolution) : originalStyle;
-        if (!baseStyle) return;
+      olLayer.setStyle((feature) => {
+        const baseStyleOrFn = olLayer.get('originalStyle') || originalStyle;
+        const baseStyle = typeof baseStyleOrFn === 'function' ? baseStyleOrFn(feature) : baseStyleOrFn;
         
+        if (!baseStyle) return;
+
         const styleToClone = Array.isArray(baseStyle) ? baseStyle[0] : baseStyle;
         if (!(styleToClone instanceof Style)) return baseStyle;
 
@@ -501,7 +502,7 @@ export const useLayerManager = ({
       });
       toast({ description: `Etiquetas activadas para "${layer.name}".` });
     } else {
-      olLayer.setStyle(originalStyle);
+      olLayer.setStyle(olLayer.get('originalStyle') || originalStyle);
       toast({ description: `Etiquetas desactivadas para "${layer.name}".` });
     }
     
@@ -705,8 +706,12 @@ export const useLayerManager = ({
 
     try {
       if (format === 'shp') {
-        const geojsonFormat = new GeoJSON({ featureProjection: 'EPSG:4326', dataProjection: 'EPSG:3857' });
+        const geojsonFormat = new GeoJSON({
+            dataProjection: 'EPSG:4326',
+            featureProjection: 'EPSG:3857'
+        });
         const geojson = geojsonFormat.writeFeaturesObject(features);
+        // shpjs expects features array
         const shpBuffer = await shp.write(geojson.features, 'GEOMETRY', {});
         const zip = new JSZip();
         zip.file(`${layerName}.zip`, shpBuffer);
@@ -723,7 +728,10 @@ export const useLayerManager = ({
         let extension: string;
 
         if (format === 'geojson') {
-          const geojsonFormat = new GeoJSON({ featureProjection: 'EPSG:4326', dataProjection: 'EPSG:3857' });
+          const geojsonFormat = new GeoJSON({
+              dataProjection: 'EPSG:4326',
+              featureProjection: 'EPSG:3857'
+          });
           textData = geojsonFormat.writeFeatures(features, {
             decimals: 7,
           });
