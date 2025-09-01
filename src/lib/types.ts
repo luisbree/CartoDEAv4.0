@@ -90,3 +90,8 @@ export interface LabelOptions {
     textColor: string;
     outlineColor: string;
 }
+
+export interface TrelloCardInfo {
+  name: string;
+  url: string;
+}

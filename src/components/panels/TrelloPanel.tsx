@@ -8,6 +8,7 @@ import { Loader2, ClipboardCheck, Search, ExternalLink, X as ClearIcon } from 'l
 import { useToast } from '@/hooks/use-toast';
 import { searchTrelloCards, type TrelloCard } from '@/ai/flows/trello-actions';
 import { ScrollArea } from '../ui/scroll-area';
+import type { TrelloCardInfo } from '@/lib/types';
 
 interface TrelloPanelProps {
   panelRef: React.RefObject<HTMLDivElement>;
@@ -15,6 +16,7 @@ interface TrelloPanelProps {
   onToggleCollapse: () => void;
   onClosePanel: () => void;
   onMouseDownHeader: (e: React.MouseEvent<HTMLDivElement>) => void;
+  onSetSelectedCard: (card: TrelloCardInfo | null) => void;
   style?: React.CSSProperties;
 }
 
@@ -24,6 +26,7 @@ const TrelloPanel: React.FC<TrelloPanelProps> = ({
   onToggleCollapse,
   onClosePanel,
   onMouseDownHeader,
+  onSetSelectedCard,
   style,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -68,13 +71,16 @@ const TrelloPanel: React.FC<TrelloPanelProps> = ({
     };
   }, [searchTerm, handleSearch]);
 
-  const handleCardClick = (url: string) => {
-    window.open(url, '_blank', 'noopener,noreferrer');
+  const handleCardClick = (card: TrelloCard) => {
+    onSetSelectedCard({ name: card.name, url: card.url });
+    const windowFeatures = "popup=true,width=800,height=600,scrollbars=yes,resizable=yes";
+    window.open(card.url, '_blank', windowFeatures);
   };
 
   const clearSearch = () => {
     setSearchTerm('');
     setResults([]);
+    onSetSelectedCard(null); // Clear the notification when search is cleared
   };
 
 
@@ -131,7 +137,7 @@ const TrelloPanel: React.FC<TrelloPanelProps> = ({
                 {results.map((card) => (
                   <li key={card.id}>
                     <button
-                      onClick={() => handleCardClick(card.url)}
+                      onClick={() => handleCardClick(card)}
                       className="w-full text-left p-1.5 rounded-md hover:bg-primary/30 flex items-center justify-between gap-2 text-xs text-white"
                     >
                       <span className="flex-1 truncate" title={card.name}>{card.name}</span>

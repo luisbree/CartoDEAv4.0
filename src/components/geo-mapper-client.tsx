@@ -41,6 +41,7 @@ import LocationSearch from '@/components/location-search/LocationSearch';
 import BaseLayerSelector from '@/components/layer-manager/BaseLayerSelector';
 import BaseLayerControls from '@/components/layer-manager/BaseLayerControls';
 import { StreetViewIcon } from '@/components/icons/StreetViewIcon';
+import TrelloCardNotification from '@/components/trello-integration/TrelloCardNotification';
 
 
 import { useOpenLayersMap } from '@/hooks/map-core/useOpenLayersMap';
@@ -56,7 +57,7 @@ import { useWfsLibrary } from '@/hooks/wfs-library/useWfsLibrary';
 import { useOsmQuery } from '@/hooks/osm-integration/useOsmQuery';
 import { useToast } from "@/hooks/use-toast";
 
-import type { OSMCategoryConfig, GeoServerDiscoveredLayer, BaseLayerOptionForSelect, MapLayer, ChatMessage, BaseLayerSettings, NominatimResult, PlainFeatureData, ActiveTool } from '@/lib/types';
+import type { OSMCategoryConfig, GeoServerDiscoveredLayer, BaseLayerOptionForSelect, MapLayer, ChatMessage, BaseLayerSettings, NominatimResult, PlainFeatureData, ActiveTool, TrelloCardInfo } from '@/lib/types';
 import { chatWithMapAssistant, type MapAssistantOutput } from '@/ai/flows/find-layer-flow';
 import { authenticateWithGee } from '@/ai/flows/gee-flow';
 import { checkTrelloCredentials } from '@/ai/flows/trello-actions';
@@ -218,6 +219,7 @@ export default function GeoMapperClient() {
   const [isGeeAuthenticated, setIsGeeAuthenticated] = useState(false);
   const [isGeeAuthenticating, setIsGeeAuthenticating] = useState(true); // Start as true
   const [isCapturing, setIsCapturing] = useState(false);
+  const [trelloCardNotification, setTrelloCardNotification] = useState<TrelloCardInfo | null>(null);
 
 
   const updateDiscoveredLayerState = useCallback((layerName: string, added: boolean, type: 'wms' | 'wfs') => {
@@ -344,15 +346,7 @@ export default function GeoMapperClient() {
     drawingSourceRef, 
     addLayer: layerManagerHook.addLayer, 
     osmCategoryConfigs: osmCategoryConfig,
-    handleExportLayer: async (layerId, format) => {
-        // Find the actual layer object from the ID
-        const layerToExport = layerManagerHook.layers.find(l => l.id === layerId);
-        if (layerToExport) {
-            await layerManagerHook.handleExportLayer(layerId, format);
-        } else {
-            toast({ description: "No se pudo encontrar la capa para exportar.", variant: "destructive"});
-        }
-    }
+    onExportLayer: layerManagerHook.handleExportLayer,
   });
   
   const drawingInteractions = useDrawingInteractions({
@@ -811,6 +805,14 @@ export default function GeoMapperClient() {
           activeBaseLayerId={activeBaseLayerId}
           baseLayerSettings={baseLayerSettings}
         />
+        
+        {trelloCardNotification && (
+            <TrelloCardNotification
+                cardName={trelloCardNotification.name}
+                cardUrl={trelloCardNotification.url}
+            />
+        )}
+
 
         {/* Center Crosshair */}
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-5 h-5 pointer-events-none z-10">
@@ -837,8 +839,6 @@ export default function GeoMapperClient() {
             osmCategoriesForSelection={osmCategoriesForSelection}
             selectedOSMCategoryIds={osmDataHook.selectedOSMCategoryIds}
             onSelectedOSMCategoriesChange={osmDataHook.setSelectedOSMCategoryIds}
-            isDownloading={osmDataHook.isDownloading}
-            onDownloadOSMLayers={osmDataHook.handleDownloadOSMLayers}
             osmQueryHook={osmQueryHook}
             style={{ top: `${panels.tools.position.y}px`, left: `${panels.tools.position.x}px`, zIndex: panels.tools.zIndex }}
           />
@@ -953,6 +953,7 @@ export default function GeoMapperClient() {
             onToggleCollapse={() => togglePanelCollapse('trello')}
             onClosePanel={() => togglePanelMinimize('trello')}
             onMouseDownHeader={(e) => handlePanelMouseDown(e, 'trello')}
+            onSetSelectedCard={setTrelloCardNotification}
             style={{ top: `${panels.trello.position.y}px`, left: `${panels.trello.position.x}px`, zIndex: panels.trello.zIndex }}
           />
         )}
