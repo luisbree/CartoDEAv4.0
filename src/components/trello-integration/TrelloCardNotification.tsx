@@ -21,7 +21,7 @@ const TrelloCardNotification: React.FC<TrelloCardNotificationProps> = ({ cardNam
     <div
       className={cn(
         "absolute top-2 right-2 z-40 max-w-xs px-3 py-2 text-xs rounded-md shadow-lg",
-        "bg-background/80 backdrop-blur-sm text-foreground border border-border",
+        "bg-background/50 backdrop-blur-sm text-foreground border-border",
         "flex items-center gap-3 animate-in fade-in-0 slide-in-from-top-4 duration-300"
       )}
       role="status"
