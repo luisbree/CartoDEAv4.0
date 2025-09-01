@@ -20,8 +20,8 @@ const TrelloCardNotification: React.FC<TrelloCardNotificationProps> = ({ cardNam
   return (
     <div
       className={cn(
-        "absolute top-2 right-2 z-30 px-3 py-2 text-xs rounded-md shadow-lg",
-        "bg-gray-800/80 backdrop-blur-sm text-white border border-gray-600/80",
+        "absolute top-12 right-2 z-30 px-3 py-2 text-xs rounded-md shadow-lg",
+        "bg-background/80 backdrop-blur-sm text-foreground border border-border",
         "flex items-center gap-3 animate-in fade-in-0 slide-in-from-top-4 duration-300"
       )}
       role="status"
@@ -32,7 +32,7 @@ const TrelloCardNotification: React.FC<TrelloCardNotificationProps> = ({ cardNam
       </div>
       <button
         onClick={handleOpenPopup}
-        className="p-1 rounded-full hover:bg-white/10 text-gray-300 hover:text-white flex-shrink-0"
+        className="p-1 rounded-full hover:bg-black/10 text-muted-foreground hover:text-foreground flex-shrink-0"
         title="Abrir tarjeta de Trello"
       >
         <ExternalLink className="h-4 w-4" />
