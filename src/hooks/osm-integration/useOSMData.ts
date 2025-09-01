@@ -144,13 +144,13 @@ export const useOSMData = ({ mapRef, drawingSourceRef, addLayer, osmCategoryConf
               return;
           }
 
-          const geojsonFormat = new GeoJSON();
+          const geojsonFormat = new GeoJSON({
+              dataProjection: 'EPSG:4326', // Correct: The desired output projection
+              featureProjection: 'EPSG:3857' // Correct: The source projection of the features in the map
+          });
 
           if (format === 'shp') {
-              const geoJson = JSON.parse(geojsonFormat.writeFeatures(allFeatures, {
-                  featureProjection: 'EPSG:4326', // SHP.js expects WGS84
-                  dataProjection: 'EPSG:3857' // The features are in Web Mercator
-              }));
+              const geoJson = JSON.parse(geojsonFormat.writeFeatures(allFeatures));
               const shpBuffer = await shp.write(geoJson.features, 'GEOMETRY', {});
               const zip = new JSZip();
               zip.file(`osm_layers.zip`, shpBuffer);
@@ -168,9 +168,7 @@ export const useOSMData = ({ mapRef, drawingSourceRef, addLayer, osmCategoryConf
 
               if (format === 'geojson') {
                   textData = geojsonFormat.writeFeatures(allFeatures, {
-                      featureProjection: 'EPSG:4326', // Target projection for file
-                      dataProjection: 'EPSG:3857',   // Source projection of features
-                      writecrs: true,               // Explicitly write CRS info
+                      writecrs: true, // Explicitly write CRS info
                   });
                   mimeType = 'application/geo+json';
               } else { // kml
