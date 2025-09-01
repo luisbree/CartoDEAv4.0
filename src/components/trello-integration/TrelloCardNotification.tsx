@@ -1,3 +1,4 @@
+
 "use client";
 
 import React from 'react';
@@ -19,7 +20,7 @@ const TrelloCardNotification: React.FC<TrelloCardNotificationProps> = ({ cardNam
   return (
     <div
       className={cn(
-        "absolute top-12 right-[270px] z-30 px-3 py-2 text-xs rounded-md shadow-lg",
+        "absolute top-2 left-2 z-30 max-w-xs px-3 py-2 text-xs rounded-md shadow-lg",
         "bg-background/80 backdrop-blur-sm text-foreground border border-border",
         "flex items-center gap-3 animate-in fade-in-0 slide-in-from-top-4 duration-300"
       )}
