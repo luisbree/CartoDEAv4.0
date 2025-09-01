@@ -8,7 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import type { MapLayer, OSMCategoryConfig } from '@/lib/types';
 import { nanoid } from 'nanoid';
 import { transformExtent, type Extent } from 'ol/proj';
-import { get as getProjection } from 'ol/proj';
+import { get as getProjection, transform } from 'ol/proj';
 import VectorLayer from 'ol/layer/Vector';
 import GeoJSON from 'ol/format/GeoJSON';
 import KML from 'ol/format/KML';
@@ -144,13 +144,17 @@ export const useOSMData = ({ mapRef, drawingSourceRef, addLayer, osmCategoryConf
               return;
           }
 
-          const geojsonFormat = new GeoJSON({
-              dataProjection: 'EPSG:4326', // Correct: The desired output projection
-              featureProjection: 'EPSG:3857' // Correct: The source projection of the features in the map
+          // Clone features and transform them to EPSG:4326 for export
+          const featuresForExport = allFeatures.map(f => {
+              const featureClone = f.clone();
+              featureClone.getGeometry()?.transform('EPSG:3857', 'EPSG:4326');
+              return featureClone;
           });
 
           if (format === 'shp') {
-              const geoJson = JSON.parse(geojsonFormat.writeFeatures(allFeatures));
+              const geojsonFormat = new GeoJSON();
+              const geoJson = geojsonFormat.writeFeaturesObject(featuresForExport);
+              // Shapefile library expects features to be an array within the object.
               const shpBuffer = await shp.write(geoJson.features, 'GEOMETRY', {});
               const zip = new JSZip();
               zip.file(`osm_layers.zip`, shpBuffer);
@@ -167,16 +171,15 @@ export const useOSMData = ({ mapRef, drawingSourceRef, addLayer, osmCategoryConf
               let mimeType = 'text/plain';
 
               if (format === 'geojson') {
-                  textData = geojsonFormat.writeFeatures(allFeatures, {
-                      writecrs: true, // Explicitly write CRS info
+                  const geojsonFormat = new GeoJSON();
+                  textData = geojsonFormat.writeFeatures(featuresForExport, {
+                      decimals: 7, // Set precision for coordinates
                   });
                   mimeType = 'application/geo+json';
               } else { // kml
                   const kmlFormat = new KML({ extractStyles: true });
-                  textData = kmlFormat.writeFeatures(allFeatures, {
-                      featureProjection: 'EPSG:4326',
-                      dataProjection: 'EPSG:3857'
-                  });
+                   // KML format intrinsically works with EPSG:4326
+                  textData = kmlFormat.writeFeatures(featuresForExport);
                   mimeType = 'application/vnd.google-earth.kml+xml';
               }
               
@@ -191,7 +194,7 @@ export const useOSMData = ({ mapRef, drawingSourceRef, addLayer, osmCategoryConf
           toast({ description: `Capas OSM descargadas como ${format.toUpperCase()}.` });
       } catch (error: any) {
           console.error("Error downloading OSM layers:", error);
-          toast({ description: `Error al descargar: ${error.message}` });
+          toast({ description: `Error al descargar: ${error.message}`, variant: 'destructive' });
       } finally {
           setIsDownloading(false);
       }
