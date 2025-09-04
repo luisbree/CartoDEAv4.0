@@ -56,6 +56,7 @@ import { useMapCapture } from '@/hooks/map-tools/useMapCapture';
 import { useWfsLibrary } from '@/hooks/wfs-library/useWfsLibrary';
 import { useOsmQuery } from '@/hooks/osm-integration/useOsmQuery';
 import { useToast } from "@/hooks/use-toast";
+import { cn } from '@/lib/utils';
 
 import type { OSMCategoryConfig, GeoServerDiscoveredLayer, BaseLayerOptionForSelect, MapLayer, ChatMessage, BaseLayerSettings, NominatimResult, PlainFeatureData, ActiveTool, TrelloCardInfo } from '@/lib/types';
 import { chatWithMapAssistant, type MapAssistantOutput } from '@/ai/flows/find-layer-flow';
@@ -153,17 +154,7 @@ export default function GeoMapperClient() {
   const [activeTool, setActiveTool] = useState<ActiveTool>({ type: null, id: null });
   const lastActiveToolRef = useRef<ActiveTool>({ type: 'interaction', id: 'inspect' });
 
-  const [theme, setTheme] = useState<'light' | 'dark'>('light');
-
-  useEffect(() => {
-    const root = window.document.documentElement;
-    root.classList.remove('light', 'dark');
-    root.classList.add(theme);
-  }, [theme]);
-
-  const toggleTheme = () => {
-    setTheme(prevTheme => (prevTheme === 'light' ? 'dark' : 'light'));
-  };
+  const [isLogoInverted, setIsLogoInverted] = useState(false);
 
   const { panels, handlePanelMouseDown, togglePanelCollapse, togglePanelMinimize } = useFloatingPanels({
     toolsPanelRef,
@@ -701,13 +692,16 @@ export default function GeoMapperClient() {
 
       <div className="bg-gray-700/90 backdrop-blur-sm shadow-md p-2 z-20 flex items-center gap-2">
         <div 
-          onClick={toggleTheme}
-          className="relative w-8 h-8 bg-black rounded-full flex-shrink-0 border border-white/80 flex items-center justify-center cursor-pointer" 
-          title="Cambiar Tema (Claro/Oscuro)"
+          onClick={() => setIsLogoInverted(prev => !prev)}
+          className={cn(
+            "relative w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center cursor-pointer transition-colors duration-200",
+            isLogoInverted ? "bg-white border-black/80" : "bg-black border-white/80"
+          )} 
+          title="Invertir Colores del Logo"
         >
-          <div className="absolute w-full h-full rounded-full border border-white/70 scale-75"></div>
-          <div className="absolute w-full h-full rounded-full border border-white/50 scale-50"></div>
-          <div className="absolute w-full h-full rounded-full border border-white/30 scale-25"></div>
+          <div className={cn("absolute w-full h-full rounded-full border scale-75 transition-colors duration-200", isLogoInverted ? "border-black/70" : "border-white/70")}></div>
+          <div className={cn("absolute w-full h-full rounded-full border scale-50 transition-colors duration-200", isLogoInverted ? "border-black/50" : "border-white/50")}></div>
+          <div className={cn("absolute w-full h-full rounded-full border scale-25 transition-colors duration-200", isLogoInverted ? "border-black/30" : "border-white/30")}></div>
         </div>
         <TooltipProvider delayDuration={200}>
           <Tooltip>
