@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useCallback, useEffect } from 'react';
@@ -500,6 +499,7 @@ export const useLayerManager = ({
           textAlign: geometryType === 'Point' ? 'left' : 'center',
           textBaseline: geometryType === 'Point' ? 'middle' : 'middle',
           offsetX: geometryType === 'Point' ? 10 : 0,
+          placement: labelOptions.placement === 'parallel' && (geometryType === 'LineString' || geometryType === 'MultiLineString') ? 'line' : 'point',
         });
 
         newStyle.setText(textStyle);

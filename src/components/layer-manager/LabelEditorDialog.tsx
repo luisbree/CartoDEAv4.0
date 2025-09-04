@@ -117,6 +117,7 @@ const LabelEditorDialog: React.FC<LabelEditorDialogProps> = ({
     fontFamily: 'sans-serif',
     textColor: 'negro',
     outlineColor: 'blanco',
+    placement: 'horizontal',
   });
 
   const attributeFields = useMemo(() => {
@@ -136,11 +137,21 @@ const LabelEditorDialog: React.FC<LabelEditorDialogProps> = ({
     return Array.from(keys).sort();
   }, [layer]);
 
+  const isLineLayer = useMemo(() => {
+    const source = layer?.olLayer.getSource();
+    if (!source) return false;
+    const features = source.getFeatures();
+    if (features.length === 0) return false; // Default to false if no features to check
+    // Check the first feature's geometry type
+    const geomType = features[0].getGeometry()?.getType();
+    return geomType === 'LineString' || geomType === 'MultiLineString';
+  }, [layer]);
+
   useEffect(() => {
     // Initialize state from layer's current label options if they exist
     const existingOptions = layer?.olLayer.get('labelOptions');
     if (existingOptions) {
-      setLabelOptions(existingOptions);
+      setLabelOptions({ placement: 'horizontal', ...existingOptions }); // Ensure placement has a default
     } else {
       // Reset to default if no options exist
        setLabelOptions({
@@ -150,6 +161,7 @@ const LabelEditorDialog: React.FC<LabelEditorDialogProps> = ({
         fontFamily: "'Encode Sans'",
         textColor: 'negro',
         outlineColor: 'blanco',
+        placement: 'horizontal',
       });
     }
   }, [isOpen, layer, attributeFields]);
@@ -244,6 +256,26 @@ const LabelEditorDialog: React.FC<LabelEditorDialogProps> = ({
               />
             </div>
           </div>
+          {isLineLayer && (
+            <div className="space-y-1.5 pt-2 border-t border-gray-700/60">
+                <Label htmlFor="label-placement" className="text-xs">
+                  Alineación de Etiqueta (Líneas)
+                </Label>
+                <Select
+                  value={labelOptions.placement}
+                  onValueChange={(value: 'horizontal' | 'parallel') => setLabelOptions(prev => ({ ...prev, placement: value }))}
+                  disabled={!labelOptions.enabled}
+                >
+                  <SelectTrigger id="label-placement" className="h-8 text-xs bg-black/20 w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-gray-700 text-white border-gray-600">
+                    <SelectItem value="horizontal" className="text-xs">Horizontal</SelectItem>
+                    <SelectItem value="parallel" className="text-xs">Paralelo a la línea</SelectItem>
+                  </SelectContent>
+                </Select>
+            </div>
+          )}
         </div>
         <DialogFooter className="justify-center">
           <Button variant="outline" onClick={onClose} className="h-8 text-xs bg-gray-200 text-black hover:bg-gray-300">Cancelar</Button>

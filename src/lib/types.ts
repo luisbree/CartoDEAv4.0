@@ -89,6 +89,7 @@ export interface LabelOptions {
     fontFamily: string;
     textColor: string;
     outlineColor: string;
+    placement: 'horizontal' | 'parallel';
 }
 
 export interface TrelloCardInfo {
