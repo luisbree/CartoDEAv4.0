@@ -28,6 +28,19 @@ interface UseFloatingPanelsProps {
 }
 
 const initialZIndex = 30;
+const CASCADE_OFFSET = 40; // The 40px offset for cascading panels
+
+// This defines the order in which panels will cascade. 'legend' is excluded as it's fixed.
+const panelCascadeOrder: PanelId[] = [
+    'wfsLibrary', 
+    'tools', 
+    'trello', 
+    'attributes', 
+    'printComposer', 
+    'gee',
+    // 'ai' and 'help' are handled separately on the right side
+];
+
 
 export const useFloatingPanels = ({
   toolsPanelRef,
@@ -59,18 +72,16 @@ export const useFloatingPanels = ({
   const [panels, setPanels] = useState<Record<PanelId, PanelState>>(() => {
     const initialX = panelPadding;
     const initialY = panelPadding;
-    const cascadeOffsetX = 42;
-    const cascadeOffsetY = 42;
     
     return {
       // Order reflects the toggle buttons in the UI
       legend: { isMinimized: false, isCollapsed: false, position: { x: initialX, y: initialY }, zIndex: initialZIndex + 2 },
-      wfsLibrary: { isMinimized: true, isCollapsed: false, position: { x: initialX + cascadeOffsetX, y: initialY + cascadeOffsetY }, zIndex: initialZIndex },
-      tools: { isMinimized: true, isCollapsed: false, position: { x: initialX + cascadeOffsetX * 2, y: initialY + cascadeOffsetY * 2 }, zIndex: initialZIndex },
-      trello: { isMinimized: true, isCollapsed: false, position: { x: initialX + cascadeOffsetX * 3, y: initialY + cascadeOffsetY * 3 }, zIndex: initialZIndex },
-      attributes: { isMinimized: true, isCollapsed: false, position: { x: initialX + cascadeOffsetX * 4, y: initialY + cascadeOffsetY * 4 }, zIndex: initialZIndex },
-      printComposer: { isMinimized: true, isCollapsed: false, position: { x: initialX + cascadeOffsetX * 5, y: initialY + cascadeOffsetY * 5 }, zIndex: initialZIndex },
-      gee: { isMinimized: true, isCollapsed: false, position: { x: initialX + cascadeOffsetX * 6, y: initialY + cascadeOffsetY * 6 }, zIndex: initialZIndex },
+      wfsLibrary: { isMinimized: true, isCollapsed: false, position: { x: initialX, y: initialY }, zIndex: initialZIndex },
+      tools: { isMinimized: true, isCollapsed: false, position: { x: initialX, y: initialY }, zIndex: initialZIndex },
+      trello: { isMinimized: true, isCollapsed: false, position: { x: initialX, y: initialY }, zIndex: initialZIndex },
+      attributes: { isMinimized: true, isCollapsed: false, position: { x: initialX, y: initialY }, zIndex: initialZIndex },
+      printComposer: { isMinimized: true, isCollapsed: false, position: { x: initialX, y: initialY }, zIndex: initialZIndex },
+      gee: { isMinimized: true, isCollapsed: false, position: { x: initialX, y: initialY }, zIndex: initialZIndex },
       ai: { isMinimized: false, isCollapsed: false, position: { x: -9999, y: panelPadding }, zIndex: initialZIndex + 3 }, // Positioned dynamically
       help: { isMinimized: true, isCollapsed: false, position: { x: -9999, y: panelPadding }, zIndex: initialZIndex }, // Positioned dynamically
     };
@@ -164,22 +175,41 @@ export const useFloatingPanels = ({
   
   const togglePanelMinimize = useCallback((panelId: PanelId) => {
     setPanels(prev => {
-        const panelState = prev[panelId];
-        const newIsMinimized = !panelState.isMinimized;
-        // If restoring, bring to front
+        const currentPanelState = prev[panelId];
+        const newIsMinimized = !currentPanelState.isMinimized;
+        
+        let newPosition = currentPanelState.position;
+        let newZIndex = currentPanelState.zIndex;
+
+        // If restoring a panel, calculate its new cascaded position
+        if (newIsMinimized === false && panelId !== 'legend' && panelId !== 'ai' && panelId !== 'help') {
+            const openCascadePanelsCount = panelCascadeOrder
+                .filter(id => id !== panelId && !prev[id].isMinimized)
+                .length;
+            
+            newPosition = {
+                x: panelPadding + (openCascadePanelsCount * CASCADE_OFFSET),
+                y: panelPadding + (openCascadePanelsCount * CASCADE_OFFSET),
+            };
+        }
+        
+        // Bring to front when restoring
         if (!newIsMinimized) {
             zIndexCounterRef.current += 1;
-            return {
-                ...prev,
-                [panelId]: { ...panelState, isMinimized: newIsMinimized, zIndex: zIndexCounterRef.current }
-            }
+            newZIndex = zIndexCounterRef.current;
         }
+
         return {
             ...prev,
-            [panelId]: { ...panelState, isMinimized: newIsMinimized }
-        }
+            [panelId]: { 
+                ...currentPanelState, 
+                isMinimized: newIsMinimized,
+                position: newPosition,
+                zIndex: newZIndex 
+            }
+        };
     });
-  }, []);
+  }, [panelPadding]);
 
   useEffect(() => {
     const mm = (e: MouseEvent) => handleMouseMove(e);
