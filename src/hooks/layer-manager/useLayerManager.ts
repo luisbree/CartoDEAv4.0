@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useCallback, useEffect } from 'react';
@@ -480,7 +481,7 @@ export const useLayerManager = ({
       
       olLayer.setStyle((feature) => {
         const baseStyleOrFn = olLayer.get('originalStyle') || originalStyle;
-        const baseStyle = typeof baseStyleOrFn === 'function' ? baseStyleOrFn(feature) : baseStyleOrFn;
+        const baseStyle = typeof baseStyleOrFn === 'function' ? baseStyleOrFn(feature, 0) : baseStyleOrFn;
         
         if (!baseStyle) return;
 
@@ -647,7 +648,11 @@ export const useLayerManager = ({
             return prevLayers;
         }
     
-        const clonedFeatures = selectedFeaturesForExtraction.map(f => f.clone());
+        const clonedFeatures = selectedFeaturesForExtraction.map(f => {
+            const clone = f.clone();
+            clone.setStyle(undefined); // Crucial: Remove the highlight style from the clone
+            return clone;
+        });
         
         let style;
         let originalLayerName = 'Selección';
@@ -657,7 +662,8 @@ export const useLayerManager = ({
           for (const layer of prevLayers) {
             if (layer.olLayer instanceof VectorLayer) {
               const source = layer.olLayer.getSource();
-              if (source && source.hasFeature(firstFeature)) {
+              // Use getFeatureById for robustness, as hasFeature might not work if the feature instance is different
+              if (source && firstFeature.getId() && source.getFeatureById(firstFeature.getId())) {
                 style = layer.olLayer.getStyle();
                 originalLayerName = layer.name;
                 break;
@@ -672,7 +678,7 @@ export const useLayerManager = ({
         const newOlLayer = new VectorLayer({
             source: newSource,
             properties: { id: newLayerId, name: newSourceName, type: 'vector' },
-            style: style 
+            style: style // Apply the original layer's style, not the highlight style
         });
     
         const newMapLayer: MapLayer = {

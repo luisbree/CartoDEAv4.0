@@ -127,6 +127,7 @@ export const useFeatureInspection = ({
         multi: true,
         condition: singleClick,
         filter: (feature, layer) => !layer.get('isBaseLayer') && !layer.get('isDrawingLayer'),
+        useInteractingStyle: false, // Prevents select interaction from overriding feature styles
     });
     selectInteractionRef.current = select;
     map.addInteraction(select);
