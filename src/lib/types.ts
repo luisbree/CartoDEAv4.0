@@ -95,3 +95,11 @@ export interface TrelloCardInfo {
   name: string;
   url: string;
 }
+
+export interface StyleOptions {
+  strokeColor: string;
+  fillColor: string;
+  lineWidth: number;
+  lineStyle: 'solid' | 'dashed' | 'dotted';
+  pointSize: number;
+}

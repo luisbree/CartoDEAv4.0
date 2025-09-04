@@ -24,13 +24,8 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import type { StyleOptions } from '@/lib/types';
 
-export interface StyleOptions {
-  strokeColor: string;
-  fillColor: string;
-  lineWidth: number;
-  lineStyle: 'solid' | 'dashed' | 'dotted';
-}
 
 interface StyleEditorDialogProps {
   isOpen: boolean;
@@ -143,6 +138,7 @@ const StyleEditorDialog: React.FC<StyleEditorDialogProps> = ({
     fillColor: 'azul',
     lineWidth: 2,
     lineStyle: 'solid',
+    pointSize: 5,
   });
 
   const handleApply = () => {
@@ -150,18 +146,20 @@ const StyleEditorDialog: React.FC<StyleEditorDialogProps> = ({
   };
   
   const isPolygon = layerType.includes('Polygon');
+  const isPoint = layerType.includes('Point');
+  const isLine = layerType.includes('LineString');
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="bg-gray-800 text-white border-gray-700 sm:max-w-md p-4">
         <DialogHeader>
-          <DialogTitle>Estilo</DialogTitle>
+          <DialogTitle>Editor de Simbología</DialogTitle>
         </DialogHeader>
         <div className="grid grid-cols-1 gap-4 py-2">
-            <div className="flex items-end gap-3 w-full justify-around">
+            <div className="flex items-end gap-3 w-full justify-around flex-wrap">
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="stroke-color" className="text-xs">
-                  Contorno
+                  {isPoint ? 'Borde' : 'Contorno'}
                 </Label>
                 <ColorPicker 
                   value={styleOptions.strokeColor}
@@ -169,7 +167,7 @@ const StyleEditorDialog: React.FC<StyleEditorDialogProps> = ({
                 />
               </div>
               
-              {isPolygon && (
+              {(isPolygon || isPoint) && (
                 <div className="flex flex-col gap-1.5">
                   <Label htmlFor="fill-color" className="text-xs">
                     Relleno
@@ -180,25 +178,44 @@ const StyleEditorDialog: React.FC<StyleEditorDialogProps> = ({
                   />
                 </div>
               )}
+              
+              {isPoint && (
+                 <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="point-size" className="text-xs">
+                    Tamaño (px)
+                  </Label>
+                  <Input
+                    id="point-size"
+                    type="number"
+                    min="1"
+                    max="30"
+                    value={styleOptions.pointSize}
+                    onChange={(e) => setStyleOptions(prev => ({ ...prev, pointSize: Number(e.target.value) }))}
+                    className="h-8 text-xs bg-black/20 w-20"
+                  />
+                </div>
+              )}
 
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="line-style" className="text-xs">
-                  Estilo Línea
-                </Label>
-                <Select
-                  value={styleOptions.lineStyle}
-                  onValueChange={(value: StyleOptions['lineStyle']) => setStyleOptions(prev => ({ ...prev, lineStyle: value }))}
-                >
-                  <SelectTrigger id="line-style" className="h-8 text-xs bg-black/20 w-28">
-                    <SelectValue placeholder="Seleccionar estilo" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-gray-700 text-white border-gray-600">
-                    <SelectItem value="solid" className="text-xs">Continua</SelectItem>
-                    <SelectItem value="dashed" className="text-xs">Trazos</SelectItem>
-                    <SelectItem value="dotted" className="text-xs">Puntos</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              {isLine && (
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="line-style" className="text-xs">
+                    Estilo Línea
+                  </Label>
+                  <Select
+                    value={styleOptions.lineStyle}
+                    onValueChange={(value: StyleOptions['lineStyle']) => setStyleOptions(prev => ({ ...prev, lineStyle: value }))}
+                  >
+                    <SelectTrigger id="line-style" className="h-8 text-xs bg-black/20 w-28">
+                      <SelectValue placeholder="Seleccionar estilo" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-gray-700 text-white border-gray-600">
+                      <SelectItem value="solid" className="text-xs">Continua</SelectItem>
+                      <SelectItem value="dashed" className="text-xs">Trazos</SelectItem>
+                      <SelectItem value="dotted" className="text-xs">Puntos</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
 
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="line-width" className="text-xs">
@@ -207,7 +224,7 @@ const StyleEditorDialog: React.FC<StyleEditorDialogProps> = ({
                 <Input
                   id="line-width"
                   type="number"
-                  min="1"
+                  min="0"
                   max="20"
                   value={styleOptions.lineWidth}
                   onChange={(e) => setStyleOptions(prev => ({ ...prev, lineWidth: Number(e.target.value) }))}

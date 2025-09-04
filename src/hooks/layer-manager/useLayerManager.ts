@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useCallback, useEffect } from 'react';
@@ -13,7 +12,7 @@ import type { Geometry } from 'ol/geom';
 import { useToast } from "@/hooks/use-toast";
 import { findSentinel2Footprints } from '@/services/sentinel';
 import { findLandsatFootprints } from '@/services/landsat';
-import type { MapLayer, VectorMapLayer, PlainFeatureData, LabelOptions } from '@/lib/types';
+import type { MapLayer, VectorMapLayer, PlainFeatureData, LabelOptions, StyleOptions } from '@/lib/types';
 import { nanoid } from 'nanoid';
 import { Style, Stroke, Fill, Circle as CircleStyle, Text as TextStyle } from 'ol/style';
 import { transformExtent } from 'ol/proj';
@@ -368,7 +367,7 @@ export const useLayerManager = ({
     }));
   }, [mapRef]);
 
-  const changeLayerStyle = useCallback((layerId: string, styleOptions: { strokeColor?: string; fillColor?: string; lineStyle?: 'solid' | 'dashed' | 'dotted'; lineWidth?: number }) => {
+  const changeLayerStyle = useCallback((layerId: string, styleOptions: StyleOptions) => {
     setLayers(prevLayers => {
         const layer = prevLayers.find(l => l.id === layerId);
         if (!layer || !(layer.olLayer instanceof VectorLayer)) {
@@ -438,7 +437,12 @@ export const useLayerManager = ({
         if (styleOptions.lineWidth) {
             styleChanged = true;
             stroke.setWidth(styleOptions.lineWidth);
-            if (image.getStroke()) image.getStroke().setWidth(styleOptions.lineWidth > 3 ? styleOptions.lineWidth / 2 : 1.5);
+            if (image.getStroke()) image.getStroke().setWidth(styleOptions.lineWidth);
+        }
+
+        if (styleOptions.pointSize) {
+            styleChanged = true;
+            image.setRadius(styleOptions.pointSize);
         }
     
         if (styleOptions.lineStyle) {
@@ -706,12 +710,12 @@ export const useLayerManager = ({
 
     try {
       if (format === 'shp') {
-        const geojsonFormat = new GeoJSON({
-            dataProjection: 'EPSG:4326',
-            featureProjection: 'EPSG:3857'
-        });
-        const geojson = geojsonFormat.writeFeaturesObject(features);
-        // shpjs expects features array
+        // shpjs library expects features to be in a GeoJSON FeatureCollection format and in EPSG:4326
+        const geojsonFormat = new GeoJSON();
+        const clonedFeatures = features.map(f => f.clone());
+        clonedFeatures.forEach(f => f.getGeometry()?.transform('EPSG:3857', 'EPSG:4326'));
+        const geojson = geojsonFormat.writeFeaturesObject(clonedFeatures);
+
         const shpBuffer = await shp.write(geojson.features, 'GEOMETRY', {});
         const zip = new JSZip();
         zip.file(`${layerName}.zip`, shpBuffer);
@@ -722,28 +726,24 @@ export const useLayerManager = ({
         link.click();
         URL.revokeObjectURL(link.href);
         link.remove();
+
       } else {
         let textData: string;
         let mimeType: string;
         let extension: string;
 
-        if (format === 'geojson') {
-          const geojsonFormat = new GeoJSON({
-              dataProjection: 'EPSG:4326',
-              featureProjection: 'EPSG:3857'
-          });
-          textData = geojsonFormat.writeFeatures(features, {
-            decimals: 7,
-          });
-          mimeType = 'application/geo+json';
-          extension = 'geojson';
-        } else { // kml
-          const kmlFormat = new KML({ extractStyles: true, showPointNames: true });
-          textData = kmlFormat.writeFeatures(features, {
+        const writeOptions = {
             dataProjection: 'EPSG:4326',
             featureProjection: 'EPSG:3857',
             decimals: 7,
-          });
+        };
+
+        if (format === 'geojson') {
+          textData = new GeoJSON().writeFeatures(features, writeOptions);
+          mimeType = 'application/geo+json';
+          extension = 'geojson';
+        } else { // kml
+          textData = new KML({ extractStyles: true, showPointNames: true }).writeFeatures(features, writeOptions);
           mimeType = 'application/vnd.google-earth.kml+xml';
           extension = 'kml';
         }
@@ -904,7 +904,7 @@ export const useLayerManager = ({
     renameLayer,
     isDrawingSourceEmptyOrNotPolygon,
     handleExtractByPolygon,
-    handleExtractBySelection,
+    handleExtractBySelection: (features: Feature<Geometry>[]) => handleExtractBySelection(features),
     handleExportLayer,
     findSentinel2FootprintsInCurrentView,
     isFindingSentinelFootprints,
