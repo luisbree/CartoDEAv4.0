@@ -153,6 +153,18 @@ export default function GeoMapperClient() {
   const [activeTool, setActiveTool] = useState<ActiveTool>({ type: null, id: null });
   const lastActiveToolRef = useRef<ActiveTool>({ type: 'interaction', id: 'inspect' });
 
+  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+
+  useEffect(() => {
+    const root = window.document.documentElement;
+    root.classList.remove('light', 'dark');
+    root.classList.add(theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme(prevTheme => (prevTheme === 'light' ? 'dark' : 'light'));
+  };
+
   const { panels, handlePanelMouseDown, togglePanelCollapse, togglePanelMinimize } = useFloatingPanels({
     toolsPanelRef,
     legendPanelRef,
@@ -219,7 +231,7 @@ export default function GeoMapperClient() {
   const [isGeeAuthenticated, setIsGeeAuthenticated] = useState(false);
   const [isGeeAuthenticating, setIsGeeAuthenticating] = useState(true); // Start as true
   const [isCapturing, setIsCapturing] = useState(false);
-  const [trelloCardNotification, setTrelloCardNotification] = useState<TrelloCardInfo | null>(null);
+  const [trelloCardNotification, setTrelloCardInfo] = useState<TrelloCardInfo | null>(null);
 
 
   const updateDiscoveredLayerState = useCallback((layerName: string, added: boolean, type: 'wms' | 'wfs') => {
@@ -689,8 +701,9 @@ export default function GeoMapperClient() {
 
       <div className="bg-gray-700/90 backdrop-blur-sm shadow-md p-2 z-20 flex items-center gap-2">
         <div 
+          onClick={toggleTheme}
           className="relative w-8 h-8 bg-black rounded-full flex-shrink-0 border border-white/80 flex items-center justify-center cursor-pointer" 
-          title="Logo Placeholder"
+          title="Cambiar Tema (Claro/Oscuro)"
         >
           <div className="absolute w-full h-full rounded-full border border-white/70 scale-75"></div>
           <div className="absolute w-full h-full rounded-full border border-white/50 scale-50"></div>
@@ -964,7 +977,7 @@ export default function GeoMapperClient() {
             onToggleCollapse={() => togglePanelCollapse('trello')}
             onClosePanel={() => togglePanelMinimize('trello')}
             onMouseDownHeader={(e) => handlePanelMouseDown(e, 'trello')}
-            onSetSelectedCard={setTrelloCardNotification}
+            onSetSelectedCard={setTrelloCardInfo}
             style={{ top: `${panels.trello.position.y}px`, left: `${panels.trello.position.x}px`, zIndex: panels.trello.zIndex }}
           />
         )}
