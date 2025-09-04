@@ -594,7 +594,8 @@ export default function GeoMapperClient() {
     try {
         const [lon, lat] = transform(center, view.getProjection(), 'EPSG:4326');
         const url = `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${lat},${lon}`;
-        window.open(url, '_blank', 'noopener,noreferrer');
+        const windowFeatures = "popup=true,width=800,height=600,scrollbars=yes,resizable=yes";
+        window.open(url, '_blank', windowFeatures);
     } catch (error) {
         console.error("Error transforming coordinates for Street View:", error);
         toast({ description: "Error al obtener las coordenadas para Street View.", variant: "destructive" });
@@ -839,6 +840,8 @@ export default function GeoMapperClient() {
             osmCategoriesForSelection={osmCategoriesForSelection}
             selectedOSMCategoryIds={osmDataHook.selectedOSMCategoryIds}
             onSelectedOSMCategoriesChange={osmDataHook.setSelectedOSMCategoryIds}
+            isDownloading={osmDataHook.isDownloading}
+            onDownloadOSMLayers={osmDataHook.handleDownloadOSMLayers}
             osmQueryHook={osmQueryHook}
             style={{ top: `${panels.tools.position.y}px`, left: `${panels.tools.position.x}px`, zIndex: panels.tools.zIndex }}
           />
