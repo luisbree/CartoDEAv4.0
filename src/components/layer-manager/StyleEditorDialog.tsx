@@ -25,6 +25,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { StyleOptions } from '@/lib/types';
+import { Slider } from '../ui/slider';
 
 
 interface StyleEditorDialogProps {
@@ -51,6 +52,9 @@ const colorOptions = [
 
 const isValidHex = (color: string) => /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/.test(color);
 
+const hexToDecimal = (hex: string) => parseInt(hex.replace(/^#/, ''), 16);
+const decimalToHex = (dec: number) => '#' + dec.toString(16).padStart(6, '0');
+
 interface ColorPickerProps {
   value: string;
   onChange: (value: string) => void;
@@ -58,14 +62,15 @@ interface ColorPickerProps {
 
 const ColorPicker: React.FC<ColorPickerProps> = ({ value, onChange }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const [customColorInput, setCustomColorInput] = useState('');
+  const [customColorInput, setCustomColorInput] = useState('#000000');
   
   useEffect(() => {
     if (isOpen) {
       if (isValidHex(value)) {
         setCustomColorInput(value);
       } else {
-        setCustomColorInput('#000000');
+        const hexFromName = colorOptions.find(c => c.value === value)?.hex;
+        setCustomColorInput(hexFromName || '#000000');
       }
     }
   }, [isOpen, value]);
@@ -78,6 +83,21 @@ const ColorPicker: React.FC<ColorPickerProps> = ({ value, onChange }) => {
           setIsOpen(false);
       }
   };
+  
+  const handleSliderChange = (value: number[]) => {
+      setCustomColorInput(decimalToHex(value[0]));
+  };
+  
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const val = e.target.value;
+      if (val.startsWith('#')) {
+          setCustomColorInput(val);
+      } else {
+          setCustomColorInput(`#${val}`);
+      }
+  };
+
+  const sliderValue = isValidHex(customColorInput) ? hexToDecimal(customColorInput) : 0;
 
   return (
     <Popover open={isOpen} onOpenChange={setIsOpen}>
@@ -106,13 +126,13 @@ const ColorPicker: React.FC<ColorPickerProps> = ({ value, onChange }) => {
           ))}
         </div>
         <div className="mt-3 pt-3 border-t border-gray-600 space-y-2">
-            <Label className="text-xs font-medium text-white/90">Color Hex</Label>
+            <Label className="text-xs font-medium text-white/90">Color Personalizado</Label>
             <div className="flex items-center gap-2">
                  <div className="w-6 h-6 rounded-md border border-white/30" style={{ backgroundColor: isValidHex(customColorInput) ? customColorInput : 'transparent' }} />
                  <Input 
                     type="text" 
                     value={customColorInput}
-                    onChange={(e) => setCustomColorInput(e.target.value)}
+                    onChange={handleInputChange}
                     className="h-8 text-xs bg-black/20 w-24 text-white/90"
                     placeholder="#RRGGBB"
                  />
@@ -120,6 +140,13 @@ const ColorPicker: React.FC<ColorPickerProps> = ({ value, onChange }) => {
                     Aplicar
                  </Button>
             </div>
+            <Slider
+                value={[sliderValue]}
+                onValueChange={handleSliderChange}
+                max={16777215} // #FFFFFF
+                step={1}
+                className="w-full"
+            />
         </div>
       </PopoverContent>
     </Popover>
@@ -196,7 +223,7 @@ const StyleEditorDialog: React.FC<StyleEditorDialogProps> = ({
                 </div>
               )}
 
-              {isLine && (
+              {(isLine || isPolygon) && (
                 <div className="flex flex-col gap-1.5">
                   <Label htmlFor="line-style" className="text-xs">
                     Estilo Línea
