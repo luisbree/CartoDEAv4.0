@@ -488,7 +488,8 @@ export default function GeoMapperClient() {
                     strokeColor: styleRequest.strokeColor,
                     fillColor: styleRequest.fillColor,
                     lineStyle: styleRequest.lineStyle,
-                    lineWidth: styleRequest.lineWidth
+                    lineWidth: styleRequest.lineWidth,
+                    pointSize: 5, // Default point size
                 });
             } else {
                 toast({description: `Drax intentó aplicar un estilo a una capa no encontrada: ${styleRequest.layerName}`});
@@ -687,7 +688,14 @@ export default function GeoMapperClient() {
     <div className="flex h-screen w-screen flex-col bg-background text-foreground">
 
       <div className="bg-gray-700/90 backdrop-blur-sm shadow-md p-2 z-20 flex items-center gap-2">
-        <div className="w-8 h-8 bg-gray-600/50 rounded-md flex-shrink-0" title="Placeholder para Logo"></div>
+        <div 
+          className="relative w-8 h-8 bg-black rounded-full flex-shrink-0 border border-white/80 flex items-center justify-center cursor-pointer" 
+          title="Logo Placeholder"
+        >
+          <div className="absolute w-full h-full rounded-full border border-white/70 scale-75"></div>
+          <div className="absolute w-full h-full rounded-full border border-white/50 scale-50"></div>
+          <div className="absolute w-full h-full rounded-full border border-white/30 scale-25"></div>
+        </div>
         <TooltipProvider delayDuration={200}>
           <Tooltip>
             <TooltipTrigger asChild>
