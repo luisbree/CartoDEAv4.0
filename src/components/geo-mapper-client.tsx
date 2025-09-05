@@ -42,6 +42,7 @@ import BaseLayerSelector from '@/components/layer-manager/BaseLayerSelector';
 import BaseLayerControls from '@/components/layer-manager/BaseLayerControls';
 import { StreetViewIcon } from '@/components/icons/StreetViewIcon';
 import TrelloCardNotification from '@/components/trello-integration/TrelloCardNotification';
+import { DphLogoIcon } from '@/components/icons/DphLogoIcon';
 
 
 import { useOpenLayersMap } from '@/hooks/map-core/useOpenLayersMap';
@@ -153,8 +154,6 @@ export default function GeoMapperClient() {
 
   const [activeTool, setActiveTool] = useState<ActiveTool>({ type: null, id: null });
   const lastActiveToolRef = useRef<ActiveTool>({ type: 'interaction', id: 'inspect' });
-
-  const [isLogoInverted, setIsLogoInverted] = useState(false);
 
   const { panels, handlePanelMouseDown, togglePanelCollapse, togglePanelMinimize } = useFloatingPanels({
     toolsPanelRef,
@@ -691,18 +690,7 @@ export default function GeoMapperClient() {
     <div className="flex h-screen w-screen flex-col bg-background text-foreground">
 
       <div className="bg-gray-700/90 backdrop-blur-sm shadow-md p-2 z-20 flex items-center gap-2">
-        <div 
-          onClick={() => setIsLogoInverted(prev => !prev)}
-          className={cn(
-            "relative w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center cursor-pointer transition-colors duration-200",
-            isLogoInverted ? "bg-white border-black/80" : "bg-black border-white/80"
-          )} 
-          title="Invertir Colores del Logo"
-        >
-          <div className={cn("absolute w-full h-full rounded-full border scale-75 transition-colors duration-200", isLogoInverted ? "border-black/70" : "border-white/70")}></div>
-          <div className={cn("absolute w-full h-full rounded-full border scale-50 transition-colors duration-200", isLogoInverted ? "border-black/50" : "border-white/50")}></div>
-          <div className={cn("absolute w-full h-full rounded-full border scale-25 transition-colors duration-200", isLogoInverted ? "border-black/30" : "border-white/30")}></div>
-        </div>
+        <DphLogoIcon className="h-8 w-8 flex-shrink-0" />
         <TooltipProvider delayDuration={200}>
           <Tooltip>
             <TooltipTrigger asChild>
