@@ -118,6 +118,7 @@ const LabelEditorDialog: React.FC<LabelEditorDialogProps> = ({
     textColor: 'negro',
     outlineColor: 'blanco',
     placement: 'horizontal',
+    offsetY: 0,
   });
 
   const attributeFields = useMemo(() => {
@@ -148,13 +149,7 @@ const LabelEditorDialog: React.FC<LabelEditorDialogProps> = ({
   }, [layer]);
 
   useEffect(() => {
-    // Initialize state from layer's current label options if they exist
-    const existingOptions = layer?.olLayer.get('labelOptions');
-    if (existingOptions) {
-      setLabelOptions({ placement: 'horizontal', ...existingOptions }); // Ensure placement has a default
-    } else {
-      // Reset to default if no options exist
-       setLabelOptions({
+    const defaultOptions: LabelOptions = {
         enabled: false,
         field: attributeFields[0] || null,
         fontSize: 12,
@@ -162,7 +157,14 @@ const LabelEditorDialog: React.FC<LabelEditorDialogProps> = ({
         textColor: 'negro',
         outlineColor: 'blanco',
         placement: 'horizontal',
-      });
+        offsetY: 0,
+    };
+    
+    const existingOptions = layer?.olLayer.get('labelOptions');
+    if (existingOptions) {
+      setLabelOptions({ ...defaultOptions, ...existingOptions });
+    } else {
+      setLabelOptions(defaultOptions);
     }
   }, [isOpen, layer, attributeFields]);
 
@@ -257,23 +259,44 @@ const LabelEditorDialog: React.FC<LabelEditorDialogProps> = ({
             </div>
           </div>
           {isLineLayer && (
-            <div className="space-y-1.5 pt-2 border-t border-gray-700/60">
-                <Label htmlFor="label-placement" className="text-xs">
-                  Alineación de Etiqueta (Líneas)
-                </Label>
-                <Select
-                  value={labelOptions.placement}
-                  onValueChange={(value: 'horizontal' | 'parallel') => setLabelOptions(prev => ({ ...prev, placement: value }))}
-                  disabled={!labelOptions.enabled}
-                >
-                  <SelectTrigger id="label-placement" className="h-8 text-xs bg-black/20 w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-gray-700 text-white border-gray-600">
-                    <SelectItem value="horizontal" className="text-xs">Horizontal</SelectItem>
-                    <SelectItem value="parallel" className="text-xs">Paralelo a la línea</SelectItem>
-                  </SelectContent>
-                </Select>
+            <div className="space-y-3 pt-2 border-t border-gray-700/60">
+                <div className="flex items-end gap-3">
+                    <div className="flex-grow space-y-1.5">
+                        <Label htmlFor="label-placement" className="text-xs">
+                          Alineación de Etiqueta (Líneas)
+                        </Label>
+                        <Select
+                          value={labelOptions.placement}
+                          onValueChange={(value: 'horizontal' | 'parallel') => setLabelOptions(prev => ({ ...prev, placement: value }))}
+                          disabled={!labelOptions.enabled}
+                        >
+                          <SelectTrigger id="label-placement" className="h-8 text-xs bg-black/20 w-full">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent className="bg-gray-700 text-white border-gray-600">
+                            <SelectItem value="horizontal" className="text-xs">Horizontal</SelectItem>
+                            <SelectItem value="parallel" className="text-xs">Paralelo a la línea</SelectItem>
+                          </SelectContent>
+                        </Select>
+                    </div>
+                    {labelOptions.placement === 'parallel' && (
+                         <div className="space-y-1.5">
+                            <Label htmlFor="offset-y" className="text-xs">
+                                Desplazamiento Y (px)
+                            </Label>
+                            <Input
+                                id="offset-y"
+                                type="number"
+                                step="1"
+                                value={labelOptions.offsetY}
+                                onChange={(e) => setLabelOptions(prev => ({ ...prev, offsetY: Number(e.target.value) }))}
+                                className="h-8 text-xs bg-black/20 w-28"
+                                disabled={!labelOptions.enabled}
+                                title="Valores positivos hacia arriba, negativos hacia abajo"
+                            />
+                        </div>
+                    )}
+                </div>
             </div>
           )}
         </div>

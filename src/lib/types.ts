@@ -90,6 +90,7 @@ export interface LabelOptions {
     textColor: string;
     outlineColor: string;
     placement: 'horizontal' | 'parallel';
+    offsetY: number;
 }
 
 export interface TrelloCardInfo {
