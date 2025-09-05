@@ -6,7 +6,7 @@ export function DphLogoIcon(props: SVGProps<SVGSVGElement>) {
       <defs>
         <style>
           {`
-            .cls-1, .cls-2 { fill: #1d1d1b; }
+            .cls-1, .cls-2 { fill: #fff; }
             .cls-2 { stroke: #fff; stroke-miterlimit: 10; stroke-width: 0.5px; }
           `}
         </style>
