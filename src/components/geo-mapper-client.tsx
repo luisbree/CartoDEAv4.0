@@ -697,7 +697,7 @@ export default function GeoMapperClient() {
               <Button
                 variant={"outline"}
                 size="icon"
-                className={`h-8 w-8 focus-visible:ring-primary ${
+                className={`h-8 w-8 focus-visible:ring-primary flex-shrink-0 ${
                   !panels.legend.isMinimized
                     ? 'bg-primary text-primary-foreground hover:bg-primary/90 border-primary/80'
                     : 'bg-gray-700/80 text-white hover:bg-gray-600/90 border-gray-600/70'
@@ -713,14 +713,19 @@ export default function GeoMapperClient() {
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
-        <LocationSearch onLocationSelect={handleLocationSelection} className="max-w-sm" />
-        <div className="max-w-sm w-full">
-            <BaseLayerSelector
-                availableBaseLayers={availableBaseLayersForSelect}
-                activeBaseLayerId={activeBaseLayerId}
-                onChangeBaseLayer={handleChangeBaseLayer}
-            />
+
+        {/* Search and Layer Selector Container */}
+        <div className="flex-grow flex items-center gap-2 min-w-0">
+            <LocationSearch onLocationSelect={handleLocationSelection} className="flex-shrink min-w-[150px] w-full max-w-sm" />
+            <div className="flex-shrink-0 w-full max-w-[220px]">
+                <BaseLayerSelector
+                    availableBaseLayers={availableBaseLayersForSelect}
+                    activeBaseLayerId={activeBaseLayerId}
+                    onChangeBaseLayer={handleChangeBaseLayer}
+                />
+            </div>
         </div>
+
         <DropdownMenu>
             <DropdownMenuTrigger asChild>
                 <Button
@@ -761,7 +766,7 @@ export default function GeoMapperClient() {
         </Button>
 
          {/* The rest of the panel buttons */}
-        <div className="flex flex-row space-x-1 ml-auto">
+        <div className="flex flex-row space-x-1 ml-auto flex-shrink-0">
           <TooltipProvider delayDuration={200}>
             {panelToggleConfigs.map((panelConfig) => {
               const panelState = panels[panelConfig.id as keyof typeof panels];
