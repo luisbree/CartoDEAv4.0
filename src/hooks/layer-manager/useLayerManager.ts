@@ -494,7 +494,6 @@ export const useLayerManager = ({
             if (part.type === 'field') {
                 return feature.get(part.value) || '';
             }
-            // All other types, including 'text' and 'newline', use their value directly
             return part.value;
         }).join('');
 
@@ -503,17 +502,19 @@ export const useLayerManager = ({
         }
 
         const geometryType = feature.getGeometry()?.getType();
-
+        
         const textStyle = new TextStyle({
           text: labelText,
           font: `${labelOptions.fontSize}px ${labelOptions.fontFamily}`,
           fill: new Fill({ color: textColor }),
-          stroke: new Stroke({ color: outlineColor, width: 2 }),
+          stroke: new Stroke({ color: outlineColor, width: 2.5 }),
           textAlign: geometryType === 'Point' ? 'left' : 'center',
-          textBaseline: geometryType === 'Point' ? 'middle' : 'middle',
+          textBaseline: 'middle',
           offsetX: geometryType === 'Point' ? 10 : 0,
           offsetY: -labelOptions.offsetY,
           placement: labelOptions.placement === 'parallel' && (geometryType === 'LineString' || geometryType === 'MultiLineString') ? 'line' : 'point',
+          overflow: labelOptions.overflow, // For polygons
+          backgroundStroke: labelOptions.overflow ? new Stroke({ color: textColor, width: 0.5 }) : undefined, // Leader line
         });
 
         newStyle.setText(textStyle);

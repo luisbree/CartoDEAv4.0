@@ -97,6 +97,7 @@ export interface LabelOptions {
     outlineColor: string;
     placement: 'horizontal' | 'parallel';
     offsetY: number;
+    overflow: boolean; // For polygon labels to draw outside
 }
 
 
