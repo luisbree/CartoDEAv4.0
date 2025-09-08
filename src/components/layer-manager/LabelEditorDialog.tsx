@@ -29,7 +29,6 @@ import type { LabelOptions, LabelPart, VectorMapLayer } from '@/lib/types';
 import { Switch } from '../ui/switch';
 import { GripVertical, Plus, Trash2, Type, Hash, CornerDownLeft } from 'lucide-react';
 import { nanoid } from 'nanoid';
-import { Textarea } from '../ui/textarea';
 
 
 const colorOptions = [
@@ -277,12 +276,11 @@ const LabelEditorDialog: React.FC<LabelEditorDialogProps> = ({
                                 </Select>
                             )}
                             {part.type === 'text' && (
-                                <Textarea 
+                                <Input 
                                     value={part.value} 
                                     onChange={(e) => updateLabelPart(part.id, e.target.value)} 
-                                    className="text-xs flex-grow bg-black/30 min-h-[28px] h-auto resize-y" 
+                                    className="h-7 text-xs flex-grow bg-black/30" 
                                     placeholder="Texto..."
-                                    rows={1}
                                 />
                             )}
                             {part.type === 'newline' && (
@@ -425,3 +423,5 @@ const LabelEditorDialog: React.FC<LabelEditorDialogProps> = ({
 };
 
 export default LabelEditorDialog;
+
+    
