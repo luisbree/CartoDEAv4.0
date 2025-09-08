@@ -29,10 +29,15 @@ type BaseLayerDefinition = {
   name: string;
   band?: Band;
   parentLayerId?: string;
-  createLayer?: () => TileLayer<XYZ | OSM>;
+  createLayer?: () => TileLayer<XYZ | OSM> | null;
 }
 
 export const BASE_LAYER_DEFINITIONS: readonly BaseLayerDefinition[] = [
+  {
+    id: 'none',
+    name: 'Sin capa base',
+    createLayer: () => null, // This option doesn't create a layer
+  },
   {
     id: 'osm-standard',
     name: 'OpenStreetMap',
@@ -212,10 +217,13 @@ const MapView: React.FC<MapViewProps> = ({ setMapInstanceAndElement, onMapClick,
       .filter(def => def.createLayer)
       .map(def => {
         const layer = def.createLayer!();
-        layer.setVisible(def.id === (activeBaseLayerId || BASE_LAYER_DEFINITIONS[0].id));
-        baseLayerRefs.current[def.id] = layer;
-        return layer;
-    });
+        if (layer) { // Check if the layer is not null
+          layer.setVisible(def.id === (activeBaseLayerId || BASE_LAYER_DEFINITIONS[0].id));
+          baseLayerRefs.current[def.id] = layer;
+          return layer;
+        }
+        return null;
+    }).filter((l): l is TileLayer<any> => l !== null);
 
     const map = new OLMap({
       target: mapElementRef.current,
@@ -271,6 +279,14 @@ const MapView: React.FC<MapViewProps> = ({ setMapInstanceAndElement, onMapClick,
   useEffect(() => {
     if (!olMapInstanceRef.current || !activeBaseLayerId) return;
 
+    if (activeBaseLayerId === 'none') {
+      // If "no base layer" is selected, hide all base layers
+      Object.values(baseLayerRefs.current).forEach(layer => {
+        layer.setVisible(false);
+      });
+      return;
+    }
+
     const selectedDef = BASE_LAYER_DEFINITIONS.find(d => d.id === activeBaseLayerId);
     if (!selectedDef) return;
 
@@ -304,3 +320,4 @@ const MapView: React.FC<MapViewProps> = ({ setMapInstanceAndElement, onMapClick,
 };
 
 export default MapView;
+

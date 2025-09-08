@@ -170,7 +170,7 @@ export default function GeoMapperClient() {
     panelPadding: PANEL_PADDING,
   });
 
-  const [activeBaseLayerId, setActiveBaseLayerId] = useState<string>(BASE_LAYER_DEFINITIONS[0].id);
+  const [activeBaseLayerId, setActiveBaseLayerId] = useState<string>(BASE_LAYER_DEFINITIONS[1].id); // Start with OSM Standard
   const [baseLayerSettings, setBaseLayerSettings] = useState<BaseLayerSettings>({
     opacity: 1,
     brightness: 100,
@@ -999,3 +999,4 @@ export default function GeoMapperClient() {
     </div>
   );
 }
+
