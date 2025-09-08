@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -24,8 +25,10 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import type { LabelOptions, VectorMapLayer } from '@/lib/types';
+import type { LabelOptions, LabelPart, VectorMapLayer } from '@/lib/types';
 import { Switch } from '../ui/switch';
+import { GripVertical, Plus, Trash2, Type, Hash } from 'lucide-react';
+import { nanoid } from 'nanoid';
 
 const colorOptions = [
   { value: 'transparent', label: 'Sin color', hex: 'rgba(0,0,0,0)', iconClass: "bg-transparent border border-dashed border-white/50 bg-[conic-gradient(from_90deg_at_1px_1px,#fff_90deg,rgb(228,228,231)_0)]" },
@@ -112,7 +115,7 @@ const LabelEditorDialog: React.FC<LabelEditorDialogProps> = ({
 }) => {
   const [labelOptions, setLabelOptions] = useState<LabelOptions>({
     enabled: false,
-    field: null,
+    labelParts: [],
     fontSize: 12,
     fontFamily: 'sans-serif',
     textColor: 'negro',
@@ -120,6 +123,8 @@ const LabelEditorDialog: React.FC<LabelEditorDialogProps> = ({
     placement: 'horizontal',
     offsetY: 0,
   });
+
+  const [draggedItem, setDraggedItem] = useState<string | null>(null);
 
   const attributeFields = useMemo(() => {
     const source = layer?.olLayer.getSource();
@@ -130,7 +135,7 @@ const LabelEditorDialog: React.FC<LabelEditorDialogProps> = ({
     const keys = new Set<string>();
     features.forEach(feature => {
         Object.keys(feature.getProperties()).forEach(key => {
-            if (key !== 'geometry') { // Exclude geometry
+            if (key !== 'geometry') {
                 keys.add(key);
             }
         });
@@ -142,8 +147,7 @@ const LabelEditorDialog: React.FC<LabelEditorDialogProps> = ({
     const source = layer?.olLayer.getSource();
     if (!source) return false;
     const features = source.getFeatures();
-    if (features.length === 0) return false; // Default to false if no features to check
-    // Check the first feature's geometry type
+    if (features.length === 0) return false;
     const geomType = features[0].getGeometry()?.getType();
     return geomType === 'LineString' || geomType === 'MultiLineString';
   }, [layer]);
@@ -151,7 +155,7 @@ const LabelEditorDialog: React.FC<LabelEditorDialogProps> = ({
   useEffect(() => {
     const defaultOptions: LabelOptions = {
         enabled: false,
-        field: attributeFields[0] || null,
+        labelParts: attributeFields.length > 0 ? [{ id: nanoid(), type: 'field', value: attributeFields[0] }] : [],
         fontSize: 12,
         fontFamily: "'Encode Sans'",
         textColor: 'negro',
@@ -168,13 +172,61 @@ const LabelEditorDialog: React.FC<LabelEditorDialogProps> = ({
     }
   }, [isOpen, layer, attributeFields]);
 
-  const handleApply = () => {
-    onApply(labelOptions);
+  const handleApply = () => { onApply(labelOptions); };
+  
+  const addLabelPart = (type: 'field' | 'text') => {
+    const newPart: LabelPart = {
+        id: nanoid(),
+        type,
+        value: type === 'field' ? (attributeFields[0] || '') : ' '
+    };
+    setLabelOptions(prev => ({ ...prev, labelParts: [...prev.labelParts, newPart] }));
   };
+
+  const updateLabelPart = (id: string, value: string) => {
+    setLabelOptions(prev => ({
+        ...prev,
+        labelParts: prev.labelParts.map(part => part.id === id ? { ...part, value } : part)
+    }));
+  };
+
+  const removeLabelPart = (id: string) => {
+    setLabelOptions(prev => ({
+        ...prev,
+        labelParts: prev.labelParts.filter(part => part.id !== id)
+    }));
+  };
+
+  const onDragStart = (e: React.DragEvent<HTMLLIElement>, id: string) => {
+    setDraggedItem(id);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+  
+  const onDragOver = (e: React.DragEvent<HTMLLIElement>) => {
+    e.preventDefault();
+  };
+
+  const onDrop = (e: React.DragEvent<HTMLLIElement>, dropId: string) => {
+      e.preventDefault();
+      if (!draggedItem) return;
+      const draggedIndex = labelOptions.labelParts.findIndex(p => p.id === draggedItem);
+      const dropIndex = labelOptions.labelParts.findIndex(p => p.id === dropId);
+      
+      const newParts = [...labelOptions.labelParts];
+      const [removed] = newParts.splice(draggedIndex, 1);
+      newParts.splice(dropIndex, 0, removed);
+
+      setLabelOptions(prev => ({...prev, labelParts: newParts}));
+      setDraggedItem(null);
+  };
+  
+  const labelPreview = useMemo(() => {
+      return labelOptions.labelParts.map(part => part.type === 'field' ? `{${part.value}}` : part.value).join('');
+  }, [labelOptions.labelParts]);
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="bg-gray-800 text-white border-gray-700 sm:max-w-[500px] p-4">
+      <DialogContent className="bg-gray-800 text-white border-gray-700 sm:max-w-[550px] p-4">
         <DialogHeader>
           <DialogTitle>Configurar Etiquetas para "{layer.name}"</DialogTitle>
         </DialogHeader>
@@ -188,24 +240,54 @@ const LabelEditorDialog: React.FC<LabelEditorDialogProps> = ({
               <Label htmlFor="label-enabled">Mostrar Etiquetas</Label>
           </div>
           
-          <div className="space-y-1.5">
-            <Label htmlFor="label-field" className="text-xs">
-              Campo para Etiqueta
-            </Label>
-            <Select
-              value={labelOptions.field || ''}
-              onValueChange={(value) => setLabelOptions(prev => ({ ...prev, field: value }))}
-              disabled={!labelOptions.enabled}
-            >
-              <SelectTrigger id="label-field" className="h-8 text-xs bg-black/20 w-full">
-                <SelectValue placeholder="Seleccionar un campo..." />
-              </SelectTrigger>
-              <SelectContent className="bg-gray-700 text-white border-gray-600">
-                {attributeFields.map(field => (
-                  <SelectItem key={field} value={field} className="text-xs">{field}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="space-y-2 p-3 border border-white/10 bg-black/10 rounded-md">
+            <Label className="text-xs font-semibold">Constructor de Etiqueta</Label>
+            <div className="min-h-[100px] bg-black/20 rounded-md p-2">
+                <ul className="space-y-1">
+                    {labelOptions.labelParts.map(part => (
+                        <li 
+                           key={part.id} 
+                           className="flex items-center gap-2 p-1 bg-gray-700/50 rounded-md"
+                           draggable
+                           onDragStart={(e) => onDragStart(e, part.id)}
+                           onDragOver={onDragOver}
+                           onDrop={(e) => onDrop(e, part.id)}
+                           >
+                            <GripVertical className="h-4 w-4 text-gray-400 cursor-grab flex-shrink-0" />
+                            {part.type === 'field' ? (
+                                <Select value={part.value} onValueChange={(value) => updateLabelPart(part.id, value)}>
+                                    <SelectTrigger className="h-7 text-xs flex-grow bg-black/30">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent className="bg-gray-700 text-white border-gray-600">
+                                        {attributeFields.map(field => (
+                                            <SelectItem key={field} value={field} className="text-xs">{field}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            ) : (
+                                <Input 
+                                    value={part.value} 
+                                    onChange={(e) => updateLabelPart(part.id, e.target.value)} 
+                                    className="h-7 text-xs flex-grow bg-black/30" 
+                                    placeholder="Texto..."
+                                />
+                            )}
+                            <Button variant="ghost" size="icon" onClick={() => removeLabelPart(part.id)} className="h-6 w-6 hover:bg-red-500/30 text-red-300">
+                                <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                        </li>
+                    ))}
+                </ul>
+            </div>
+            <div className="flex items-center gap-2">
+                <Button size="sm" onClick={() => addLabelPart('field')} className="h-7 text-xs"><Hash className="mr-1.5 h-3.5 w-3.5" />Añadir Campo</Button>
+                <Button size="sm" onClick={() => addLabelPart('text')} className="h-7 text-xs"><Type className="mr-1.5 h-3.5 w-3.5" />Añadir Texto</Button>
+            </div>
+             <div className="mt-2 pt-2 border-t border-white/10">
+                <Label className="text-xs">Vista Previa:</Label>
+                <p className="text-sm font-mono bg-black/20 p-1.5 rounded-md truncate">{labelPreview || "(Vacío)"}</p>
+            </div>
           </div>
           
           <div className="flex items-end gap-3 w-full justify-around">
@@ -310,3 +392,5 @@ const LabelEditorDialog: React.FC<LabelEditorDialogProps> = ({
 };
 
 export default LabelEditorDialog;
+
+    
