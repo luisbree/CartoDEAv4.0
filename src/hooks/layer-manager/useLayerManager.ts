@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useCallback, useEffect } from 'react';
@@ -521,21 +522,14 @@ export const useLayerManager = ({
         
         // --- LEADER LINE LOGIC ---
         if (labelOptions.overflow && (geometryType === 'Polygon' || geometryType === 'MultiPolygon')) {
-            // This part is complex. We render the style, get the text geometry,
-            // and if it's outside, we add a line style.
-            const labelGeometry = newStyle.getText().getGeometry(feature) as Point;
-            const polygonInteriorPoint = (geometry as any).getInteriorPoint().getCoordinates();
-
-            if (labelGeometry && !geometry.intersectsCoordinate(labelGeometry.getCoordinates())) {
-                const leaderLine = new Style({
-                    geometry: new LineString([polygonInteriorPoint, labelGeometry.getCoordinates()]),
-                    stroke: new Stroke({
-                        color: textColor,
-                        width: 1
-                    })
-                });
-                return [newStyle, leaderLine];
-            }
+            const leaderLine = new Style({
+                geometry: (feature) => (feature.getGeometry() as any).getInteriorPoint(),
+                stroke: new Stroke({
+                    color: textColor,
+                    width: 1
+                })
+            });
+            return [newStyle, leaderLine];
         }
 
         return newStyle;
