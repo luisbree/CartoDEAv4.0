@@ -512,7 +512,7 @@ export const useLayerManager = ({
           textAlign: geometryType === 'Point' ? 'left' : 'center',
           textBaseline: geometryType === 'Point' ? 'middle' : 'middle',
           offsetX: geometryType === 'Point' ? 10 : 0,
-          offsetY: labelOptions.offsetY,
+          offsetY: -labelOptions.offsetY,
           placement: labelOptions.placement === 'parallel' && (geometryType === 'LineString' || geometryType === 'MultiLineString') ? 'line' : 'point',
         });
 
