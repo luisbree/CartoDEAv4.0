@@ -9,7 +9,7 @@ import TileLayer from 'ol/layer/Tile';
 import TileWMS from 'ol/source/TileWMS';
 import XYZ from 'ol/source/XYZ';
 import type Feature from 'ol/Feature';
-import type { Geometry } from 'ol/geom';
+import { Geometry, LineString, Point } from 'ol/geom';
 import { useToast } from "@/hooks/use-toast";
 import { findSentinel2Footprints } from '@/services/sentinel';
 import { findLandsatFootprints } from '@/services/landsat';
@@ -479,9 +479,9 @@ export const useLayerManager = ({
       const textColor = colorMap[labelOptions.textColor] || (isValidHex(labelOptions.textColor) ? labelOptions.textColor : '#000000');
       const outlineColor = colorMap[labelOptions.outlineColor] || (isValidHex(labelOptions.outlineColor) ? labelOptions.outlineColor : '#FFFFFF');
       
-      olLayer.setStyle((feature) => {
+      olLayer.setStyle((feature, resolution) => {
         const baseStyleOrFn = olLayer.get('originalStyle') || originalStyle;
-        const baseStyle = typeof baseStyleOrFn === 'function' ? baseStyleOrFn(feature, 0) : baseStyleOrFn;
+        const baseStyle = typeof baseStyleOrFn === 'function' ? baseStyleOrFn(feature, resolution) : baseStyleOrFn;
         
         if (!baseStyle) return;
 
@@ -491,9 +491,8 @@ export const useLayerManager = ({
         const newStyle = styleToClone.clone();
         
         const labelText = labelOptions.labelParts.map(part => {
-            if (part.type === 'field') {
-                return feature.get(part.value) || '';
-            }
+            if (part.type === 'field') return feature.get(part.value) || '';
+            if (part.type === 'newline') return '\n';
             return part.value;
         }).join('');
 
@@ -501,7 +500,9 @@ export const useLayerManager = ({
             return newStyle; // Return base style if label is empty
         }
 
-        const geometryType = feature.getGeometry()?.getType();
+        const geometry = feature.getGeometry();
+        if (!geometry) return newStyle;
+        const geometryType = geometry.getType();
         
         const textStyle = new TextStyle({
           text: labelText,
@@ -513,11 +514,30 @@ export const useLayerManager = ({
           offsetX: geometryType === 'Point' ? 10 : 0,
           offsetY: -labelOptions.offsetY,
           placement: labelOptions.placement === 'parallel' && (geometryType === 'LineString' || geometryType === 'MultiLineString') ? 'line' : 'point',
-          overflow: labelOptions.overflow, // For polygons
-          backgroundStroke: labelOptions.overflow ? new Stroke({ color: textColor, width: 0.5 }) : undefined, // Leader line
+          overflow: labelOptions.overflow,
         });
-
+        
         newStyle.setText(textStyle);
+        
+        // --- LEADER LINE LOGIC ---
+        if (labelOptions.overflow && (geometryType === 'Polygon' || geometryType === 'MultiPolygon')) {
+            // This part is complex. We render the style, get the text geometry,
+            // and if it's outside, we add a line style.
+            const labelGeometry = newStyle.getText().getGeometry(feature) as Point;
+            const polygonInteriorPoint = (geometry as any).getInteriorPoint().getCoordinates();
+
+            if (labelGeometry && !geometry.intersectsCoordinate(labelGeometry.getCoordinates())) {
+                const leaderLine = new Style({
+                    geometry: new LineString([polygonInteriorPoint, labelGeometry.getCoordinates()]),
+                    stroke: new Stroke({
+                        color: textColor,
+                        width: 1
+                    })
+                });
+                return [newStyle, leaderLine];
+            }
+        }
+
         return newStyle;
       });
       toast({ description: `Etiquetas activadas para "${layer.name}".` });
