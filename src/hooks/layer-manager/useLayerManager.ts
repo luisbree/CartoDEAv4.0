@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useCallback, useEffect } from 'react';
@@ -493,6 +494,7 @@ export const useLayerManager = ({
             if (part.type === 'field') {
                 return feature.get(part.value) || '';
             }
+            // All other types, including 'text' and 'newline', use their value directly
             return part.value;
         }).join('');
 

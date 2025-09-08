@@ -84,7 +84,7 @@ export interface ActiveTool {
 
 export interface LabelPart {
   id: string; // Unique ID for drag-and-drop
-  type: 'field' | 'text';
+  type: 'field' | 'text' | 'newline';
   value: string;
 }
 

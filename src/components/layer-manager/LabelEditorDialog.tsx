@@ -27,8 +27,10 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { LabelOptions, LabelPart, VectorMapLayer } from '@/lib/types';
 import { Switch } from '../ui/switch';
-import { GripVertical, Plus, Trash2, Type, Hash } from 'lucide-react';
+import { GripVertical, Plus, Trash2, Type, Hash, CornerDownLeft } from 'lucide-react';
 import { nanoid } from 'nanoid';
+import { Textarea } from '../ui/textarea';
+
 
 const colorOptions = [
   { value: 'transparent', label: 'Sin color', hex: 'rgba(0,0,0,0)', iconClass: "bg-transparent border border-dashed border-white/50 bg-[conic-gradient(from_90deg_at_1px_1px,#fff_90deg,rgb(228,228,231)_0)]" },
@@ -174,11 +176,11 @@ const LabelEditorDialog: React.FC<LabelEditorDialogProps> = ({
 
   const handleApply = () => { onApply(labelOptions); };
   
-  const addLabelPart = (type: 'field' | 'text') => {
+  const addLabelPart = (type: 'field' | 'text' | 'newline') => {
     const newPart: LabelPart = {
         id: nanoid(),
         type,
-        value: type === 'field' ? (attributeFields[0] || '') : ' '
+        value: type === 'field' ? (attributeFields[0] || '') : type === 'text' ? ' ' : '\n'
     };
     setLabelOptions(prev => ({ ...prev, labelParts: [...prev.labelParts, newPart] }));
   };
@@ -221,7 +223,11 @@ const LabelEditorDialog: React.FC<LabelEditorDialogProps> = ({
   };
   
   const labelPreview = useMemo(() => {
-      return labelOptions.labelParts.map(part => part.type === 'field' ? `{${part.value}}` : part.value).join('');
+      return labelOptions.labelParts.map(part => {
+        if (part.type === 'field') return `{${part.value}}`;
+        if (part.type === 'newline') return '↵';
+        return part.value;
+      }).join('');
   }, [labelOptions.labelParts]);
 
   return (
@@ -254,7 +260,7 @@ const LabelEditorDialog: React.FC<LabelEditorDialogProps> = ({
                            onDrop={(e) => onDrop(e, part.id)}
                            >
                             <GripVertical className="h-4 w-4 text-gray-400 cursor-grab flex-shrink-0" />
-                            {part.type === 'field' ? (
+                            {part.type === 'field' && (
                                 <Select value={part.value} onValueChange={(value) => updateLabelPart(part.id, value)}>
                                     <SelectTrigger className="h-7 text-xs flex-grow bg-black/30">
                                         <SelectValue />
@@ -265,13 +271,20 @@ const LabelEditorDialog: React.FC<LabelEditorDialogProps> = ({
                                         ))}
                                     </SelectContent>
                                 </Select>
-                            ) : (
-                                <Input 
+                            )}
+                            {part.type === 'text' && (
+                                <Textarea 
                                     value={part.value} 
                                     onChange={(e) => updateLabelPart(part.id, e.target.value)} 
-                                    className="h-7 text-xs flex-grow bg-black/30" 
+                                    className="text-xs flex-grow bg-black/30 min-h-[28px] h-auto resize-y" 
                                     placeholder="Texto..."
+                                    rows={1}
                                 />
+                            )}
+                            {part.type === 'newline' && (
+                                <div className="flex items-center justify-center flex-grow bg-black/30 rounded-md h-7 text-xs text-gray-400 italic">
+                                   <CornerDownLeft className="h-3 w-3 mr-2"/> Salto de Línea
+                                </div>
                             )}
                             <Button variant="ghost" size="icon" onClick={() => removeLabelPart(part.id)} className="h-6 w-6 hover:bg-red-500/30 text-red-300">
                                 <Trash2 className="h-3.5 w-3.5" />
@@ -283,6 +296,7 @@ const LabelEditorDialog: React.FC<LabelEditorDialogProps> = ({
             <div className="flex items-center gap-2">
                 <Button size="sm" onClick={() => addLabelPart('field')} className="h-7 text-xs"><Hash className="mr-1.5 h-3.5 w-3.5" />Añadir Campo</Button>
                 <Button size="sm" onClick={() => addLabelPart('text')} className="h-7 text-xs"><Type className="mr-1.5 h-3.5 w-3.5" />Añadir Texto</Button>
+                <Button size="sm" onClick={() => addLabelPart('newline')} className="h-7 text-xs"><CornerDownLeft className="mr-1.5 h-3.5 w-3.5" />Salto de Línea</Button>
             </div>
              <div className="mt-2 pt-2 border-t border-white/10">
                 <Label className="text-xs">Vista Previa:</Label>
@@ -392,5 +406,3 @@ const LabelEditorDialog: React.FC<LabelEditorDialogProps> = ({
 };
 
 export default LabelEditorDialog;
-
-    
