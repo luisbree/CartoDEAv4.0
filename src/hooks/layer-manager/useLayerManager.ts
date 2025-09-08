@@ -474,7 +474,7 @@ export const useLayerManager = ({
 
     const originalStyle = olLayer.getStyle();
 
-    if (labelOptions.enabled && labelOptions.field) {
+    if (labelOptions.enabled && labelOptions.labelParts.length > 0) {
       const textColor = colorMap[labelOptions.textColor] || (isValidHex(labelOptions.textColor) ? labelOptions.textColor : '#000000');
       const outlineColor = colorMap[labelOptions.outlineColor] || (isValidHex(labelOptions.outlineColor) ? labelOptions.outlineColor : '#FFFFFF');
       
@@ -489,10 +489,21 @@ export const useLayerManager = ({
 
         const newStyle = styleToClone.clone();
         
+        const labelText = labelOptions.labelParts.map(part => {
+            if (part.type === 'field') {
+                return feature.get(part.value) || '';
+            }
+            return part.value;
+        }).join('');
+
+        if (!labelText) {
+            return newStyle; // Return base style if label is empty
+        }
+
         const geometryType = feature.getGeometry()?.getType();
 
         const textStyle = new TextStyle({
-          text: String(feature.get(labelOptions.field!) || ''),
+          text: labelText,
           font: `${labelOptions.fontSize}px ${labelOptions.fontFamily}`,
           fill: new Fill({ color: textColor }),
           stroke: new Stroke({ color: outlineColor, width: 2 }),

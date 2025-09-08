@@ -82,9 +82,15 @@ export interface ActiveTool {
   id: DrawToolId | MeasureToolId | InteractionToolId | null;
 }
 
+export interface LabelPart {
+  id: string; // Unique ID for drag-and-drop
+  type: 'field' | 'text';
+  value: string;
+}
+
 export interface LabelOptions {
     enabled: boolean;
-    field: string | null;
+    labelParts: LabelPart[];
     fontSize: number;
     fontFamily: string;
     textColor: string;
@@ -92,6 +98,7 @@ export interface LabelOptions {
     placement: 'horizontal' | 'parallel';
     offsetY: number;
 }
+
 
 export interface TrelloCardInfo {
   name: string;
