@@ -2,7 +2,7 @@
 
 import React, { useRef, useState } from 'react';
 import LayerItem from './LayerItem';
-import type { LabelOptions, MapLayer } from '@/lib/types';
+import type { GraduatedSymbology, LabelOptions, MapLayer } from '@/lib/types';
 import { Layers } from 'lucide-react';
 import type { StyleOptions } from './StyleEditorDialog';
 
@@ -22,6 +22,7 @@ interface LayerListProps {
   onRenameLayer: (layerId: string, newName: string) => void;
   onChangeLayerStyle: (layerId: string, styleOptions: StyleOptions) => void;
   onChangeLayerLabels: (layerId: string, labelOptions: LabelOptions) => void;
+  onApplyGraduatedSymbology: (layerId: string, symbology: GraduatedSymbology) => void;
 
   // Selection props
   selectedLayerIds: string[];
@@ -44,6 +45,7 @@ const LayerList: React.FC<LayerListProps> = ({
   onRenameLayer,
   onChangeLayerStyle,
   onChangeLayerLabels,
+  onApplyGraduatedSymbology,
   selectedLayerIds,
   onLayerClick,
 }) => {
@@ -119,6 +121,7 @@ const LayerList: React.FC<LayerListProps> = ({
           onRenameLayer={onRenameLayer}
           onChangeLayerStyle={onChangeLayerStyle}
           onChangeLayerLabels={onChangeLayerLabels}
+          onApplyGraduatedSymbology={onApplyGraduatedSymbology}
           isDrawingSourceEmptyOrNotPolygon={isDrawingSourceEmptyOrNotPolygon}
           isSelectionEmpty={isSelectionEmpty}
           onSetLayerOpacity={onSetLayerOpacity}

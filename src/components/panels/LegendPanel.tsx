@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useMemo } from 'react';
@@ -7,7 +6,7 @@ import LayerList from '@/components/layer-manager/LayerList';
 import FileUploadControl from '@/components/layer-manager/FileUploadControl';
 import FeatureInteractionToolbar from '@/components/feature-inspection/FeatureInteractionToolbar';
 import { Separator } from '@/components/ui/separator';
-import type { MapLayer, GeoServerDiscoveredLayer, LabelOptions } from '@/lib/types';
+import type { MapLayer, GeoServerDiscoveredLayer, LabelOptions, GraduatedSymbology } from '@/lib/types';
 import { ListTree, Trash2, Database, Search, X as ClearIcon } from 'lucide-react'; 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -51,6 +50,7 @@ interface LegendPanelProps {
   onRenameLayer: (layerId: string, newName: string) => void;
   onChangeLayerStyle: (layerId: string, styleOptions: StyleOptions) => void;
   onChangeLayerLabels: (layerId: string, labelOptions: LabelOptions) => void;
+  onApplyGraduatedSymbology: (layerId: string, symbology: GraduatedSymbology) => void;
 
   onAddLayer: (layer: MapLayer) => void;
 
@@ -75,7 +75,7 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
   panelRef, isCollapsed, onToggleCollapse, onClosePanel, onMouseDownHeader,
   layers, onToggleLayerVisibility, onRemoveLayer, onRemoveLayers, onZoomToLayerExtent, onShowLayerTable,
   onExtractByPolygon, onExtractBySelection, onExportLayer, isDrawingSourceEmptyOrNotPolygon, isSelectionEmpty, onSetLayerOpacity, onReorderLayers, onRenameLayer,
-  onChangeLayerStyle, onChangeLayerLabels,
+  onChangeLayerStyle, onChangeLayerLabels, onApplyGraduatedSymbology,
   onAddLayer, 
   activeTool, onSetActiveTool, onClearSelection,
   discoveredDeasLayers, onAddDeasLayer,
@@ -231,6 +231,7 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
                             onRenameLayer={onRenameLayer}
                             onChangeLayerStyle={onChangeLayerStyle}
                             onChangeLayerLabels={onChangeLayerLabels}
+                            onApplyGraduatedSymbology={onApplyGraduatedSymbology}
                             isDrawingSourceEmptyOrNotPolygon={isDrawingSourceEmptyOrNotPolygon}
                             isSelectionEmpty={isSelectionEmpty}
                             onSetLayerOpacity={onSetLayerOpacity}

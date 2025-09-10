@@ -15,13 +15,14 @@ import {
   DropdownMenuPortal
 } from "@/components/ui/dropdown-menu";
 import { Slider } from "@/components/ui/slider"; 
-import { Eye, EyeOff, Settings2, ZoomIn, Table2, Trash2, Scissors, Percent, GripVertical, CopyPlus, Download, Edit, Palette, Tags } from 'lucide-react';
-import type { LabelOptions, MapLayer } from '@/lib/types';
+import { Eye, EyeOff, Settings2, ZoomIn, Table2, Trash2, Scissors, Percent, GripVertical, CopyPlus, Download, Edit, Palette, Tags, Waypoints } from 'lucide-react';
+import type { GraduatedSymbology, LabelOptions, MapLayer } from '@/lib/types';
 import VectorLayer from 'ol/layer/Vector'; 
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import StyleEditorDialog, { type StyleOptions } from './StyleEditorDialog';
 import LabelEditorDialog from './LabelEditorDialog';
+import GraduatedSymbologyDialog from './GraduatedSymbologyDialog';
 
 
 interface LayerItemProps {
@@ -39,6 +40,7 @@ interface LayerItemProps {
   onRenameLayer: (layerId: string, newName: string) => void;
   onChangeLayerStyle: (layerId: string, styleOptions: StyleOptions) => void;
   onChangeLayerLabels: (layerId: string, labelOptions: LabelOptions) => void;
+  onApplyGraduatedSymbology: (layerId: string, symbology: GraduatedSymbology) => void;
   
   // Drag and Drop props
   isDraggable: boolean;
@@ -71,6 +73,7 @@ const LayerItem: React.FC<LayerItemProps> = ({
   onRenameLayer,
   onChangeLayerStyle,
   onChangeLayerLabels,
+  onApplyGraduatedSymbology,
   isDraggable,
   onDragStart,
   onDragEnd,
@@ -90,6 +93,7 @@ const LayerItem: React.FC<LayerItemProps> = ({
   const [editingName, setEditingName] = useState(layer.name);
   const [isStyleEditorOpen, setIsStyleEditorOpen] = useState(false);
   const [isLabelEditorOpen, setIsLabelEditorOpen] = useState(false);
+  const [isGraduatedEditorOpen, setIsGraduatedEditorOpen] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -145,6 +149,11 @@ const LayerItem: React.FC<LayerItemProps> = ({
     setIsDropdownOpen(false);
   };
 
+  const handleGraduatedSymbologyApply = (symbology: GraduatedSymbology) => {
+    onApplyGraduatedSymbology(layer.id, symbology);
+    setIsGraduatedEditorOpen(false);
+    setIsDropdownOpen(false);
+  };
 
   return (
     <>
@@ -242,6 +251,16 @@ const LayerItem: React.FC<LayerItemProps> = ({
                   </DropdownMenuItem>
               )}
               
+              {isVectorLayer && (
+                 <DropdownMenuItem
+                    className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer"
+                    onSelect={(e) => { e.preventDefault(); setIsGraduatedEditorOpen(true); }}
+                  >
+                    <Waypoints className="mr-2 h-3.5 w-3.5" />
+                    Simbología Graduada
+                  </DropdownMenuItem>
+              )}
+
                {isVectorLayer && (
                  <DropdownMenuItem
                     className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer"
@@ -345,6 +364,14 @@ const LayerItem: React.FC<LayerItemProps> = ({
             isOpen={isLabelEditorOpen}
             onClose={() => setIsLabelEditorOpen(false)}
             onApply={handleLabelChange}
+            layer={layer as any}
+        />
+      )}
+       {isVectorLayer && (
+        <GraduatedSymbologyDialog
+            isOpen={isGraduatedEditorOpen}
+            onClose={() => setIsGraduatedEditorOpen(false)}
+            onApply={handleGraduatedSymbologyApply}
             layer={layer as any}
         />
       )}

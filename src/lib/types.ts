@@ -6,6 +6,18 @@ import type { Style } from 'ol/style';
 import type Feature from 'ol/Feature';
 import type { Geometry } from 'ol/geom';
 
+export type ColorRampId = 'reds' | 'blues' | 'greens' | 'viridis';
+export type ClassificationMethod = 'quantiles';
+
+export interface GraduatedSymbology {
+  field: string;
+  method: ClassificationMethod;
+  classes: number;
+  colorRamp: ColorRampId;
+  breaks: number[]; // The upper bound for each class
+  colors: string[]; // The hex color for each class
+}
+
 export interface MapLayer {
   id: string;
   name: string;
@@ -14,6 +26,7 @@ export interface MapLayer {
   opacity: number;
   type: 'wms' | 'wfs' | 'vector' | 'osm' | 'drawing' | 'sentinel' | 'landsat' | 'gee' | 'geotiff';
   isDeas?: boolean;
+  graduatedSymbology?: GraduatedSymbology;
 }
 
 export interface VectorMapLayer extends MapLayer {
