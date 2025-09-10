@@ -10,7 +10,7 @@ import TileLayer from 'ol/layer/Tile';
 import TileWMS from 'ol/source/TileWMS';
 import XYZ from 'ol/source/XYZ';
 import type Feature from 'ol/Feature';
-import { Geometry, LineString, Point } from 'ol/geom';
+import { Geometry, LineString, Point, Polygon } from 'ol/geom';
 import { useToast } from "@/hooks/use-toast";
 import { findSentinel2Footprints } from '@/services/sentinel';
 import { findLandsatFootprints } from '@/services/landsat';
@@ -475,6 +475,12 @@ export const useLayerManager = ({
     olLayer.set('labelOptions', labelOptions); // Store options for persistence
 
     const originalStyle = olLayer.getStyle();
+    
+    // Store original style if it's not already stored
+    if (!olLayer.get('originalStyle')) {
+        olLayer.set('originalStyle', originalStyle);
+    }
+
 
     if (labelOptions.enabled && labelOptions.labelParts.length > 0) {
       const textColor = colorMap[labelOptions.textColor] || (isValidHex(labelOptions.textColor) ? labelOptions.textColor : '#000000');
@@ -517,21 +523,23 @@ export const useLayerManager = ({
           placement: labelOptions.placement === 'parallel' && (geometryType === 'LineString' || geometryType === 'MultiLineString') ? 'line' : 'point',
           overflow: labelOptions.overflow,
         });
-        
-        newStyle.setText(textStyle);
-        
-        // --- LEADER LINE LOGIC ---
+
+        // --- CORRECT LEADER LINE LOGIC ---
         if (labelOptions.overflow && (geometryType === 'Polygon' || geometryType === 'MultiPolygon')) {
-            const leaderLineStyle = new Style({
-                geometry: (feature) => (feature.getGeometry() as any).getInteriorPoint(),
-                stroke: new Stroke({
-                    color: textColor,
-                    width: 1
-                })
+            const polygonStyle = new Style({
+                fill: newStyle.getFill(),
+                stroke: newStyle.getStroke(),
+                geometry: feature.getGeometry() as Polygon, // Explicitly style the polygon
             });
-            return [newStyle, leaderLineStyle];
+            const textWithLeaderStyle = new Style({
+                text: textStyle,
+                geometry: (feature) => (feature.getGeometry() as Polygon).getInteriorPoint(),
+            });
+
+            return [polygonStyle, textWithLeaderStyle];
         }
         
+        newStyle.setText(textStyle);
         return newStyle;
       });
       toast({ description: `Etiquetas activadas para "${layer.name}".` });
