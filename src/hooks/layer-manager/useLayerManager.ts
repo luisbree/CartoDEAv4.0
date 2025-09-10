@@ -522,16 +522,16 @@ export const useLayerManager = ({
         
         // --- LEADER LINE LOGIC ---
         if (labelOptions.overflow && (geometryType === 'Polygon' || geometryType === 'MultiPolygon')) {
-            const leaderLine = new Style({
+            const leaderLineStyle = new Style({
                 geometry: (feature) => (feature.getGeometry() as any).getInteriorPoint(),
                 stroke: new Stroke({
                     color: textColor,
                     width: 1
                 })
             });
-            return [newStyle, leaderLine];
+            return [newStyle, leaderLineStyle];
         }
-
+        
         return newStyle;
       });
       toast({ description: `Etiquetas activadas para "${layer.name}".` });
