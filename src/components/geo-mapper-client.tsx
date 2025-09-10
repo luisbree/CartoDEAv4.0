@@ -879,6 +879,7 @@ export default function GeoMapperClient() {
             onRenameLayer={layerManagerHook.renameLayer}
             onChangeLayerStyle={layerManagerHook.changeLayerStyle}
             onChangeLayerLabels={layerManagerHook.changeLayerLabels}
+            onApplyGraduatedSymbology={layerManagerHook.applyGraduatedSymbology}
             isDrawingSourceEmptyOrNotPolygon={layerManagerHook.isDrawingSourceEmptyOrNotPolygon}
             isSelectionEmpty={featureInspectionHook.selectedFeatures.length === 0}
             onSetLayerOpacity={layerManagerHook.setLayerOpacity}
@@ -999,4 +1000,3 @@ export default function GeoMapperClient() {
     </div>
   );
 }
-
