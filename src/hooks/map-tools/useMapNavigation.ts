@@ -6,6 +6,7 @@ import type { Map } from 'ol';
 import DragBox from 'ol/interaction/DragBox';
 import type { MapActionToolId } from '@/lib/types';
 import type { Extent } from 'ol/extent';
+import type { EventsKey } from 'ol/events';
 
 interface UseMapNavigationProps {
   mapRef: React.RefObject<Map | null>;
@@ -97,13 +98,15 @@ export const useMapNavigation = ({
   useEffect(() => {
     if (!isMapReady || !mapRef.current) return;
 
-    const view = mapRef.current.getView();
+    const map = mapRef.current;
+    const view = map.getView();
+    let listenerKey: EventsKey | undefined;
     
-    const listener = view.on('moveend', () => {
+    const listener = () => {
         if (isNavigatingHistoryRef.current) {
             return;
         }
-        const newExtent = view.calculateExtent(mapRef.current!.getSize());
+        const newExtent = view.calculateExtent(map.getSize());
         viewHistoryRef.current.push(newExtent);
         
         // Keep history at a reasonable size
@@ -112,16 +115,20 @@ export const useMapNavigation = ({
         }
         
         setCanGoToPrevious(viewHistoryRef.current.length > 1);
-    });
+    };
 
-    // Add initial extent
-    const initialExtent = view.calculateExtent(mapRef.current.getSize()!);
-    viewHistoryRef.current.push(initialExtent);
+    // Use a timeout to capture the initial extent after the view is stable
+    const initialTimeout = setTimeout(() => {
+        const initialExtent = view.calculateExtent(map.getSize()!);
+        viewHistoryRef.current.push(initialExtent);
+        listenerKey = view.on('moveend', listener);
+    }, 100);
+
 
     return () => {
-        // In some environments, the listener key can be an object, so we check.
-        if (typeof listener === 'object' && listener.key) {
-           view.un('moveend', listener.key);
+        clearTimeout(initialTimeout);
+        if (listenerKey) {
+            view.un('moveend', listener);
         }
     };
   }, [isMapReady, mapRef]);
