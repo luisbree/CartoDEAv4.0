@@ -23,33 +23,49 @@ export const useGeoServerLayers = ({
   onLayerStateUpdate,
 }: UseGeoServerLayersProps) => {
   const { toast } = useToast();
+  const [isFetching, setIsFetching] = useState(false);
   
-  const handleFetchGeoServerLayers = useCallback(async (urlOverride: string): Promise<GeoServerDiscoveredLayer[]> => {
+  const handleFetchGeoServerLayers = useCallback(async (urlOverride: string): Promise<GeoServerDiscoveredLayer[] | null> => {
     const urlToUse = urlOverride;
     if (!urlToUse.trim()) {
-      toast({ description: 'Por favor, ingrese una URL de GeoServer válida.' });
-      return [];
+      toast({ description: 'Por favor, ingrese una URL de GeoServer válida.', variant: 'destructive' });
+      return null;
     }
     
+    setIsFetching(true);
     const getCapabilitiesUrl = `${urlToUse.trim()}/wms?service=WMS&version=1.3.0&request=GetCapabilities`;
     const proxyUrl = `/api/geoserver-proxy?url=${encodeURIComponent(getCapabilitiesUrl)}&cacheBust=${Date.now()}`;
 
     try {
       const response = await fetch(proxyUrl);
-      if (!response.ok) {
-        const errorData = await response.text();
-        throw new Error(`Error al obtener capas de GeoServer: ${response.statusText}. Detalles: ${errorData}`);
-      }
+      const text = await response.text(); // Get text response regardless of status
 
-      const text = await response.text();
+      if (!response.ok) {
+          // Attempt to parse XML for a service exception, otherwise show the plain text
+          try {
+              const parser = new DOMParser();
+              const xml = parser.parseFromString(text, "application/xml");
+              const exceptionText = xml.querySelector('ServiceException')?.textContent;
+              if (exceptionText) {
+                  throw new Error(`Error de GeoServer: ${exceptionText.trim()}`);
+              }
+          } catch (e) {} // Ignore parsing errors, fall back to plain text
+          throw new Error(`Error al obtener capas (${response.status}): ${text || response.statusText}`);
+      }
+      
+
       const parser = new DOMParser();
       const xml = parser.parseFromString(text, "application/xml");
-      console.log(xml)
+
       const errorNode = xml.querySelector('ServiceException, ServiceExceptionReport');
       if (errorNode) {
-          throw new Error(`Error en la respuesta de GeoServer: ${errorNode.textContent || 'Error desconocido'}`);
+          throw new Error(`Error en la respuesta de GeoServer: ${errorNode.textContent?.trim() || 'Error desconocido'}`);
       }
       const layerNodes = Array.from(xml.querySelectorAll('Layer[queryable="1"]'));
+
+      if (layerNodes.length === 0) {
+        toast({ description: "El servidor no devolvió ninguna capa WMS consultable." });
+      }
 
       const discoveredLayers: GeoServerDiscoveredLayer[] = layerNodes.map(node => {
           const name = node.querySelector('Name')?.textContent ?? '';
@@ -79,7 +95,6 @@ export const useGeoServerLayers = ({
               }
           }
           
-          // Get default style name
           const styleName = node.querySelector('Style > Name')?.textContent ?? undefined;
 
           return { name, title, bbox, wmsAddedToMap: false, wfsAddedToMap: false, styleName };
@@ -89,12 +104,15 @@ export const useGeoServerLayers = ({
 
     } catch (error: any) {
       console.error("Error fetching GeoServer layers:", error);
-      toast({ description: `Error al conectar con GeoServer: ${error.message}` });
-      return [];
+      toast({ title: "Error de Conexión", description: `${error.message}`, variant: 'destructive', duration: 8000 });
+      return null;
+    } finally {
+      setIsFetching(false);
     }
   }, [toast]);
 
   return {
     handleFetchGeoServerLayers,
+    isFetching,
   };
 };

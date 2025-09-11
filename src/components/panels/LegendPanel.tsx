@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useMemo } from 'react';
@@ -7,7 +8,7 @@ import FileUploadControl from '@/components/layer-manager/FileUploadControl';
 import FeatureInteractionToolbar from '@/components/feature-inspection/FeatureInteractionToolbar';
 import { Separator } from '@/components/ui/separator';
 import type { MapLayer, GeoServerDiscoveredLayer, LabelOptions, GraduatedSymbology } from '@/lib/types';
-import { ListTree, Trash2, Database, Search, X as ClearIcon } from 'lucide-react'; 
+import { ListTree, Trash2, Database, Search, X as ClearIcon, RefreshCw, Loader2 } from 'lucide-react'; 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -61,6 +62,8 @@ interface LegendPanelProps {
   // DEAS props
   discoveredDeasLayers: GeoServerDiscoveredLayer[];
   onAddDeasLayer: (layer: GeoServerDiscoveredLayer) => void;
+  isFetchingDeasLayers: boolean;
+  onReloadDeasLayers: () => void;
 
   style?: React.CSSProperties;
 }
@@ -78,7 +81,7 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
   onChangeLayerStyle, onChangeLayerLabels, onApplyGraduatedSymbology,
   onAddLayer, 
   activeTool, onSetActiveTool, onClearSelection,
-  discoveredDeasLayers, onAddDeasLayer,
+  discoveredDeasLayers, onAddDeasLayer, isFetchingDeasLayers, onReloadDeasLayers,
   style,
 }) => {
   const [selectedLayerIds, setSelectedLayerIds] = useState<string[]>([]);
@@ -246,7 +249,32 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
             {/* --- DEAS Catalog Section --- */}
             <div className="flex flex-col pt-2 basis-1/3">
                 <Separator className="bg-white/10 mb-2" />
-                <h3 className="text-sm font-semibold text-white px-2 pb-2 flex-shrink-0">Capas Predefinidas (DEAS)</h3>
+                <div className="flex items-center justify-between px-2 pb-2 flex-shrink-0">
+                  <h3 className="text-sm font-semibold text-white">Capas Predefinidas (DEAS)</h3>
+                  <TooltipProvider delayDuration={300}>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6 text-white/70 hover:text-white hover:bg-white/10"
+                                onClick={onReloadDeasLayers}
+                                disabled={isFetchingDeasLayers}
+                            >
+                                {isFetchingDeasLayers ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                    <RefreshCw className="h-3.5 w-3.5" />
+                                )}
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="bg-gray-700 text-white border-gray-600">
+                           <p className="text-xs">Recargar capas</p>
+                        </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+
                  <div className="relative mb-2 px-2">
                     <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
                     <Input
@@ -314,7 +342,7 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
                       </Accordion>
                   ) : (
                       <p className="p-4 text-center text-xs text-gray-400">
-                        {discoveredDeasLayers.length === 0 ? "Cargando capas..." : "No se encontraron resultados."}
+                        {isFetchingDeasLayers ? "Cargando capas..." : "No se encontraron resultados."}
                       </p>
                   )}
                   </div>

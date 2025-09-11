@@ -246,6 +246,7 @@ export default function GeoMapperClient() {
   
   const {
     handleFetchGeoServerLayers,
+    isFetching: isFetchingDeasLayers,
   } = useGeoServerLayers({
       onLayerStateUpdate: updateDiscoveredLayerState,
   });
@@ -272,24 +273,30 @@ export default function GeoMapperClient() {
 
   const initialGeoServerUrl = 'http://www.minfra.gba.gob.ar/ambientales/geoserver';
 
+  const loadInitialDeasLayers = useCallback(async () => {
+      try {
+          const discovered = await handleFetchGeoServerLayers(initialGeoServerUrl);
+          if (discovered) {
+              setDiscoveredGeoServerLayers(discovered);
+          }
+      } catch (error) {
+          console.error("Failed to load initial DEAS layers:", error);
+          // Toast is now handled inside the hook for better error details
+      }
+  }, [handleFetchGeoServerLayers]);
+
   // Effect for initial GeoServer layer loading
   useEffect(() => {
-    const loadInitialLayers = async () => {
-      try {
-        const discovered = await handleFetchGeoServerLayers(initialGeoServerUrl);
-        if (discovered && discovered.length > 0) {
-          setDiscoveredGeoServerLayers(discovered);
-        }
-      } catch (error) {
-        console.error("Failed to load initial DEAS layers:", error);
-        toast({ description: `No se pudo obtener la lista de capas de DEAS. Es posible que el asistente no las encuentre.`, variant: 'destructive' });
-      }
-    };
-    
     if (isMapReady) {
-       loadInitialLayers();
+       loadInitialDeasLayers();
     }
-  }, [isMapReady, handleFetchGeoServerLayers, toast]);
+  }, [isMapReady, loadInitialDeasLayers]);
+  
+  const handleReloadDeasLayers = useCallback(async () => {
+    toast({ description: "Recargando capas desde el servidor de DEAS..." });
+    await loadInitialDeasLayers();
+  }, [loadInitialDeasLayers, toast]);
+
 
   // Effect for automatic GEE and Trello authentication on load
   useEffect(() => {
@@ -913,6 +920,8 @@ export default function GeoMapperClient() {
             style={{ top: `${panels.legend.position.y}px`, left: `${panels.legend.position.x}px`, zIndex: panels.legend.zIndex }}
             discoveredDeasLayers={discoveredGeoServerLayers}
             onAddDeasLayer={handleDeasAddWfsLayer}
+            isFetchingDeasLayers={isFetchingDeasLayers}
+            onReloadDeasLayers={handleReloadDeasLayers}
           />
         )}
 
