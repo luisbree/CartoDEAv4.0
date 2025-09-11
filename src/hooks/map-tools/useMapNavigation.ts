@@ -29,7 +29,6 @@ export const useMapNavigation = ({
   const dragBoxInteractionRef = useRef<DragBox | null>(null);
   const [viewHistory, setViewHistory] = useState<Extent[]>([]);
   const isNavigatingHistoryRef = useRef(false);
-  const historyTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Stop any active navigation tool
   const stopTool = useCallback(() => {
@@ -50,21 +49,23 @@ export const useMapNavigation = ({
 
     isNavigatingHistoryRef.current = true;
     
-    // The last element is the current view, so we pop it.
+    // The last element is the current view, so we pop it to get the previous one.
     const newHistory = [...viewHistory];
-    newHistory.pop();
+    newHistory.pop(); 
     const previousExtent = newHistory[newHistory.length - 1];
 
-    mapRef.current?.getView().fit(previousExtent, {
-      duration: 500,
-      callback: () => {
-        setTimeout(() => {
-          isNavigatingHistoryRef.current = false;
-        }, 100);
-      }
-    });
-    
-    setViewHistory(newHistory);
+    if (mapRef.current && previousExtent) {
+        mapRef.current.getView().fit(previousExtent, {
+          duration: 500,
+          callback: () => {
+            // After the animation, allow history to be captured again.
+            setTimeout(() => {
+              isNavigatingHistoryRef.current = false;
+            }, 100); 
+          }
+        });
+        setViewHistory(newHistory);
+    }
 
   }, [mapRef, viewHistory]);
 
@@ -107,38 +108,47 @@ export const useMapNavigation = ({
     const map = mapRef.current;
     const view = map.getView();
     let moveEndKey: EventsKey;
+    let historyTimeout: NodeJS.Timeout;
 
     const listener = () => {
         if (isNavigatingHistoryRef.current) return;
 
-        if (historyTimeoutRef.current) clearTimeout(historyTimeoutRef.current);
-
-        historyTimeoutRef.current = setTimeout(() => {
+        clearTimeout(historyTimeout);
+        historyTimeout = setTimeout(() => {
             const currentSize = map.getSize();
             if (!currentSize) return;
             const newExtent = view.calculateExtent(currentSize);
             
             setViewHistory(prevHistory => {
-                if (prevHistory.length === 0) {
-                    return [newExtent];
-                }
-                const lastExtent = prevHistory[prevHistory.length - 1];
-                if (newExtent.some(isNaN) || (lastExtent && lastExtent.every((val, i) => Math.abs(val - newExtent[i]) < 1))) {
+                const lastExtent = prevHistory.length > 0 ? prevHistory[prevHistory.length - 1] : null;
+
+                // Avoid adding duplicate extents if the view hasn't changed meaningfully
+                if (lastExtent && lastExtent.every((val, i) => Math.abs(val - newExtent[i]) < 1)) {
                     return prevHistory;
                 }
+
                 const updatedHistory = [...prevHistory, newExtent];
                 if (updatedHistory.length > MAX_HISTORY_LENGTH) {
-                    return updatedHistory.slice(1);
+                    return updatedHistory.slice(updatedHistory.length - MAX_HISTORY_LENGTH);
                 }
                 return updatedHistory;
             });
-        }, 300);
+        }, 300); // Debounce to avoid capturing intermediate extents during a single drag
     };
     
+    // Add the listener only when the map is ready
     moveEndKey = view.on('moveend', listener);
 
+    // Initial extent capture
+    map.once('rendercomplete', () => {
+        const initialSize = map.getSize();
+        if (initialSize) {
+            setViewHistory([view.calculateExtent(initialSize)]);
+        }
+    });
+
     return () => {
-      if (historyTimeoutRef.current) clearTimeout(historyTimeoutRef.current);
+      clearTimeout(historyTimeout);
       if (moveEndKey) {
         unByKey(moveEndKey);
       }
