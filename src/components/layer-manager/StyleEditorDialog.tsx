@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -64,6 +64,8 @@ interface ColorPickerProps {
 const ColorPicker: React.FC<ColorPickerProps> = ({ value, onChange }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [customColorInput, setCustomColorInput] = useState('#000000');
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   useEffect(() => {
     if (isOpen) {
@@ -102,12 +104,27 @@ const ColorPicker: React.FC<ColorPickerProps> = ({ value, onChange }) => {
   
   const handleStep = (direction: 'increment' | 'decrement') => {
       let currentValue = isValidHex(customColorInput) ? hexToDecimal(customColorInput) : 0;
+      const stepAmount = 1;
       if (direction === 'increment') {
-          currentValue = Math.min(16777215, currentValue + 1);
+          currentValue = Math.min(16777215, currentValue + stepAmount);
       } else {
-          currentValue = Math.max(0, currentValue - 1);
+          currentValue = Math.max(0, currentValue - stepAmount);
       }
       setCustomColorInput(decimalToHex(currentValue));
+  };
+  
+  const stopStepping = () => {
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    if (intervalRef.current) clearInterval(intervalRef.current);
+  };
+  
+  const handleStepMouseDown = (direction: 'increment' | 'decrement') => {
+    handleStep(direction); // Immediate step on click
+    timeoutRef.current = setTimeout(() => {
+      intervalRef.current = setInterval(() => {
+        handleStep(direction);
+      }, 50); // Speed of fast stepping
+    }, 500); // Delay before fast stepping starts
   };
 
 
@@ -153,7 +170,14 @@ const ColorPicker: React.FC<ColorPickerProps> = ({ value, onChange }) => {
                  </Button>
             </div>
             <div className="flex items-center gap-2">
-                <Button variant="outline" size="icon" className="h-6 w-6 flex-shrink-0" onClick={() => handleStep('decrement')}>
+                <Button 
+                  variant="outline" 
+                  size="icon" 
+                  className="h-6 w-6 flex-shrink-0" 
+                  onMouseDown={() => handleStepMouseDown('decrement')}
+                  onMouseUp={stopStepping}
+                  onMouseLeave={stopStepping}
+                >
                     <Minus className="h-3 w-3" />
                 </Button>
                 <Slider
@@ -163,7 +187,14 @@ const ColorPicker: React.FC<ColorPickerProps> = ({ value, onChange }) => {
                     step={1}
                     className="w-full"
                 />
-                <Button variant="outline" size="icon" className="h-6 w-6 flex-shrink-0" onClick={() => handleStep('increment')}>
+                <Button 
+                  variant="outline" 
+                  size="icon" 
+                  className="h-6 w-6 flex-shrink-0" 
+                  onMouseDown={() => handleStepMouseDown('increment')}
+                  onMouseUp={stopStepping}
+                  onMouseLeave={stopStepping}
+                >
                     <Plus className="h-3 w-3" />
                 </Button>
             </div>
