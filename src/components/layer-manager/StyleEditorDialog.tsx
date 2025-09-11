@@ -103,14 +103,16 @@ const ColorPicker: React.FC<ColorPickerProps> = ({ value, onChange }) => {
   const sliderValue = isValidHex(customColorInput) ? hexToDecimal(customColorInput) : 0;
   
   const handleStep = (direction: 'increment' | 'decrement') => {
-      let currentValue = isValidHex(customColorInput) ? hexToDecimal(customColorInput) : 0;
-      const stepAmount = 1;
-      if (direction === 'increment') {
-          currentValue = Math.min(16777215, currentValue + stepAmount);
-      } else {
-          currentValue = Math.max(0, currentValue - stepAmount);
-      }
-      setCustomColorInput(decimalToHex(currentValue));
+      setCustomColorInput(prevColor => {
+          let currentValue = isValidHex(prevColor) ? hexToDecimal(prevColor) : 0;
+          const stepAmount = 5000; // Increased for a more noticeable change
+          if (direction === 'increment') {
+              currentValue = Math.min(16777215, currentValue + stepAmount);
+          } else {
+              currentValue = Math.max(0, currentValue - stepAmount);
+          }
+          return decimalToHex(currentValue);
+      });
   };
   
   const stopStepping = () => {
