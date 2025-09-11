@@ -139,7 +139,9 @@ export const useMapNavigation = ({
 
     return () => {
       if (historyTimeoutRef.current) clearTimeout(historyTimeoutRef.current);
-      unByKey(moveEndKey);
+      if (moveEndKey) {
+        unByKey(moveEndKey);
+      }
     };
   }, [isMapReady, mapRef]);
   
