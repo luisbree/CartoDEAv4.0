@@ -27,9 +27,8 @@ export const useMapNavigation = ({
   setActiveTool,
 }: UseMapNavigationProps) => {
   const dragBoxInteractionRef = useRef<DragBox | null>(null);
-  const viewHistoryRef = useRef<Extent[]>([]);
+  const [viewHistory, setViewHistory] = useState<Extent[]>([]);
   const isNavigatingHistoryRef = useRef(false);
-  const [canGoToPrevious, setCanGoToPrevious] = useState(false);
   const historyTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Stop any active navigation tool
@@ -47,30 +46,33 @@ export const useMapNavigation = ({
   
   // Go to the previous extent in history
   const goToPreviousExtent = useCallback(() => {
-    if (viewHistoryRef.current.length < 2) return; // Need at least current and previous
+    if (viewHistory.length < 2) return;
 
     isNavigatingHistoryRef.current = true;
-    viewHistoryRef.current.pop(); // Remove current view
-    const previousExtent = viewHistoryRef.current[viewHistoryRef.current.length - 1];
     
+    // The last element is the current view, so we pop it.
+    const newHistory = [...viewHistory];
+    newHistory.pop();
+    const previousExtent = newHistory[newHistory.length - 1];
+
     mapRef.current?.getView().fit(previousExtent, {
       duration: 500,
       callback: () => {
-        // Use a timeout to ensure this runs after the moveend event from fit() is processed
         setTimeout(() => {
-            isNavigatingHistoryRef.current = false;
+          isNavigatingHistoryRef.current = false;
         }, 100);
-        setCanGoToPrevious(viewHistoryRef.current.length > 1);
       }
     });
+    
+    setViewHistory(newHistory);
 
-  }, [mapRef]);
+  }, [mapRef, viewHistory]);
 
   // Effect to manage the DragBox interaction for "Zoom to Area"
   useEffect(() => {
     if (!isMapReady || !mapRef.current) return;
     
-    stopTool(); // Clear previous interaction
+    stopTool(); 
 
     if (activeTool === 'zoomToArea') {
       const dragBox = new DragBox({});
@@ -80,12 +82,10 @@ export const useMapNavigation = ({
       dragBox.on('boxend', () => {
         const extent = dragBox.getGeometry().getExtent();
         mapRef.current?.getView().fit(extent, { duration: 500 });
-        // Deactivate the tool after use for a better user experience
         setActiveTool(null);
       });
     }
 
-    // Manage cursor style
     if (mapElementRef.current) {
         mapElementRef.current.style.cursor = activeTool === 'zoomToArea' ? 'crosshair' : 'default';
     }
@@ -106,58 +106,39 @@ export const useMapNavigation = ({
 
     const map = mapRef.current;
     const view = map.getView();
-    
-    // This is the core logic for capturing the view history.
-    const listener = () => {
-        // Don't record history if we are navigating via the back button
-        if (isNavigatingHistoryRef.current) {
-            return;
-        }
+    let moveEndKey: EventsKey;
 
-        // Debounce the history recording to prevent too many entries during fast pans/zooms
-        if (historyTimeoutRef.current) {
-            clearTimeout(historyTimeoutRef.current);
-        }
+    const listener = () => {
+        if (isNavigatingHistoryRef.current) return;
+
+        if (historyTimeoutRef.current) clearTimeout(historyTimeoutRef.current);
 
         historyTimeoutRef.current = setTimeout(() => {
             const currentSize = map.getSize();
             if (!currentSize) return;
-
             const newExtent = view.calculateExtent(currentSize);
             
-            // On the very first moveend event, initialize the history
-            if (viewHistoryRef.current.length === 0) {
-                 viewHistoryRef.current.push(newExtent);
-                 // We don't set 'canGoToPrevious' yet, as there's no previous state
-                 return; 
-            }
-
-            const lastExtent = viewHistoryRef.current[viewHistoryRef.current.length - 1];
-            
-            // Check if extents are valid and different enough to record
-            if (newExtent.some(isNaN) || (lastExtent && lastExtent.every((val, i) => Math.abs(val - newExtent[i]) < 1))) {
-                return; // Don't add if extent is invalid or hasn't changed significantly
-            }
-            
-            viewHistoryRef.current.push(newExtent);
-
-            // Keep the history at a manageable size
-            if (viewHistoryRef.current.length > MAX_HISTORY_LENGTH) {
-                viewHistoryRef.current.shift();
-            }
-
-            // Update the state to enable/disable the button
-            setCanGoToPrevious(viewHistoryRef.current.length > 1);
-        }, 300); // 300ms debounce
+            setViewHistory(prevHistory => {
+                if (prevHistory.length === 0) {
+                    return [newExtent];
+                }
+                const lastExtent = prevHistory[prevHistory.length - 1];
+                if (newExtent.some(isNaN) || (lastExtent && lastExtent.every((val, i) => Math.abs(val - newExtent[i]) < 1))) {
+                    return prevHistory;
+                }
+                const updatedHistory = [...prevHistory, newExtent];
+                if (updatedHistory.length > MAX_HISTORY_LENGTH) {
+                    return updatedHistory.slice(1);
+                }
+                return updatedHistory;
+            });
+        }, 300);
     };
+    
+    moveEndKey = view.on('moveend', listener);
 
-    const moveEndKey = view.on('moveend', listener);
-
-    // Cleanup function to remove the listener
     return () => {
-      if (historyTimeoutRef.current) {
-        clearTimeout(historyTimeoutRef.current);
-      }
+      if (historyTimeoutRef.current) clearTimeout(historyTimeoutRef.current);
       unByKey(moveEndKey);
     };
   }, [isMapReady, mapRef]);
@@ -167,6 +148,7 @@ export const useMapNavigation = ({
     activeTool,
     toggleZoomToArea,
     goToPreviousExtent,
-    canGoToPrevious,
+    canGoToPrevious: viewHistory.length > 1,
+    viewHistory, // Return for debugging
   };
 };

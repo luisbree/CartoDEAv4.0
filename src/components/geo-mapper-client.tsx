@@ -43,6 +43,7 @@ import BaseLayerControls from '@/components/layer-manager/BaseLayerControls';
 import { StreetViewIcon } from '@/components/icons/StreetViewIcon';
 import TrelloCardNotification from '@/components/trello-integration/TrelloCardNotification';
 import { DphLogoIcon } from '@/components/icons/DphLogoIcon';
+import HistoryDebugDisplay from '@/components/debug/HistoryDebugDisplay';
 
 
 import { useOpenLayersMap } from '@/hooks/map-core/useOpenLayersMap';
@@ -869,6 +870,8 @@ export default function GeoMapperClient() {
           activeBaseLayerId={activeBaseLayerId}
           baseLayerSettings={baseLayerSettings}
         />
+        
+        <HistoryDebugDisplay history={mapNavigationHook.viewHistory} />
         
         {trelloCardNotification && (
             <TrelloCardNotification
