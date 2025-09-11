@@ -102,46 +102,40 @@ export const useMapNavigation = ({
     const map = mapRef.current;
     const view = map.getView();
     let moveEndKey: EventsKey | undefined;
-    let historyTimeout: NodeJS.Timeout | undefined;
 
     const handleMoveEnd = () => {
-      if (isNavigatingHistoryRef.current) return;
-      
-      const newExtent = view.calculateExtent(map.getSize());
+        if (isNavigatingHistoryRef.current) return;
+        
+        const newExtent = view.calculateExtent(map.getSize());
 
-      setViewHistory(prevHistory => {
-        const lastExtent = prevHistory.length > 0 ? prevHistory[prevHistory.length - 1] : null;
-        if (lastExtent && lastExtent.every((val, i) => Math.abs(val - newExtent[i]) < 1)) {
-          return prevHistory;
-        }
-
-        const updatedHistory = [...prevHistory, newExtent];
-        if (updatedHistory.length > MAX_HISTORY_LENGTH) {
-          return updatedHistory.slice(updatedHistory.length - MAX_HISTORY_LENGTH);
-        }
-        return updatedHistory;
-      });
+        setViewHistory(prevHistory => {
+            const lastExtent = prevHistory.length > 0 ? prevHistory[prevHistory.length - 1] : null;
+            // A simple check to avoid adding duplicate extents if the map hasn't moved significantly
+            if (lastExtent && lastExtent.every((val, i) => Math.abs(val - newExtent[i]) < 1)) {
+                return prevHistory;
+            }
+            
+            const updatedHistory = [...prevHistory, newExtent];
+            if (updatedHistory.length > MAX_HISTORY_LENGTH) {
+                return updatedHistory.slice(updatedHistory.length - MAX_HISTORY_LENGTH);
+            }
+            return updatedHistory;
+        });
     };
-
-    const debouncedListener = () => {
-        clearTimeout(historyTimeout);
-        historyTimeout = setTimeout(handleMoveEnd, 250);
-    };
-
-    // Use 'rendercomplete' for the very first extent capture.
+    
+    // Use 'rendercomplete' for the very first extent capture, which is more reliable.
     const renderCompleteKey = map.once('rendercomplete', () => {
-      const initialSize = map.getSize();
-      if (initialSize) {
-        setViewHistory([view.calculateExtent(initialSize)]);
-      }
-      // After the first render, start listening for movement.
-      moveEndKey = view.on('moveend', debouncedListener);
+        const initialSize = map.getSize();
+        if (initialSize) {
+            setViewHistory([view.calculateExtent(initialSize)]);
+        }
+        // After the first render, start listening for movement.
+        moveEndKey = view.on('moveend', handleMoveEnd);
     });
 
     return () => {
-      clearTimeout(historyTimeout);
-      if (renderCompleteKey) unByKey(renderCompleteKey);
-      if (moveEndKey) unByKey(moveEndKey);
+        if (renderCompleteKey) unByKey(renderCompleteKey);
+        if (moveEndKey) unByKey(moveEndKey);
     };
   }, [isMapReady, mapRef]);
 

@@ -689,17 +689,15 @@ export default function GeoMapperClient() {
 
     const handleContextMenu = (e: MouseEvent) => {
         e.preventDefault();
-        if (activeTool.type !== null) {
-            handleSetActiveTool({ type: null, id: null });
-        } else {
-            handleSetActiveTool(lastActiveToolRef.current);
-        }
+        handleSetActiveTool(activeTool.type === null ? lastActiveToolRef.current : { type: null, id: null });
     };
 
     mapEl.addEventListener('contextmenu', handleContextMenu);
 
     return () => {
-        mapEl.removeEventListener('contextmenu', handleContextMenu);
+        if (mapEl) {
+            mapEl.removeEventListener('contextmenu', handleContextMenu);
+        }
     };
   }, [activeTool, handleSetActiveTool, mapElementRef]);
 
