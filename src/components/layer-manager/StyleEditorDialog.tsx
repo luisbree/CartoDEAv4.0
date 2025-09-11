@@ -26,6 +26,7 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { StyleOptions } from '@/lib/types';
 import { Slider } from '../ui/slider';
+import { Minus, Plus } from 'lucide-react';
 
 
 interface StyleEditorDialogProps {
@@ -98,6 +99,17 @@ const ColorPicker: React.FC<ColorPickerProps> = ({ value, onChange }) => {
   };
 
   const sliderValue = isValidHex(customColorInput) ? hexToDecimal(customColorInput) : 0;
+  
+  const handleStep = (direction: 'increment' | 'decrement') => {
+      let currentValue = isValidHex(customColorInput) ? hexToDecimal(customColorInput) : 0;
+      if (direction === 'increment') {
+          currentValue = Math.min(16777215, currentValue + 1);
+      } else {
+          currentValue = Math.max(0, currentValue - 1);
+      }
+      setCustomColorInput(decimalToHex(currentValue));
+  };
+
 
   return (
     <Popover open={isOpen} onOpenChange={setIsOpen}>
@@ -140,13 +152,21 @@ const ColorPicker: React.FC<ColorPickerProps> = ({ value, onChange }) => {
                     Aplicar
                  </Button>
             </div>
-            <Slider
-                value={[sliderValue]}
-                onValueChange={handleSliderChange}
-                max={16777215} // #FFFFFF
-                step={1}
-                className="w-full"
-            />
+            <div className="flex items-center gap-2">
+                <Button variant="outline" size="icon" className="h-6 w-6 flex-shrink-0" onClick={() => handleStep('decrement')}>
+                    <Minus className="h-3 w-3" />
+                </Button>
+                <Slider
+                    value={[sliderValue]}
+                    onValueChange={handleSliderChange}
+                    max={16777215} // #FFFFFF
+                    step={1}
+                    className="w-full"
+                />
+                <Button variant="outline" size="icon" className="h-6 w-6 flex-shrink-0" onClick={() => handleStep('increment')}>
+                    <Plus className="h-3 w-3" />
+                </Button>
+            </div>
         </div>
       </PopoverContent>
     </Popover>
