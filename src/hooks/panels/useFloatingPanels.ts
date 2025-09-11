@@ -69,49 +69,43 @@ export const useFloatingPanels = ({
     gee: geePanelRef,
   }), [attributesPanelRef, aiPanelRef, legendPanelRef, toolsPanelRef, trelloPanelRef, wfsLibraryPanelRef, helpPanelRef, printComposerPanelRef, geePanelRef]);
   
-  const [panels, setPanels] = useState<Record<PanelId, PanelState>>(() => {
-    const initialX = panelPadding;
-    const initialY = panelPadding;
-    
-    return {
-      // Order reflects the toggle buttons in the UI
-      legend: { isMinimized: false, isCollapsed: false, position: { x: initialX, y: initialY }, zIndex: initialZIndex + 2 },
-      wfsLibrary: { isMinimized: true, isCollapsed: false, position: { x: initialX, y: initialY }, zIndex: initialZIndex },
-      tools: { isMinimized: true, isCollapsed: false, position: { x: initialX, y: initialY }, zIndex: initialZIndex },
-      trello: { isMinimized: true, isCollapsed: false, position: { x: initialX, y: initialY }, zIndex: initialZIndex },
-      attributes: { isMinimized: true, isCollapsed: false, position: { x: initialX, y: initialY }, zIndex: initialZIndex },
-      printComposer: { isMinimized: true, isCollapsed: false, position: { x: initialX, y: initialY }, zIndex: initialZIndex },
-      gee: { isMinimized: true, isCollapsed: false, position: { x: initialX, y: initialY }, zIndex: initialZIndex },
-      ai: { isMinimized: false, isCollapsed: false, position: { x: -9999, y: panelPadding }, zIndex: initialZIndex + 3 }, // Positioned dynamically
-      help: { isMinimized: true, isCollapsed: false, position: { x: -9999, y: panelPadding }, zIndex: initialZIndex }, // Positioned dynamically
-    };
+  const [panels, setPanels] = useState<Record<PanelId, PanelState>>({
+      // Start with minimized panels off-screen or at a default position to avoid hydration errors.
+      // Positions will be set correctly on mount.
+      legend: { isMinimized: false, isCollapsed: false, position: { x: -9999, y: -9999 }, zIndex: initialZIndex + 2 },
+      wfsLibrary: { isMinimized: true, isCollapsed: false, position: { x: -9999, y: -9999 }, zIndex: initialZIndex },
+      tools: { isMinimized: true, isCollapsed: false, position: { x: -9999, y: -9999 }, zIndex: initialZIndex },
+      trello: { isMinimized: true, isCollapsed: false, position: { x: -9999, y: -9999 }, zIndex: initialZIndex },
+      attributes: { isMinimized: true, isCollapsed: false, position: { x: -9999, y: -9999 }, zIndex: initialZIndex },
+      printComposer: { isMinimized: true, isCollapsed: false, position: { x: -9999, y: -9999 }, zIndex: initialZIndex },
+      gee: { isMinimized: true, isCollapsed: false, position: { x: -9999, y: -9999 }, zIndex: initialZIndex },
+      ai: { isMinimized: false, isCollapsed: false, position: { x: -9999, y: -9999 }, zIndex: initialZIndex + 3 },
+      help: { isMinimized: true, isCollapsed: false, position: { x: -9999, y: -9999 }, zIndex: initialZIndex },
   });
 
 
   const activeDragRef = useRef<{ panelId: PanelId | null, offsetX: number, offsetY: number }>({ panelId: null, offsetX: 0, offsetY: 0 });
   const zIndexCounterRef = useRef(initialZIndex + 3); // Start above AI panel
-  const positionInitialized = useRef(false);
   
   useEffect(() => {
-    // This effect runs once to set the initial position of the AI and Help panels on the right side.
-    if (mapAreaRef.current && !positionInitialized.current) {
+    // This effect runs once after the component mounts on the client.
+    // It sets the initial positions, preventing hydration mismatch.
+    if (mapAreaRef.current) {
         const mapWidth = mapAreaRef.current.clientWidth;
-        const helpPanelWidth = 400; // Use the specific width of the help panel
         const aiPanelX = mapWidth - panelWidth - panelPadding;
-        const helpPanelX = mapWidth - panelWidth - helpPanelWidth - (panelPadding * 2);
-
+        
         setPanels(prev => ({
             ...prev,
-            ai: {
-                ...prev.ai,
-                position: { x: aiPanelX, y: prev.ai.position.y }
-            },
-            help: {
-                ...prev.help,
-                position: { x: helpPanelX, y: prev.help.position.y }
-            }
+            legend: { ...prev.legend, position: { x: panelPadding, y: panelPadding } },
+            wfsLibrary: { ...prev.wfsLibrary, position: { x: panelPadding, y: panelPadding } },
+            tools: { ...prev.tools, position: { x: panelPadding, y: panelPadding } },
+            trello: { ...prev.trello, position: { x: panelPadding, y: panelPadding } },
+            attributes: { ...prev.attributes, position: { x: panelPadding, y: panelPadding } },
+            printComposer: { ...prev.printComposer, position: { x: panelPadding, y: panelPadding } },
+            gee: { ...prev.gee, position: { x: panelPadding, y: panelPadding } },
+            ai: { ...prev.ai, position: { x: aiPanelX, y: panelPadding } },
+            help: { ...prev.help, position: { x: aiPanelX, y: panelPadding } },
         }));
-        positionInitialized.current = true;
     }
   }, [mapAreaRef, panelWidth, panelPadding]);
 

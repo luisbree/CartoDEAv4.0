@@ -150,6 +150,11 @@ export default function GeoMapperClient() {
   const printComposerPanelRef = useRef<HTMLDivElement>(null);
   const geePanelRef = useRef<HTMLDivElement>(null);
   const trelloPopupRef = useRef<Window | null>(null);
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   const { mapRef, mapElementRef, setMapInstanceAndElement, isMapReady, drawingSourceRef } = useOpenLayersMap();
   const { toast } = useToast();
@@ -876,7 +881,7 @@ export default function GeoMapperClient() {
 
         <WfsLoadingIndicator isVisible={layerManagerHook.isWfsLoading || wfsLibraryHook.isLoading} />
 
-        {panels.tools && !panels.tools.isMinimized && (
+        {isMounted && panels.tools && !panels.tools.isMinimized && (
           <ToolsPanel
             panelRef={toolsPanelRef}
             isCollapsed={panels.tools.isCollapsed}
@@ -900,7 +905,7 @@ export default function GeoMapperClient() {
           />
         )}
 
-        {panels.legend && !panels.legend.isMinimized && (
+        {isMounted && panels.legend && !panels.legend.isMinimized && (
           <LegendPanel
             panelRef={legendPanelRef}
             isCollapsed={panels.legend.isCollapsed}
@@ -941,7 +946,7 @@ export default function GeoMapperClient() {
           />
         )}
 
-        {panels.attributes && !panels.attributes.isMinimized && (
+        {isMounted && panels.attributes && !panels.attributes.isMinimized && (
           <AttributesPanelComponent
             panelRef={attributesPanelRef}
             isCollapsed={panels.attributes.isCollapsed}
@@ -959,7 +964,7 @@ export default function GeoMapperClient() {
           />
         )}
         
-        {panels.printComposer && !panels.printComposer.isMinimized && printLayoutImage && (
+        {isMounted && panels.printComposer && !panels.printComposer.isMinimized && printLayoutImage && (
             <PrintComposerPanel
                 mapImage={printLayoutImage}
                 panelRef={printComposerPanelRef}
@@ -971,7 +976,7 @@ export default function GeoMapperClient() {
             />
         )}
 
-        {panels.gee && !panels.gee.isMinimized && (
+        {isMounted && panels.gee && !panels.gee.isMinimized && (
           <GeeProcessingPanel
             panelRef={geePanelRef}
             isCollapsed={panels.gee.isCollapsed}
@@ -986,7 +991,7 @@ export default function GeoMapperClient() {
           />
         )}
 
-        {panels.ai && !panels.ai.isMinimized && (
+        {isMounted && panels.ai && !panels.ai.isMinimized && (
           <AIPanel
             panelRef={aiPanelRef}
             isCollapsed={panels.ai.isCollapsed}
@@ -1005,7 +1010,7 @@ export default function GeoMapperClient() {
           />
         )}
 
-        {panels.trello && !panels.trello.isMinimized && (
+        {isMounted && panels.trello && !panels.trello.isMinimized && (
           <TrelloPanel
             panelRef={trelloPanelRef}
             isCollapsed={panels.trello.isCollapsed}
@@ -1017,7 +1022,7 @@ export default function GeoMapperClient() {
           />
         )}
 
-        {panels.wfsLibrary && !panels.wfsLibrary.isMinimized && (
+        {isMounted && panels.wfsLibrary && !panels.wfsLibrary.isMinimized && (
           <WfsLibraryPanel
             panelRef={wfsLibraryPanelRef}
             isCollapsed={panels.wfsLibrary.isCollapsed}
@@ -1033,7 +1038,7 @@ export default function GeoMapperClient() {
           />
         )}
 
-        {panels.help && !panels.help.isMinimized && (
+        {isMounted && panels.help && !panels.help.isMinimized && (
           <HelpPanel
             panelRef={helpPanelRef}
             isCollapsed={panels.help.isCollapsed}
