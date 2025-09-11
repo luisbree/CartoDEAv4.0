@@ -17,8 +17,6 @@ interface UseMapNavigationProps {
   setActiveTool: (toolId: MapActionToolId | null) => void;
 }
 
-const MAX_HISTORY_LENGTH = 20;
-
 export const useMapNavigation = ({
   mapRef,
   mapElementRef,
@@ -27,8 +25,6 @@ export const useMapNavigation = ({
   setActiveTool,
 }: UseMapNavigationProps) => {
   const dragBoxInteractionRef = useRef<DragBox | null>(null);
-  const [viewHistory, setViewHistory] = useState<Extent[]>([]);
-  const isNavigatingHistoryRef = useRef(false);
 
   const stopTool = useCallback(() => {
     if (dragBoxInteractionRef.current && mapRef.current) {
@@ -41,31 +37,6 @@ export const useMapNavigation = ({
     setActiveTool(activeTool === 'zoomToArea' ? null : 'zoomToArea');
   }, [activeTool, setActiveTool]);
 
-  const goToPreviousExtent = useCallback(() => {
-    if (viewHistory.length < 2) return;
-
-    isNavigatingHistoryRef.current = true;
-
-    // The current view is the last item, so we pop it to get to the previous one
-    const newHistory = [...viewHistory];
-    newHistory.pop(); 
-    const previousExtent = newHistory[newHistory.length - 1];
-
-    if (mapRef.current && previousExtent) {
-        mapRef.current.getView().fit(previousExtent, {
-          duration: 500,
-          callback: () => {
-            // Delay resetting the flag slightly to prevent the moveend event from re-adding the extent we just navigated to
-            setTimeout(() => {
-              isNavigatingHistoryRef.current = false;
-            }, 100); 
-          }
-        });
-        setViewHistory(newHistory);
-    } else {
-       isNavigatingHistoryRef.current = false;
-    }
-  }, [mapRef, viewHistory]);
   
   // Effect to manage the "Zoom to Area" tool
   useEffect(() => {
@@ -98,57 +69,9 @@ export const useMapNavigation = ({
     };
   }, [activeTool, isMapReady, mapRef, mapElementRef, stopTool, toggleZoomToArea]);
 
-  
-  // Effect to manage the view history for the back button
-  useEffect(() => {
-    if (!isMapReady || !mapRef.current) {
-      return;
-    }
-
-    const map = mapRef.current;
-    const view = map.getView();
-    
-    const handleMoveEnd = () => {
-        if (isNavigatingHistoryRef.current) return;
-        
-        const newExtent = view.calculateExtent(map.getSize());
-
-        setViewHistory(prevHistory => {
-            const lastExtent = prevHistory.length > 0 ? prevHistory[prevHistory.length - 1] : null;
-            if (lastExtent && lastExtent.every((val, i) => Math.abs(val - newExtent[i]) < 1)) {
-                return prevHistory;
-            }
-            
-            const updatedHistory = [...prevHistory, newExtent];
-            if (updatedHistory.length > MAX_HISTORY_LENGTH) {
-                return updatedHistory.slice(updatedHistory.length - MAX_HISTORY_LENGTH);
-            }
-            return updatedHistory;
-        });
-    };
-    
-    // Use 'rendercomplete' for the very first extent capture, which is more reliable.
-    const renderCompleteKey = map.once('rendercomplete', () => {
-        const initialSize = map.getSize();
-        if (initialSize) {
-           setViewHistory([view.calculateExtent(initialSize)]);
-        }
-    });
-
-    const moveEndKey = view.on('moveend', handleMoveEnd);
-
-    return () => {
-        unByKey(renderCompleteKey);
-        unByKey(moveEndKey);
-    };
-  }, [isMapReady, mapRef]);
-
 
   return {
     activeTool,
     toggleZoomToArea,
-    goToPreviousExtent,
-    canGoToPrevious: viewHistory.length > 1,
-    viewHistory,
   };
 };

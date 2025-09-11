@@ -796,16 +796,6 @@ export default function GeoMapperClient() {
                 <ZoomIn className="h-4 w-4" />
             </Button>
             <Button
-                onClick={mapNavigationHook.goToPreviousExtent}
-                variant="outline"
-                size="icon"
-                className="h-8 w-8 flex-shrink-0 bg-black/20 hover:bg-black/40 border border-white/30 text-white/90"
-                title="Encuadre Anterior"
-                disabled={!mapNavigationHook.canGoToPrevious}
-            >
-                <Undo2 className="h-4 w-4" />
-            </Button>
-            <Button
                 onClick={handleCaptureAndDownload}
                 variant="outline"
                 size="icon"
