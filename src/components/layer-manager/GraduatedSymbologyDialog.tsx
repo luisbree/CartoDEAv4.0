@@ -20,13 +20,49 @@ import {
 import { Input } from "@/components/ui/input";
 import type { GraduatedSymbology, VectorMapLayer, ColorRampId, ClassificationMethod } from '@/lib/types';
 
-// Color ramps
-const COLOR_RAMPS: Record<ColorRampId, string[]> = {
-  reds: ['#fee5d9', '#fcae91', '#fb6a4a', '#de2d26', '#a50f15'],
-  blues: ['#eff3ff', '#bdd7e7', '#6baed6', '#3182bd', '#08519c'],
-  greens: ['#edf8e9', '#bae4b3', '#74c476', '#31a354', '#006d2c'],
-  viridis: ['#440154', '#3b528b', '#21918c', '#5ec962', '#fde725'],
+// --- Color Interpolation Helpers ---
+
+function hexToRgb(hex: string): [number, number, number] {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result
+        ? [parseInt(result[1], 16), parseInt(result[2], 16), parseInt(result[3], 16)]
+        : [0, 0, 0];
+}
+
+function rgbToHex(r: number, g: number, b: number): string {
+    return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1).padStart(6, '0');
+}
+
+function interpolateColors(color1: [number, number, number], color2: [number, number, number], factor: number): [number, number, number] {
+    const result = color1.slice() as [number, number, number];
+    for (let i = 0; i < 3; i++) {
+        result[i] = Math.round(result[i] + factor * (color2[i] - color1[i]));
+    }
+    return result;
+}
+
+function generateColorRamp(startHex: string, endHex: string, count: number): string[] {
+    if (count <= 1) return [startHex];
+    const startRgb = hexToRgb(startHex);
+    const endRgb = hexToRgb(endHex);
+    const ramp: string[] = [];
+    for (let i = 0; i < count; i++) {
+        const factor = i / (count - 1);
+        const interpolatedRgb = interpolateColors(startRgb, endRgb, factor);
+        ramp.push(rgbToHex(interpolatedRgb[0], interpolatedRgb[1], interpolatedRgb[2]));
+    }
+    return ramp;
+}
+
+
+// Define ramps by start and end colors for interpolation
+const COLOR_RAMP_DEFINITIONS: Record<ColorRampId, { start: string, end: string }> = {
+  reds: { start: '#fee5d9', end: '#a50f15' },
+  blues: { start: '#eff3ff', end: '#08519c' },
+  greens: { start: '#edf8e9', end: '#006d2c' },
+  viridis: { start: '#440154', end: '#fde725' },
 };
+
 
 interface GraduatedSymbologyDialogProps {
   isOpen: boolean;
@@ -94,39 +130,35 @@ const GraduatedSymbologyDialog: React.FC<GraduatedSymbologyDialogProps> = ({
     values.sort((a, b) => a - b);
 
     let breaks: number[] = [];
-    const ramp = COLOR_RAMPS[colorRamp];
-    const numClasses = Math.min(classes, ramp.length);
+    const rampDefinition = COLOR_RAMP_DEFINITIONS[colorRamp];
+    const numClasses = Math.max(2, classes);
 
     if (method === 'quantiles') {
       const step = Math.max(1, Math.floor(values.length / numClasses));
       for (let i = 1; i < numClasses; i++) {
-        breaks.push(values[i * step]);
+        const breakIndex = Math.min(i * step, values.length - 1);
+        breaks.push(values[breakIndex]);
       }
       breaks.push(values[values.length - 1]);
     }
     
-    // Ensure breaks are unique
+    // Ensure breaks are unique and handle cases with few unique values
     breaks = [...new Set(breaks)];
-     // Adjust if there are fewer unique breaks than classes
-    while (breaks.length < numClasses && breaks.length < values.length) {
-       // This logic can be improved, but for now we just reduce the class count
-       // to the number of unique breaks found.
-       setClasses(breaks.length);
-       break;
-    }
+    const finalNumClasses = breaks.length;
+    const finalColors = generateColorRamp(rampDefinition.start, rampDefinition.end, finalNumClasses);
 
     setClassification({
       breaks,
-      colors: ramp.slice(0, breaks.length),
+      colors: finalColors,
     });
   };
 
   const handleApply = () => {
-    if (classification && field) {
+    if (classification && field && classification.breaks.length > 0) {
       onApply({
         field,
         method,
-        classes,
+        classes: classification.breaks.length,
         colorRamp,
         breaks: classification.breaks,
         colors: classification.colors,
@@ -178,9 +210,9 @@ const GraduatedSymbologyDialog: React.FC<GraduatedSymbologyDialogProps> = ({
                 id="classes-input"
                 type="number"
                 min="2"
-                max="10"
+                max="20"
                 value={classes}
-                onChange={e => setClasses(Math.max(2, Math.min(10, Number(e.target.value))))}
+                onChange={e => setClasses(Math.max(2, Math.min(20, Number(e.target.value))))}
                 className="h-8 text-xs bg-black/20"
               />
             </div>
@@ -191,12 +223,10 @@ const GraduatedSymbologyDialog: React.FC<GraduatedSymbologyDialogProps> = ({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="bg-gray-700 text-white border-gray-600">
-                  {Object.keys(COLOR_RAMPS).map(rampId => (
+                  {Object.entries(COLOR_RAMP_DEFINITIONS).map(([rampId, {start, end}]) => (
                     <SelectItem key={rampId} value={rampId} className="text-xs">
                       <div className="flex items-center gap-2">
-                        <div className="flex h-4 w-16 rounded-sm overflow-hidden">
-                          {COLOR_RAMPS[rampId as ColorRampId].map(color => <div key={color} style={{ backgroundColor: color, flex: 1 }} />)}
-                        </div>
+                        <div className="flex h-4 w-16 rounded-sm overflow-hidden" style={{ background: `linear-gradient(to right, ${start}, ${end})` }} />
                         {rampId.charAt(0).toUpperCase() + rampId.slice(1)}
                       </div>
                     </SelectItem>
@@ -213,7 +243,7 @@ const GraduatedSymbologyDialog: React.FC<GraduatedSymbologyDialogProps> = ({
           {classification && (
             <div className="mt-2 pt-2 border-t border-white/10 space-y-2">
               <Label className="text-sm">Vista Previa de la Leyenda</Label>
-              <div className="space-y-1 rounded-md bg-black/10 p-2">
+              <div className="space-y-1 rounded-md bg-black/10 p-2 max-h-32 overflow-y-auto">
                 {classification.colors.map((color, index) => {
                   const lowerBound = index === 0 ? 'Mín' : formatNumber(classification.breaks[index - 1]);
                   const upperBound = formatNumber(classification.breaks[index]);
