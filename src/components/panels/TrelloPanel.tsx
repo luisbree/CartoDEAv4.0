@@ -16,7 +16,7 @@ interface TrelloPanelProps {
   onToggleCollapse: () => void;
   onClosePanel: () => void;
   onMouseDownHeader: (e: React.MouseEvent<HTMLDivElement>) => void;
-  onSetSelectedCard: (card: TrelloCardInfo | null) => void;
+  onSetSelectedCard: (card: TrelloCardInfo) => void;
   style?: React.CSSProperties;
 }
 
@@ -73,14 +73,11 @@ const TrelloPanel: React.FC<TrelloPanelProps> = ({
 
   const handleCardClick = (card: TrelloCard) => {
     onSetSelectedCard({ name: card.name, url: card.url });
-    const windowFeatures = "popup=true,width=800,height=600,scrollbars=yes,resizable=yes";
-    window.open(card.url, '_blank', windowFeatures);
   };
 
   const clearSearch = () => {
     setSearchTerm('');
     setResults([]);
-    onSetSelectedCard(null); // Clear the notification when search is cleared
   };
 
 

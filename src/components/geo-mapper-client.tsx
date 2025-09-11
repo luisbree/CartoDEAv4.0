@@ -148,6 +148,7 @@ export default function GeoMapperClient() {
   const helpPanelRef = useRef<HTMLDivElement>(null);
   const printComposerPanelRef = useRef<HTMLDivElement>(null);
   const geePanelRef = useRef<HTMLDivElement>(null);
+  const trelloPopupRef = useRef<Window | null>(null);
 
   const { mapRef, mapElementRef, setMapInstanceAndElement, isMapReady, drawingSourceRef } = useOpenLayersMap();
   const { toast } = useToast();
@@ -685,6 +686,25 @@ export default function GeoMapperClient() {
     };
   }, [activeTool, handleSetActiveTool, mapElementRef]);
 
+  const handleSetTrelloCard = (card: TrelloCardInfo) => {
+    if (trelloPopupRef.current && !trelloPopupRef.current.closed) {
+      trelloPopupRef.current.close();
+    }
+    setTrelloCardInfo(card);
+  };
+
+  const handleTrelloNotificationOpen = (popup: Window | null) => {
+    trelloPopupRef.current = popup;
+  };
+  
+  const handleTrelloNotificationClose = () => {
+    if (trelloPopupRef.current && !trelloPopupRef.current.closed) {
+      trelloPopupRef.current.close();
+    }
+    setTrelloCardInfo(null);
+    trelloPopupRef.current = null;
+  };
+
 
   return (
     <div className="flex h-screen w-screen flex-col bg-background text-foreground">
@@ -819,6 +839,8 @@ export default function GeoMapperClient() {
             <TrelloCardNotification
                 cardName={trelloCardNotification.name}
                 cardUrl={trelloCardNotification.url}
+                onOpen={handleTrelloNotificationOpen}
+                onClose={handleTrelloNotificationClose}
             />
         )}
 
@@ -965,7 +987,7 @@ export default function GeoMapperClient() {
             onToggleCollapse={() => togglePanelCollapse('trello')}
             onClosePanel={() => togglePanelMinimize('trello')}
             onMouseDownHeader={(e) => handlePanelMouseDown(e, 'trello')}
-            onSetSelectedCard={setTrelloCardInfo}
+            onSetSelectedCard={handleSetTrelloCard}
             style={{ top: `${panels.trello.position.y}px`, left: `${panels.trello.position.x}px`, zIndex: panels.trello.zIndex }}
           />
         )}

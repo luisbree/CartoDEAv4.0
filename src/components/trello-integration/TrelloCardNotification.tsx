@@ -2,19 +2,22 @@
 "use client";
 
 import React from 'react';
-import { ClipboardCheck, ExternalLink } from 'lucide-react';
+import { ClipboardCheck, ExternalLink, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface TrelloCardNotificationProps {
   cardName: string;
   cardUrl: string;
+  onOpen: (popup: Window | null) => void;
+  onClose: () => void;
 }
 
-const TrelloCardNotification: React.FC<TrelloCardNotificationProps> = ({ cardName, cardUrl }) => {
+const TrelloCardNotification: React.FC<TrelloCardNotificationProps> = ({ cardName, cardUrl, onOpen, onClose }) => {
   
   const handleOpenPopup = () => {
     const windowFeatures = "popup=true,width=800,height=600,scrollbars=yes,resizable=yes";
-    window.open(cardUrl, '_blank', windowFeatures);
+    const popup = window.open(cardUrl, '_blank', windowFeatures);
+    onOpen(popup);
   };
 
   return (
@@ -36,6 +39,13 @@ const TrelloCardNotification: React.FC<TrelloCardNotificationProps> = ({ cardNam
         title="Abrir tarjeta de Trello"
       >
         <ExternalLink className="h-4 w-4" />
+      </button>
+      <button
+        onClick={onClose}
+        className="p-1 rounded-full hover:bg-black/10 text-muted-foreground hover:text-foreground flex-shrink-0"
+        title="Cerrar proyecto actual"
+      >
+        <X className="h-4 w-4" />
       </button>
     </div>
   );
