@@ -109,8 +109,9 @@ export const useMapNavigation = ({
     const view = map.getView();
     
     // Initialize history with the first view
-    if (view.isRendered() && viewHistoryRef.current.length === 0) {
-        viewHistoryRef.current.push(view.calculateExtent(map.getSize()));
+    const mapSize = map.getSize();
+    if (mapSize && viewHistoryRef.current.length === 0) {
+        viewHistoryRef.current.push(view.calculateExtent(mapSize));
     }
     
     const listener = () => {
@@ -123,10 +124,14 @@ export const useMapNavigation = ({
         }
 
         historyTimeoutRef.current = setTimeout(() => {
-            const newExtent = view.calculateExtent(map.getSize());
+            const currentSize = map.getSize();
+            if (!currentSize) return;
+
+            const newExtent = view.calculateExtent(currentSize);
             const lastExtent = viewHistoryRef.current[viewHistoryRef.current.length - 1];
             
-            if (!lastExtent || !lastExtent.every((val, i) => Math.abs(val - newExtent[i]) < 1)) {
+            // Check if extents are valid and different enough to record
+            if (newExtent.every(isFinite) && (!lastExtent || !lastExtent.every((val, i) => Math.abs(val - newExtent[i]) < 1))) {
                 viewHistoryRef.current.push(newExtent);
                 if (viewHistoryRef.current.length > MAX_HISTORY_LENGTH) {
                     viewHistoryRef.current.shift();
