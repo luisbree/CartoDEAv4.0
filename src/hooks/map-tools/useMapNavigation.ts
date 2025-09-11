@@ -45,15 +45,17 @@ export const useMapNavigation = ({
     if (viewHistory.length < 2) return;
 
     isNavigatingHistoryRef.current = true;
-    
+
+    // The current view is the last item, so we pop it to get to the previous one
     const newHistory = [...viewHistory];
-    newHistory.pop();
+    newHistory.pop(); 
     const previousExtent = newHistory[newHistory.length - 1];
 
     if (mapRef.current && previousExtent) {
         mapRef.current.getView().fit(previousExtent, {
           duration: 500,
           callback: () => {
+            // Delay resetting the flag slightly to prevent the moveend event from re-adding the extent we just navigated to
             setTimeout(() => {
               isNavigatingHistoryRef.current = false;
             }, 100); 
@@ -64,7 +66,8 @@ export const useMapNavigation = ({
        isNavigatingHistoryRef.current = false;
     }
   }, [mapRef, viewHistory]);
-
+  
+  // Effect to manage the "Zoom to Area" tool
   useEffect(() => {
     if (!isMapReady || !mapRef.current) return;
     
@@ -78,7 +81,8 @@ export const useMapNavigation = ({
       dragBox.on('boxend', () => {
         const extent = dragBox.getGeometry().getExtent();
         mapRef.current?.getView().fit(extent, { duration: 500 });
-        setActiveTool(null);
+        // Correctly toggle the tool off so the lastActiveToolRef is updated
+        toggleZoomToArea();
       });
     }
 
@@ -92,8 +96,10 @@ export const useMapNavigation = ({
         mapElementRef.current.style.cursor = 'default';
       }
     };
-  }, [activeTool, isMapReady, mapRef, mapElementRef, stopTool, setActiveTool]);
+  }, [activeTool, isMapReady, mapRef, mapElementRef, stopTool, toggleZoomToArea]);
 
+  
+  // Effect to manage the view history for the back button
   useEffect(() => {
     if (!isMapReady || !mapRef.current) {
       return;
@@ -101,8 +107,7 @@ export const useMapNavigation = ({
 
     const map = mapRef.current;
     const view = map.getView();
-    let moveEndKey: EventsKey | undefined;
-
+    
     const handleMoveEnd = () => {
         if (isNavigatingHistoryRef.current) return;
         
@@ -110,7 +115,6 @@ export const useMapNavigation = ({
 
         setViewHistory(prevHistory => {
             const lastExtent = prevHistory.length > 0 ? prevHistory[prevHistory.length - 1] : null;
-            // A simple check to avoid adding duplicate extents if the map hasn't moved significantly
             if (lastExtent && lastExtent.every((val, i) => Math.abs(val - newExtent[i]) < 1)) {
                 return prevHistory;
             }
@@ -127,17 +131,18 @@ export const useMapNavigation = ({
     const renderCompleteKey = map.once('rendercomplete', () => {
         const initialSize = map.getSize();
         if (initialSize) {
-            setViewHistory([view.calculateExtent(initialSize)]);
+           setViewHistory([view.calculateExtent(initialSize)]);
         }
-        // After the first render, start listening for movement.
-        moveEndKey = view.on('moveend', handleMoveEnd);
     });
 
+    const moveEndKey = view.on('moveend', handleMoveEnd);
+
     return () => {
-        if (renderCompleteKey) unByKey(renderCompleteKey);
-        if (moveEndKey) unByKey(moveEndKey);
+        unByKey(renderCompleteKey);
+        unByKey(moveEndKey);
     };
   }, [isMapReady, mapRef]);
+
 
   return {
     activeTool,
