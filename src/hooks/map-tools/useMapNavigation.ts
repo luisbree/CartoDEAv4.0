@@ -7,6 +7,7 @@ import DragBox from 'ol/interaction/DragBox';
 import type { MapActionToolId } from '@/lib/types';
 import type { Extent } from 'ol/extent';
 import type { EventsKey } from 'ol/events';
+import { unByKey } from 'ol/Observable';
 
 interface UseMapNavigationProps {
   mapRef: React.RefObject<Map | null>;
@@ -29,6 +30,8 @@ export const useMapNavigation = ({
   const viewHistoryRef = useRef<Extent[]>([]);
   const isNavigatingHistoryRef = useRef(false);
   const [canGoToPrevious, setCanGoToPrevious] = useState(false);
+  const historyTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
 
   // Stop any active navigation tool
   const stopTool = useCallback(() => {
@@ -54,7 +57,10 @@ export const useMapNavigation = ({
     mapRef.current?.getView().fit(previousExtent, {
       duration: 500,
       callback: () => {
-        isNavigatingHistoryRef.current = false;
+        // Use a timeout to ensure this runs after the moveend event from fit() is processed
+        setTimeout(() => {
+            isNavigatingHistoryRef.current = false;
+        }, 100);
         setCanGoToPrevious(viewHistoryRef.current.length > 1);
       }
     });
@@ -100,36 +106,47 @@ export const useMapNavigation = ({
 
     const map = mapRef.current;
     const view = map.getView();
-    let listenerKey: EventsKey | undefined;
     
     const listener = () => {
         if (isNavigatingHistoryRef.current) {
             return;
         }
-        const newExtent = view.calculateExtent(map.getSize());
-        viewHistoryRef.current.push(newExtent);
-        
-        // Keep history at a reasonable size
-        if (viewHistoryRef.current.length > MAX_HISTORY_LENGTH) {
-            viewHistoryRef.current.shift();
+
+        // Debounce the history push
+        if (historyTimeoutRef.current) {
+            clearTimeout(historyTimeoutRef.current);
         }
-        
-        setCanGoToPrevious(viewHistoryRef.current.length > 1);
+
+        historyTimeoutRef.current = setTimeout(() => {
+            const newExtent = view.calculateExtent(map.getSize());
+            
+            // Avoid pushing duplicate extents
+            const lastExtent = viewHistoryRef.current[viewHistoryRef.current.length - 1];
+            if (lastExtent && lastExtent.every((val, i) => val === newExtent[i])) {
+                return;
+            }
+
+            viewHistoryRef.current.push(newExtent);
+            
+            if (viewHistoryRef.current.length > MAX_HISTORY_LENGTH) {
+                viewHistoryRef.current.shift();
+            }
+            
+            setCanGoToPrevious(viewHistoryRef.current.length > 1);
+        }, 500); // Wait 500ms after moveend to capture the extent
     };
 
-    // Use a timeout to capture the initial extent after the view is stable
-    const initialTimeout = setTimeout(() => {
-        const initialExtent = view.calculateExtent(map.getSize()!);
-        viewHistoryRef.current.push(initialExtent);
-        listenerKey = view.on('moveend', listener);
-    }, 100);
+    // Capture initial extent right away
+    const initialExtent = view.calculateExtent(map.getSize()!);
+    viewHistoryRef.current.push(initialExtent);
 
+    const listenerKey = view.on('moveend', listener);
 
     return () => {
-        clearTimeout(initialTimeout);
-        if (listenerKey) {
-            view.un('moveend', listener);
+        if (historyTimeoutRef.current) {
+            clearTimeout(historyTimeoutRef.current);
         }
+        unByKey(listenerKey);
     };
   }, [isMapReady, mapRef]);
   
