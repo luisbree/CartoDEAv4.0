@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -80,7 +81,7 @@ const DraggablePanel: React.FC<DraggablePanelProps> = ({
         maxWidth: maxSize.width ? `${maxSize.width}px` : '90vw',
         maxHeight: maxSize.height ? `${maxSize.height}px` : '80vh',
         resize: isCollapsed ? 'none' : 'both',
-        overflow: isCollapsed ? 'hidden' : 'visible', // Change this line
+        overflow: 'hidden',
       }}
       onMouseUpCapture={handleResizeStop}
     >
