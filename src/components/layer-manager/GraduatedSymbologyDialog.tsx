@@ -118,6 +118,7 @@ const COLOR_RAMP_DEFINITIONS: Record<ColorRampId, { start: string, end: string }
   blues: { start: '#eff3ff', end: '#08519c' },
   greens: { start: '#edf8e9', end: '#006d2c' },
   viridis: { start: '#440154', end: '#fde725' },
+  pinks: { start: '#ffcce1', end: '#c70063'},
 };
 
 
