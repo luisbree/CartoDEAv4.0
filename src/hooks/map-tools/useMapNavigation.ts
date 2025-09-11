@@ -82,7 +82,6 @@ export const useMapNavigation = ({
       dragBox.on('boxend', () => {
         const extent = dragBox.getGeometry().getExtent();
         mapRef.current?.getView().fit(extent, { duration: 500 });
-        // The tool is no longer self-disabling. The user can toggle it off with right-click.
       });
     }
 
@@ -102,51 +101,48 @@ export const useMapNavigation = ({
 
   // Effect to manage the view history
   useEffect(() => {
-    if (!isMapReady || !mapRef.current) return;
+    if (!isMapReady || !mapRef.current) {
+      return;
+    }
 
     const map = mapRef.current;
     const view = map.getView();
+    
+    // Initialize history with the first view
+    if (view.isRendered() && viewHistoryRef.current.length === 0) {
+        viewHistoryRef.current.push(view.calculateExtent(map.getSize()));
+    }
     
     const listener = () => {
         if (isNavigatingHistoryRef.current) {
             return;
         }
 
-        // Debounce the history push
         if (historyTimeoutRef.current) {
             clearTimeout(historyTimeoutRef.current);
         }
 
         historyTimeoutRef.current = setTimeout(() => {
             const newExtent = view.calculateExtent(map.getSize());
-            
-            // Avoid pushing duplicate extents
             const lastExtent = viewHistoryRef.current[viewHistoryRef.current.length - 1];
-            if (lastExtent && lastExtent.every((val, i) => val === newExtent[i])) {
-                return;
-            }
-
-            viewHistoryRef.current.push(newExtent);
             
-            if (viewHistoryRef.current.length > MAX_HISTORY_LENGTH) {
-                viewHistoryRef.current.shift();
+            if (!lastExtent || !lastExtent.every((val, i) => Math.abs(val - newExtent[i]) < 1)) {
+                viewHistoryRef.current.push(newExtent);
+                if (viewHistoryRef.current.length > MAX_HISTORY_LENGTH) {
+                    viewHistoryRef.current.shift();
+                }
+                setCanGoToPrevious(viewHistoryRef.current.length > 1);
             }
-            
-            setCanGoToPrevious(viewHistoryRef.current.length > 1);
-        }, 500); // Wait 500ms after moveend to capture the extent
+        }, 300);
     };
 
-    // Capture initial extent right away
-    const initialExtent = view.calculateExtent(map.getSize()!);
-    viewHistoryRef.current.push(initialExtent);
-
-    const listenerKey = view.on('moveend', listener);
+    const moveEndKey = view.on('moveend', listener);
 
     return () => {
-        if (historyTimeoutRef.current) {
-            clearTimeout(historyTimeoutRef.current);
-        }
-        unByKey(listenerKey);
+      if (historyTimeoutRef.current) {
+        clearTimeout(historyTimeoutRef.current);
+      }
+      unByKey(moveEndKey);
     };
   }, [isMapReady, mapRef]);
   
