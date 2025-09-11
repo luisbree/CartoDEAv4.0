@@ -62,8 +62,8 @@ function jenks(data: number[], n_classes: number): number[] {
   data = data.slice().sort((a, b) => a - b);
 
   const matrices = (() => {
-    const lower_class_limits = Array(data.length).fill(0).map(() => Array(n_classes).fill(0));
-    const variance_combinations = Array(data.length).fill(0).map(() => Array(n_classes).fill(0));
+    const lower_class_limits = Array(data.length).fill(0).map(() => Array(n_classes + 1).fill(0));
+    const variance_combinations = Array(data.length).fill(0).map(() => Array(n_classes + 1).fill(0));
     let variance = 0;
 
     for (let i = 0; i < data.length; i++) {
@@ -72,8 +72,8 @@ function jenks(data: number[], n_classes: number): number[] {
         sum += data[j];
         sum_sq += data[j] * data[j];
         variance = sum_sq - (sum * sum) / (j - i + 1);
-        lower_class_limits[i][0] = data[i];
-        variance_combinations[i][0] = variance;
+        lower_class_limits[i][1] = data[i];
+        variance_combinations[i][1] = variance;
       }
     }
     return { lower_class_limits, variance_combinations };
@@ -81,11 +81,11 @@ function jenks(data: number[], n_classes: number): number[] {
 
   const { lower_class_limits, variance_combinations } = matrices;
 
-  for (let k = 1; k < n_classes; k++) {
+  for (let k = 2; k <= n_classes; k++) {
     for (let i = 0; i < data.length; i++) {
       let min_variance = Infinity;
       for (let j = i; j < data.length; j++) {
-        const current_variance = variance_combinations[i][k - 1] + (j < data.length - 1 ? variance_combinations[j + 1][0] : 0);
+        const current_variance = variance_combinations[i][k - 1] + (j < data.length - 1 ? variance_combinations[j + 1][1] : 0);
         if (current_variance < min_variance) {
           min_variance = current_variance;
           lower_class_limits[i][k] = data[j];
@@ -96,12 +96,12 @@ function jenks(data: number[], n_classes: number): number[] {
   }
   
   const breaks = [];
-  let k = n_classes - 1;
+  let k = n_classes;
   let i = 0;
-  while (k > 0) {
+  while (k > 1) {
     const resolved_break = lower_class_limits[i][k];
     breaks.push(resolved_break);
-    while (data[i] <= resolved_break) {
+    while (i < data.length -1 && data[i] <= resolved_break) {
       i++;
     }
     k--;
