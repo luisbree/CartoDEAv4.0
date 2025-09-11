@@ -54,6 +54,62 @@ function generateColorRamp(startHex: string, endHex: string, count: number): str
     return ramp;
 }
 
+// --- Jenks Natural Breaks Algorithm ---
+
+function jenks(data: number[], n_classes: number): number[] {
+  if (n_classes > data.length) return [];
+
+  data = data.slice().sort((a, b) => a - b);
+
+  const matrices = (() => {
+    const lower_class_limits = Array(data.length).fill(0).map(() => Array(n_classes).fill(0));
+    const variance_combinations = Array(data.length).fill(0).map(() => Array(n_classes).fill(0));
+    let variance = 0;
+
+    for (let i = 0; i < data.length; i++) {
+      let sum = 0, sum_sq = 0;
+      for (let j = i; j < data.length; j++) {
+        sum += data[j];
+        sum_sq += data[j] * data[j];
+        variance = sum_sq - (sum * sum) / (j - i + 1);
+        lower_class_limits[i][0] = data[i];
+        variance_combinations[i][0] = variance;
+      }
+    }
+    return { lower_class_limits, variance_combinations };
+  })();
+
+  const { lower_class_limits, variance_combinations } = matrices;
+
+  for (let k = 1; k < n_classes; k++) {
+    for (let i = 0; i < data.length; i++) {
+      let min_variance = Infinity;
+      for (let j = i; j < data.length; j++) {
+        const current_variance = variance_combinations[i][k - 1] + (j < data.length - 1 ? variance_combinations[j + 1][0] : 0);
+        if (current_variance < min_variance) {
+          min_variance = current_variance;
+          lower_class_limits[i][k] = data[j];
+        }
+      }
+      variance_combinations[i][k] = min_variance;
+    }
+  }
+  
+  const breaks = [];
+  let k = n_classes - 1;
+  let i = 0;
+  while (k > 0) {
+    const resolved_break = lower_class_limits[i][k];
+    breaks.push(resolved_break);
+    while (data[i] <= resolved_break) {
+      i++;
+    }
+    k--;
+  }
+  
+  return breaks.reverse();
+}
+
 
 // Define ramps by start and end colors for interpolation
 const COLOR_RAMP_DEFINITIONS: Record<ColorRampId, { start: string, end: string }> = {
@@ -132,8 +188,14 @@ const GraduatedSymbologyDialog: React.FC<GraduatedSymbologyDialogProps> = ({
     let breaks: number[] = [];
     const rampDefinition = COLOR_RAMP_DEFINITIONS[colorRamp];
     const numClasses = Math.max(2, classes);
-
-    if (method === 'quantiles') {
+    
+    if (method === 'natural-breaks') {
+      breaks = jenks(values, numClasses);
+      // Ensure the last break is the max value of the dataset
+      if (breaks.length > 0 && breaks[breaks.length - 1] < values[values.length - 1]) {
+        breaks[breaks.length - 1] = values[values.length - 1];
+      }
+    } else { // quantiles
       const step = Math.max(1, Math.floor(values.length / numClasses));
       for (let i = 1; i < numClasses; i++) {
         const breakIndex = Math.min(i * step, values.length - 1);
@@ -198,6 +260,7 @@ const GraduatedSymbologyDialog: React.FC<GraduatedSymbologyDialogProps> = ({
                 </SelectTrigger>
                 <SelectContent className="bg-gray-700 text-white border-gray-600">
                   <SelectItem value="quantiles" className="text-xs">Cuantiles (Equal Count)</SelectItem>
+                  <SelectItem value="natural-breaks" className="text-xs">Natural Breaks (Jenks)</SelectItem>
                 </SelectContent>
               </Select>
             </div>

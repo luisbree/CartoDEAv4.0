@@ -7,7 +7,7 @@ import type Feature from 'ol/Feature';
 import type { Geometry } from 'ol/geom';
 
 export type ColorRampId = 'reds' | 'blues' | 'greens' | 'viridis';
-export type ClassificationMethod = 'quantiles';
+export type ClassificationMethod = 'quantiles' | 'natural-breaks';
 
 export interface GraduatedSymbology {
   field: string;
