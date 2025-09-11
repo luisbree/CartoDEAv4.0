@@ -60,7 +60,7 @@ import { useOsmQuery } from '@/hooks/osm-integration/useOsmQuery';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from '@/lib/utils';
 
-import type { OSMCategoryConfig, GeoServerDiscoveredLayer, BaseLayerOptionForSelect, MapLayer, ChatMessage, BaseLayerSettings, NominatimResult, PlainFeatureData, ActiveTool, TrelloCardInfo } from '@/lib/types';
+import type { OSMCategoryConfig, GeoServerDiscoveredLayer, BaseLayerOptionForSelect, MapLayer, ChatMessage, BaseLayerSettings, NominatimResult, PlainFeatureData, ActiveTool, TrelloCardInfo, GraduatedSymbology } from '@/lib/types';
 import { chatWithMapAssistant, type MapAssistantOutput } from '@/ai/flows/find-layer-flow';
 import { authenticateWithGee } from '@/ai/flows/gee-flow';
 import { checkTrelloCredentials } from '@/ai/flows/trello-actions';
@@ -357,7 +357,7 @@ export default function GeoMapperClient() {
     drawingSourceRef, 
     addLayer: layerManagerHook.addLayer, 
     osmCategoryConfigs: osmCategoryConfig,
-    onExportLayers: layerManagerHook.handleExportLayer,
+    onExportLayers: layerManagerHook.handleExportLayer as any,
   });
   
   const drawingInteractions = useDrawingInteractions({
@@ -803,7 +803,6 @@ export default function GeoMapperClient() {
                 size="icon"
                 className="h-8 w-8 flex-shrink-0 bg-black/20 hover:bg-black/40 border border-white/30 text-white/90"
                 title="Encuadre Anterior"
-                disabled={!mapNavigationHook.canGoToPrevious}
             >
                 <Undo2 className="h-4 w-4" />
             </Button>
