@@ -75,7 +75,7 @@ export const useMapNavigation = ({
       dragBox.on('boxend', () => {
         const extent = dragBox.getGeometry().getExtent();
         mapRef.current?.getView().fit(extent, { duration: 500 });
-        setActiveTool(null); // Deactivate tool after use
+        // The tool is no longer self-disabling. The user can toggle it off with right-click.
       });
     }
 
@@ -90,7 +90,7 @@ export const useMapNavigation = ({
         mapElementRef.current.style.cursor = 'default';
       }
     };
-  }, [activeTool, isMapReady, mapRef, mapElementRef, stopTool, setActiveTool]);
+  }, [activeTool, isMapReady, mapRef, mapElementRef, stopTool]);
 
 
   // Effect to manage the view history
@@ -119,7 +119,10 @@ export const useMapNavigation = ({
     viewHistoryRef.current.push(initialExtent);
 
     return () => {
-        view.un('moveend', listener.key);
+        // In some environments, the listener key can be an object, so we check.
+        if (typeof listener === 'object' && listener.key) {
+           view.un('moveend', listener.key);
+        }
     };
   }, [isMapReady, mapRef]);
   
