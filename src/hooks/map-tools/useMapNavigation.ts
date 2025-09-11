@@ -65,6 +65,8 @@ export const useMapNavigation = ({
           }
         });
         setViewHistory(newHistory);
+    } else {
+       isNavigatingHistoryRef.current = false;
     }
 
   }, [mapRef, viewHistory]);
@@ -107,7 +109,7 @@ export const useMapNavigation = ({
 
     const map = mapRef.current;
     const view = map.getView();
-    let moveEndKey: EventsKey;
+    let moveEndKey: EventsKey | undefined;
     let historyTimeout: NodeJS.Timeout;
 
     const listener = () => {
@@ -122,7 +124,6 @@ export const useMapNavigation = ({
             setViewHistory(prevHistory => {
                 const lastExtent = prevHistory.length > 0 ? prevHistory[prevHistory.length - 1] : null;
 
-                // Avoid adding duplicate extents if the view hasn't changed meaningfully
                 if (lastExtent && lastExtent.every((val, i) => Math.abs(val - newExtent[i]) < 1)) {
                     return prevHistory;
                 }
@@ -133,18 +134,17 @@ export const useMapNavigation = ({
                 }
                 return updatedHistory;
             });
-        }, 300); // Debounce to avoid capturing intermediate extents during a single drag
+        }, 300);
     };
     
-    // Add the listener only when the map is ready
-    moveEndKey = view.on('moveend', listener);
-
-    // Initial extent capture
+    // Capture initial state
     map.once('rendercomplete', () => {
         const initialSize = map.getSize();
         if (initialSize) {
             setViewHistory([view.calculateExtent(initialSize)]);
         }
+        // Then, start listening for subsequent changes
+        moveEndKey = view.on('moveend', listener);
     });
 
     return () => {
@@ -153,7 +153,7 @@ export const useMapNavigation = ({
         unByKey(moveEndKey);
       }
     };
-  }, [isMapReady, mapRef]);
+  }, [isMapReady, mapRef, setViewHistory]); // Add setViewHistory to dependencies
   
   
   return {
@@ -161,6 +161,6 @@ export const useMapNavigation = ({
     toggleZoomToArea,
     goToPreviousExtent,
     canGoToPrevious: viewHistory.length > 1,
-    viewHistory, // Return for debugging
+    viewHistory,
   };
 };
