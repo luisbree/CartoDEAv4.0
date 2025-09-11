@@ -89,10 +89,11 @@ export interface PlainFeatureData {
 export type DrawToolId = 'Polygon' | 'LineString' | 'Point' | 'Rectangle' | 'FreehandPolygon';
 export type MeasureToolId = 'LineString' | 'Polygon';
 export type InteractionToolId = 'inspect' | 'selectBox';
+export type MapActionToolId = 'zoomToArea';
 
 export interface ActiveTool {
-  type: 'draw' | 'measure' | 'interaction' | null;
-  id: DrawToolId | MeasureToolId | InteractionToolId | null;
+  type: 'draw' | 'measure' | 'interaction' | 'mapAction' | null;
+  id: DrawToolId | MeasureToolId | InteractionToolId | MapActionToolId | null;
 }
 
 export interface LabelPart {

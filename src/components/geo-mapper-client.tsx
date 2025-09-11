@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { MapPin, Database, Wrench, ListTree, ListChecks, Sparkles, ClipboardCheck, Library, LifeBuoy, Printer, Server, BrainCircuit, Camera, Loader2, SlidersHorizontal } from 'lucide-react';
+import { MapPin, Database, Wrench, ListTree, ListChecks, Sparkles, ClipboardCheck, Library, LifeBuoy, Printer, Server, BrainCircuit, Camera, Loader2, SlidersHorizontal, ZoomIn, Undo2 } from 'lucide-react';
 import { Style, Fill, Stroke, Circle as CircleStyle, Text as TextStyle } from 'ol/style';
 import { transform, transformExtent } from 'ol/proj';
 import type { Extent } from 'ol/extent';
@@ -50,6 +50,7 @@ import { useLayerManager } from '@/hooks/layer-manager/useLayerManager';
 import { useFeatureInspection } from '@/hooks/feature-inspection/useFeatureInspection';
 import { useDrawingInteractions } from '@/hooks/drawing-tools/useDrawingInteractions';
 import { useMeasurement } from '@/hooks/map-tools/useMeasurement';
+import { useMapNavigation } from '@/hooks/map-tools/useMapNavigation';
 import { useOSMData } from '@/hooks/osm-integration/useOSMData';
 import { useGeoServerLayers } from '@/hooks/geoserver-connection/useGeoServerLayers';
 import { useFloatingPanels } from '@/hooks/panels/useFloatingPanels';
@@ -356,7 +357,7 @@ export default function GeoMapperClient() {
     drawingSourceRef, 
     addLayer: layerManagerHook.addLayer, 
     osmCategoryConfigs: osmCategoryConfig,
-    onExportLayer: layerManagerHook.handleExportLayer,
+    onExportLayers: layerManagerHook.handleExportLayer,
   });
   
   const drawingInteractions = useDrawingInteractions({
@@ -369,6 +370,14 @@ export default function GeoMapperClient() {
     mapRef, isMapReady,
     activeTool: activeTool.type === 'measure' ? activeTool.id : null,
     setActiveTool: (id) => handleSetActiveTool({ type: 'measure', id }),
+  });
+
+  const mapNavigationHook = useMapNavigation({
+    mapRef,
+    mapElementRef,
+    isMapReady,
+    activeTool: activeTool.type === 'mapAction' ? activeTool.id : null,
+    setActiveTool: (id) => handleSetActiveTool({ type: 'mapAction', id }),
   });
 
   const { captureMapAsDataUrl } = useMapCapture({ mapRef, activeBaseLayerId });
@@ -778,6 +787,25 @@ export default function GeoMapperClient() {
                 title="Abrir Google Street View en la ubicación actual"
             >
                 <StreetViewIcon className="h-5 w-5" />
+            </Button>
+             <Button
+                onClick={mapNavigationHook.toggleZoomToArea}
+                variant="outline"
+                size="icon"
+                className={cn("h-8 w-8 flex-shrink-0 bg-black/20 hover:bg-black/40 border border-white/30 text-white/90", mapNavigationHook.activeTool === 'zoomToArea' && 'bg-primary hover:bg-primary/90')}
+                title="Zoom a Área"
+            >
+                <ZoomIn className="h-4 w-4" />
+            </Button>
+            <Button
+                onClick={mapNavigationHook.goToPreviousExtent}
+                variant="outline"
+                size="icon"
+                className="h-8 w-8 flex-shrink-0 bg-black/20 hover:bg-black/40 border border-white/30 text-white/90"
+                title="Encuadre Anterior"
+                disabled={!mapNavigationHook.canGoToPrevious}
+            >
+                <Undo2 className="h-4 w-4" />
             </Button>
             <Button
                 onClick={handleCaptureAndDownload}
