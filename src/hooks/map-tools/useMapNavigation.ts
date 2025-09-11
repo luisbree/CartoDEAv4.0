@@ -108,12 +108,6 @@ export const useMapNavigation = ({
     const map = mapRef.current;
     const view = map.getView();
     
-    // Initialize history with the first view
-    const mapSize = map.getSize();
-    if (mapSize && viewHistoryRef.current.length === 0) {
-        viewHistoryRef.current.push(view.calculateExtent(mapSize));
-    }
-    
     const listener = () => {
         if (isNavigatingHistoryRef.current) {
             return;
@@ -128,6 +122,12 @@ export const useMapNavigation = ({
             if (!currentSize) return;
 
             const newExtent = view.calculateExtent(currentSize);
+            
+            // On the very first moveend event, initialize the history if it's empty
+            if (viewHistoryRef.current.length === 0) {
+                 viewHistoryRef.current.push(newExtent);
+            }
+
             const lastExtent = viewHistoryRef.current[viewHistoryRef.current.length - 1];
             
             // Check if extents are valid and different enough to record
@@ -138,7 +138,7 @@ export const useMapNavigation = ({
                 }
                 setCanGoToPrevious(viewHistoryRef.current.length > 1);
             }
-        }, 300);
+        }, 300); // Debounce to avoid rapid history entries
     };
 
     const moveEndKey = view.on('moveend', listener);
