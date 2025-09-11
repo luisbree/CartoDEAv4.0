@@ -54,7 +54,7 @@ function generateColorRamp(startHex: string, endHex: string, count: number): str
     return ramp;
 }
 
-// --- Jenks Natural Breaks Algorithm ---
+// --- Jenks Natural Breaks Algorithm (Corrected Implementation) ---
 
 function jenks(data: number[], n_classes: number): number[] {
   if (n_classes > data.length) return [];
@@ -62,53 +62,54 @@ function jenks(data: number[], n_classes: number): number[] {
   data = data.slice().sort((a, b) => a - b);
 
   const matrices = (() => {
-    const lower_class_limits = Array(data.length).fill(0).map(() => Array(n_classes + 1).fill(0));
-    const variance_combinations = Array(data.length).fill(0).map(() => Array(n_classes + 1).fill(0));
-    let variance = 0;
-
-    for (let i = 0; i < data.length; i++) {
-      let sum = 0, sum_sq = 0;
-      for (let j = i; j < data.length; j++) {
-        sum += data[j];
-        sum_sq += data[j] * data[j];
-        variance = sum_sq - (sum * sum) / (j - i + 1);
-        lower_class_limits[i][1] = data[i];
-        variance_combinations[i][1] = variance;
-      }
+    const mat1 = Array(data.length + 1).fill(0).map(() => Array(n_classes + 1).fill(0));
+    const mat2 = Array(data.length + 1).fill(0).map(() => Array(n_classes + 1).fill(0));
+    
+    for (let i = 1; i <= n_classes; i++) {
+        mat1[1][i] = 1;
+        mat2[1][i] = 0;
+        for (let j = 2; j <= data.length; j++) {
+            mat2[j][i] = Infinity;
+        }
     }
-    return { lower_class_limits, variance_combinations };
+
+    let v = 0.0;
+    for (let l = 2; l <= data.length; l++) {
+        let s1 = 0.0, s2 = 0.0, w = 0.0;
+        for (let m = 1; m <= l; m++) {
+            const i4 = l - m + 1;
+            const val = data[i4 - 1];
+            w++;
+            s1 += val;
+            s2 += val * val;
+            v = s2 - (s1 * s1) / w;
+            const i3 = i4 - 1;
+            if (i3 !== 0) {
+                for (let j = 2; j <= n_classes; j++) {
+                    if (mat2[l][j] >= (v + mat2[i3][j - 1])) {
+                        mat1[l][j] = i4;
+                        mat2[l][j] = v + mat2[i3][j - 1];
+                    }
+                }
+            }
+        }
+        mat1[l][1] = 1;
+        mat2[l][1] = v;
+    }
+    return { backlinkMatrix: mat1 };
   })();
 
-  const { lower_class_limits, variance_combinations } = matrices;
-
-  for (let k = 2; k <= n_classes; k++) {
-    for (let i = 0; i < data.length; i++) {
-      let min_variance = Infinity;
-      for (let j = i; j < data.length; j++) {
-        const current_variance = variance_combinations[i][k - 1] + (j < data.length - 1 ? variance_combinations[j + 1][1] : 0);
-        if (current_variance < min_variance) {
-          min_variance = current_variance;
-          lower_class_limits[i][k] = data[j];
-        }
-      }
-      variance_combinations[i][k] = min_variance;
-    }
-  }
-  
+  const { backlinkMatrix } = matrices;
   const breaks = [];
-  let k = n_classes;
-  let i = 0;
-  while (k > 1) {
-    const resolved_break = lower_class_limits[i][k];
-    breaks.push(resolved_break);
-    while (i < data.length -1 && data[i] <= resolved_break) {
-      i++;
-    }
-    k--;
+  let k = data.length;
+  for (let i = n_classes; i > 1; i--) {
+    breaks.push(data[backlinkMatrix[k][i] - 2]);
+    k = backlinkMatrix[k][i] - 1;
   }
   
   return breaks.reverse();
 }
+
 
 
 // Define ramps by start and end colors for interpolation
@@ -193,7 +194,10 @@ const GraduatedSymbologyDialog: React.FC<GraduatedSymbologyDialogProps> = ({
       breaks = jenks(values, numClasses);
       // Ensure the last break is the max value of the dataset
       if (breaks.length > 0 && breaks[breaks.length - 1] < values[values.length - 1]) {
-        breaks[breaks.length - 1] = values[values.length - 1];
+        breaks.push(values[values.length - 1]);
+      } else if (breaks.length === 0) {
+        // Handle case where jenks fails or returns no breaks
+        breaks.push(values[values.length - 1]);
       }
     } else { // quantiles
       const step = Math.max(1, Math.floor(values.length / numClasses));
@@ -205,7 +209,7 @@ const GraduatedSymbologyDialog: React.FC<GraduatedSymbologyDialogProps> = ({
     }
     
     // Ensure breaks are unique and handle cases with few unique values
-    breaks = [...new Set(breaks)];
+    breaks = [...new Set(breaks)].sort((a, b) => a - b);
     const finalNumClasses = breaks.length;
     const finalColors = generateColorRamp(rampDefinition.start, rampDefinition.end, finalNumClasses);
 
