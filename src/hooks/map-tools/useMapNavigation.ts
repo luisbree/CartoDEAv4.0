@@ -29,6 +29,8 @@ export const useMapNavigation = ({
   const dragBoxInteractionRef = useRef<DragBox | null>(null);
   const [viewHistory, setViewHistory] = useState<Extent[]>([]);
   const isNavigatingHistoryRef = useRef(false);
+  const historyListenerRef = useRef<(event: any) => void>();
+
 
   // Stop any active navigation tool
   const stopTool = useCallback(() => {
@@ -101,7 +103,31 @@ export const useMapNavigation = ({
     };
   }, [activeTool, isMapReady, mapRef, mapElementRef, stopTool, setActiveTool]);
 
-  // Effect to manage the view history
+  // Define the history listener using a ref to prevent stale closures
+  useEffect(() => {
+    historyListenerRef.current = () => {
+      if (isNavigatingHistoryRef.current || !mapRef.current) return;
+      
+      const newExtent = mapRef.current.getView().calculateExtent(mapRef.current.getSize());
+      
+      setViewHistory(prevHistory => {
+          const lastExtent = prevHistory.length > 0 ? prevHistory[prevHistory.length - 1] : null;
+
+          // Prevent adding duplicate extents
+          if (lastExtent && lastExtent.every((val, i) => Math.abs(val - newExtent[i]) < 1)) {
+              return prevHistory;
+          }
+
+          const updatedHistory = [...prevHistory, newExtent];
+          if (updatedHistory.length > MAX_HISTORY_LENGTH) {
+              return updatedHistory.slice(updatedHistory.length - MAX_HISTORY_LENGTH);
+          }
+          return updatedHistory;
+      });
+    };
+  }, []); // Empty dependency array means this ref is set once
+
+  // Effect to attach and detach the event listener from the map view
   useEffect(() => {
     if (!isMapReady || !mapRef.current) {
       return;
@@ -110,41 +136,23 @@ export const useMapNavigation = ({
     const map = mapRef.current;
     const view = map.getView();
     let moveEndKey: EventsKey | undefined;
-    let historyTimeout: NodeJS.Timeout;
+    let historyTimeout: NodeJS.Timeout | undefined;
 
-    const listener = () => {
-        if (isNavigatingHistoryRef.current) return;
-
+    const debouncedListener = () => {
         clearTimeout(historyTimeout);
         historyTimeout = setTimeout(() => {
-            const currentSize = map.getSize();
-            if (!currentSize) return;
-            const newExtent = view.calculateExtent(currentSize);
-            
-            setViewHistory(prevHistory => {
-                const lastExtent = prevHistory.length > 0 ? prevHistory[prevHistory.length - 1] : null;
-
-                if (lastExtent && lastExtent.every((val, i) => Math.abs(val - newExtent[i]) < 1)) {
-                    return prevHistory;
-                }
-
-                const updatedHistory = [...prevHistory, newExtent];
-                if (updatedHistory.length > MAX_HISTORY_LENGTH) {
-                    return updatedHistory.slice(updatedHistory.length - MAX_HISTORY_LENGTH);
-                }
-                return updatedHistory;
-            });
-        }, 300);
+            historyListenerRef.current?.(null);
+        }, 300); // 300ms debounce
     };
     
-    // Capture initial state
+    // Capture initial state once map is fully rendered
     map.once('rendercomplete', () => {
         const initialSize = map.getSize();
         if (initialSize) {
             setViewHistory([view.calculateExtent(initialSize)]);
         }
         // Then, start listening for subsequent changes
-        moveEndKey = view.on('moveend', listener);
+        moveEndKey = view.on('moveend', debouncedListener);
     });
 
     return () => {
@@ -153,7 +161,7 @@ export const useMapNavigation = ({
         unByKey(moveEndKey);
       }
     };
-  }, [isMapReady, mapRef, setViewHistory]); // Add setViewHistory to dependencies
+  }, [isMapReady, mapRef]);
   
   
   return {
