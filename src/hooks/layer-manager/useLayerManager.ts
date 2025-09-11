@@ -1,5 +1,3 @@
-
-
 "use client";
 
 import { useState, useCallback, useEffect } from 'react';
@@ -17,6 +15,7 @@ import { findLandsatFootprints } from '@/services/landsat';
 import type { MapLayer, VectorMapLayer, PlainFeatureData, LabelOptions, StyleOptions, GraduatedSymbology } from '@/lib/types';
 import { nanoid } from 'nanoid';
 import { Style, Stroke, Fill, Circle as CircleStyle, Text as TextStyle } from 'ol/style';
+import type { StyleLike } from 'ol/style/Style';
 import { transformExtent } from 'ol/proj';
 import GeoJSON from 'ol/format/GeoJSON';
 import KML from 'ol/format/KML';
@@ -60,6 +59,91 @@ const transparentStyle = new Style({
   fill: new Fill({ color: 'rgba(255,255,255,0)' }),
   stroke: new Stroke({ color: 'rgba(255,255,255,0)', width: 0 }),
 });
+
+
+// Centralized function to create the final style for a layer
+const createStyleFunction = (
+  baseStyleOrFn: StyleLike | null | undefined,
+  labelOptions: LabelOptions | undefined,
+  graduatedSymbology: GraduatedSymbology | undefined
+): StyleLike => {
+  const isLabelEnabled = labelOptions?.enabled && labelOptions.labelParts.length > 0;
+
+  // Case 1: No labels and no graduated symbology, just return the simple base style
+  if (!isLabelEnabled && !graduatedSymbology) {
+    return baseStyleOrFn || transparentStyle;
+  }
+
+  // Case 2: We have labels or graduated symbology, so we need a style function
+  return (feature, resolution) => {
+    let baseStyle: Style | Style[];
+
+    // Determine the base style
+    if (graduatedSymbology) {
+      const value = feature.get(graduatedSymbology.field);
+      let color = 'rgba(128,128,128,0.5)'; // Default gray for invalid values
+      if (typeof value === 'number') {
+        color = graduatedSymbology.colors[graduatedSymbology.colors.length - 1]; // Default to last color
+        for (let i = 0; i < graduatedSymbology.breaks.length; i++) {
+            if (value <= graduatedSymbology.breaks[i]) {
+                color = graduatedSymbology.colors[i];
+                break;
+            }
+        }
+      }
+      baseStyle = new Style({
+          fill: new Fill({ color }),
+          stroke: new Stroke({ color: 'rgba(0,0,0,0.5)', width: 1 }),
+      });
+    } else {
+        const style = typeof baseStyleOrFn === 'function' ? baseStyleOrFn(feature, resolution) : baseStyleOrFn;
+        baseStyle = Array.isArray(style) ? style[0] : style || new Style();
+    }
+    
+    // If labels are not enabled, just return the calculated base style
+    if (!isLabelEnabled) {
+      return baseStyle;
+    }
+
+    // Clone the base style(s) to add labels without modifying the original
+    const styleToClone = Array.isArray(baseStyle) ? baseStyle[0] : baseStyle;
+    if (!(styleToClone instanceof Style)) return baseStyle;
+    const finalStyle = styleToClone.clone();
+
+    // --- Label Logic ---
+    const labelText = labelOptions.labelParts.map(part => {
+        if (part.type === 'field') return feature.get(part.value) || '';
+        if (part.type === 'newline') return '\n';
+        return part.value;
+    }).join('');
+
+    if (!labelText) {
+        return finalStyle;
+    }
+    
+    const textColor = colorMap[labelOptions.textColor] || (isValidHex(labelOptions.textColor) ? labelOptions.textColor : '#000000');
+    const outlineColor = colorMap[labelOptions.outlineColor] || (isValidHex(labelOptions.outlineColor) ? labelOptions.outlineColor : '#FFFFFF');
+    const geometry = feature.getGeometry();
+    const geometryType = geometry?.getType();
+
+    const textStyle = new TextStyle({
+        text: labelText,
+        font: `${labelOptions.fontSize}px ${labelOptions.fontFamily}`,
+        fill: new Fill({ color: textColor }),
+        stroke: new Stroke({ color: outlineColor, width: 2.5 }),
+        textAlign: geometryType === 'Point' ? 'left' : 'center',
+        textBaseline: 'middle',
+        offsetX: geometryType === 'Point' ? 10 : 0,
+        offsetY: -labelOptions.offsetY,
+        placement: labelOptions.placement === 'parallel' && (geometryType === 'LineString' || geometryType === 'MultiLineString') ? 'line' : 'point',
+        overflow: labelOptions.overflow,
+    });
+
+    finalStyle.setText(textStyle);
+    return finalStyle;
+  };
+};
+
 
 export const useLayerManager = ({
   mapRef,
@@ -370,252 +454,115 @@ export const useLayerManager = ({
   }, [mapRef]);
 
   const changeLayerStyle = useCallback((layerId: string, styleOptions: StyleOptions) => {
-    setLayers(prevLayers => {
-        const layer = prevLayers.find(l => l.id === layerId);
-        if (!layer || !(layer.olLayer instanceof VectorLayer)) {
-            setTimeout(() => toast({ description: "Solo se puede cambiar el estilo de capas vectoriales." }), 0);
-            return prevLayers;
-        }
-    
-        const linkedWmsId = layer.olLayer.get('linkedWmsLayerId');
-        if (linkedWmsId && mapRef.current) {
-            const wmsLayer = mapRef.current.getLayers().getArray().find(l => l.get('id') === linkedWmsId);
-            if (wmsLayer) {
-                wmsLayer.setVisible(false);
-                setTimeout(() => toast({ description: `Se ocultó la capa WMS para mostrar el nuevo estilo.` }), 0);
-            }
-        }
-    
-        const olLayer = layer.olLayer as VectorLayer<any>;
-        const existingStyle = olLayer.getStyle();
-        let baseStyle: Style;
-    
-        if (existingStyle instanceof Style) {
-            baseStyle = existingStyle.clone();
-        } else if (Array.isArray(existingStyle) && existingStyle.length > 0 && existingStyle[0] instanceof Style) {
-            baseStyle = existingStyle[0].clone();
-        } else {
-            baseStyle = new Style({
-                stroke: new Stroke({ color: '#3399CC', width: 2 }),
-                fill: new Fill({ color: 'rgba(51, 153, 204, 0.2)' }),
-                image: new CircleStyle({
-                    radius: 5,
-                    fill: new Fill({ color: 'rgba(51, 153, 204, 0.2)' }),
-                    stroke: new Stroke({ color: '#3399CC', width: 1.5 })
-                })
-            });
-        }
-    
-        const stroke = baseStyle.getStroke() ?? new Stroke();
-        const fill = baseStyle.getFill() ?? new Fill();
-        const image = baseStyle.getImage() instanceof CircleStyle ? baseStyle.getImage().clone() as CircleStyle : new CircleStyle({
-            radius: 5,
-            fill: new Fill({ color: 'rgba(51, 153, 204, 0.2)' }),
-            stroke: new Stroke({ color: '#3399CC', width: 1.5 })
-        });
-        
-        let styleChanged = false;
-    
-        if (styleOptions.strokeColor) {
-            const colorName = styleOptions.strokeColor.toLowerCase();
-            const colorValue = colorMap[colorName] || (isValidHex(colorName) ? colorName : undefined);
-            if (colorValue !== undefined) {
-                styleChanged = true;
-                stroke.setColor(colorValue);
-                if (image.getStroke()) image.getStroke().setColor(colorValue);
-            }
-        }
-    
-        if (styleOptions.fillColor) {
-            const colorName = styleOptions.fillColor.toLowerCase();
-            const colorValue = colorMap[colorName] || (isValidHex(colorName) ? colorName : undefined);
-             if (colorValue !== undefined) {
-                styleChanged = true;
-                fill.setColor(colorValue);
-                if (image.getFill()) image.getFill().setColor(colorValue);
-            }
-        }
-    
-        if (styleOptions.lineWidth) {
-            styleChanged = true;
-            stroke.setWidth(styleOptions.lineWidth);
-            if (image.getStroke()) image.getStroke().setWidth(styleOptions.lineWidth);
-        }
+    const layer = layers.find(l => l.id === layerId) as VectorMapLayer | undefined;
+    if (!layer) return;
 
-        if (styleOptions.pointSize) {
-            styleChanged = true;
-            image.setRadius(styleOptions.pointSize);
+    // Hide linked WMS to show custom style
+    const linkedWmsId = layer.olLayer.get('linkedWmsLayerId');
+    if (linkedWmsId && mapRef.current) {
+        const wmsLayer = mapRef.current.getLayers().getArray().find(l => l.get('id') === linkedWmsId);
+        if (wmsLayer) {
+            wmsLayer.setVisible(false);
+            setTimeout(() => toast({ description: `Se ocultó la capa WMS para mostrar el nuevo estilo.` }), 0);
         }
-    
-        if (styleOptions.lineStyle) {
-            styleChanged = true;
-            let lineDash: number[] | undefined;
-            if (styleOptions.lineStyle === 'dashed') lineDash = [10, 10];
-            else if (styleOptions.lineStyle === 'dotted') lineDash = [1, 5];
-            stroke.setLineDash(lineDash);
-        }
-        
-        if (styleChanged) {
-            const newStyle = new Style({ stroke, fill, image });
-            olLayer.setStyle(newStyle);
-            // Also update the layer state to remove graduated symbology if a simple style is applied
-            if (layer.graduatedSymbology) {
-              const updatedLayer = { ...layer, graduatedSymbology: undefined };
-              return prevLayers.map(l => l.id === layerId ? updatedLayer : l);
-            }
-            setTimeout(() => toast({ description: `Estilo de la capa "${layer.name}" actualizado.` }), 0);
-        }
-        return prevLayers;
+    }
+
+    const olLayer = layer.olLayer;
+    const existingStyle = (olLayer.get('originalStyle') || olLayer.getStyle()) as StyleLike | undefined;
+    let baseStyle: Style;
+
+    if (existingStyle instanceof Style) {
+        baseStyle = existingStyle.clone();
+    } else {
+        baseStyle = new Style({
+            stroke: new Stroke({ color: '#3399CC', width: 2 }),
+            fill: new Fill({ color: 'rgba(51, 153, 204, 0.2)' }),
+            image: new CircleStyle({
+                radius: 5,
+                fill: new Fill({ color: 'rgba(51, 153, 204, 0.2)' }),
+                stroke: new Stroke({ color: '#3399CC', width: 1.5 })
+            })
+        });
+    }
+
+    const stroke = baseStyle.getStroke() ?? new Stroke();
+    const fill = baseStyle.getFill() ?? new Fill();
+    const image = baseStyle.getImage() instanceof CircleStyle ? (baseStyle.getImage() as CircleStyle).clone() : new CircleStyle({
+        radius: 5,
+        fill: new Fill({ color: 'rgba(51, 153, 204, 0.2)' }),
+        stroke: new Stroke({ color: '#3399CC', width: 1.5 })
     });
-  }, [toast, mapRef]);
+    
+    // Apply new style options
+    const strokeColorValue = colorMap[styleOptions.strokeColor.toLowerCase()] || (isValidHex(styleOptions.strokeColor) ? styleOptions.strokeColor : undefined);
+    if (strokeColorValue) {
+      stroke.setColor(strokeColorValue);
+      image.getStroke()?.setColor(strokeColorValue);
+    }
+
+    const fillColorValue = colorMap[styleOptions.fillColor.toLowerCase()] || (isValidHex(styleOptions.fillColor) ? styleOptions.fillColor : undefined);
+    if (fillColorValue) {
+      fill.setColor(fillColorValue);
+      image.getFill()?.setColor(fillColorValue);
+    }
+    
+    stroke.setWidth(styleOptions.lineWidth);
+    image.getStroke()?.setWidth(styleOptions.lineWidth);
+    image.setRadius(styleOptions.pointSize);
+    let lineDash: number[] | undefined;
+    if (styleOptions.lineStyle === 'dashed') lineDash = [10, 10];
+    else if (styleOptions.lineStyle === 'dotted') lineDash = [1, 5];
+    stroke.setLineDash(lineDash);
+
+    const newSimpleStyle = new Style({ stroke, fill, image });
+    olLayer.set('originalStyle', newSimpleStyle);
+    olLayer.set('graduatedSymbology', undefined); // Clear graduated symbology
+
+    const finalStyle = createStyleFunction(newSimpleStyle, olLayer.get('labelOptions'), undefined);
+    olLayer.setStyle(finalStyle);
+
+    setLayers(prev => prev.map(l => l.id === layerId ? { ...l, graduatedSymbology: undefined } : l));
+    setTimeout(() => toast({ description: `Estilo de la capa "${layer.name}" actualizado.` }), 0);
+
+  }, [layers, toast, mapRef]);
 
   const changeLayerLabels = useCallback((layerId: string, labelOptions: LabelOptions) => {
-    const layer = layers.find(l => l.id === layerId);
-    if (!layer || !(layer.olLayer instanceof VectorLayer)) {
-      toast({ description: "Solo se pueden etiquetar capas vectoriales." });
-      return;
-    }
+    const layer = layers.find(l => l.id === layerId) as VectorMapLayer | undefined;
+    if (!layer) return;
 
-    const olLayer = layer.olLayer as VectorLayer<any>;
-    olLayer.set('labelOptions', labelOptions); // Store options for persistence
+    const olLayer = layer.olLayer;
+    olLayer.set('labelOptions', labelOptions); // Store options
 
-    const originalStyle = olLayer.getStyle();
-    
-    // Store original style if it's not already stored
     if (!olLayer.get('originalStyle')) {
-        olLayer.set('originalStyle', originalStyle);
+      olLayer.set('originalStyle', olLayer.getStyle());
     }
 
+    const baseStyle = olLayer.get('originalStyle');
+    const graduatedSymbology = layer.graduatedSymbology;
 
-    if (labelOptions.enabled && labelOptions.labelParts.length > 0) {
-      const textColor = colorMap[labelOptions.textColor] || (isValidHex(labelOptions.textColor) ? labelOptions.textColor : '#000000');
-      const outlineColor = colorMap[labelOptions.outlineColor] || (isValidHex(labelOptions.outlineColor) ? labelOptions.outlineColor : '#FFFFFF');
-      
-      olLayer.setStyle((feature, resolution) => {
-        const baseStyleOrFn = olLayer.get('originalStyle') || originalStyle;
-        const baseStyle = typeof baseStyleOrFn === 'function' ? baseStyleOrFn(feature, resolution) : baseStyleOrFn;
-        
-        if (!baseStyle) return;
-
-        const styleToClone = Array.isArray(baseStyle) ? baseStyle[0] : baseStyle;
-        if (!(styleToClone instanceof Style)) return baseStyle;
-
-        const newStyle = styleToClone.clone();
-        
-        const labelText = labelOptions.labelParts.map(part => {
-            if (part.type === 'field') return feature.get(part.value) || '';
-            if (part.type === 'newline') return '\n';
-            return part.value;
-        }).join('');
-
-        if (!labelText) {
-            return newStyle; // Return base style if label is empty
-        }
-
-        const geometry = feature.getGeometry();
-        if (!geometry) return newStyle;
-        const geometryType = geometry.getType();
-        
-        const textStyle = new TextStyle({
-          text: labelText,
-          font: `${labelOptions.fontSize}px ${labelOptions.fontFamily}`,
-          fill: new Fill({ color: textColor }),
-          stroke: new Stroke({ color: outlineColor, width: 2.5 }),
-          textAlign: geometryType === 'Point' ? 'left' : 'center',
-          textBaseline: 'middle',
-          offsetX: geometryType === 'Point' ? 10 : 0,
-          offsetY: -labelOptions.offsetY,
-          placement: labelOptions.placement === 'parallel' && (geometryType === 'LineString' || geometryType === 'MultiLineString') ? 'line' : 'point',
-          overflow: labelOptions.overflow,
-        });
-
-        if (labelOptions.overflow && (geometryType === 'Polygon' || geometryType === 'MultiPolygon')) {
-            const polygonStyle = new Style({
-                fill: newStyle.getFill(),
-                stroke: newStyle.getStroke(),
-            });
-            const textWithLeaderStyle = new Style({
-                text: textStyle,
-                geometry: (feature) => (feature.getGeometry() as Polygon).getInteriorPoint(),
-            });
-
-            // This is the correct way to render a leader line
-            const leaderLineStyle = new Style({
-              stroke: new Stroke({
-                  color: 'rgba(0, 0, 0, 0.7)',
-                  width: 1,
-              }),
-              geometry: (feature) => {
-                  const geometry = feature.getGeometry();
-                  if (!geometry || !(geometry instanceof Polygon)) return undefined;
-                  const interiorPoint = geometry.getInteriorPoint().getCoordinates();
-                  // The text anchor logic of OL will place the text. We just need to provide a line
-                  // from the interior point to the polygon itself. OL will handle clipping.
-                  // For simplicity, we just return the polygon itself, which the renderer uses.
-                  return geometry;
-              }
-            });
-
-            return [polygonStyle, leaderLineStyle, textWithLeaderStyle];
-        }
-        
-        newStyle.setText(textStyle);
-        return newStyle;
-      });
-      toast({ description: `Etiquetas activadas para "${layer.name}".` });
-    } else {
-      olLayer.setStyle(olLayer.get('originalStyle') || originalStyle);
-      toast({ description: `Etiquetas desactivadas para "${layer.name}".` });
-    }
+    const finalStyle = createStyleFunction(baseStyle, labelOptions, graduatedSymbology);
+    olLayer.setStyle(finalStyle);
     
-    olLayer.getSource()?.changed();
+    olLayer.getSource()?.changed(); // Force redraw
+    toast({ description: `Etiquetas ${labelOptions.enabled ? 'activadas' : 'desactivadas'} para "${layer.name}".` });
   }, [layers, toast]);
 
   const applyGraduatedSymbology = useCallback((layerId: string, symbology: GraduatedSymbology) => {
-    setLayers(prevLayers => {
-        const layer = prevLayers.find(l => l.id === layerId) as VectorMapLayer | undefined;
-        if (!layer) return prevLayers;
+    const layer = layers.find(l => l.id === layerId) as VectorMapLayer | undefined;
+    if (!layer) return;
 
-        const olLayer = layer.olLayer;
-        const styleCache: { [key: string]: Style } = {};
-        
-        const newStyleFunction = (feature: Feature<Geometry>) => {
-            const value = feature.get(symbology.field);
-            if (typeof value !== 'number') {
-                return transparentStyle; // Hide features without a valid value
-            }
+    const olLayer = layer.olLayer;
+    const labelOptions = olLayer.get('labelOptions');
+    olLayer.set('graduatedSymbology', symbology);
 
-            let color = symbology.colors[symbology.colors.length - 1]; // Default to last color
-            for (let i = 0; i < symbology.breaks.length; i++) {
-                if (value <= symbology.breaks[i]) {
-                    color = symbology.colors[i];
-                    break;
-                }
-            }
+    // Create and apply the new style function that combines symbology and labels
+    const finalStyle = createStyleFunction(null, labelOptions, symbology);
+    olLayer.setStyle(finalStyle);
+    olLayer.set('originalStyle', olLayer.getStyle()); // Store the new function as the base
 
-            if (styleCache[color]) {
-                return styleCache[color];
-            }
-
-            const style = new Style({
-                fill: new Fill({ color }),
-                stroke: new Stroke({ color: 'rgba(0,0,0,0.5)', width: 1 }),
-            });
-            styleCache[color] = style;
-            return style;
-        };
-
-        olLayer.setStyle(newStyleFunction);
-        olLayer.set('originalStyle', newStyleFunction);
-        
-        // Remove simple style and label options when applying graduated
-        olLayer.set('labelOptions', undefined);
-
-        setTimeout(() => toast({ description: `Simbología graduada aplicada a "${layer.name}".` }), 0);
-
-        return prevLayers.map(l => l.id === layerId ? { ...l, graduatedSymbology: symbology } : l);
-    });
-  }, [toast]);
+    setLayers(prev => prev.map(l => l.id === layerId ? { ...l, graduatedSymbology: symbology } : l));
+    setTimeout(() => toast({ description: `Simbología graduada aplicada a "${layer.name}".` }), 0);
+  }, [layers, toast]);
 
   const zoomToLayerExtent = useCallback((layerId: string) => {
     if (!mapRef.current) return;
