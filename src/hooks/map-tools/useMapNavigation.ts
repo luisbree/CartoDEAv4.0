@@ -32,7 +32,6 @@ export const useMapNavigation = ({
   const [canGoToPrevious, setCanGoToPrevious] = useState(false);
   const historyTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-
   // Stop any active navigation tool
   const stopTool = useCallback(() => {
     if (dragBoxInteractionRef.current && mapRef.current) {
@@ -67,7 +66,6 @@ export const useMapNavigation = ({
 
   }, [mapRef]);
 
-
   // Effect to manage the DragBox interaction for "Zoom to Area"
   useEffect(() => {
     if (!isMapReady || !mapRef.current) return;
@@ -82,6 +80,8 @@ export const useMapNavigation = ({
       dragBox.on('boxend', () => {
         const extent = dragBox.getGeometry().getExtent();
         mapRef.current?.getView().fit(extent, { duration: 500 });
+        // Deactivate the tool after use for a better user experience
+        setActiveTool(null);
       });
     }
 
@@ -96,8 +96,7 @@ export const useMapNavigation = ({
         mapElementRef.current.style.cursor = 'default';
       }
     };
-  }, [activeTool, isMapReady, mapRef, mapElementRef, stopTool]);
-
+  }, [activeTool, isMapReady, mapRef, mapElementRef, stopTool, setActiveTool]);
 
   // Effect to manage the view history
   useEffect(() => {
@@ -108,11 +107,14 @@ export const useMapNavigation = ({
     const map = mapRef.current;
     const view = map.getView();
     
+    // This is the core logic for capturing the view history.
     const listener = () => {
+        // Don't record history if we are navigating via the back button
         if (isNavigatingHistoryRef.current) {
             return;
         }
 
+        // Debounce the history recording to prevent too many entries during fast pans/zooms
         if (historyTimeoutRef.current) {
             clearTimeout(historyTimeoutRef.current);
         }
@@ -123,26 +125,35 @@ export const useMapNavigation = ({
 
             const newExtent = view.calculateExtent(currentSize);
             
-            // On the very first moveend event, initialize the history if it's empty
+            // On the very first moveend event, initialize the history
             if (viewHistoryRef.current.length === 0) {
                  viewHistoryRef.current.push(newExtent);
+                 // We don't set 'canGoToPrevious' yet, as there's no previous state
+                 return; 
             }
 
             const lastExtent = viewHistoryRef.current[viewHistoryRef.current.length - 1];
             
             // Check if extents are valid and different enough to record
-            if (newExtent.every(isFinite) && (!lastExtent || !lastExtent.every((val, i) => Math.abs(val - newExtent[i]) < 1))) {
-                viewHistoryRef.current.push(newExtent);
-                if (viewHistoryRef.current.length > MAX_HISTORY_LENGTH) {
-                    viewHistoryRef.current.shift();
-                }
-                setCanGoToPrevious(viewHistoryRef.current.length > 1);
+            if (newExtent.some(isNaN) || (lastExtent && lastExtent.every((val, i) => Math.abs(val - newExtent[i]) < 1))) {
+                return; // Don't add if extent is invalid or hasn't changed significantly
             }
-        }, 300); // Debounce to avoid rapid history entries
+            
+            viewHistoryRef.current.push(newExtent);
+
+            // Keep the history at a manageable size
+            if (viewHistoryRef.current.length > MAX_HISTORY_LENGTH) {
+                viewHistoryRef.current.shift();
+            }
+
+            // Update the state to enable/disable the button
+            setCanGoToPrevious(viewHistoryRef.current.length > 1);
+        }, 300); // 300ms debounce
     };
 
     const moveEndKey = view.on('moveend', listener);
 
+    // Cleanup function to remove the listener
     return () => {
       if (historyTimeoutRef.current) {
         clearTimeout(historyTimeoutRef.current);

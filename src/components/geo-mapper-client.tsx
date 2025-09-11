@@ -803,6 +803,7 @@ export default function GeoMapperClient() {
                 size="icon"
                 className="h-8 w-8 flex-shrink-0 bg-black/20 hover:bg-black/40 border border-white/30 text-white/90"
                 title="Encuadre Anterior"
+                disabled={!mapNavigationHook.canGoToPrevious}
             >
                 <Undo2 className="h-4 w-4" />
             </Button>
