@@ -29,8 +29,7 @@ export const useMapNavigation = ({
   const dragBoxInteractionRef = useRef<DragBox | null>(null);
   const [viewHistory, setViewHistory] = useState<Extent[]>([]);
   const isNavigatingHistoryRef = useRef(false);
-  const historyListenerRef = useRef<(event: any) => void>();
-
+  const isInitializedRef = useRef(false);
 
   // Stop any active navigation tool
   const stopTool = useCallback(() => {
@@ -70,7 +69,6 @@ export const useMapNavigation = ({
     } else {
        isNavigatingHistoryRef.current = false;
     }
-
   }, [mapRef, viewHistory]);
 
   // Effect to manage the DragBox interaction for "Zoom to Area"
@@ -103,36 +101,35 @@ export const useMapNavigation = ({
     };
   }, [activeTool, isMapReady, mapRef, mapElementRef, stopTool, setActiveTool]);
 
-  // Define the history listener using a ref to prevent stale closures
-  useEffect(() => {
-    historyListenerRef.current = () => {
-      if (isNavigatingHistoryRef.current || !mapRef.current) return;
-      
-      const newExtent = mapRef.current.getView().calculateExtent(mapRef.current.getSize());
-      
-      setViewHistory(prevHistory => {
-          const lastExtent = prevHistory.length > 0 ? prevHistory[prevHistory.length - 1] : null;
+  // This is the function that will be called on `moveend`.
+  // It's defined with useCallback to ensure it has a stable reference and access to the latest `setViewHistory`.
+  const handleMoveEnd = useCallback(() => {
+    if (isNavigatingHistoryRef.current || !mapRef.current) return;
 
-          // Prevent adding duplicate extents
-          if (lastExtent && lastExtent.every((val, i) => Math.abs(val - newExtent[i]) < 1)) {
-              return prevHistory;
-          }
+    const newExtent = mapRef.current.getView().calculateExtent(mapRef.current.getSize());
+    
+    setViewHistory(prevHistory => {
+        const lastExtent = prevHistory.length > 0 ? prevHistory[prevHistory.length - 1] : null;
 
-          const updatedHistory = [...prevHistory, newExtent];
-          if (updatedHistory.length > MAX_HISTORY_LENGTH) {
-              return updatedHistory.slice(updatedHistory.length - MAX_HISTORY_LENGTH);
-          }
-          return updatedHistory;
-      });
-    };
-  }, []); // Empty dependency array means this ref is set once
+        if (lastExtent && lastExtent.every((val, i) => Math.abs(val - newExtent[i]) < 1)) {
+            return prevHistory;
+        }
+
+        const updatedHistory = [...prevHistory, newExtent];
+        if (updatedHistory.length > MAX_HISTORY_LENGTH) {
+            return updatedHistory.slice(updatedHistory.length - MAX_HISTORY_LENGTH);
+        }
+        return updatedHistory;
+    });
+  }, [setViewHistory, mapRef]); // Dependency on setViewHistory is key
+
 
   // Effect to attach and detach the event listener from the map view
   useEffect(() => {
-    if (!isMapReady || !mapRef.current) {
+    if (!isMapReady || !mapRef.current || isInitializedRef.current) {
       return;
     }
-
+    
     const map = mapRef.current;
     const view = map.getView();
     let moveEndKey: EventsKey | undefined;
@@ -140,11 +137,9 @@ export const useMapNavigation = ({
 
     const debouncedListener = () => {
         clearTimeout(historyTimeout);
-        historyTimeout = setTimeout(() => {
-            historyListenerRef.current?.(null);
-        }, 300); // 300ms debounce
+        historyTimeout = setTimeout(handleMoveEnd, 300); // 300ms debounce
     };
-    
+
     // Capture initial state once map is fully rendered
     map.once('rendercomplete', () => {
         const initialSize = map.getSize();
@@ -153,6 +148,7 @@ export const useMapNavigation = ({
         }
         // Then, start listening for subsequent changes
         moveEndKey = view.on('moveend', debouncedListener);
+        isInitializedRef.current = true; // Mark as initialized
     });
 
     return () => {
@@ -161,7 +157,7 @@ export const useMapNavigation = ({
         unByKey(moveEndKey);
       }
     };
-  }, [isMapReady, mapRef]);
+  }, [isMapReady, mapRef, handleMoveEnd]);
   
   
   return {
