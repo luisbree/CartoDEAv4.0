@@ -255,33 +255,25 @@ const LayerItem: React.FC<LayerItemProps> = ({
               </DropdownMenuItem>
 
               {isVectorLayer && (
-                 <DropdownMenuItem
-                    className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer"
-                    onSelect={(e) => { e.preventDefault(); setIsStyleEditorOpen(true); }}
-                  >
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer data-[state=open]:bg-gray-600">
                     <Palette className="mr-2 h-3.5 w-3.5" />
-                    Simbología Simple
-                  </DropdownMenuItem>
-              )}
-              
-              {isVectorLayer && (
-                 <DropdownMenuItem
-                    className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer"
-                    onSelect={(e) => { e.preventDefault(); setIsCategorizedEditorOpen(true); }}
-                  >
-                    <AppWindow className="mr-2 h-3.5 w-3.5" />
-                    Simbología por Categorías
-                  </DropdownMenuItem>
-              )}
-              
-              {isVectorLayer && (
-                 <DropdownMenuItem
-                    className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer"
-                    onSelect={(e) => { e.preventDefault(); setIsGraduatedEditorOpen(true); }}
-                  >
-                    <Waypoints className="mr-2 h-3.5 w-3.5" />
-                    Simbología Graduada
-                  </DropdownMenuItem>
+                    <span>Simbología</span>
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuPortal>
+                    <DropdownMenuSubContent className="bg-gray-700 text-white border-gray-600">
+                      <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setIsStyleEditorOpen(true); }} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">
+                        <Palette className="mr-2 h-3.5 w-3.5" /> Simple
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setIsCategorizedEditorOpen(true); }} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">
+                        <AppWindow className="mr-2 h-3.5 w-3.5" /> Por Categorías
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setIsGraduatedEditorOpen(true); }} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">
+                        <Waypoints className="mr-2 h-3.5 w-3.5" /> Graduada
+                      </DropdownMenuItem>
+                    </DropdownMenuSubContent>
+                  </DropdownMenuPortal>
+                </DropdownMenuSub>
               )}
 
                {isVectorLayer && (
@@ -421,4 +413,3 @@ const LayerItem: React.FC<LayerItemProps> = ({
 };
 
 export default LayerItem;
-
