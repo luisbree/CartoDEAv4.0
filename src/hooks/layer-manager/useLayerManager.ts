@@ -13,7 +13,7 @@ import { Geometry, LineString, Point, Polygon } from 'ol/geom';
 import { useToast } from "@/hooks/use-toast";
 import { findSentinel2Footprints } from '@/services/sentinel';
 import { findLandsatFootprints } from '@/services/landsat';
-import type { MapLayer, VectorMapLayer, PlainFeatureData, LabelOptions, StyleOptions, GraduatedSymbology } from '@/lib/types';
+import type { MapLayer, VectorMapLayer, PlainFeatureData, LabelOptions, StyleOptions, GraduatedSymbology, CategorizedSymbology } from '@/lib/types';
 import { nanoid } from 'nanoid';
 import { Style, Stroke, Fill, Circle as CircleStyle, Text as TextStyle } from 'ol/style';
 import type { StyleLike } from 'ol/style/Style';
@@ -66,16 +66,17 @@ const transparentStyle = new Style({
 const createStyleFunction = (
   baseStyleOrFn: StyleLike | null | undefined,
   labelOptions: LabelOptions | undefined,
-  graduatedSymbology: GraduatedSymbology | undefined
+  graduatedSymbology: GraduatedSymbology | undefined,
+  categorizedSymbology: CategorizedSymbology | undefined
 ): StyleLike => {
   const isLabelEnabled = labelOptions?.enabled && labelOptions.labelParts.length > 0;
 
-  // Case 1: No labels and no graduated symbology, just return the simple base style
-  if (!isLabelEnabled && !graduatedSymbology) {
+  // Case 1: No complex styling, just return the simple base style
+  if (!isLabelEnabled && !graduatedSymbology && !categorizedSymbology) {
     return baseStyleOrFn || transparentStyle;
   }
 
-  // Case 2: We have labels or graduated symbology, so we need a style function
+  // Case 2: We have labels or complex symbology, so we need a style function
   return (feature, resolution) => {
     let baseStyle: Style | Style[];
 
@@ -95,6 +96,18 @@ const createStyleFunction = (
         
         const strokeColor = colorMap[graduatedSymbology.strokeColor] || (isValidHex(graduatedSymbology.strokeColor) ? graduatedSymbology.strokeColor : 'rgba(0,0,0,0.5)');
         const strokeWidth = graduatedSymbology.strokeWidth ?? 1;
+
+        baseStyle = new Style({
+            fill: new Fill({ color: fillColor }),
+            stroke: new Stroke({ color: strokeColor, width: strokeWidth }),
+        });
+    } else if (categorizedSymbology) {
+        const value = feature.get(categorizedSymbology.field);
+        const category = categorizedSymbology.categories.find(c => c.value === value);
+        const fillColor = category ? category.color : 'rgba(128,128,128,0.5)'; // Default gray if value not in categories
+        
+        const strokeColor = colorMap[categorizedSymbology.strokeColor] || (isValidHex(categorizedSymbology.strokeColor) ? categorizedSymbology.strokeColor : 'rgba(0,0,0,0.5)');
+        const strokeWidth = categorizedSymbology.strokeWidth ?? 1;
 
         baseStyle = new Style({
             fill: new Fill({ color: fillColor }),
@@ -522,11 +535,12 @@ export const useLayerManager = ({
     const newSimpleStyle = new Style({ stroke, fill, image });
     olLayer.set('originalStyle', newSimpleStyle);
     olLayer.set('graduatedSymbology', undefined); // Clear graduated symbology
+    olLayer.set('categorizedSymbology', undefined); // Clear categorized symbology
 
-    const finalStyle = createStyleFunction(newSimpleStyle, olLayer.get('labelOptions'), undefined);
+    const finalStyle = createStyleFunction(newSimpleStyle, olLayer.get('labelOptions'), undefined, undefined);
     olLayer.setStyle(finalStyle);
 
-    setLayers(prev => prev.map(l => l.id === layerId ? { ...l, graduatedSymbology: undefined } : l));
+    setLayers(prev => prev.map(l => l.id === layerId ? { ...l, graduatedSymbology: undefined, categorizedSymbology: undefined } : l));
     setTimeout(() => toast({ description: `Estilo de la capa "${layer.name}" actualizado.` }), 0);
 
   }, [layers, toast, mapRef]);
@@ -544,8 +558,9 @@ export const useLayerManager = ({
 
     const baseStyle = olLayer.get('originalStyle');
     const graduatedSymbology = layer.graduatedSymbology;
+    const categorizedSymbology = layer.categorizedSymbology;
 
-    const finalStyle = createStyleFunction(baseStyle, labelOptions, graduatedSymbology);
+    const finalStyle = createStyleFunction(baseStyle, labelOptions, graduatedSymbology, categorizedSymbology);
     olLayer.setStyle(finalStyle);
     
     olLayer.getSource()?.changed(); // Force redraw
@@ -569,14 +584,41 @@ export const useLayerManager = ({
     const olLayer = layer.olLayer;
     const labelOptions = olLayer.get('labelOptions');
     olLayer.set('graduatedSymbology', symbology);
+    olLayer.set('categorizedSymbology', undefined); // Clear other complex symbology
 
     // Create and apply the new style function that combines symbology and labels
-    const finalStyle = createStyleFunction(null, labelOptions, symbology);
+    const finalStyle = createStyleFunction(null, labelOptions, symbology, undefined);
     olLayer.setStyle(finalStyle);
     olLayer.set('originalStyle', olLayer.getStyle()); // Store the new function as the base
 
-    setLayers(prev => prev.map(l => l.id === layerId ? { ...l, graduatedSymbology: symbology } : l));
+    setLayers(prev => prev.map(l => l.id === layerId ? { ...l, graduatedSymbology: symbology, categorizedSymbology: undefined } : l));
     setTimeout(() => toast({ description: `Simbología graduada aplicada a "${layer.name}".` }), 0);
+  }, [layers, toast, mapRef]);
+  
+  const applyCategorizedSymbology = useCallback((layerId: string, symbology: CategorizedSymbology) => {
+      const layer = layers.find(l => l.id === layerId) as VectorMapLayer | undefined;
+      if (!layer) return;
+  
+      const linkedWmsId = layer.olLayer.get('linkedWmsLayerId');
+      if (linkedWmsId && mapRef.current) {
+          const wmsLayer = mapRef.current.getLayers().getArray().find(l => l.get('id') === linkedWmsId);
+          if (wmsLayer) {
+              wmsLayer.setVisible(false);
+              setTimeout(() => toast({ description: `Se ocultó la capa WMS para mostrar el nuevo estilo.` }), 0);
+          }
+      }
+  
+      const olLayer = layer.olLayer;
+      const labelOptions = olLayer.get('labelOptions');
+      olLayer.set('categorizedSymbology', symbology);
+      olLayer.set('graduatedSymbology', undefined); // Clear other complex symbology
+  
+      const finalStyle = createStyleFunction(null, labelOptions, undefined, symbology);
+      olLayer.setStyle(finalStyle);
+      olLayer.set('originalStyle', olLayer.getStyle());
+  
+      setLayers(prev => prev.map(l => l.id === layerId ? { ...l, categorizedSymbology: symbology, graduatedSymbology: undefined } : l));
+      setTimeout(() => toast({ description: `Simbología por categorías aplicada a "${layer.name}".` }), 0);
   }, [layers, toast, mapRef]);
 
   const zoomToLayerExtent = useCallback((layerId: string) => {
@@ -971,6 +1013,7 @@ export const useLayerManager = ({
     changeLayerStyle,
     changeLayerLabels,
     applyGraduatedSymbology,
+    applyCategorizedSymbology,
     zoomToLayerExtent,
     handleShowLayerTable,
     renameLayer,
