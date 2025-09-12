@@ -454,7 +454,6 @@ const GraduatedSymbologyDialog: React.FC<GraduatedSymbologyDialogProps> = ({
         <div className="grid grid-cols-1 gap-3 py-1">
           
           <div className="p-2 border border-white/10 rounded-md space-y-2.5">
-            <h4 className="text-xs font-semibold -mb-1">Clasificación</h4>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label htmlFor="field-select" className="text-xs">Campo</Label>
@@ -540,35 +539,36 @@ const GraduatedSymbologyDialog: React.FC<GraduatedSymbologyDialogProps> = ({
             </Button>
           </div>
 
-          <div className="p-2 border border-white/10 rounded-md space-y-2">
-             <h4 className="text-xs font-semibold">Estilo de Contorno</h4>
-             <div className="flex items-end gap-3 w-full justify-around flex-wrap">
-                <div className="flex flex-col gap-1">
-                  <Label htmlFor="stroke-color" className="text-xs">Color</Label>
-                  <ColorPicker 
-                    value={strokeColor}
-                    onChange={setStrokeColor}
-                  />
-                </div>
-                 <div className="flex flex-col gap-1">
-                    <Label htmlFor="stroke-width" className="text-xs">Grosor (px)</Label>
-                    <Input
-                      id="stroke-width"
-                      type="number"
-                      min="0"
-                      max="20"
-                      step="0.5"
-                      value={strokeWidth}
-                      onChange={(e) => setStrokeWidth(Number(e.target.value))}
-                      className="h-8 text-xs bg-black/20 w-24"
-                    />
+          <div className="p-2 border border-white/10 rounded-md">
+             <div className="flex items-center justify-between gap-3 w-full">
+                <h4 className="text-xs font-semibold">Contorno</h4>
+                <div className="flex items-center gap-2">
+                    <div className="flex flex-col items-center gap-1">
+                      <Label htmlFor="stroke-color" className="text-xs">Color</Label>
+                      <ColorPicker 
+                        value={strokeColor}
+                        onChange={setStrokeColor}
+                      />
+                    </div>
+                     <div className="flex flex-col items-center gap-1">
+                        <Label htmlFor="stroke-width" className="text-xs">Grosor</Label>
+                        <Input
+                          id="stroke-width"
+                          type="number"
+                          min="0"
+                          max="20"
+                          step="0.5"
+                          value={strokeWidth}
+                          onChange={(e) => setStrokeWidth(Number(e.target.value))}
+                          className="h-8 text-xs bg-black/20 w-16"
+                        />
+                    </div>
                 </div>
              </div>
           </div>
 
           {classification && (
             <div className="space-y-1">
-              <Label className="text-xs font-semibold">Vista Previa de la Leyenda</Label>
               <ScrollArea className="h-32">
                 <div className="space-y-1 rounded-md bg-black/10 p-2">
                   {classification.colors.map((color, index) => {
