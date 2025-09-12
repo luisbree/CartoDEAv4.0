@@ -12,6 +12,7 @@ interface LayerListProps {
   onToggleVisibility: (layerId: string) => void;
   onZoomToExtent: (layerId: string) => void; 
   onShowLayerTable: (layerId: string) => void;
+  onShowStatistics: (layerId: string) => void;
   onRemoveLayer: (layerId: string) => void;
   onExtractByPolygon: (layerId: string) => void;
   onExtractBySelection: () => void;
@@ -36,6 +37,7 @@ const LayerList: React.FC<LayerListProps> = ({
   onToggleVisibility,
   onZoomToExtent, 
   onShowLayerTable,
+  onShowStatistics,
   onRemoveLayer,
   onExtractByPolygon,
   onExtractBySelection,
@@ -117,6 +119,7 @@ const LayerList: React.FC<LayerListProps> = ({
           onToggleVisibility={onToggleVisibility}
           onZoomToExtent={onZoomToExtent}
           onShowLayerTable={onShowLayerTable}
+          onShowStatistics={onShowStatistics}
           onRemove={onRemoveLayer}
           onExtractByPolygon={onExtractByPolygon}
           onExtractBySelection={onExtractBySelection}
