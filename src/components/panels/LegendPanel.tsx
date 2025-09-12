@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useMemo } from 'react';
@@ -7,7 +6,7 @@ import LayerList from '@/components/layer-manager/LayerList';
 import FileUploadControl from '@/components/layer-manager/FileUploadControl';
 import FeatureInteractionToolbar from '@/components/feature-inspection/FeatureInteractionToolbar';
 import { Separator } from '@/components/ui/separator';
-import type { MapLayer, GeoServerDiscoveredLayer, LabelOptions, GraduatedSymbology } from '@/lib/types';
+import type { MapLayer, GeoServerDiscoveredLayer, LabelOptions, GraduatedSymbology, CategorizedSymbology } from '@/lib/types';
 import { ListTree, Trash2, Database, Search, X as ClearIcon, RefreshCw, Loader2 } from 'lucide-react'; 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -52,6 +51,7 @@ interface LegendPanelProps {
   onChangeLayerStyle: (layerId: string, styleOptions: StyleOptions) => void;
   onChangeLayerLabels: (layerId: string, labelOptions: LabelOptions) => void;
   onApplyGraduatedSymbology: (layerId: string, symbology: GraduatedSymbology) => void;
+  onApplyCategorizedSymbology: (layerId: string, symbology: CategorizedSymbology) => void;
 
   onAddLayer: (layer: MapLayer) => void;
 
@@ -78,7 +78,7 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
   panelRef, isCollapsed, onToggleCollapse, onClosePanel, onMouseDownHeader,
   layers, onToggleLayerVisibility, onRemoveLayer, onRemoveLayers, onZoomToLayerExtent, onShowLayerTable,
   onExtractByPolygon, onExtractBySelection, onExportLayer, isDrawingSourceEmptyOrNotPolygon, isSelectionEmpty, onSetLayerOpacity, onReorderLayers, onRenameLayer,
-  onChangeLayerStyle, onChangeLayerLabels, onApplyGraduatedSymbology,
+  onChangeLayerStyle, onChangeLayerLabels, onApplyGraduatedSymbology, onApplyCategorizedSymbology,
   onAddLayer, 
   activeTool, onSetActiveTool, onClearSelection,
   discoveredDeasLayers, onAddDeasLayer, isFetchingDeasLayers, onReloadDeasLayers,
@@ -235,6 +235,7 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
                             onChangeLayerStyle={onChangeLayerStyle}
                             onChangeLayerLabels={onChangeLayerLabels}
                             onApplyGraduatedSymbology={onApplyGraduatedSymbology}
+                            onApplyCategorizedSymbology={onApplyCategorizedSymbology}
                             isDrawingSourceEmptyOrNotPolygon={isDrawingSourceEmptyOrNotPolygon}
                             isSelectionEmpty={isSelectionEmpty}
                             onSetLayerOpacity={onSetLayerOpacity}

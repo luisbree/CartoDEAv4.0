@@ -2,7 +2,7 @@
 
 import React, { useRef, useState } from 'react';
 import LayerItem from './LayerItem';
-import type { GraduatedSymbology, LabelOptions, MapLayer } from '@/lib/types';
+import type { CategorizedSymbology, GraduatedSymbology, LabelOptions, MapLayer } from '@/lib/types';
 import { Layers } from 'lucide-react';
 import type { StyleOptions } from './StyleEditorDialog';
 
@@ -23,6 +23,7 @@ interface LayerListProps {
   onChangeLayerStyle: (layerId: string, styleOptions: StyleOptions) => void;
   onChangeLayerLabels: (layerId: string, labelOptions: LabelOptions) => void;
   onApplyGraduatedSymbology: (layerId: string, symbology: GraduatedSymbology) => void;
+  onApplyCategorizedSymbology: (layerId: string, symbology: CategorizedSymbology) => void;
 
   // Selection props
   selectedLayerIds: string[];
@@ -46,6 +47,7 @@ const LayerList: React.FC<LayerListProps> = ({
   onChangeLayerStyle,
   onChangeLayerLabels,
   onApplyGraduatedSymbology,
+  onApplyCategorizedSymbology,
   selectedLayerIds,
   onLayerClick,
 }) => {
@@ -122,6 +124,7 @@ const LayerList: React.FC<LayerListProps> = ({
           onChangeLayerStyle={onChangeLayerStyle}
           onChangeLayerLabels={onChangeLayerLabels}
           onApplyGraduatedSymbology={onApplyGraduatedSymbology}
+          onApplyCategorizedSymbology={onApplyCategorizedSymbology}
           isDrawingSourceEmptyOrNotPolygon={isDrawingSourceEmptyOrNotPolygon}
           isSelectionEmpty={isSelectionEmpty}
           onSetLayerOpacity={onSetLayerOpacity}

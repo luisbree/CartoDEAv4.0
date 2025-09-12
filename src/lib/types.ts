@@ -22,6 +22,16 @@ export interface GraduatedSymbology {
   customColors?: { start: string; end: string };
 }
 
+export interface CategorizedSymbology {
+  field: string;
+  colorRamp: ColorRampId;
+  // An array of objects, where each object represents a unique value and its assigned color
+  categories: { value: string | number; color: string }[];
+  strokeColor: string;
+  strokeWidth: number;
+  customColors?: { start: string; end: string };
+}
+
 export interface MapLayer {
   id: string;
   name: string;
@@ -31,6 +41,7 @@ export interface MapLayer {
   type: 'wms' | 'wfs' | 'vector' | 'osm' | 'drawing' | 'sentinel' | 'landsat' | 'gee' | 'geotiff';
   isDeas?: boolean;
   graduatedSymbology?: GraduatedSymbology;
+  categorizedSymbology?: CategorizedSymbology;
 }
 
 export interface VectorMapLayer extends MapLayer {

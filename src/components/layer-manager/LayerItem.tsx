@@ -15,14 +15,15 @@ import {
   DropdownMenuPortal
 } from "@/components/ui/dropdown-menu";
 import { Slider } from "@/components/ui/slider"; 
-import { Eye, EyeOff, Settings2, ZoomIn, Table2, Trash2, Scissors, Percent, GripVertical, CopyPlus, Download, Edit, Palette, Tags, Waypoints } from 'lucide-react';
-import type { GraduatedSymbology, LabelOptions, MapLayer } from '@/lib/types';
+import { Eye, EyeOff, Settings2, ZoomIn, Table2, Trash2, Scissors, Percent, GripVertical, CopyPlus, Download, Edit, Palette, Tags, Waypoints, AppWindow } from 'lucide-react';
+import type { CategorizedSymbology, GraduatedSymbology, LabelOptions, MapLayer } from '@/lib/types';
 import VectorLayer from 'ol/layer/Vector'; 
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import StyleEditorDialog, { type StyleOptions } from './StyleEditorDialog';
 import LabelEditorDialog from './LabelEditorDialog';
 import GraduatedSymbologyDialog from './GraduatedSymbologyDialog';
+import CategorizedSymbologyDialog from './CategorizedSymbologyDialog';
 
 
 interface LayerItemProps {
@@ -41,6 +42,7 @@ interface LayerItemProps {
   onChangeLayerStyle: (layerId: string, styleOptions: StyleOptions) => void;
   onChangeLayerLabels: (layerId: string, labelOptions: LabelOptions) => void;
   onApplyGraduatedSymbology: (layerId: string, symbology: GraduatedSymbology) => void;
+  onApplyCategorizedSymbology: (layerId: string, symbology: CategorizedSymbology) => void;
   
   // Drag and Drop props
   isDraggable: boolean;
@@ -74,6 +76,7 @@ const LayerItem: React.FC<LayerItemProps> = ({
   onChangeLayerStyle,
   onChangeLayerLabels,
   onApplyGraduatedSymbology,
+  onApplyCategorizedSymbology,
   isDraggable,
   onDragStart,
   onDragEnd,
@@ -94,6 +97,7 @@ const LayerItem: React.FC<LayerItemProps> = ({
   const [isStyleEditorOpen, setIsStyleEditorOpen] = useState(false);
   const [isLabelEditorOpen, setIsLabelEditorOpen] = useState(false);
   const [isGraduatedEditorOpen, setIsGraduatedEditorOpen] = useState(false);
+  const [isCategorizedEditorOpen, setIsCategorizedEditorOpen] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -152,6 +156,12 @@ const LayerItem: React.FC<LayerItemProps> = ({
   const handleGraduatedSymbologyApply = (symbology: GraduatedSymbology) => {
     onApplyGraduatedSymbology(layer.id, symbology);
     setIsGraduatedEditorOpen(false);
+    setIsDropdownOpen(false);
+  };
+  
+  const handleCategorizedSymbologyApply = (symbology: CategorizedSymbology) => {
+    onApplyCategorizedSymbology(layer.id, symbology);
+    setIsCategorizedEditorOpen(false);
     setIsDropdownOpen(false);
   };
 
@@ -247,7 +257,17 @@ const LayerItem: React.FC<LayerItemProps> = ({
                     onSelect={(e) => { e.preventDefault(); setIsStyleEditorOpen(true); }}
                   >
                     <Palette className="mr-2 h-3.5 w-3.5" />
-                    Simbología
+                    Simbología Simple
+                  </DropdownMenuItem>
+              )}
+              
+              {isVectorLayer && (
+                 <DropdownMenuItem
+                    className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer"
+                    onSelect={(e) => { e.preventDefault(); setIsCategorizedEditorOpen(true); }}
+                  >
+                    <AppWindow className="mr-2 h-3.5 w-3.5" />
+                    Simbología por Categorías
                   </DropdownMenuItem>
               )}
               
@@ -372,6 +392,14 @@ const LayerItem: React.FC<LayerItemProps> = ({
             isOpen={isGraduatedEditorOpen}
             onClose={() => setIsGraduatedEditorOpen(false)}
             onApply={handleGraduatedSymbologyApply}
+            layer={layer as any}
+        />
+      )}
+      {isVectorLayer && (
+        <CategorizedSymbologyDialog
+            isOpen={isCategorizedEditorOpen}
+            onClose={() => setIsCategorizedEditorOpen(false)}
+            onApply={handleCategorizedSymbologyApply}
             layer={layer as any}
         />
       )}
