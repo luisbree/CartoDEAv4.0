@@ -1,3 +1,4 @@
+
 import type { default as Layer } from 'ol/layer/Layer';
 import type VectorLayer from 'ol/layer/Vector';
 import type VectorSource from 'ol/source/Vector';
@@ -16,6 +17,8 @@ export interface GraduatedSymbology {
   colorRamp: ColorRampId;
   breaks: number[]; // The upper bound for each class
   colors: string[]; // The hex color for each class
+  strokeColor: string;
+  strokeWidth: number;
 }
 
 export interface MapLayer {

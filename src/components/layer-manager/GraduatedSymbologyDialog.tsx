@@ -1,6 +1,7 @@
+
 "use client";
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -8,6 +9,11 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -19,6 +25,9 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import type { GraduatedSymbology, VectorMapLayer, ColorRampId, ClassificationMethod } from '@/lib/types';
+import { cn } from "@/lib/utils";
+import { Minus, Plus } from 'lucide-react';
+import { Slider } from '../ui/slider';
 
 // --- Color Interpolation Helpers ---
 
@@ -121,6 +130,175 @@ const COLOR_RAMP_DEFINITIONS: Record<ColorRampId, { start: string, end: string }
   pinks: { start: '#ffcce1', end: '#c70063'},
 };
 
+// --- Reusable Color Picker Component ---
+const colorOptions = [
+  { value: 'transparent', label: 'Sin color', hex: 'rgba(0,0,0,0)', iconClass: "bg-transparent border border-dashed border-white/50 bg-[conic-gradient(from_90deg_at_1px_1px,#fff_90deg,rgb(228,228,231)_0)]" },
+  { value: 'rojo', label: 'Rojo', hex: '#e63946' },
+  { value: 'verde', label: 'Verde', hex: '#2a9d8f' },
+  { value: 'azul', label: 'Azul', hex: '#0077b6' },
+  { value: 'amarillo', label: 'Amarillo', hex: '#ffbe0b' },
+  { value: 'naranja', label: 'Naranja', hex: '#f4a261' },
+  { value: 'violeta', label: 'Violeta', hex: '#8338ec' },
+  { value: 'negro', label: 'Negro', hex: '#000000' },
+  { value: 'blanco', label: 'Blanco', hex: '#ffffff' },
+  { value: 'gris', label: 'Gris', hex: '#adb5bd' },
+  { value: 'cian', label: 'Cian', hex: '#00ffff' },
+  { value: 'magenta', label: 'Magenta', hex: '#ff00ff' },
+];
+
+const isValidHex = (color: string) => /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/.test(color);
+const hexToDecimal = (hex: string) => parseInt(hex.replace(/^#/, ''), 16);
+const decimalToHex = (dec: number) => '#' + dec.toString(16).padStart(6, '0');
+
+interface ColorPickerProps {
+  value: string;
+  onChange: (value: string) => void;
+}
+
+const ColorPicker: React.FC<ColorPickerProps> = ({ value, onChange }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [customColorInput, setCustomColorInput] = useState('#000000');
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  useEffect(() => {
+    if (isOpen) {
+      if (isValidHex(value)) {
+        setCustomColorInput(value);
+      } else {
+        const hexFromName = colorOptions.find(c => c.value === value)?.hex;
+        setCustomColorInput(hexFromName || '#000000');
+      }
+    }
+  }, [isOpen, value]);
+
+  const selectedColor = colorOptions.find(c => c.value === value) || { hex: isValidHex(value) ? value : '#000000', iconClass: '' };
+  
+  const handleCustomColorApply = () => {
+      if (isValidHex(customColorInput)) {
+          onChange(customColorInput);
+          setIsOpen(false);
+      }
+  };
+  
+  const handleSliderChange = (value: number[]) => {
+      setCustomColorInput(decimalToHex(value[0]));
+  };
+  
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const val = e.target.value;
+      if (val.startsWith('#')) {
+          setCustomColorInput(val);
+      } else {
+          setCustomColorInput(`#${val}`);
+      }
+  };
+
+  const sliderValue = isValidHex(customColorInput) ? hexToDecimal(customColorInput) : 0;
+  
+  const handleStep = (direction: 'increment' | 'decrement') => {
+      setCustomColorInput(prevColor => {
+          let currentValue = isValidHex(prevColor) ? hexToDecimal(prevColor) : 0;
+          const stepAmount = 1;
+          if (direction === 'increment') {
+              currentValue = Math.min(16777215, currentValue + stepAmount);
+          } else {
+              currentValue = Math.max(0, currentValue - stepAmount);
+          }
+          return decimalToHex(currentValue);
+      });
+  };
+  
+  const stopStepping = () => {
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    if (intervalRef.current) clearInterval(intervalRef.current);
+  };
+  
+  const handleStepMouseDown = (direction: 'increment' | 'decrement') => {
+    handleStep(direction); // Immediate step on click
+    timeoutRef.current = setTimeout(() => {
+      intervalRef.current = setInterval(() => {
+        handleStep(direction);
+      }, 50); // Speed of fast stepping
+    }, 500); // Delay before fast stepping starts
+  };
+
+  return (
+    <Popover open={isOpen} onOpenChange={setIsOpen}>
+      <PopoverTrigger asChild>
+        <Button variant="outline" className="h-8 w-8 p-0 border-white/30 bg-black/20">
+            <div className={cn("w-5 h-5 rounded-full border border-white/20", selectedColor.iconClass)} style={{ backgroundColor: selectedColor.hex }} />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent side="right" align="start" className="w-auto p-2 bg-gray-700/90 backdrop-blur-sm border-gray-600">
+        <div className="grid grid-cols-6 gap-2">
+          {colorOptions.map(color => (
+            <Button
+              key={color.value}
+              variant="outline"
+              className={cn(
+                "h-7 w-7 p-0",
+                value === color.value ? "ring-2 ring-offset-2 ring-offset-gray-700 ring-white" : "border-white/30"
+              )}
+              onClick={() => {
+                onChange(color.value);
+                setIsOpen(false);
+              }}
+            >
+              <div className={cn("w-5 h-5 rounded-full border border-white/20", color.iconClass)} style={{ backgroundColor: color.hex }} />
+            </Button>
+          ))}
+        </div>
+        <div className="mt-3 pt-3 border-t border-gray-600 space-y-2">
+            <Label className="text-xs font-medium text-white/90">Color Personalizado</Label>
+            <div className="flex items-center gap-2">
+                 <div className="w-6 h-6 rounded-md border border-white/30" style={{ backgroundColor: isValidHex(customColorInput) ? customColorInput : 'transparent' }} />
+                 <Input 
+                    type="text" 
+                    value={customColorInput}
+                    onChange={handleInputChange}
+                    className="h-8 text-xs bg-black/20 w-24 text-white/90"
+                    placeholder="#RRGGBB"
+                 />
+                 <Button onClick={handleCustomColorApply} size="sm" className="h-8 text-xs" disabled={!isValidHex(customColorInput)}>
+                    Aplicar
+                 </Button>
+            </div>
+            <div className="flex items-center gap-2">
+                <Button 
+                  variant="outline" 
+                  size="icon" 
+                  className="h-6 w-6 flex-shrink-0" 
+                  onMouseDown={() => handleStepMouseDown('decrement')}
+                  onMouseUp={stopStepping}
+                  onMouseLeave={stopStepping}
+                >
+                    <Minus className="h-3 w-3" />
+                </Button>
+                <Slider
+                    value={[sliderValue]}
+                    onValueChange={handleSliderChange}
+                    max={16777215} // #FFFFFF
+                    step={1}
+                    className="w-full"
+                />
+                <Button 
+                  variant="outline" 
+                  size="icon" 
+                  className="h-6 w-6 flex-shrink-0" 
+                  onMouseDown={() => handleStepMouseDown('increment')}
+                  onMouseUp={stopStepping}
+                  onMouseLeave={stopStepping}
+                >
+                    <Plus className="h-3 w-3" />
+                </Button>
+            </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+};
+
 
 interface GraduatedSymbologyDialogProps {
   isOpen: boolean;
@@ -140,6 +318,8 @@ const GraduatedSymbologyDialog: React.FC<GraduatedSymbologyDialogProps> = ({
   const [classes, setClasses] = useState<number>(5);
   const [colorRamp, setColorRamp] = useState<ColorRampId>('reds');
   const [classification, setClassification] = useState<{ breaks: number[]; colors: string[] } | null>(null);
+  const [strokeColor, setStrokeColor] = useState('negro');
+  const [strokeWidth, setStrokeWidth] = useState(1);
 
   const numericFields = useMemo(() => {
     const source = layer?.olLayer.getSource();
@@ -160,11 +340,14 @@ const GraduatedSymbologyDialog: React.FC<GraduatedSymbologyDialogProps> = ({
   useEffect(() => {
     if (isOpen) {
       // Reset state when dialog opens
-      const initialField = layer.graduatedSymbology?.field || numericFields[0] || '';
+      const existingSymbology = layer.graduatedSymbology;
+      const initialField = existingSymbology?.field || numericFields[0] || '';
       setField(initialField);
-      setMethod(layer.graduatedSymbology?.method || 'quantiles');
-      setClasses(layer.graduatedSymbology?.classes || 5);
-      setColorRamp(layer.graduatedSymbology?.colorRamp || 'reds');
+      setMethod(existingSymbology?.method || 'quantiles');
+      setClasses(existingSymbology?.classes || 5);
+      setColorRamp(existingSymbology?.colorRamp || 'reds');
+      setStrokeColor(existingSymbology?.strokeColor || 'negro');
+      setStrokeWidth(existingSymbology?.strokeWidth === undefined ? 1 : existingSymbology.strokeWidth);
       setClassification(null);
     }
   }, [isOpen, numericFields, layer]);
@@ -229,6 +412,8 @@ const GraduatedSymbologyDialog: React.FC<GraduatedSymbologyDialogProps> = ({
         colorRamp,
         breaks: classification.breaks,
         colors: classification.colors,
+        strokeColor,
+        strokeWidth,
       });
     }
   };
@@ -239,77 +424,107 @@ const GraduatedSymbologyDialog: React.FC<GraduatedSymbologyDialogProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="bg-gray-800 text-white border-gray-700 sm:max-w-md p-4">
+      <DialogContent className="bg-gray-800 text-white border-gray-700 sm:max-w-[500px] p-4">
         <DialogHeader>
           <DialogTitle>Simbología Graduada para "{layer.name}"</DialogTitle>
         </DialogHeader>
         <div className="grid grid-cols-1 gap-4 py-2 space-y-3">
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="field-select">Campo</Label>
-              <Select value={field} onValueChange={setField}>
-                <SelectTrigger id="field-select" className="h-8 text-xs bg-black/20">
-                  <SelectValue placeholder="Seleccionar campo..." />
-                </SelectTrigger>
-                <SelectContent className="bg-gray-700 text-white border-gray-600">
-                  {numericFields.map(f => <SelectItem key={f} value={f} className="text-xs">{f}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="method-select">Método</Label>
-              <Select value={method} onValueChange={(v) => setMethod(v as ClassificationMethod)}>
-                <SelectTrigger id="method-select" className="h-8 text-xs bg-black/20">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-gray-700 text-white border-gray-600">
-                  <SelectItem value="quantiles" className="text-xs">Cuantiles (Equal Count)</SelectItem>
-                  <SelectItem value="natural-breaks" className="text-xs">Natural Breaks (Jenks)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="classes-input">Clases</Label>
-              <Input
-                id="classes-input"
-                type="number"
-                min="2"
-                max="20"
-                value={classes}
-                onChange={e => setClasses(Math.max(2, Math.min(20, Number(e.target.value))))}
-                className="h-8 text-xs bg-black/20"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="ramp-select">Rampa de Color</Label>
-              <Select value={colorRamp} onValueChange={(v) => setColorRamp(v as ColorRampId)}>
-                <SelectTrigger id="ramp-select" className="h-8 text-xs bg-black/20">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-gray-700 text-white border-gray-600">
-                  {Object.entries(COLOR_RAMP_DEFINITIONS).map(([rampId, {start, end}]) => (
-                    <SelectItem key={rampId} value={rampId} className="text-xs">
-                      <div className="flex items-center gap-2">
-                        <div className="flex h-4 w-16 rounded-sm overflow-hidden" style={{ background: `linear-gradient(to right, ${start}, ${end})` }} />
-                        {rampId.charAt(0).toUpperCase() + rampId.slice(1)}
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
           
-          <Button onClick={handleGenerateClassification} disabled={!field} className="h-8 text-xs">
-            Clasificar
-          </Button>
+          <div className="p-3 border border-white/10 rounded-md space-y-3">
+            <h4 className="text-sm font-semibold -mb-1">Clasificación</h4>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="field-select">Campo</Label>
+                <Select value={field} onValueChange={setField}>
+                  <SelectTrigger id="field-select" className="h-8 text-xs bg-black/20">
+                    <SelectValue placeholder="Seleccionar campo..." />
+                  </SelectTrigger>
+                  <SelectContent className="bg-gray-700 text-white border-gray-600">
+                    {numericFields.map(f => <SelectItem key={f} value={f} className="text-xs">{f}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="method-select">Método</Label>
+                <Select value={method} onValueChange={(v) => setMethod(v as ClassificationMethod)}>
+                  <SelectTrigger id="method-select" className="h-8 text-xs bg-black/20">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-gray-700 text-white border-gray-600">
+                    <SelectItem value="quantiles" className="text-xs">Cuantiles (Equal Count)</SelectItem>
+                    <SelectItem value="natural-breaks" className="text-xs">Natural Breaks (Jenks)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="classes-input">Clases</Label>
+                <Input
+                  id="classes-input"
+                  type="number"
+                  min="2"
+                  max="20"
+                  value={classes}
+                  onChange={e => setClasses(Math.max(2, Math.min(20, Number(e.target.value))))}
+                  className="h-8 text-xs bg-black/20"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="ramp-select">Rampa de Color</Label>
+                <Select value={colorRamp} onValueChange={(v) => setColorRamp(v as ColorRampId)}>
+                  <SelectTrigger id="ramp-select" className="h-8 text-xs bg-black/20">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-gray-700 text-white border-gray-600">
+                    {Object.entries(COLOR_RAMP_DEFINITIONS).map(([rampId, {start, end}]) => (
+                      <SelectItem key={rampId} value={rampId} className="text-xs">
+                        <div className="flex items-center gap-2">
+                          <div className="flex h-4 w-16 rounded-sm overflow-hidden" style={{ background: `linear-gradient(to right, ${start}, ${end})` }} />
+                          {rampId.charAt(0).toUpperCase() + rampId.slice(1)}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            
+            <Button onClick={handleGenerateClassification} disabled={!field} className="h-8 text-xs w-full">
+              Clasificar
+            </Button>
+          </div>
+
+          <div className="p-3 border border-white/10 rounded-md space-y-3">
+             <h4 className="text-sm font-semibold -mb-1">Estilo de Contorno</h4>
+             <div className="flex items-end gap-3 w-full justify-around flex-wrap">
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="stroke-color" className="text-xs">Color</Label>
+                  <ColorPicker 
+                    value={strokeColor}
+                    onChange={setStrokeColor}
+                  />
+                </div>
+                 <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="stroke-width" className="text-xs">Grosor (px)</Label>
+                    <Input
+                      id="stroke-width"
+                      type="number"
+                      min="0"
+                      max="20"
+                      step="0.5"
+                      value={strokeWidth}
+                      onChange={(e) => setStrokeWidth(Number(e.target.value))}
+                      className="h-8 text-xs bg-black/20 w-24"
+                    />
+                </div>
+             </div>
+          </div>
+
 
           {classification && (
-            <div className="mt-2 pt-2 border-t border-white/10 space-y-2">
+            <div className="pt-2 space-y-2">
               <Label className="text-sm">Vista Previa de la Leyenda</Label>
               <div className="space-y-1 rounded-md bg-black/10 p-2 max-h-32 overflow-y-auto">
                 {classification.colors.map((color, index) => {
@@ -317,7 +532,7 @@ const GraduatedSymbologyDialog: React.FC<GraduatedSymbologyDialogProps> = ({
                   const upperBound = formatNumber(classification.breaks[index]);
                   return (
                     <div key={index} className="flex items-center gap-2 text-xs">
-                      <div className="h-4 w-4 rounded-sm border border-white/20" style={{ backgroundColor: color }} />
+                      <div className="h-4 w-4 rounded-sm border" style={{ backgroundColor: color, borderColor: colorOptions.find(c => c.value === strokeColor)?.hex || strokeColor, borderWidth: `${strokeWidth}px` }} />
                       <span>{lowerBound} - {upperBound}</span>
                     </div>
                   );

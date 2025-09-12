@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useCallback, useEffect } from 'react';
@@ -80,21 +81,25 @@ const createStyleFunction = (
 
     // Determine the base style
     if (graduatedSymbology) {
-      const value = feature.get(graduatedSymbology.field);
-      let color = 'rgba(128,128,128,0.5)'; // Default gray for invalid values
-      if (typeof value === 'number') {
-        color = graduatedSymbology.colors[graduatedSymbology.colors.length - 1]; // Default to last color
-        for (let i = 0; i < graduatedSymbology.breaks.length; i++) {
-            if (value <= graduatedSymbology.breaks[i]) {
-                color = graduatedSymbology.colors[i];
-                break;
+        const value = feature.get(graduatedSymbology.field);
+        let fillColor = 'rgba(128,128,128,0.5)'; // Default gray for invalid values
+        if (typeof value === 'number') {
+            fillColor = graduatedSymbology.colors[graduatedSymbology.colors.length - 1]; // Default to last color
+            for (let i = 0; i < graduatedSymbology.breaks.length; i++) {
+                if (value <= graduatedSymbology.breaks[i]) {
+                    fillColor = graduatedSymbology.colors[i];
+                    break;
+                }
             }
         }
-      }
-      baseStyle = new Style({
-          fill: new Fill({ color }),
-          stroke: new Stroke({ color: 'rgba(0,0,0,0.5)', width: 1 }),
-      });
+        
+        const strokeColor = colorMap[graduatedSymbology.strokeColor] || (isValidHex(graduatedSymbology.strokeColor) ? graduatedSymbology.strokeColor : 'rgba(0,0,0,0.5)');
+        const strokeWidth = graduatedSymbology.strokeWidth ?? 1;
+
+        baseStyle = new Style({
+            fill: new Fill({ color: fillColor }),
+            stroke: new Stroke({ color: strokeColor, width: strokeWidth }),
+        });
     } else {
         const style = typeof baseStyleOrFn === 'function' ? baseStyleOrFn(feature, resolution) : baseStyleOrFn;
         baseStyle = Array.isArray(style) ? style[0] : style || new Style();
@@ -551,6 +556,16 @@ export const useLayerManager = ({
     const layer = layers.find(l => l.id === layerId) as VectorMapLayer | undefined;
     if (!layer) return;
 
+    // Hide linked WMS to show custom style
+    const linkedWmsId = layer.olLayer.get('linkedWmsLayerId');
+    if (linkedWmsId && mapRef.current) {
+        const wmsLayer = mapRef.current.getLayers().getArray().find(l => l.get('id') === linkedWmsId);
+        if (wmsLayer) {
+            wmsLayer.setVisible(false);
+            setTimeout(() => toast({ description: `Se ocultó la capa WMS para mostrar el nuevo estilo.` }), 0);
+        }
+    }
+
     const olLayer = layer.olLayer;
     const labelOptions = olLayer.get('labelOptions');
     olLayer.set('graduatedSymbology', symbology);
@@ -562,7 +577,7 @@ export const useLayerManager = ({
 
     setLayers(prev => prev.map(l => l.id === layerId ? { ...l, graduatedSymbology: symbology } : l));
     setTimeout(() => toast({ description: `Simbología graduada aplicada a "${layer.name}".` }), 0);
-  }, [layers, toast]);
+  }, [layers, toast, mapRef]);
 
   const zoomToLayerExtent = useCallback((layerId: string) => {
     if (!mapRef.current) return;
