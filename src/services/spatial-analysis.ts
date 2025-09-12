@@ -3,6 +3,8 @@
 
 import type { VectorMapLayer } from '@/lib/types';
 import type { Polygon } from 'ol/geom';
+import * as jsts from 'jsts';
+
 // The 'jsts' library is not compatible with modern bundlers like Next.js's.
 // We declare it as 'any' here and use its classes dynamically inside the function
 // to prevent 'Module not found' errors during the build process.
