@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
@@ -438,6 +439,11 @@ const GraduatedSymbologyDialog: React.FC<GraduatedSymbologyDialogProps> = ({
     return num.toLocaleString(undefined, { maximumFractionDigits: 2 });
   };
 
+  const handleCustomColorChange = (type: 'start' | 'end', colorValue: string) => {
+      const hex = colorOptions.find(c => c.value === colorValue)?.hex || (isValidHex(colorValue) ? colorValue : '#000000');
+      setCustomColors(prev => ({ ...prev, [type]: hex }));
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="bg-gray-800 text-white border-gray-700 sm:max-w-[500px] p-4">
@@ -514,7 +520,7 @@ const GraduatedSymbologyDialog: React.FC<GraduatedSymbologyDialogProps> = ({
                   <Label className="text-xs">Inicio</Label>
                   <ColorPicker 
                     value={customColors.start}
-                    onChange={(color) => setCustomColors(prev => ({ ...prev, start: color }))}
+                    onChange={(color) => handleCustomColorChange('start', color)}
                   />
                 </div>
                 <div className="flex-1 h-3 rounded-full mt-auto mb-2.5" style={{ background: `linear-gradient(to right, ${customColors.start}, ${customColors.end})` }} />
@@ -522,7 +528,7 @@ const GraduatedSymbologyDialog: React.FC<GraduatedSymbologyDialogProps> = ({
                   <Label className="text-xs">Fin</Label>
                    <ColorPicker 
                     value={customColors.end}
-                    onChange={(color) => setCustomColors(prev => ({ ...prev, end: color }))}
+                    onChange={(color) => handleCustomColorChange('end', color)}
                   />
                 </div>
               </div>
@@ -589,3 +595,4 @@ const GraduatedSymbologyDialog: React.FC<GraduatedSymbologyDialogProps> = ({
 };
 
 export default GraduatedSymbologyDialog;
+
