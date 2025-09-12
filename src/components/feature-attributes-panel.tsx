@@ -184,7 +184,7 @@ const AttributesPanelComponent: React.FC<AttributesPanelComponentProps> = ({
                           >
                             {allKeys.map(key => (
                               <TableCell
-                                key={key}
+                                key={`${featureId}-${key}`}
                                 className="px-3 py-1.5 text-xs text-slate-200 dark:text-slate-200 border-b border-gray-700/50 whitespace-normal break-words"
                               >
                                 {key === 'preview_url' && attrs[key] && isValidUrl(String(attrs[key])) ? (
