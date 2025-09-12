@@ -7,7 +7,7 @@ import type { Style } from 'ol/style';
 import type Feature from 'ol/Feature';
 import type { Geometry } from 'ol/geom';
 
-export type ColorRampId = 'reds' | 'blues' | 'greens' | 'viridis' | 'pinks';
+export type ColorRampId = 'reds' | 'blues' | 'greens' | 'viridis' | 'pinks' | 'custom';
 export type ClassificationMethod = 'quantiles' | 'natural-breaks';
 
 export interface GraduatedSymbology {
@@ -19,6 +19,7 @@ export interface GraduatedSymbology {
   colors: string[]; // The hex color for each class
   strokeColor: string;
   strokeWidth: number;
+  customColors?: { start: string; end: string };
 }
 
 export interface MapLayer {

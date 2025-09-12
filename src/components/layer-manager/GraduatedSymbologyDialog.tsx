@@ -122,7 +122,7 @@ function jenks(data: number[], n_classes: number): number[] {
 
 
 // Define ramps by start and end colors for interpolation
-const COLOR_RAMP_DEFINITIONS: Record<ColorRampId, { start: string, end: string }> = {
+const COLOR_RAMP_DEFINITIONS: Record<Exclude<ColorRampId, 'custom'>, { start: string, end: string }> = {
   reds: { start: '#fee5d9', end: '#a50f15' },
   blues: { start: '#eff3ff', end: '#08519c' },
   greens: { start: '#edf8e9', end: '#006d2c' },
@@ -317,6 +317,7 @@ const GraduatedSymbologyDialog: React.FC<GraduatedSymbologyDialogProps> = ({
   const [method, setMethod] = useState<ClassificationMethod>('quantiles');
   const [classes, setClasses] = useState<number>(5);
   const [colorRamp, setColorRamp] = useState<ColorRampId>('reds');
+  const [customColors, setCustomColors] = useState({ start: '#ffffff', end: '#000000' });
   const [classification, setClassification] = useState<{ breaks: number[]; colors: string[] } | null>(null);
   const [strokeColor, setStrokeColor] = useState('negro');
   const [strokeWidth, setStrokeWidth] = useState(1);
@@ -346,6 +347,7 @@ const GraduatedSymbologyDialog: React.FC<GraduatedSymbologyDialogProps> = ({
       setMethod(existingSymbology?.method || 'quantiles');
       setClasses(existingSymbology?.classes || 5);
       setColorRamp(existingSymbology?.colorRamp || 'reds');
+      setCustomColors(existingSymbology?.customColors || { start: '#f0f9e8', end: '#08589e' });
       setStrokeColor(existingSymbology?.strokeColor || 'negro');
       setStrokeWidth(existingSymbology?.strokeWidth === undefined ? 1 : existingSymbology.strokeWidth);
       setClassification(null);
@@ -371,7 +373,17 @@ const GraduatedSymbologyDialog: React.FC<GraduatedSymbologyDialogProps> = ({
     values.sort((a, b) => a - b);
 
     let breaks: number[] = [];
-    const rampDefinition = COLOR_RAMP_DEFINITIONS[colorRamp];
+    let startColor: string, endColor: string;
+
+    if (colorRamp === 'custom') {
+        startColor = customColors.start;
+        endColor = customColors.end;
+    } else {
+        const rampDefinition = COLOR_RAMP_DEFINITIONS[colorRamp];
+        startColor = rampDefinition.start;
+        endColor = rampDefinition.end;
+    }
+    
     const numClasses = Math.max(2, classes);
     
     if (method === 'natural-breaks') {
@@ -395,7 +407,7 @@ const GraduatedSymbologyDialog: React.FC<GraduatedSymbologyDialogProps> = ({
     // Ensure breaks are unique and handle cases with few unique values
     breaks = [...new Set(breaks)].sort((a, b) => a - b);
     const finalNumClasses = breaks.length;
-    const finalColors = generateColorRamp(rampDefinition.start, rampDefinition.end, finalNumClasses);
+    const finalColors = generateColorRamp(startColor, endColor, finalNumClasses);
 
     setClassification({
       breaks,
@@ -405,16 +417,20 @@ const GraduatedSymbologyDialog: React.FC<GraduatedSymbologyDialogProps> = ({
 
   const handleApply = () => {
     if (classification && field && classification.breaks.length > 0) {
-      onApply({
-        field,
-        method,
-        classes: classification.breaks.length,
-        colorRamp,
-        breaks: classification.breaks,
-        colors: classification.colors,
-        strokeColor,
-        strokeWidth,
-      });
+        const symbology: GraduatedSymbology = {
+            field,
+            method,
+            classes: classification.breaks.length,
+            colorRamp,
+            breaks: classification.breaks,
+            colors: classification.colors,
+            strokeColor,
+            strokeWidth,
+        };
+        if (colorRamp === 'custom') {
+            symbology.customColors = customColors;
+        }
+        onApply(symbology);
     }
   };
   
@@ -486,10 +502,31 @@ const GraduatedSymbologyDialog: React.FC<GraduatedSymbologyDialogProps> = ({
                         </div>
                       </SelectItem>
                     ))}
+                    <SelectItem value="custom" className="text-xs">Personalizada</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             </div>
+
+            {colorRamp === 'custom' && (
+              <div className="flex items-end gap-3 w-full justify-around pt-2 border-t border-white/10">
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs">Inicio</Label>
+                  <ColorPicker 
+                    value={customColors.start}
+                    onChange={(color) => setCustomColors(prev => ({ ...prev, start: color }))}
+                  />
+                </div>
+                <div className="flex-1 h-3 rounded-full mt-auto mb-2.5" style={{ background: `linear-gradient(to right, ${customColors.start}, ${customColors.end})` }} />
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs">Fin</Label>
+                   <ColorPicker 
+                    value={customColors.end}
+                    onChange={(color) => setCustomColors(prev => ({ ...prev, end: color }))}
+                  />
+                </div>
+              </div>
+            )}
             
             <Button onClick={handleGenerateClassification} disabled={!field} className="h-8 text-xs w-full">
               Clasificar
