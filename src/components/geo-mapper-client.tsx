@@ -1010,6 +1010,7 @@ export default function GeoMapperClient() {
         {isMounted && panels.statistics && !panels.statistics.isMinimized && statisticsLayer && (
             <StatisticsPanel
                 layer={statisticsLayer}
+                selectedFeatures={featureInspectionHook.selectedFeatures}
                 panelRef={statisticsPanelRef}
                 isCollapsed={panels.statistics.isCollapsed}
                 onToggleCollapse={() => togglePanelCollapse('statistics')}
@@ -1083,4 +1084,3 @@ export default function GeoMapperClient() {
     </div>
   );
 }
-
