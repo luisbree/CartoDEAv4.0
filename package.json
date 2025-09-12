@@ -1,3 +1,4 @@
+
 {
   "name": "nextn",
   "version": "0.1.0",
@@ -45,7 +46,9 @@
     "firebase": "^11.9.1",
     "genkit": "^1.14.1",
     "html-to-image": "^1.11.11",
+    "jsts": "^2.10.0",
     "lucide-react": "^0.475.0",
+    "nanoid": "^5.0.7",
     "next": "15.3.3",
     "ol": "^9.2.4",
     "osmtogeojson": "^3.0.0-beta.5",
@@ -61,6 +64,7 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@types/jsts": "^0.0.30",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",

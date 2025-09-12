@@ -1,16 +1,19 @@
 
 "use client";
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import DraggablePanel from './DraggablePanel';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { BarChartHorizontal, Sigma } from 'lucide-react';
+import { BarChartHorizontal, Sigma, Maximize } from 'lucide-react';
 import type { VectorMapLayer } from '@/lib/types';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type Feature from 'ol/Feature';
-import type { Geometry } from 'ol/geom';
+import type { Geometry, Polygon } from 'ol/geom';
+import type VectorSource from 'ol/source/Vector';
+import { calculateWeightedSum } from '@/services/spatial-analysis';
+import { useToast } from '@/hooks/use-toast';
 
 interface StatisticsPanelProps {
   panelRef: React.RefObject<HTMLDivElement>;
@@ -20,6 +23,7 @@ interface StatisticsPanelProps {
   onMouseDownHeader: (e: React.MouseEvent<HTMLDivElement>) => void;
   layer: VectorMapLayer | null;
   selectedFeatures: Feature<Geometry>[];
+  drawingSource: VectorSource<Feature<Geometry>> | null;
   style?: React.CSSProperties;
 }
 
@@ -30,6 +34,7 @@ interface StatResults {
   count: number;
   min: number;
   max: number;
+  weightedSum?: number;
 }
 
 const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
@@ -40,11 +45,14 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
   onMouseDownHeader,
   layer,
   selectedFeatures,
+  drawingSource,
   style,
 }) => {
   const [selectedField, setSelectedField] = useState<string>('');
   const [results, setResults] = useState<StatResults | null>(null);
   const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [isDrawingPolygonAvailable, setIsDrawingPolygonAvailable] = useState(false);
+  const { toast } = useToast();
 
   const numericFields = useMemo(() => {
     if (!layer) return [];
@@ -64,13 +72,35 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
   }, [layer]);
 
   // Reset state when layer changes
-  React.useEffect(() => {
+  useEffect(() => {
     if (layer) {
       setSelectedField(numericFields[0] || '');
       setResults(null);
       setIsSelectionMode(false);
     }
   }, [layer, numericFields]);
+
+  // Effect to check for an available drawing polygon
+  useEffect(() => {
+    const source = drawingSource;
+    if (!source) {
+      setIsDrawingPolygonAvailable(false);
+      return;
+    }
+
+    const checkPolygon = () => {
+      const hasPolygon = source.getFeatures().some(f => f.getGeometry()?.getType() === 'Polygon');
+      setIsDrawingPolygonAvailable(hasPolygon);
+    };
+
+    source.on(['addfeature', 'removefeature', 'clear'], checkPolygon);
+    checkPolygon(); // Initial check
+
+    return () => {
+      source.un(['addfeature', 'removefeature', 'clear'], checkPolygon);
+    };
+  }, [drawingSource]);
+
 
   const handleCalculate = useCallback(() => {
     if (!layer || !selectedField) {
@@ -110,6 +140,40 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
     setResults({ sum, mean, median, count, min, max });
   }, [layer, selectedField, selectedFeatures]);
 
+  const handleCalculateWeightedSum = useCallback(async () => {
+    if (!layer || !selectedField || !drawingSource) {
+        toast({ description: "Seleccione una capa, un campo y dibuje un polígono.", variant: "destructive"});
+        return;
+    }
+    
+    const drawingPolygon = drawingSource.getFeatures().find(f => f.getGeometry()?.getType() === 'Polygon');
+    if (!drawingPolygon) {
+        toast({ description: "No se encontró un polígono dibujado para el análisis.", variant: "destructive"});
+        return;
+    }
+
+    try {
+        const weightedSum = await calculateWeightedSum({
+            analysisLayer: layer,
+            drawingPolygon: drawingPolygon.getGeometry() as Polygon,
+            field: selectedField
+        });
+        
+        // Update results, keeping existing stats if available
+        setResults(prev => ({
+            ...(prev || { sum: 0, mean: 0, median: 0, count: 0, min: 0, max: 0 }),
+            weightedSum: weightedSum,
+        }));
+        
+        toast({ description: "Cálculo de suma ponderada completado." });
+
+    } catch (error: any) {
+        console.error("Weighted sum calculation error:", error);
+        toast({ description: `Error en el cálculo: ${error.message}`, variant: "destructive"});
+    }
+  }, [layer, selectedField, drawingSource, toast]);
+
+
   const panelTitle = `Estadísticas: ${layer?.name || ''}${isSelectionMode ? ' (Selección)' : ''}`;
 
   return (
@@ -144,7 +208,17 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
             
             <Button onClick={handleCalculate} disabled={!selectedField} className="w-full h-8 text-xs">
                 <Sigma className="mr-2 h-4 w-4" />
-                Calcular Estadísticas
+                Calcular Estadísticas Básicas
+            </Button>
+            <Button 
+                onClick={handleCalculateWeightedSum} 
+                disabled={!selectedField || !isDrawingPolygonAvailable} 
+                className="w-full h-8 text-xs"
+                variant="secondary"
+                title={!isDrawingPolygonAvailable ? "Dibuje un polígono en el mapa primero" : ""}
+            >
+                <Maximize className="mr-2 h-4 w-4" />
+                Calcular Suma Ponderada por Área
             </Button>
 
             {results && (
@@ -157,6 +231,12 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
                             <TableRow><TableCell className="text-xs text-gray-300 p-1.5">Mínimo</TableCell><TableCell className="text-xs text-white p-1.5 text-right font-mono">{results.min.toLocaleString(undefined, { maximumFractionDigits: 2 })}</TableCell></TableRow>
                             <TableRow><TableCell className="text-xs text-gray-300 p-1.5">Máximo</TableCell><TableCell className="text-xs text-white p-1.5 text-right font-mono">{results.max.toLocaleString(undefined, { maximumFractionDigits: 2 })}</TableCell></TableRow>
                             <TableRow><TableCell className="text-xs text-gray-300 p-1.5">Cantidad</TableCell><TableCell className="text-xs text-white p-1.5 text-right font-mono">{results.count.toLocaleString()}</TableCell></TableRow>
+                             {results.weightedSum !== undefined && (
+                                <TableRow className="bg-primary/20">
+                                    <TableCell className="text-xs text-primary-foreground p-1.5 font-semibold">Suma Ponderada (por área dibujada)</TableCell>
+                                    <TableCell className="text-xs text-primary-foreground p-1.5 text-right font-mono font-semibold">{results.weightedSum.toLocaleString(undefined, { maximumFractionDigits: 2 })}</TableCell>
+                                </TableRow>
+                            )}
                         </TableBody>
                     </Table>
                 </div>

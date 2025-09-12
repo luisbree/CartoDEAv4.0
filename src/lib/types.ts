@@ -7,6 +7,7 @@ import type Source from 'ol/source/Source';
 import type { Style } from 'ol/style';
 import type Feature from 'ol/Feature';
 import type { Geometry } from 'ol/geom';
+import { nanoid } from 'nanoid';
 
 export type ColorRampId = 'reds' | 'blues' | 'greens' | 'viridis' | 'pinks' | 'custom';
 export type ClassificationMethod = 'quantiles' | 'natural-breaks';
