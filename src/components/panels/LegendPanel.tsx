@@ -41,6 +41,7 @@ interface LegendPanelProps {
   onRemoveLayers: (layerIds: string[]) => void;
   onZoomToLayerExtent: (layerId: string) => void;
   onShowLayerTable: (layerId: string) => void;
+  onShowStatistics: (layerId: string) => void;
   onExtractByPolygon: (layerId: string, onSuccess?: () => void) => void;
   onExtractBySelection: (onSuccess?: () => void) => void;
   onExportLayer: (layerId: string, format: 'geojson' | 'kml' | 'shp') => void;
@@ -77,7 +78,7 @@ type DeasOrgNode = { [orgName: string]: DeasProjectNode };
 
 const LegendPanel: React.FC<LegendPanelProps> = ({
   panelRef, isCollapsed, onToggleCollapse, onClosePanel, onMouseDownHeader,
-  layers, onToggleLayerVisibility, onRemoveLayer, onRemoveLayers, onZoomToLayerExtent, onShowLayerTable,
+  layers, onToggleLayerVisibility, onRemoveLayer, onRemoveLayers, onZoomToLayerExtent, onShowLayerTable, onShowStatistics,
   onExtractByPolygon, onExtractBySelection, onExportLayer, isDrawingSourceEmptyOrNotPolygon, isSelectionEmpty, onSetLayerOpacity, onReorderLayers, onRenameLayer,
   onChangeLayerStyle, onChangeLayerLabels, onApplyGraduatedSymbology, onApplyCategorizedSymbology,
   onAddLayer, 
@@ -228,6 +229,7 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
                             onToggleVisibility={onToggleLayerVisibility}
                             onZoomToExtent={onZoomToLayerExtent}
                             onShowLayerTable={onShowLayerTable}
+                            onShowStatistics={onShowStatistics}
                             onRemoveLayer={onRemoveLayer}
                             onExtractByPolygon={(layerId) => onExtractByPolygon(layerId, clearLayerSelection)}
                             onExtractBySelection={() => onExtractBySelection(clearLayerSelection)}
@@ -357,3 +359,4 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
 };
 
 export default LegendPanel;
+

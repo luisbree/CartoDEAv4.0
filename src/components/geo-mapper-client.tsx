@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { MapPin, Database, Wrench, ListTree, ListChecks, Sparkles, ClipboardCheck, Library, LifeBuoy, Printer, Server, BrainCircuit, Camera, Loader2, SlidersHorizontal, ZoomIn, Undo2 } from 'lucide-react';
+import { MapPin, Database, Wrench, ListTree, ListChecks, Sparkles, ClipboardCheck, Library, LifeBuoy, Printer, Server, BrainCircuit, Camera, Loader2, SlidersHorizontal, ZoomIn, Undo2, BarChartHorizontal } from 'lucide-react';
 import { Style, Fill, Stroke, Circle as CircleStyle, Text as TextStyle } from 'ol/style';
 import { transform, transformExtent } from 'ol/proj';
 import type { Extent } from 'ol/extent';
@@ -36,6 +36,7 @@ import WfsLibraryPanel from '@/components/panels/WfsLibraryPanel';
 import HelpPanel from '@/components/panels/HelpPanel';
 import PrintComposerPanel from '@/components/panels/PrintComposerPanel';
 import GeeProcessingPanel from '@/components/panels/GeeProcessingPanel';
+import StatisticsPanel from '@/components/panels/StatisticsPanel';
 import WfsLoadingIndicator from '@/components/feedback/WfsLoadingIndicator';
 import LocationSearch from '@/components/location-search/LocationSearch';
 import BaseLayerSelector from '@/components/layer-manager/BaseLayerSelector';
@@ -60,7 +61,7 @@ import { useOsmQuery } from '@/hooks/osm-integration/useOsmQuery';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from '@/lib/utils';
 
-import type { OSMCategoryConfig, GeoServerDiscoveredLayer, BaseLayerOptionForSelect, MapLayer, ChatMessage, BaseLayerSettings, NominatimResult, PlainFeatureData, ActiveTool, TrelloCardInfo, GraduatedSymbology } from '@/lib/types';
+import type { OSMCategoryConfig, GeoServerDiscoveredLayer, BaseLayerOptionForSelect, MapLayer, ChatMessage, BaseLayerSettings, NominatimResult, PlainFeatureData, ActiveTool, TrelloCardInfo, GraduatedSymbology, VectorMapLayer } from '@/lib/types';
 import { chatWithMapAssistant, type MapAssistantOutput } from '@/ai/flows/find-layer-flow';
 import { authenticateWithGee } from '@/ai/flows/gee-flow';
 import { checkTrelloCredentials } from '@/ai/flows/trello-actions';
@@ -149,6 +150,7 @@ export default function GeoMapperClient() {
   const helpPanelRef = useRef<HTMLDivElement>(null);
   const printComposerPanelRef = useRef<HTMLDivElement>(null);
   const geePanelRef = useRef<HTMLDivElement>(null);
+  const statisticsPanelRef = useRef<HTMLDivElement>(null);
   const trelloPopupRef = useRef<Window | null>(null);
   const [isMounted, setIsMounted] = useState(false);
 
@@ -172,6 +174,7 @@ export default function GeoMapperClient() {
     helpPanelRef,
     printComposerPanelRef,
     geePanelRef,
+    statisticsPanelRef,
     mapAreaRef,
     panelWidth: PANEL_WIDTH,
     panelPadding: PANEL_PADDING,
@@ -229,6 +232,7 @@ export default function GeoMapperClient() {
   const [isGeeAuthenticating, setIsGeeAuthenticating] = useState(true); // Start as true
   const [isCapturing, setIsCapturing] = useState(false);
   const [trelloCardNotification, setTrelloCardInfo] = useState<TrelloCardInfo | null>(null);
+  const [statisticsLayer, setStatisticsLayer] = useState<VectorMapLayer | null>(null);
 
 
   const updateDiscoveredLayerState = useCallback((layerName: string, added: boolean, type: 'wms' | 'wfs') => {
@@ -724,6 +728,16 @@ export default function GeoMapperClient() {
     trelloPopupRef.current = null;
   };
 
+  const handleShowStatistics = useCallback((layerId: string) => {
+      const layer = layerManagerHook.layers.find(l => l.id === layerId) as VectorMapLayer | undefined;
+      if (layer) {
+          setStatisticsLayer(layer);
+          togglePanelMinimize('statistics');
+      } else {
+          toast({ description: "No se encontró la capa para calcular estadísticas.", variant: "destructive" });
+      }
+  }, [layerManagerHook.layers, togglePanelMinimize, toast]);
+
 
   return (
     <div className="flex h-screen w-screen flex-col bg-background text-foreground">
@@ -923,6 +937,7 @@ export default function GeoMapperClient() {
                   togglePanelMinimize('attributes');
               }
             }}
+            onShowStatistics={handleShowStatistics}
             onExtractByPolygon={layerManagerHook.handleExtractByPolygon}
             onExtractBySelection={() => layerManagerHook.handleExtractBySelection(featureInspectionHook.selectedFeatures)}
             onExportLayer={layerManagerHook.handleExportLayer}
@@ -992,6 +1007,21 @@ export default function GeoMapperClient() {
           />
         )}
 
+        {isMounted && panels.statistics && !panels.statistics.isMinimized && statisticsLayer && (
+            <StatisticsPanel
+                layer={statisticsLayer}
+                panelRef={statisticsPanelRef}
+                isCollapsed={panels.statistics.isCollapsed}
+                onToggleCollapse={() => togglePanelCollapse('statistics')}
+                onClosePanel={() => {
+                    togglePanelMinimize('statistics');
+                    setStatisticsLayer(null);
+                }}
+                onMouseDownHeader={(e) => handlePanelMouseDown(e, 'statistics')}
+                style={{ top: `${panels.statistics.position.y}px`, left: `${panels.statistics.position.x}px`, zIndex: panels.statistics.zIndex }}
+            />
+        )}
+
         {isMounted && panels.ai && !panels.ai.isMinimized && (
           <AIPanel
             panelRef={aiPanelRef}
@@ -1053,3 +1083,4 @@ export default function GeoMapperClient() {
     </div>
   );
 }
+

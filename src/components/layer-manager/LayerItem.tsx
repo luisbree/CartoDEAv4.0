@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -15,7 +16,7 @@ import {
   DropdownMenuPortal
 } from "@/components/ui/dropdown-menu";
 import { Slider } from "@/components/ui/slider"; 
-import { Eye, EyeOff, Settings2, ZoomIn, Table2, Trash2, Scissors, Percent, GripVertical, CopyPlus, Download, Edit, Palette, Tags, Waypoints, AppWindow } from 'lucide-react';
+import { Eye, EyeOff, Settings2, ZoomIn, Table2, Trash2, Scissors, Percent, GripVertical, CopyPlus, Download, Edit, Palette, Tags, Waypoints, AppWindow, BarChartHorizontal } from 'lucide-react';
 import type { CategorizedSymbology, GraduatedSymbology, LabelOptions, MapLayer } from '@/lib/types';
 import VectorLayer from 'ol/layer/Vector'; 
 import { cn } from '@/lib/utils';
@@ -31,6 +32,7 @@ interface LayerItemProps {
   onToggleVisibility: (layerId: string) => void;
   onZoomToExtent: (layerId: string) => void;
   onShowLayerTable: (layerId: string) => void;
+  onShowStatistics: (layerId: string) => void;
   onRemove: (layerId: string) => void;
   onExtractByPolygon: (layerId: string) => void;
   onExtractBySelection: () => void;
@@ -65,6 +67,7 @@ const LayerItem: React.FC<LayerItemProps> = ({
   onToggleVisibility,
   onZoomToExtent,
   onShowLayerTable,
+  onShowStatistics,
   onRemove,
   onExtractByPolygon,
   onExtractBySelection,
@@ -302,6 +305,16 @@ const LayerItem: React.FC<LayerItemProps> = ({
               )}
 
               {isVectorLayer && (
+                <DropdownMenuItem
+                  className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer"
+                  onSelect={() => onShowStatistics(layer.id)}
+                >
+                  <BarChartHorizontal className="mr-2 h-3.5 w-3.5" />
+                  Estadísticas
+                </DropdownMenuItem>
+              )}
+
+              {isVectorLayer && (
                 <DropdownMenuSub>
                   <DropdownMenuSubTrigger className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer data-[state=open]:bg-gray-600">
                     <Download className="mr-2 h-3.5 w-3.5" />
@@ -408,3 +421,4 @@ const LayerItem: React.FC<LayerItemProps> = ({
 };
 
 export default LayerItem;
+

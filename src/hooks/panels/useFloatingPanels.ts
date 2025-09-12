@@ -3,7 +3,7 @@
 
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 
-type PanelId = 'tools' | 'legend' | 'attributes' | 'ai' | 'trello' | 'wfsLibrary' | 'help' | 'printComposer' | 'gee';
+type PanelId = 'tools' | 'legend' | 'attributes' | 'ai' | 'trello' | 'wfsLibrary' | 'help' | 'printComposer' | 'gee' | 'statistics';
 
 interface PanelState {
   isMinimized: boolean;
@@ -22,6 +22,7 @@ interface UseFloatingPanelsProps {
   helpPanelRef: React.RefObject<HTMLDivElement>;
   printComposerPanelRef: React.RefObject<HTMLDivElement>;
   geePanelRef: React.RefObject<HTMLDivElement>;
+  statisticsPanelRef: React.RefObject<HTMLDivElement>;
   mapAreaRef: React.RefObject<HTMLDivElement>;
   panelWidth: number;
   panelPadding: number;
@@ -38,6 +39,7 @@ const panelCascadeOrder: PanelId[] = [
     'attributes', 
     'printComposer', 
     'gee',
+    'statistics',
     // 'ai' and 'help' are handled separately on the right side
 ];
 
@@ -52,6 +54,7 @@ export const useFloatingPanels = ({
   helpPanelRef,
   printComposerPanelRef,
   geePanelRef,
+  statisticsPanelRef,
   mapAreaRef,
   panelWidth,
   panelPadding
@@ -67,7 +70,8 @@ export const useFloatingPanels = ({
     help: helpPanelRef,
     printComposer: printComposerPanelRef,
     gee: geePanelRef,
-  }), [attributesPanelRef, aiPanelRef, legendPanelRef, toolsPanelRef, trelloPanelRef, wfsLibraryPanelRef, helpPanelRef, printComposerPanelRef, geePanelRef]);
+    statistics: statisticsPanelRef,
+  }), [attributesPanelRef, aiPanelRef, legendPanelRef, toolsPanelRef, trelloPanelRef, wfsLibraryPanelRef, helpPanelRef, printComposerPanelRef, geePanelRef, statisticsPanelRef]);
   
   const [panels, setPanels] = useState<Record<PanelId, PanelState>>({
       // Start with minimized panels off-screen or at a default position to avoid hydration errors.
@@ -79,6 +83,7 @@ export const useFloatingPanels = ({
       attributes: { isMinimized: true, isCollapsed: false, position: { x: -9999, y: -9999 }, zIndex: initialZIndex },
       printComposer: { isMinimized: true, isCollapsed: false, position: { x: -9999, y: -9999 }, zIndex: initialZIndex },
       gee: { isMinimized: true, isCollapsed: false, position: { x: -9999, y: -9999 }, zIndex: initialZIndex },
+      statistics: { isMinimized: true, isCollapsed: false, position: { x: -9999, y: -9999 }, zIndex: initialZIndex },
       ai: { isMinimized: false, isCollapsed: false, position: { x: -9999, y: -9999 }, zIndex: initialZIndex + 3 },
       help: { isMinimized: true, isCollapsed: false, position: { x: -9999, y: -9999 }, zIndex: initialZIndex },
   });
@@ -103,6 +108,7 @@ export const useFloatingPanels = ({
             attributes: { ...prev.attributes, position: { x: panelPadding, y: panelPadding } },
             printComposer: { ...prev.printComposer, position: { x: panelPadding, y: panelPadding } },
             gee: { ...prev.gee, position: { x: panelPadding, y: panelPadding } },
+            statistics: { ...prev.statistics, position: { x: panelPadding, y: panelPadding } },
             ai: { ...prev.ai, position: { x: aiPanelX, y: panelPadding } },
             help: { ...prev.help, position: { x: aiPanelX, y: panelPadding } },
         }));
@@ -227,3 +233,4 @@ export const useFloatingPanels = ({
     togglePanelMinimize,
   };
 };
+

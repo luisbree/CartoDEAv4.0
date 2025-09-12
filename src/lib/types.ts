@@ -1,4 +1,5 @@
 
+
 import type { default as Layer } from 'ol/layer/Layer';
 import type VectorLayer from 'ol/layer/Vector';
 import type VectorSource from 'ol/source/Vector';
@@ -46,6 +47,7 @@ export interface MapLayer {
 
 export interface VectorMapLayer extends MapLayer {
   olLayer: VectorLayer<VectorSource<Feature<Geometry>>>;
+  type: 'wfs' | 'vector' | 'osm' | 'drawing' | 'sentinel' | 'landsat';
 }
 
 export interface OSMCategoryConfig {
