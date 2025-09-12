@@ -29,6 +29,7 @@ import type { GraduatedSymbology, VectorMapLayer, ColorRampId, ClassificationMet
 import { cn } from "@/lib/utils";
 import { Minus, Plus } from 'lucide-react';
 import { Slider } from '../ui/slider';
+import { ScrollArea } from '../ui/scroll-area';
 
 // --- Color Interpolation Helpers ---
 
@@ -446,28 +447,28 @@ const GraduatedSymbologyDialog: React.FC<GraduatedSymbologyDialogProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="bg-gray-800 text-white border-gray-700 sm:max-w-[500px] p-4">
+      <DialogContent className="bg-gray-800 text-white border-gray-700 sm:max-w-[480px] p-4">
         <DialogHeader>
-          <DialogTitle>Simbología Graduada para "{layer.name}"</DialogTitle>
+          <DialogTitle className="text-base">Simbología Graduada: {layer.name}</DialogTitle>
         </DialogHeader>
-        <div className="grid grid-cols-1 gap-4 py-2 space-y-3">
+        <div className="grid grid-cols-1 gap-3 py-1">
           
-          <div className="p-3 border border-white/10 rounded-md space-y-3">
-            <h4 className="text-sm font-semibold -mb-1">Clasificación</h4>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="field-select">Campo</Label>
+          <div className="p-2 border border-white/10 rounded-md space-y-2.5">
+            <h4 className="text-xs font-semibold -mb-1">Clasificación</h4>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label htmlFor="field-select" className="text-xs">Campo</Label>
                 <Select value={field} onValueChange={setField}>
                   <SelectTrigger id="field-select" className="h-8 text-xs bg-black/20">
-                    <SelectValue placeholder="Seleccionar campo..." />
+                    <SelectValue placeholder="Seleccionar..." />
                   </SelectTrigger>
                   <SelectContent className="bg-gray-700 text-white border-gray-600">
                     {numericFields.map(f => <SelectItem key={f} value={f} className="text-xs">{f}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="method-select">Método</Label>
+              <div className="space-y-1">
+                <Label htmlFor="method-select" className="text-xs">Método</Label>
                 <Select value={method} onValueChange={(v) => setMethod(v as ClassificationMethod)}>
                   <SelectTrigger id="method-select" className="h-8 text-xs bg-black/20">
                     <SelectValue />
@@ -480,9 +481,9 @@ const GraduatedSymbologyDialog: React.FC<GraduatedSymbologyDialogProps> = ({
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="classes-input">Clases</Label>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label htmlFor="classes-input" className="text-xs">Clases</Label>
                 <Input
                   id="classes-input"
                   type="number"
@@ -493,8 +494,8 @@ const GraduatedSymbologyDialog: React.FC<GraduatedSymbologyDialogProps> = ({
                   className="h-8 text-xs bg-black/20"
                 />
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="ramp-select">Rampa de Color</Label>
+              <div className="space-y-1">
+                <Label htmlFor="ramp-select" className="text-xs">Rampa de Color</Label>
                 <Select value={colorRamp} onValueChange={(v) => setColorRamp(v as ColorRampId)}>
                   <SelectTrigger id="ramp-select" className="h-8 text-xs bg-black/20">
                     <SelectValue />
@@ -515,8 +516,8 @@ const GraduatedSymbologyDialog: React.FC<GraduatedSymbologyDialogProps> = ({
             </div>
 
             {colorRamp === 'custom' && (
-              <div className="flex items-end gap-3 w-full justify-around pt-2 border-t border-white/10">
-                <div className="flex flex-col gap-1.5">
+              <div className="flex items-end gap-3 w-full justify-around pt-1.5 border-t border-white/10">
+                <div className="flex flex-col gap-1">
                   <Label className="text-xs">Inicio</Label>
                   <ColorPicker 
                     value={customColors.start}
@@ -524,7 +525,7 @@ const GraduatedSymbologyDialog: React.FC<GraduatedSymbologyDialogProps> = ({
                   />
                 </div>
                 <div className="flex-1 h-3 rounded-full mt-auto mb-2.5" style={{ background: `linear-gradient(to right, ${customColors.start}, ${customColors.end})` }} />
-                <div className="flex flex-col gap-1.5">
+                <div className="flex flex-col gap-1">
                   <Label className="text-xs">Fin</Label>
                    <ColorPicker 
                     value={customColors.end}
@@ -539,17 +540,17 @@ const GraduatedSymbologyDialog: React.FC<GraduatedSymbologyDialogProps> = ({
             </Button>
           </div>
 
-          <div className="p-3 border border-white/10 rounded-md space-y-3">
-             <h4 className="text-sm font-semibold -mb-1">Estilo de Contorno</h4>
+          <div className="p-2 border border-white/10 rounded-md space-y-2">
+             <h4 className="text-xs font-semibold">Estilo de Contorno</h4>
              <div className="flex items-end gap-3 w-full justify-around flex-wrap">
-                <div className="flex flex-col gap-1.5">
+                <div className="flex flex-col gap-1">
                   <Label htmlFor="stroke-color" className="text-xs">Color</Label>
                   <ColorPicker 
                     value={strokeColor}
                     onChange={setStrokeColor}
                   />
                 </div>
-                 <div className="flex flex-col gap-1.5">
+                 <div className="flex flex-col gap-1">
                     <Label htmlFor="stroke-width" className="text-xs">Grosor (px)</Label>
                     <Input
                       id="stroke-width"
@@ -565,27 +566,28 @@ const GraduatedSymbologyDialog: React.FC<GraduatedSymbologyDialogProps> = ({
              </div>
           </div>
 
-
           {classification && (
-            <div className="pt-2 space-y-2">
-              <Label className="text-sm">Vista Previa de la Leyenda</Label>
-              <div className="space-y-1 rounded-md bg-black/10 p-2 max-h-32 overflow-y-auto">
-                {classification.colors.map((color, index) => {
-                  const lowerBound = index === 0 ? 'Mín' : formatNumber(classification.breaks[index - 1]);
-                  const upperBound = formatNumber(classification.breaks[index]);
-                  return (
-                    <div key={index} className="flex items-center gap-2 text-xs">
-                      <div className="h-4 w-4 rounded-sm border" style={{ backgroundColor: color, borderColor: colorOptions.find(c => c.value === strokeColor)?.hex || strokeColor, borderWidth: `${strokeWidth}px` }} />
-                      <span>{lowerBound} - {upperBound}</span>
-                    </div>
-                  );
-                })}
-              </div>
+            <div className="space-y-1">
+              <Label className="text-xs font-semibold">Vista Previa de la Leyenda</Label>
+              <ScrollArea className="h-32">
+                <div className="space-y-1 rounded-md bg-black/10 p-2">
+                  {classification.colors.map((color, index) => {
+                    const lowerBound = index === 0 ? 'Mín' : formatNumber(classification.breaks[index - 1]);
+                    const upperBound = formatNumber(classification.breaks[index]);
+                    return (
+                      <div key={index} className="flex items-center gap-2 text-xs">
+                        <div className="h-4 w-4 rounded-sm border" style={{ backgroundColor: color, borderColor: colorOptions.find(c => c.value === strokeColor)?.hex || strokeColor, borderWidth: `${strokeWidth}px` }} />
+                        <span>{lowerBound} - {upperBound}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </ScrollArea>
             </div>
           )}
 
         </div>
-        <DialogFooter className="justify-center">
+        <DialogFooter className="justify-center pt-2">
           <Button variant="outline" onClick={onClose} className="h-8 text-xs bg-gray-200 text-black hover:bg-gray-300">Cancelar</Button>
           <Button onClick={handleApply} disabled={!classification} className="h-8 text-xs bg-primary hover:bg-primary/90">Aplicar</Button>
         </DialogFooter>
@@ -595,4 +597,3 @@ const GraduatedSymbologyDialog: React.FC<GraduatedSymbologyDialogProps> = ({
 };
 
 export default GraduatedSymbologyDialog;
-
