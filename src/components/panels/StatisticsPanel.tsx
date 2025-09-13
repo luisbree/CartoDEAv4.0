@@ -202,32 +202,27 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
         return;
     }
     
-    const geojsonFormat = new GeoJSON();
+    const geojsonFormat = new GeoJSON({
+        dataProjection: 'EPSG:4326',
+        featureProjection: 'EPSG:3857',
+    });
+
     const intersectionResults: { feature: Feature<Geometry>; intersection: TurfFeature<TurfPolygon | TurfMultiPolygon> }[] = [];
 
-    // --- Robust Intersection Logic ---
     const drawingOlGeom = drawingPolygonFeature.getGeometry();
     if (!drawingOlGeom) return;
 
-    // 1. Transform and clean the drawing polygon
-    const drawingGeom4326 = drawingOlGeom.clone().transform('EPSG:3857', 'EPSG:4326');
-    const drawingPolygonGeoJSON = geojsonFormat.writeGeometryObject(drawingGeom4326) as TurfPolygon;
-    const cleanedDrawingPolygon = turf.cleanCoords(drawingPolygonGeoJSON);
-
+    const drawingPolygonGeoJSON = geojsonFormat.writeGeometryObject(drawingOlGeom) as TurfPolygon;
+    
     for (const feature of analysisSource.getFeatures()) {
         const olGeometry = feature.getGeometry();
         if (!olGeometry) continue;
 
         try {
-            // 2. Transform and clean each feature geometry
-            const featureGeom4326 = olGeometry.clone().transform('EPSG:3857', 'EPSG:4326');
-            const featureGeoJSON = geojsonFormat.writeGeometryObject(featureGeom4326);
+            const featureGeoJSON = geojsonFormat.writeGeometryObject(olGeometry);
             if (!featureGeoJSON) continue;
 
-            const cleanedFeatureGeoJSON = turf.cleanCoords(featureGeoJSON);
-        
-            // 3. Perform intersection with cleaned geometries
-            const intersection = turf.intersect(cleanedDrawingPolygon, cleanedFeatureGeoJSON as any);
+            const intersection = turf.intersect(drawingPolygonGeoJSON, featureGeoJSON as any);
 
             if (intersection) {
                 intersectionResults.push({ feature, intersection: intersection as TurfFeature<TurfPolygon | TurfMultiPolygon> });
@@ -237,7 +232,6 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
             continue;
         }
     }
-
 
     if (intersectionResults.length > 0) {
         const intersectionFeatures = intersectionResults.map(result => {
