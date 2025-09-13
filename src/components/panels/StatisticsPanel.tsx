@@ -11,7 +11,7 @@ import type { MapLayer, VectorMapLayer } from '@/lib/types';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type Feature from 'ol/Feature';
 import type { Geometry, Polygon } from 'ol/geom';
-import type VectorSource from 'ol/source/Vector';
+import VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
 import GeoJSON from 'ol/format/GeoJSON';
 import * as turf from '@turf/turf';
@@ -382,3 +382,5 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
 };
 
 export default StatisticsPanel;
+
+    
