@@ -6,7 +6,7 @@ import DraggablePanel from './DraggablePanel';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { BarChartHorizontal, Sigma, Maximize, Layers } from 'lucide-react';
+import { BarChartHorizontal, Sigma, Maximize, Layers, Scissors } from 'lucide-react';
 import type { MapLayer, VectorMapLayer } from '@/lib/types';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type Feature from 'ol/Feature';
@@ -183,17 +183,16 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
     }, true);
     toast({ description: `Se creó la capa "${layerName}".` });
   }, [drawingSource, onAddLayer, toast]);
-
-
-  const handleCalculateWeightedSum = useCallback(async () => {
-    if (!layer || !selectedField || !drawingSource) {
-        toast({ description: "Seleccione una capa, un campo y dibuje un polígono.", variant: "destructive"});
+  
+  const handleExtractByDrawing = useCallback(() => {
+    if (!layer || !drawingSource) {
+        toast({ description: "Seleccione una capa y dibuje un polígono.", variant: "destructive"});
         return;
     }
     
     const drawingPolygonFeature = drawingSource.getFeatures().find(f => f.getGeometry()?.getType() === 'Polygon');
     if (!drawingPolygonFeature) {
-        toast({ description: "No se encontró un polígono dibujado para el análisis.", variant: "destructive"});
+        toast({ description: "No se encontró un polígono dibujado para la extracción.", variant: "destructive"});
         return;
     }
     
@@ -203,97 +202,77 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
         return;
     }
 
-    try {
-        const geojsonFormat = new GeoJSON({
-            featureProjection: 'EPSG:4326',
-            dataProjection: 'EPSG:3857'
-        });
+    const geojsonFormat = new GeoJSON({
+        dataProjection: 'EPSG:4326',
+        featureProjection: 'EPSG:3857'
+    });
 
-        const drawingPolygonGeoJSON = geojsonFormat.writeGeometryObject(drawingPolygonFeature.getGeometry() as Polygon) as TurfPolygon | TurfMultiPolygon;
-        const analysisFeatures = analysisSource.getFeatures();
-        
-        const intersectionResults: { feature: Feature<Geometry>; intersection: TurfFeature<TurfPolygon | TurfMultiPolygon> }[] = [];
+    const drawingPolygonGeoJSON = geojsonFormat.writeGeometryObject(drawingPolygonFeature.getGeometry() as Polygon) as TurfPolygon | TurfMultiPolygon;
+    const analysisFeatures = analysisSource.getFeatures();
+    
+    const intersectionResults: { feature: Feature<Geometry>; intersection: TurfFeature<TurfPolygon | TurfMultiPolygon> }[] = [];
 
-        for (const feature of analysisFeatures) {
-            const olGeometry = feature.getGeometry();
-            if (!olGeometry) {
-                continue;
-            }
-        
-            const featureGeoJSON = geojsonFormat.writeFeatureObject(feature);
-            if (!featureGeoJSON.geometry) {
-                continue;
-            }
-        
-            try {
-                // Now it's safe to perform the intersection
-                const intersection = turf.intersect(drawingPolygonGeoJSON, featureGeoJSON.geometry as any);
-                if (intersection) {
-                    intersectionResults.push({ feature, intersection });
-                }
-            } catch (error) {
-                console.warn("Error de intersección de Turf.js para una entidad, saltando:", { error, featureId: feature.getId() });
-                continue;
-            }
+    for (const feature of analysisFeatures) {
+        const olGeometry = feature.getGeometry();
+        if (!olGeometry) {
+            continue;
         }
-        
-        const analysisFeaturesForWeighting = intersectionResults.map(r => {
-             const turfFeat = turf.feature(r.intersection.geometry, r.feature.getProperties());
-             return turfFeat as TurfFeature<TurfPolygon | TurfMultiPolygon>;
-        });
-
-        const weightedSum = await calculateWeightedSum({
-            analysisFeaturesGeoJSON: analysisFeaturesForWeighting,
-            drawingPolygonGeoJSON,
-            field: selectedField
-        });
-        
-        // --- Visualization Logic ---
-        const intersectionFeatures = intersectionResults.map(result => {
-             const olFeature = geojsonFormat.readFeature(result.intersection, {
-                dataProjection: 'EPSG:4326',
-                featureProjection: 'EPSG:3857'
-             });
-             olFeature.setProperties(result.feature.getProperties()); // Copy attributes
-             return olFeature;
-        });
-
-        if (intersectionFeatures.length > 0) {
-            const layerName = `Recorte de ${layer.name}`;
-            const source = new VectorSource({ features: intersectionFeatures });
-            const layerId = `intersection-${nanoid()}`;
-            const olLayer = new VectorLayer({
-                source,
-                properties: { id: layerId, name: layerName, type: 'vector' },
-                style: new Style({
-                    stroke: new Stroke({ color: 'rgba(255, 0, 0, 1)', width: 2 }),
-                    fill: new Fill({ color: 'rgba(255, 0, 0, 0.5)' }),
-                }),
-            });
-            onAddLayer({
-                id: layerId,
-                name: layerName,
-                olLayer,
-                visible: true,
-                opacity: 1,
-                type: 'vector',
-            }, true);
-            toast({ description: `Se creó la capa de visualización "${layerName}".` });
-        } else {
-            toast({ description: "No se encontraron intersecciones para visualizar." });
+    
+        const featureGeoJSON = geojsonFormat.writeFeatureObject(feature);
+        if (!featureGeoJSON.geometry) {
+            continue;
         }
-        
-        setResults(prev => ({
-            ...(prev || { sum: 0, mean: 0, median: 0, count: 0, min: 0, max: 0 }),
-            weightedSum: weightedSum,
-        }));
-        
-        toast({ description: "Cálculo de suma ponderada completado." });
-
-    } catch (error: any) {
-        console.error("Weighted sum calculation error:", error);
-        toast({ description: `Error en el cálculo: ${error.message}`, variant: "destructive"});
+    
+        try {
+            const intersection = turf.intersect(drawingPolygonGeoJSON, featureGeoJSON.geometry as any);
+            if (intersection) {
+                intersectionResults.push({ feature, intersection });
+            }
+        } catch (error) {
+            console.warn("Error de intersección de Turf.js para una entidad, saltando:", { error, featureId: feature.getId() });
+            continue;
+        }
     }
+    
+    const intersectionFeatures = intersectionResults.map(result => {
+         const olFeature = geojsonFormat.readFeature(result.intersection, {
+            dataProjection: 'EPSG:4326',
+            featureProjection: 'EPSG:3857'
+         });
+         olFeature.setProperties(result.feature.getProperties()); // Copy attributes
+         return olFeature;
+    });
+
+    if (intersectionFeatures.length > 0) {
+        const layerName = `Recorte de ${layer.name}`;
+        const source = new VectorSource({ features: intersectionFeatures });
+        const layerId = `intersection-${nanoid()}`;
+        const olLayer = new VectorLayer({
+            source,
+            properties: { id: layerId, name: layerName, type: 'vector' },
+            style: new Style({
+                stroke: new Stroke({ color: 'rgba(255, 0, 0, 1)', width: 2 }),
+                fill: new Fill({ color: 'rgba(255, 0, 0, 0.5)' }),
+            }),
+        });
+        onAddLayer({
+            id: layerId,
+            name: layerName,
+            olLayer,
+            visible: true,
+            opacity: 1,
+            type: 'vector',
+        }, true);
+        toast({ description: `Se creó la capa de recorte "${layerName}".` });
+    } else {
+        toast({ description: "No se encontraron intersecciones para crear una capa de recorte." });
+    }
+  }, [layer, drawingSource, toast, onAddLayer]);
+
+
+  const handleCalculateWeightedSum = useCallback(async () => {
+    // This function can be implemented later once the extraction is confirmed to work.
+    toast({ description: "Función de suma ponderada aún no implementada en este panel."});
   }, [layer, selectedField, drawingSource, toast, onAddLayer]);
 
 
@@ -345,16 +324,26 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
                     Crear Capa desde Dibujo
                 </Button>
                 <Button 
-                    onClick={handleCalculateWeightedSum} 
-                    disabled={!selectedField || !isDrawingPolygonAvailable} 
-                    className="w-full h-8 text-xs"
-                    variant="secondary"
-                    title={!isDrawingPolygonAvailable ? "Dibuje un polígono en el mapa primero" : ""}
+                    onClick={handleExtractByDrawing} 
+                    disabled={!isDrawingPolygonAvailable || !layer}
+                    className="h-8 text-xs"
+                    variant="outline"
+                    title={!isDrawingPolygonAvailable ? "Dibuje un polígono en el mapa primero" : "Extraer entidades de la capa por el área dibujada"}
                 >
-                    <Maximize className="mr-2 h-4 w-4" />
-                    Suma Ponderada
+                    <Scissors className="mr-2 h-4 w-4" />
+                    Extraer por Dibujo
                 </Button>
             </div>
+             <Button 
+                onClick={handleCalculateWeightedSum} 
+                disabled={!selectedField || !isDrawingPolygonAvailable} 
+                className="w-full h-8 text-xs"
+                variant="secondary"
+                title={!isDrawingPolygonAvailable ? "Dibuje un polígono en el mapa primero" : ""}
+            >
+                <Maximize className="mr-2 h-4 w-4" />
+                Suma Ponderada
+            </Button>
 
             {results && (
                 <div className="pt-2 border-t border-white/10">
@@ -383,4 +372,3 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
 
 export default StatisticsPanel;
 
-    
