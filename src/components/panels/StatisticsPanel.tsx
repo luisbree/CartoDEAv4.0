@@ -172,7 +172,7 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
             dataProjection: 'EPSG:3857'
         });
 
-        const drawingPolygonGeoJSON = geojsonFormat.writeGeometryObject(drawingPolygonFeature.getGeometry() as Polygon);
+        const drawingPolygonGeoJSON = geojsonFormat.writeGeometryObject(drawingPolygonFeature.getGeometry() as Polygon) as TurfPolygon | TurfMultiPolygon;
         const analysisFeatures = analysisSource.getFeatures();
         
         const intersectionResults: { feature: Feature<Geometry>; intersection: TurfFeature<TurfPolygon | TurfMultiPolygon> }[] = [];
@@ -180,24 +180,22 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
         for (const feature of analysisFeatures) {
             const olGeometry = feature.getGeometry();
             if (!olGeometry) {
-                continue; // Skip features with no geometry
+                continue;
             }
         
             const featureGeoJSON = geojsonFormat.writeFeatureObject(feature);
             if (!featureGeoJSON.geometry) {
-                // The conversion resulted in a feature without a geometry, so we skip it.
-                console.warn("Saltando entidad con geometría inválida después de la conversión:", feature.getProperties());
                 continue;
             }
         
             try {
-                const intersection = turf.intersect(drawingPolygonGeoJSON, featureGeoJSON.geometry);
+                const intersection = turf.intersect(drawingPolygonGeoJSON, featureGeoJSON.geometry as any);
                 if (intersection) {
                     intersectionResults.push({ feature, intersection });
                 }
             } catch (error) {
                 console.warn("Error de intersección de Turf.js para una entidad, saltando:", { error, featureId: feature.getId() });
-                continue; // Skip to the next feature if intersection fails
+                continue;
             }
         }
         
@@ -215,8 +213,8 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
         // --- Visualization Logic ---
         const intersectionFeatures = intersectionResults.map(result => {
              const olFeature = geojsonFormat.readFeature(result.intersection, {
-                featureProjection: 'EPSG:3857',
                 dataProjection: 'EPSG:4326',
+                featureProjection: 'EPSG:3857'
              });
              olFeature.setProperties(result.feature.getProperties()); // Copy attributes
              return olFeature;
