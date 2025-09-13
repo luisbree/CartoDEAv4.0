@@ -12,6 +12,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import type Feature from 'ol/Feature';
 import type { Geometry, Polygon } from 'ol/geom';
 import type VectorSource from 'ol/source/Vector';
+import GeoJSON from 'ol/format/GeoJSON';
+import * as turf from '@turf/turf';
 import { calculateWeightedSum } from '@/services/spatial-analysis';
 import { useToast } from '@/hooks/use-toast';
 
@@ -146,16 +148,33 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
         return;
     }
     
-    const drawingPolygon = drawingSource.getFeatures().find(f => f.getGeometry()?.getType() === 'Polygon');
-    if (!drawingPolygon) {
+    const drawingPolygonFeature = drawingSource.getFeatures().find(f => f.getGeometry()?.getType() === 'Polygon');
+    if (!drawingPolygonFeature) {
         toast({ description: "No se encontró un polígono dibujado para el análisis.", variant: "destructive"});
+        return;
+    }
+    
+    const analysisSource = layer.olLayer.getSource();
+    if (!analysisSource) {
+        toast({ description: "La capa de análisis no tiene fuente de datos.", variant: "destructive"});
         return;
     }
 
     try {
+        const geojsonFormat = new GeoJSON({
+            featureProjection: 'EPSG:3857',
+            dataProjection: 'EPSG:4326'
+        });
+
+        const drawingPolygonGeoJSON = geojsonFormat.writeGeometryObject(drawingPolygonFeature.getGeometry() as Polygon);
+        const analysisFeaturesGeoJSON = analysisSource.getFeatures()
+            .map(f => geojsonFormat.writeFeatureObject(f))
+            .filter(f => (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon'));
+
+
         const weightedSum = await calculateWeightedSum({
-            analysisLayer: layer,
-            drawingPolygon: drawingPolygon.getGeometry() as Polygon,
+            analysisFeaturesGeoJSON,
+            drawingPolygonGeoJSON,
             field: selectedField
         });
         

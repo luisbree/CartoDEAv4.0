@@ -1,64 +1,46 @@
 
 "use client";
 
-import type { VectorMapLayer } from '@/lib/types';
-import type { Polygon } from 'ol/geom';
-import GeoJSON from 'ol/format/GeoJSON';
+import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as TurfMultiPolygon } from 'geojson';
 import * as turf from '@turf/turf';
 
 interface WeightedSumParams {
-    analysisLayer: VectorMapLayer;
-    drawingPolygon: Polygon;
+    analysisFeaturesGeoJSON: TurfFeature<TurfPolygon | TurfMultiPolygon>[];
+    drawingPolygonGeoJSON: TurfPolygon | TurfMultiPolygon;
     field: string;
 }
 
 /**
  * Calculates a surface-weighted sum of a numeric field based on the intersection
- * with a drawing polygon using Turf.js.
+ * with a drawing polygon using Turf.js. This function now expects GeoJSON inputs.
  * @param params - The parameters for the calculation.
  * @returns A promise that resolves to the calculated weighted sum.
  */
 export async function calculateWeightedSum({
-    analysisLayer,
-    drawingPolygon,
+    analysisFeaturesGeoJSON,
+    drawingPolygonGeoJSON,
     field
 }: WeightedSumParams): Promise<number> {
-    if (!analysisLayer || !drawingPolygon || !field) {
+    
+    if (!analysisFeaturesGeoJSON || !drawingPolygonGeoJSON || !field) {
         throw new Error("Parámetros inválidos para el cálculo.");
     }
-
-    const source = analysisLayer.olLayer.getSource();
-    if (!source) {
-        throw new Error("La capa de análisis no tiene una fuente de datos.");
-    }
-    const features = source.getFeatures();
-    if (features.length === 0) {
+    
+    if (analysisFeaturesGeoJSON.length === 0) {
         return 0; // No features to analyze
     }
 
-    // Use OpenLayers' GeoJSON format to convert geometries
-    const geojsonFormat = new GeoJSON({
-        featureProjection: 'EPSG:3857', // The projection of the map features
-        dataProjection: 'EPSG:4326' // The projection Turf.js expects (standard GeoJSON)
-    });
-
-    // Convert the OpenLayers drawing polygon to a GeoJSON polygon
-    const drawingPolygonGeoJSON = geojsonFormat.writeGeometryObject(drawingPolygon);
-
     let totalWeightedSum = 0;
 
-    for (const feature of features) {
-        const featureGeom = feature.getGeometry();
-        const featureValue = feature.get(field);
+    for (const featureGeoJSON of analysisFeaturesGeoJSON) {
+        const featureValue = featureGeoJSON.properties?.[field];
 
         if (
-            featureGeom &&
-            (featureGeom.getType() === 'Polygon' || featureGeom.getType() === 'MultiPolygon') &&
+            featureGeoJSON.geometry &&
+            (featureGeoJSON.geometry.type === 'Polygon' || featureGeoJSON.geometry.type === 'MultiPolygon') &&
             typeof featureValue === 'number' &&
             isFinite(featureValue)
         ) {
-            const featureGeoJSON = geojsonFormat.writeFeatureObject(feature);
-
             try {
                 // Calculate the intersection using Turf.js
                 const intersection = turf.intersect(drawingPolygonGeoJSON, featureGeoJSON.geometry);
@@ -74,7 +56,7 @@ export async function calculateWeightedSum({
                 }
             } catch (error) {
                 // Turf can throw errors on invalid geometries, so we log and continue
-                console.warn(`Error processing intersection for feature ${feature.getId()}:`, error);
+                console.warn(`Error processing intersection for a feature:`, error);
                 continue;
             }
         }
