@@ -15,6 +15,7 @@ import type VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
 import GeoJSON from 'ol/format/GeoJSON';
 import * as turf from '@turf/turf';
+import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as TurfMultiPolygon } from 'geojson';
 import { calculateWeightedSum } from '@/services/spatial-analysis';
 import { useToast } from '@/hooks/use-toast';
 import { nanoid } from 'nanoid';
@@ -174,7 +175,7 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
         const drawingPolygonGeoJSON = geojsonFormat.writeGeometryObject(drawingPolygonFeature.getGeometry() as Polygon);
         const analysisFeatures = analysisSource.getFeatures();
         
-        const intersectionResults: { feature: Feature<Geometry>; intersection: turf.Feature<turf.Polygon | turf.MultiPolygon> | null }[] = [];
+        const intersectionResults: { feature: Feature<Geometry>; intersection: TurfFeature<TurfPolygon | TurfMultiPolygon> }[] = [];
 
         for (const feature of analysisFeatures) {
             const olGeometry = feature.getGeometry();
@@ -185,21 +186,28 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
             const featureGeoJSON = geojsonFormat.writeFeatureObject(feature);
             if (!featureGeoJSON.geometry) {
                 // The conversion resulted in a feature without a geometry, so we skip it.
-                console.warn("Skipping feature with invalid geometry after conversion:", feature.getProperties());
+                console.warn("Saltando entidad con geometría inválida después de la conversión:", feature.getProperties());
                 continue;
             }
         
-            // Now it's safe to perform the intersection
-            const intersection = turf.intersect(drawingPolygonGeoJSON, featureGeoJSON.geometry);
-            if (intersection) {
-                intersectionResults.push({ feature, intersection });
+            try {
+                const intersection = turf.intersect(drawingPolygonGeoJSON, featureGeoJSON.geometry);
+                if (intersection) {
+                    intersectionResults.push({ feature, intersection });
+                }
+            } catch (error) {
+                console.warn("Error de intersección de Turf.js para una entidad, saltando:", { error, featureId: feature.getId() });
+                continue; // Skip to the next feature if intersection fails
             }
         }
-
-        const analysisFeaturesGeoJSON = intersectionResults.map(r => geojsonFormat.writeFeatureObject(r.feature));
+        
+        const analysisFeaturesForWeighting = intersectionResults.map(r => {
+             const turfFeat = turf.feature(r.intersection.geometry, r.feature.getProperties());
+             return turfFeat as TurfFeature<TurfPolygon | TurfMultiPolygon>;
+        });
 
         const weightedSum = await calculateWeightedSum({
-            analysisFeaturesGeoJSON,
+            analysisFeaturesGeoJSON: analysisFeaturesForWeighting,
             drawingPolygonGeoJSON,
             field: selectedField
         });

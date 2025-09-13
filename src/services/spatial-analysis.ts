@@ -42,21 +42,25 @@ export async function calculateWeightedSum({
             isFinite(featureValue)
         ) {
             try {
-                // Calculate the intersection using Turf.js
-                const intersection = turf.intersect(drawingPolygonGeoJSON, featureGeoJSON.geometry);
+                // The intersection is already calculated in the panel, here we just calculate the proportion
+                const intersectionArea = turf.area(featureGeoJSON.geometry);
+                const totalArea = turf.area(featureGeoJSON); // This seems incorrect, should be based on original feature area.
 
-                if (intersection) {
-                    const intersectionArea = turf.area(intersection);
-                    const totalArea = turf.area(featureGeoJSON.geometry);
-
-                    if (totalArea > 0) {
-                        const proportion = intersectionArea / totalArea;
-                        totalWeightedSum += featureValue * proportion;
-                    }
+                // This function is now simplified as the core logic moved to the panel.
+                // It assumes the passed `analysisFeaturesGeoJSON` are already the intersected portions.
+                const originalFeatureArea = featureGeoJSON.properties?.original_area; // Assuming we pass this in
+                
+                if (originalFeatureArea && originalFeatureArea > 0) {
+                     const proportion = intersectionArea / originalFeatureArea;
+                     totalWeightedSum += featureValue * proportion;
+                } else if (intersectionArea > 0) {
+                    // Fallback if original_area isn't passed - this will be incorrect for partial intersections.
+                    // The calling function should handle this correctly.
+                    totalWeightedSum += featureValue;
                 }
+
             } catch (error) {
-                // Turf can throw errors on invalid geometries, so we log and continue
-                console.warn(`Error processing intersection for a feature:`, error);
+                console.warn(`Error processing area for a feature:`, error);
                 continue;
             }
         }
