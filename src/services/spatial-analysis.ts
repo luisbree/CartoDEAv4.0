@@ -38,8 +38,8 @@ export async function calculateWeightedSum({
 
     // Use OpenLayers' GeoJSON format to convert geometries
     const geojsonFormat = new GeoJSON({
-        featureProjection: analysisLayer.olLayer.getSource()?.getProjection() || 'EPSG:3857',
-        dataProjection: 'EPSG:4326' // Turf.js works with standard GeoJSON (WGS84)
+        featureProjection: 'EPSG:3857', // The projection of the map features
+        dataProjection: 'EPSG:4326' // The projection Turf.js expects (standard GeoJSON)
     });
 
     // Convert the OpenLayers drawing polygon to a GeoJSON polygon
