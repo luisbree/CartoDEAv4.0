@@ -6,7 +6,7 @@ import DraggablePanel from './DraggablePanel';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { BarChartHorizontal, Sigma, Maximize } from 'lucide-react';
+import { BarChartHorizontal, Sigma, Maximize, Layers } from 'lucide-react';
 import type { MapLayer, VectorMapLayer } from '@/lib/types';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type Feature from 'ol/Feature';
@@ -148,6 +148,43 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
     setResults({ sum, mean, median, count, min, max });
   }, [layer, selectedField, selectedFeatures]);
 
+  const handleCreateLayerFromDrawing = useCallback(() => {
+    if (!drawingSource) {
+        toast({ description: "No hay fuente de dibujo disponible.", variant: "destructive"});
+        return;
+    }
+    const drawingPolygonFeature = drawingSource.getFeatures().find(f => f.getGeometry()?.getType() === 'Polygon');
+    if (!drawingPolygonFeature) {
+        toast({ description: "No se encontró un polígono dibujado para crear la capa.", variant: "destructive"});
+        return;
+    }
+
+    const clonedFeature = drawingPolygonFeature.clone();
+    clonedFeature.setId(nanoid()); // Give it a new ID
+
+    const layerName = `Polígono de Análisis`;
+    const source = new VectorSource({ features: [clonedFeature] });
+    const layerId = `analysis-poly-${nanoid()}`;
+    const olLayer = new VectorLayer({
+        source,
+        properties: { id: layerId, name: layerName, type: 'vector' },
+        style: new Style({
+            stroke: new Stroke({ color: 'rgba(0, 255, 255, 1)', width: 2.5 }),
+            fill: new Fill({ color: 'rgba(0, 255, 255, 0.3)' }),
+        }),
+    });
+    onAddLayer({
+        id: layerId,
+        name: layerName,
+        olLayer,
+        visible: true,
+        opacity: 1,
+        type: 'vector',
+    }, true);
+    toast({ description: `Se creó la capa "${layerName}".` });
+  }, [drawingSource, onAddLayer, toast]);
+
+
   const handleCalculateWeightedSum = useCallback(async () => {
     if (!layer || !selectedField || !drawingSource) {
         toast({ description: "Seleccione una capa, un campo y dibuje un polígono.", variant: "destructive"});
@@ -189,6 +226,7 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
             }
         
             try {
+                // Now it's safe to perform the intersection
                 const intersection = turf.intersect(drawingPolygonGeoJSON, featureGeoJSON.geometry as any);
                 if (intersection) {
                     intersectionResults.push({ feature, intersection });
@@ -295,16 +333,28 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
                 <Sigma className="mr-2 h-4 w-4" />
                 Calcular Estadísticas Básicas
             </Button>
-            <Button 
-                onClick={handleCalculateWeightedSum} 
-                disabled={!selectedField || !isDrawingPolygonAvailable} 
-                className="w-full h-8 text-xs"
-                variant="secondary"
-                title={!isDrawingPolygonAvailable ? "Dibuje un polígono en el mapa primero" : ""}
-            >
-                <Maximize className="mr-2 h-4 w-4" />
-                Suma Ponderada (y ver recorte)
-            </Button>
+            <div className="flex items-center gap-2">
+                 <Button 
+                    onClick={handleCreateLayerFromDrawing} 
+                    disabled={!isDrawingPolygonAvailable} 
+                    className="h-8 text-xs"
+                    variant="outline"
+                    title={!isDrawingPolygonAvailable ? "Dibuje un polígono en el mapa primero" : "Crear una capa a partir del polígono dibujado"}
+                >
+                    <Layers className="mr-2 h-4 w-4" />
+                    Crear Capa desde Dibujo
+                </Button>
+                <Button 
+                    onClick={handleCalculateWeightedSum} 
+                    disabled={!selectedField || !isDrawingPolygonAvailable} 
+                    className="w-full h-8 text-xs"
+                    variant="secondary"
+                    title={!isDrawingPolygonAvailable ? "Dibuje un polígono en el mapa primero" : ""}
+                >
+                    <Maximize className="mr-2 h-4 w-4" />
+                    Suma Ponderada
+                </Button>
+            </div>
 
             {results && (
                 <div className="pt-2 border-t border-white/10">
