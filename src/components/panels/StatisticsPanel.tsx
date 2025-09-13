@@ -202,41 +202,42 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
         return;
     }
     
-    const geojsonFormat = new GeoJSON({
-        dataProjection: 'EPSG:4326',
-        featureProjection: 'EPSG:3857'
-    });
-    
-    const drawingPolygonGeoJSON = geojsonFormat.writeGeometryObject(drawingPolygonFeature.getGeometry() as Polygon) as TurfPolygon | TurfMultiPolygon;
-    const analysisFeatures = analysisSource.getFeatures();
-    
+    const geojsonFormat = new GeoJSON();
     const intersectionResults: { feature: Feature<Geometry>; intersection: TurfFeature<TurfPolygon | TurfMultiPolygon> }[] = [];
 
-    for (const feature of analysisFeatures) {
+    // --- Robust Intersection Logic ---
+    const drawingOlGeom = drawingPolygonFeature.getGeometry();
+    if (!drawingOlGeom) return;
+
+    // 1. Transform and clean the drawing polygon
+    const drawingGeom4326 = drawingOlGeom.clone().transform('EPSG:3857', 'EPSG:4326');
+    const drawingPolygonGeoJSON = geojsonFormat.writeGeometryObject(drawingGeom4326) as TurfPolygon;
+    const cleanedDrawingPolygon = turf.cleanCoords(drawingPolygonGeoJSON);
+
+    for (const feature of analysisSource.getFeatures()) {
         const olGeometry = feature.getGeometry();
         if (!olGeometry) continue;
-    
-        const featureGeoJSON = geojsonFormat.writeFeatureObject(feature);
-        if (!featureGeoJSON || !featureGeoJSON.geometry) continue;
-    
-        try {
-            const featureGeometries = featureGeoJSON.geometry.type === 'Polygon'
-                ? [turf.polygon(featureGeoJSON.geometry.coordinates as Position[][])]
-                : featureGeoJSON.geometry.type === 'MultiPolygon'
-                ? (featureGeoJSON.geometry.coordinates as Position[][][]).map(coords => turf.polygon(coords))
-                : [];
 
-            for (const geom of featureGeometries) {
-                const intersection = turf.intersect(drawingPolygonGeoJSON, geom);
-                if (intersection) {
-                    intersectionResults.push({ feature, intersection: intersection as TurfFeature<TurfPolygon | TurfMultiPolygon> });
-                }
+        try {
+            // 2. Transform and clean each feature geometry
+            const featureGeom4326 = olGeometry.clone().transform('EPSG:3857', 'EPSG:4326');
+            const featureGeoJSON = geojsonFormat.writeGeometryObject(featureGeom4326);
+            if (!featureGeoJSON) continue;
+
+            const cleanedFeatureGeoJSON = turf.cleanCoords(featureGeoJSON);
+        
+            // 3. Perform intersection with cleaned geometries
+            const intersection = turf.intersect(cleanedDrawingPolygon, cleanedFeatureGeoJSON as any);
+
+            if (intersection) {
+                intersectionResults.push({ feature, intersection: intersection as TurfFeature<TurfPolygon | TurfMultiPolygon> });
             }
         } catch (error) {
             console.warn("Error de intersección de Turf.js para una entidad, saltando:", { error, featureId: feature.getId() });
             continue;
         }
     }
+
 
     if (intersectionResults.length > 0) {
         const intersectionFeatures = intersectionResults.map(result => {
@@ -268,7 +269,7 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
             opacity: 1,
             type: 'vector',
         }, true);
-        toast({ description: `Se creó la capa de recorte "${layerName}".` });
+        toast({ description: `Se creó la capa de recorte "${layerName}" con ${intersectionFeatures.length} entidades.` });
     } else {
         toast({ description: "No se encontraron intersecciones para crear una capa de recorte." });
     }
@@ -278,7 +279,7 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
   const handleCalculateWeightedSum = useCallback(async () => {
     // This function can be implemented later once the extraction is confirmed to work.
     toast({ description: "Función de suma ponderada aún no implementada en este panel."});
-  }, []);
+  }, [toast]);
 
 
   const panelTitle = `Estadísticas: ${layer?.name || ''}${isSelectionMode ? ' (Selección)' : ''}`;
@@ -313,10 +314,6 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
                 </Select>
             </div>
             
-            <Button onClick={handleCalculate} disabled={!selectedField} className="w-full h-8 text-xs">
-                <Sigma className="mr-2 h-4 w-4" />
-                Calcular Estadísticas Básicas
-            </Button>
             <div className="flex items-center gap-2">
                  <Button 
                     onClick={handleCreateLayerFromDrawing} 
@@ -340,6 +337,15 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
                 </Button>
             </div>
              <Button 
+                onClick={handleCalculate} 
+                disabled={!selectedField} 
+                className="w-full h-8 text-xs"
+                variant="secondary"
+            >
+                <Sigma className="mr-2 h-4 w-4" />
+                Calcular Estadísticas Básicas
+            </Button>
+             <Button 
                 onClick={handleCalculateWeightedSum} 
                 disabled={!selectedField || !isDrawingPolygonAvailable} 
                 className="w-full h-8 text-xs"
@@ -347,7 +353,7 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
                 title={!isDrawingPolygonAvailable ? "Dibuje un polígono en el mapa primero" : ""}
             >
                 <Maximize className="mr-2 h-4 w-4" />
-                Suma Ponderada
+                Suma Ponderada (WIP)
             </Button>
 
             {results && (
@@ -376,5 +382,3 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
 };
 
 export default StatisticsPanel;
-
-    
