@@ -15,7 +15,7 @@ import VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
 import GeoJSON from 'ol/format/GeoJSON';
 import * as turf from '@turf/turf';
-import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as TurfMultiPolygon } from 'geojson';
+import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as TurfMultiPolygon, Position } from 'geojson';
 import { calculateWeightedSum } from '@/services/spatial-analysis';
 import { useToast } from '@/hooks/use-toast';
 import { nanoid } from 'nanoid';
@@ -201,12 +201,12 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
         toast({ description: "La capa de análisis no tiene fuente de datos.", variant: "destructive"});
         return;
     }
-
+    
     const geojsonFormat = new GeoJSON({
         dataProjection: 'EPSG:4326',
         featureProjection: 'EPSG:3857'
     });
-
+    
     const drawingPolygonGeoJSON = geojsonFormat.writeGeometryObject(drawingPolygonFeature.getGeometry() as Polygon) as TurfPolygon | TurfMultiPolygon;
     const analysisFeatures = analysisSource.getFeatures();
     
@@ -220,28 +220,35 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
         if (!featureGeoJSON || !featureGeoJSON.geometry) continue;
     
         try {
-            const intersection = turf.intersect(drawingPolygonGeoJSON, featureGeoJSON.geometry as any);
-            if (intersection) {
-                intersectionResults.push({ feature, intersection });
+            const featureGeometries = featureGeoJSON.geometry.type === 'Polygon'
+                ? [turf.polygon(featureGeoJSON.geometry.coordinates as Position[][])]
+                : featureGeoJSON.geometry.type === 'MultiPolygon'
+                ? (featureGeoJSON.geometry.coordinates as Position[][][]).map(coords => turf.polygon(coords))
+                : [];
+
+            for (const geom of featureGeometries) {
+                const intersection = turf.intersect(drawingPolygonGeoJSON, geom);
+                if (intersection) {
+                    intersectionResults.push({ feature, intersection: intersection as TurfFeature<TurfPolygon | TurfMultiPolygon> });
+                }
             }
         } catch (error) {
             console.warn("Error de intersección de Turf.js para una entidad, saltando:", { error, featureId: feature.getId() });
             continue;
         }
     }
-    
-    const intersectionFeatures = intersectionResults.map(result => {
-        const intersectionFeature = new GeoJSON().readFeature(result.intersection, {
-           dataProjection: 'EPSG:4326',
-           featureProjection: 'EPSG:3857'
-        });
-        // Crucially, copy the original attributes to the new, clipped feature
-        const originalProperties = result.feature.getProperties();
-        intersectionFeature.setProperties(originalProperties);
-        return intersectionFeature;
-    });
 
-    if (intersectionFeatures.length > 0) {
+    if (intersectionResults.length > 0) {
+        const intersectionFeatures = intersectionResults.map(result => {
+            const intersectionFeature = new GeoJSON().readFeature(result.intersection, {
+               dataProjection: 'EPSG:4326',
+               featureProjection: 'EPSG:3857'
+            });
+            const originalProperties = result.feature.getProperties();
+            intersectionFeature.setProperties(originalProperties);
+            return intersectionFeature;
+        });
+
         const layerName = `Recorte de ${layer.name}`;
         const source = new VectorSource({ features: intersectionFeatures });
         const layerId = `intersection-${nanoid()}`;
@@ -271,7 +278,7 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
   const handleCalculateWeightedSum = useCallback(async () => {
     // This function can be implemented later once the extraction is confirmed to work.
     toast({ description: "Función de suma ponderada aún no implementada en este panel."});
-  }, [layer, selectedField, drawingSource, toast, onAddLayer]);
+  }, []);
 
 
   const panelTitle = `Estadísticas: ${layer?.name || ''}${isSelectionMode ? ' (Selección)' : ''}`;
@@ -369,3 +376,5 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
 };
 
 export default StatisticsPanel;
+
+    
