@@ -167,27 +167,35 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
 
     try {
         const geojsonFormat = new GeoJSON({
-            featureProjection: 'EPSG:3857',
-            dataProjection: 'EPSG:4326'
+            featureProjection: 'EPSG:4326',
+            dataProjection: 'EPSG:3857'
         });
 
         const drawingPolygonGeoJSON = geojsonFormat.writeGeometryObject(drawingPolygonFeature.getGeometry() as Polygon);
-        
         const analysisFeatures = analysisSource.getFeatures();
         
-        const intersectionResults = analysisFeatures
-            .filter(feature => !!feature.getGeometry()) // Ensure feature has a geometry
-            .map(feature => {
-                const featureGeoJSON = geojsonFormat.writeFeatureObject(feature);
-                // Ensure the resulting GeoJSON also has a geometry before intersecting
-                if (!featureGeoJSON.geometry) {
-                    return { feature, intersection: null };
-                }
-                const intersection = turf.intersect(drawingPolygonGeoJSON, featureGeoJSON.geometry);
-                return { feature, intersection };
-            })
-            .filter(result => result.intersection !== null);
+        const intersectionResults: { feature: Feature<Geometry>; intersection: turf.Feature<turf.Polygon | turf.MultiPolygon> | null }[] = [];
+
+        for (const feature of analysisFeatures) {
+            const olGeometry = feature.getGeometry();
+            if (!olGeometry) {
+                continue; // Skip features with no geometry
+            }
         
+            const featureGeoJSON = geojsonFormat.writeFeatureObject(feature);
+            if (!featureGeoJSON.geometry) {
+                // The conversion resulted in a feature without a geometry, so we skip it.
+                console.warn("Skipping feature with invalid geometry after conversion:", feature.getProperties());
+                continue;
+            }
+        
+            // Now it's safe to perform the intersection
+            const intersection = turf.intersect(drawingPolygonGeoJSON, featureGeoJSON.geometry);
+            if (intersection) {
+                intersectionResults.push({ feature, intersection });
+            }
+        }
+
         const analysisFeaturesGeoJSON = intersectionResults.map(r => geojsonFormat.writeFeatureObject(r.feature));
 
         const weightedSum = await calculateWeightedSum({
@@ -198,7 +206,10 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
         
         // --- Visualization Logic ---
         const intersectionFeatures = intersectionResults.map(result => {
-             const olFeature = geojsonFormat.readFeature(result.intersection);
+             const olFeature = geojsonFormat.readFeature(result.intersection, {
+                featureProjection: 'EPSG:3857',
+                dataProjection: 'EPSG:4326',
+             });
              olFeature.setProperties(result.feature.getProperties()); // Copy attributes
              return olFeature;
         });
@@ -222,7 +233,7 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
                 visible: true,
                 opacity: 1,
                 type: 'vector',
-            });
+            }, true);
             toast({ description: `Se creó la capa de visualización "${layerName}".` });
         } else {
             toast({ description: "No se encontraron intersecciones para visualizar." });
