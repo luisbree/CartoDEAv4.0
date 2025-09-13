@@ -214,14 +214,10 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
 
     for (const feature of analysisFeatures) {
         const olGeometry = feature.getGeometry();
-        if (!olGeometry) {
-            continue;
-        }
+        if (!olGeometry) continue;
     
         const featureGeoJSON = geojsonFormat.writeFeatureObject(feature);
-        if (!featureGeoJSON.geometry) {
-            continue;
-        }
+        if (!featureGeoJSON || !featureGeoJSON.geometry) continue;
     
         try {
             const intersection = turf.intersect(drawingPolygonGeoJSON, featureGeoJSON.geometry as any);
@@ -235,12 +231,14 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
     }
     
     const intersectionFeatures = intersectionResults.map(result => {
-         const olFeature = geojsonFormat.readFeature(result.intersection, {
-            dataProjection: 'EPSG:4326',
-            featureProjection: 'EPSG:3857'
-         });
-         olFeature.setProperties(result.feature.getProperties()); // Copy attributes
-         return olFeature;
+        const intersectionFeature = new GeoJSON().readFeature(result.intersection, {
+           dataProjection: 'EPSG:4326',
+           featureProjection: 'EPSG:3857'
+        });
+        // Crucially, copy the original attributes to the new, clipped feature
+        const originalProperties = result.feature.getProperties();
+        intersectionFeature.setProperties(originalProperties);
+        return intersectionFeature;
     });
 
     if (intersectionFeatures.length > 0) {
@@ -371,4 +369,3 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
 };
 
 export default StatisticsPanel;
-
