@@ -3,8 +3,6 @@
 
 import type { VectorMapLayer } from '@/lib/types';
 import type { Polygon } from 'ol/geom';
-import * as jsts from 'jsts';
-
 // The 'jsts' library is not compatible with modern bundlers like Next.js's.
 // We declare it as 'any' here to prevent build-time type checking errors.
 declare const jsts: any;
@@ -39,9 +37,13 @@ export async function calculateWeightedSum({
     if (features.length === 0) {
         return 0; // No features to analyze
     }
+    
+    // The JSTS library is loaded globally, so we access it from the window object.
+    // This avoids the 'Module not found' error during the Next.js build process.
+    if (typeof jsts === 'undefined') {
+        throw new Error("La librería de análisis espacial (JSTS) no está disponible. No se puede realizar el cálculo.");
+    }
 
-    // The JSTS library doesn't export types in a standard way, so we cast to any here
-    // after ensuring the library is loaded. The functionality remains the same.
     const jstsAny: any = jsts;
 
     const geometryFactory = new jstsAny.geom.GeometryFactory();
