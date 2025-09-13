@@ -43,7 +43,7 @@ export async function calculateWeightedSum({
     });
 
     // Convert the OpenLayers drawing polygon to a GeoJSON polygon
-    const drawingPolygonGeoJSON = geojsonFormat.writePolygonObject(drawingPolygon);
+    const drawingPolygonGeoJSON = geojsonFormat.writeGeometryObject(drawingPolygon);
 
     let totalWeightedSum = 0;
 
