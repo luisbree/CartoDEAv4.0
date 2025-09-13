@@ -3,11 +3,8 @@
 
 import type { VectorMapLayer } from '@/lib/types';
 import type { Polygon } from 'ol/geom';
-
-// The 'jsts' library is not compatible with modern bundlers like Next.js's.
-// We declare it as 'any' here to prevent build-time type checking errors.
-declare const jsts: any;
-
+import GeoJSON from 'ol/format/GeoJSON';
+import * as turf from '@turf/turf';
 
 interface WeightedSumParams {
     analysisLayer: VectorMapLayer;
@@ -17,7 +14,7 @@ interface WeightedSumParams {
 
 /**
  * Calculates a surface-weighted sum of a numeric field based on the intersection
- * with a drawing polygon.
+ * with a drawing polygon using Turf.js.
  * @param params - The parameters for the calculation.
  * @returns A promise that resolves to the calculated weighted sum.
  */
@@ -38,33 +35,15 @@ export async function calculateWeightedSum({
     if (features.length === 0) {
         return 0; // No features to analyze
     }
-    
-    // The JSTS library is loaded globally, so we access it from the window object.
-    // This avoids the 'Module not found' error during the Next.js build process.
-    if (typeof jsts === 'undefined') {
-        throw new Error("La librería de análisis espacial (JSTS) no está disponible. No se puede realizar el cálculo.");
-    }
 
-    const jstsAny: any = jsts;
+    // Use OpenLayers' GeoJSON format to convert geometries
+    const geojsonFormat = new GeoJSON({
+        featureProjection: analysisLayer.olLayer.getSource()?.getProjection() || 'EPSG:3857',
+        dataProjection: 'EPSG:4326' // Turf.js works with standard GeoJSON (WGS84)
+    });
 
-    const geometryFactory = new jstsAny.geom.GeometryFactory();
-    const olParser = new jstsAny.io.OL3Parser();
-    olParser.inject(
-        jstsAny.geom.Point,
-        jstsAny.geom.LineString,
-        jstsAny.geom.Polygon,
-        jstsAny.geom.LinearRing,
-        jstsAny.geom.Coordinate,
-        jstsAny.geom.PrecisionModel,
-        geometryFactory
-    );
-
-
-    // Convert the OpenLayers drawing polygon to a JSTS geometry
-    const jstsDrawingPolygon = olParser.read(drawingPolygon);
-    if (!jstsDrawingPolygon || jstsDrawingPolygon.isEmpty()) {
-        throw new Error("El polígono de dibujo no es válido.");
-    }
+    // Convert the OpenLayers drawing polygon to a GeoJSON polygon
+    const drawingPolygonGeoJSON = geojsonFormat.writePolygonObject(drawingPolygon);
 
     let totalWeightedSum = 0;
 
@@ -72,28 +51,31 @@ export async function calculateWeightedSum({
         const featureGeom = feature.getGeometry();
         const featureValue = feature.get(field);
 
-        // Ensure the feature has a valid polygon geometry and numeric value
         if (
             featureGeom &&
             (featureGeom.getType() === 'Polygon' || featureGeom.getType() === 'MultiPolygon') &&
             typeof featureValue === 'number' &&
             isFinite(featureValue)
         ) {
-            const jstsFeatureGeom = olParser.read(featureGeom);
+            const featureGeoJSON = geojsonFormat.writeFeatureObject(feature);
 
-            // Check for intersection before doing the expensive calculation
-            if (jstsDrawingPolygon.intersects(jstsFeatureGeom)) {
-                const intersectionGeom = jstsDrawingPolygon.intersection(jstsFeatureGeom);
+            try {
+                // Calculate the intersection using Turf.js
+                const intersection = turf.intersect(drawingPolygonGeoJSON, featureGeoJSON.geometry);
 
-                if (!intersectionGeom.isEmpty()) {
-                    const intersectionArea = intersectionGeom.getArea();
-                    const totalArea = jstsFeatureGeom.getArea();
-                    
+                if (intersection) {
+                    const intersectionArea = turf.area(intersection);
+                    const totalArea = turf.area(featureGeoJSON.geometry);
+
                     if (totalArea > 0) {
                         const proportion = intersectionArea / totalArea;
                         totalWeightedSum += featureValue * proportion;
                     }
                 }
+            } catch (error) {
+                // Turf can throw errors on invalid geometries, so we log and continue
+                console.warn(`Error processing intersection for feature ${feature.getId()}:`, error);
+                continue;
             }
         }
     }
