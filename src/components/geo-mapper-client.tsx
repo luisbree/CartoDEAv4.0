@@ -1012,6 +1012,7 @@ export default function GeoMapperClient() {
                 layer={statisticsLayer}
                 selectedFeatures={featureInspectionHook.selectedFeatures}
                 drawingSource={drawingSourceRef.current}
+                onAddLayer={layerManagerHook.addLayer}
                 panelRef={statisticsPanelRef}
                 isCollapsed={panels.statistics.isCollapsed}
                 onToggleCollapse={() => togglePanelCollapse('statistics')}

@@ -7,15 +7,18 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { BarChartHorizontal, Sigma, Maximize } from 'lucide-react';
-import type { VectorMapLayer } from '@/lib/types';
+import type { MapLayer, VectorMapLayer } from '@/lib/types';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type Feature from 'ol/Feature';
 import type { Geometry, Polygon } from 'ol/geom';
 import type VectorSource from 'ol/source/Vector';
+import VectorLayer from 'ol/layer/Vector';
 import GeoJSON from 'ol/format/GeoJSON';
 import * as turf from '@turf/turf';
 import { calculateWeightedSum } from '@/services/spatial-analysis';
 import { useToast } from '@/hooks/use-toast';
+import { nanoid } from 'nanoid';
+import { Style, Fill, Stroke } from 'ol/style';
 
 interface StatisticsPanelProps {
   panelRef: React.RefObject<HTMLDivElement>;
@@ -26,6 +29,7 @@ interface StatisticsPanelProps {
   layer: VectorMapLayer | null;
   selectedFeatures: Feature<Geometry>[];
   drawingSource: VectorSource<Feature<Geometry>> | null;
+  onAddLayer: (layer: MapLayer, bringToTop?: boolean) => void;
   style?: React.CSSProperties;
 }
 
@@ -48,6 +52,7 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
   layer,
   selectedFeatures,
   drawingSource,
+  onAddLayer,
   style,
 }) => {
   const [selectedField, setSelectedField] = useState<string>('');
@@ -167,10 +172,18 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
         });
 
         const drawingPolygonGeoJSON = geojsonFormat.writeGeometryObject(drawingPolygonFeature.getGeometry() as Polygon);
-        const analysisFeaturesGeoJSON = analysisSource.getFeatures()
-            .map(f => geojsonFormat.writeFeatureObject(f))
-            .filter(f => (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon'));
-
+        
+        const analysisFeatures = analysisSource.getFeatures();
+        
+        const intersectionResults = analysisFeatures
+            .map(feature => {
+                const featureGeoJSON = geojsonFormat.writeFeatureObject(feature);
+                const intersection = turf.intersect(drawingPolygonGeoJSON, featureGeoJSON.geometry);
+                return { feature, intersection };
+            })
+            .filter(result => result.intersection !== null);
+        
+        const analysisFeaturesGeoJSON = intersectionResults.map(r => geojsonFormat.writeFeatureObject(r.feature));
 
         const weightedSum = await calculateWeightedSum({
             analysisFeaturesGeoJSON,
@@ -178,7 +191,38 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
             field: selectedField
         });
         
-        // Update results, keeping existing stats if available
+        // --- Visualization Logic ---
+        const intersectionFeatures = intersectionResults.map(result => {
+             const olFeature = geojsonFormat.readFeature(result.intersection);
+             olFeature.setProperties(result.feature.getProperties()); // Copy attributes
+             return olFeature;
+        });
+
+        if (intersectionFeatures.length > 0) {
+            const layerName = `Recorte de ${layer.name}`;
+            const source = new VectorSource({ features: intersectionFeatures });
+            const layerId = `intersection-${nanoid()}`;
+            const olLayer = new VectorLayer({
+                source,
+                properties: { id: layerId, name: layerName, type: 'vector' },
+                style: new Style({
+                    stroke: new Stroke({ color: 'rgba(255, 0, 0, 1)', width: 2 }),
+                    fill: new Fill({ color: 'rgba(255, 0, 0, 0.5)' }),
+                }),
+            });
+            onAddLayer({
+                id: layerId,
+                name: layerName,
+                olLayer,
+                visible: true,
+                opacity: 1,
+                type: 'vector',
+            });
+            toast({ description: `Se creó la capa de visualización "${layerName}".` });
+        } else {
+            toast({ description: "No se encontraron intersecciones para visualizar." });
+        }
+        
         setResults(prev => ({
             ...(prev || { sum: 0, mean: 0, median: 0, count: 0, min: 0, max: 0 }),
             weightedSum: weightedSum,
@@ -190,7 +234,7 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
         console.error("Weighted sum calculation error:", error);
         toast({ description: `Error en el cálculo: ${error.message}`, variant: "destructive"});
     }
-  }, [layer, selectedField, drawingSource, toast]);
+  }, [layer, selectedField, drawingSource, toast, onAddLayer]);
 
 
   const panelTitle = `Estadísticas: ${layer?.name || ''}${isSelectionMode ? ' (Selección)' : ''}`;
@@ -237,7 +281,7 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
                 title={!isDrawingPolygonAvailable ? "Dibuje un polígono en el mapa primero" : ""}
             >
                 <Maximize className="mr-2 h-4 w-4" />
-                Calcular Suma Ponderada por Área
+                Suma Ponderada (y ver recorte)
             </Button>
 
             {results && (
