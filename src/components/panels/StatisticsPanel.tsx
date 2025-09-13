@@ -202,35 +202,35 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
       return;
     }
 
+    // THIS IS THE CRUCIAL FIX: Create a single formatter that knows how to read from the map's projection
+    // and write to the standard GeoJSON projection for Turf.
     const geojsonFormat = new GeoJSON({
-      dataProjection: 'EPSG:4326',
       featureProjection: 'EPSG:3857',
+      dataProjection: 'EPSG:4326'
     });
 
     const drawingOlGeom = drawingPolygonFeature.getGeometry();
     if (!drawingOlGeom) return;
-
     const drawingPolygonGeoJSON = geojsonFormat.writeGeometryObject(drawingOlGeom) as TurfPolygon;
     const intersectionResults: { feature: Feature<Geometry>; intersection: TurfFeature<TurfPolygon | TurfMultiPolygon> }[] = [];
 
-    analysisSource.getFeatures().forEach(feature => {
+    for (const feature of analysisSource.getFeatures()) {
       const olGeometry = feature.getGeometry();
-      if (!olGeometry) return;
+      if (!olGeometry) continue;
 
       const featureGeoJSON = geojsonFormat.writeGeometryObject(olGeometry) as TurfFeature<TurfPolygon | TurfMultiPolygon>;
-      if (!featureGeoJSON || !featureGeoJSON.geometry) return;
+      if (!featureGeoJSON || !featureGeoJSON.geometry) continue;
 
-      // Handle MultiPolygon by iterating through each polygon
       const polygonsToIntersect = featureGeoJSON.geometry.type === 'MultiPolygon'
         ? featureGeoJSON.geometry.coordinates.map(coords => turf.polygon(coords, featureGeoJSON.properties))
         : [featureGeoJSON];
 
       for (const polygon of polygonsToIntersect) {
         try {
-          // Clean coordinates to avoid self-intersection issues
+          // Clean the coordinates to prevent turf.js errors with invalid geometries
           const cleanedDrawingPoly = turf.cleanCoords(drawingPolygonGeoJSON);
           const cleanedFeaturePoly = turf.cleanCoords(polygon);
-          
+
           const intersection = turf.intersect(cleanedDrawingPoly, cleanedFeaturePoly);
 
           if (intersection) {
@@ -241,14 +241,12 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
           continue;
         }
       }
-    });
+    }
 
     if (intersectionResults.length > 0) {
       const intersectionFeatures = intersectionResults.map(result => {
-        const intersectionFeature = new GeoJSON().readFeature(result.intersection, {
-          dataProjection: 'EPSG:4326',
-          featureProjection: 'EPSG:3857'
-        });
+        // Read the result back into an OpenLayers feature, reprojecting it correctly to the map's projection
+        const intersectionFeature = geojsonFormat.readFeature(result.intersection);
         const originalProperties = result.feature.getProperties();
         intersectionFeature.setProperties(originalProperties);
         return intersectionFeature;
