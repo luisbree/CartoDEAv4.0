@@ -176,8 +176,13 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
         const analysisFeatures = analysisSource.getFeatures();
         
         const intersectionResults = analysisFeatures
+            .filter(feature => !!feature.getGeometry()) // Ensure feature has a geometry
             .map(feature => {
                 const featureGeoJSON = geojsonFormat.writeFeatureObject(feature);
+                // Ensure the resulting GeoJSON also has a geometry before intersecting
+                if (!featureGeoJSON.geometry) {
+                    return { feature, intersection: null };
+                }
                 const intersection = turf.intersect(drawingPolygonGeoJSON, featureGeoJSON.geometry);
                 return { feature, intersection };
             })
