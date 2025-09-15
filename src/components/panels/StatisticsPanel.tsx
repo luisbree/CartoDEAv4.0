@@ -189,69 +189,68 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
           toast({ description: "Seleccione una capa y dibuje un polígono.", variant: "destructive" });
           return;
       }
-  
       const drawingPolygonFeature = drawingSource.getFeatures().find(f => f.getGeometry()?.getType() === 'Polygon');
       if (!drawingPolygonFeature) {
           toast({ description: "No se encontró un polígono dibujado para la extracción.", variant: "destructive" });
           return;
       }
-  
       const analysisSource = layer.olLayer.getSource();
       if (!analysisSource || analysisSource.getFeatures().length === 0) {
           toast({ description: "La capa de análisis no tiene entidades.", variant: "destructive" });
           return;
       }
   
-      const geojsonFormat = new GeoJSON({
-          featureProjection: 'EPSG:3857',
-          dataProjection: 'EPSG:4326'
-      });
+      const geojsonFormat = new GeoJSON(); // No projection config needed here
   
-      const drawingOlGeom = drawingPolygonFeature.getGeometry();
+      // Step 1: Force transform drawing polygon and convert to GeoJSON
+      const drawingOlGeom = drawingPolygonFeature.getGeometry()?.clone().transform('EPSG:3857', 'EPSG:4326');
       if (!drawingOlGeom) return;
-  
+      
       const drawingPolygonGeoJSON = geojsonFormat.writeGeometryObject(drawingOlGeom) as TurfPolygon;
-      const intersectionResults: { feature: Feature<Geometry>; intersection: TurfFeature<TurfPolygon | TurfMultiPolygon> }[] = [];
+      console.log("POLÍGONO DE DIBUJO (para `turf.intersect`):", JSON.stringify(drawingPolygonGeoJSON, null, 2));
+
+
+      const intersectionResults: Feature<Geometry>[] = [];
   
+      // Step 2: Loop through analysis features
       for (const feature of analysisSource.getFeatures()) {
-          const featureGeoJSONObject = geojsonFormat.writeFeatureObject(feature);
+          const featureGeom = feature.getGeometry();
+          if (!featureGeom) continue;
+
+          // Step 2a: Force transform analysis feature and convert to GeoJSON
+          const featureGeom4326 = featureGeom.clone().transform('EPSG:3857', 'EPSG:4326');
+          const featureGeoJSONObject = geojsonFormat.writeGeometryObject(featureGeom4326, { rightHanded: true });
+
+          if (!featureGeoJSONObject) continue;
+
+          let intersection: TurfFeature<TurfPolygon | TurfMultiPolygon> | null = null;
           
-          if (!featureGeoJSONObject || !featureGeoJSONObject.geometry) {
+          console.log(`--- INTENTANDO INTERSECCIÓN PARA ENTIDAD ID: ${feature.getId()} ---`);
+          console.log("GEOMETRÍA DE ANÁLISIS (para `turf.intersect`):", JSON.stringify(featureGeoJSONObject, null, 2));
+
+          try {
+              intersection = turf.intersect(drawingPolygonGeoJSON, featureGeoJSONObject as any);
+          } catch (error) {
+              console.warn(`Error de Turf.js en la intersección para la entidad ${feature.getId()}:`, error);
               continue;
           }
-  
-          // Handle both Polygon and MultiPolygon from the analysis layer
-          const polygonsToIntersect = featureGeoJSONObject.geometry.type === 'MultiPolygon'
-              ? featureGeoJSONObject.geometry.coordinates.map(coords => turf.polygon(coords, featureGeoJSONObject.properties))
-              : [turf.polygon(featureGeoJSONObject.geometry.coordinates, featureGeoJSONObject.properties)];
-  
-          for (const polygon of polygonsToIntersect) {
-              try {
-                  // Ensure both inputs to intersect are valid geometry objects
-                  if (drawingPolygonGeoJSON && polygon.geometry) {
-                    const intersection = turf.intersect(drawingPolygonGeoJSON, polygon.geometry);
-                    if (intersection) {
-                        // The intersection result doesn't have properties, so we create a new feature
-                        const intersectionWithProps = turf.feature(intersection.geometry, feature.getProperties());
-                        intersectionResults.push({ feature, intersection: intersectionWithProps as TurfFeature<TurfPolygon | TurfMultiPolygon> });
-                    }
-                  }
-              } catch (error) {
-                  console.warn(` - ERROR de intersección de Turf.js para Entidad (ID: ${feature.getId()}), saltando.`, { error });
-                  continue;
-              }
+          
+          console.log("RESULTADO DE `turf.intersect`:", intersection);
+
+          if (intersection) {
+              const intersectionFeature = geojsonFormat.readFeature(intersection, {
+                  dataProjection: 'EPSG:4326',
+                  featureProjection: 'EPSG:3857',
+              });
+              intersectionFeature.setProperties(feature.getProperties()); // Copy original attributes
+              intersectionResults.push(intersectionFeature);
           }
       }
   
       if (intersectionResults.length > 0) {
-          const intersectionFeatures = intersectionResults.map(result => {
-              // The `result.intersection` already has properties, so we can read it directly
-              const olFeature = geojsonFormat.readFeature(result.intersection);
-              return olFeature;
-          });
-  
+          intersectionResults.forEach(f => f.setId(nanoid()));
           const layerName = `Recorte de ${layer.name}`;
-          const source = new VectorSource({ features: intersectionFeatures });
+          const source = new VectorSource({ features: intersectionResults });
           const layerId = `intersection-${nanoid()}`;
           const olLayer = new VectorLayer({
               source,
@@ -269,7 +268,7 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
               opacity: 1,
               type: 'vector',
           }, true);
-          toast({ description: `Se creó la capa de recorte "${layerName}" con ${intersectionFeatures.length} entidades.` });
+          toast({ description: `Se creó la capa de recorte "${layerName}" con ${intersectionResults.length} entidades.` });
       } else {
           toast({ description: "No se encontraron intersecciones para crear una capa de recorte." });
       }
