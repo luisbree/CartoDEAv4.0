@@ -10,7 +10,7 @@ import { BarChartHorizontal, Sigma, Maximize, Layers, Scissors } from 'lucide-re
 import type { MapLayer, VectorMapLayer } from '@/lib/types';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type Feature from 'ol/Feature';
-import type { Geometry, Polygon } from 'ol/geom';
+import type { Geometry, Polygon, MultiPolygon } from 'ol/geom';
 import VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
 import GeoJSON from 'ol/format/GeoJSON';
@@ -200,50 +200,42 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
           return;
       }
   
-      // IMPORTANT: Create a GeoJSON format object that knows the source and destination projections.
-      const geojsonFormat = new GeoJSON({
-          dataProjection: 'EPSG:4326',
-          featureProjection: 'EPSG:3857',
-      });
-  
-      // Step 1: Convert drawing polygon to GeoJSON in EPSG:4326
-      const drawingPolygonGeoJSON = geojsonFormat.writeGeometryObject(drawingPolygonFeature.getGeometry() as Polygon) as TurfPolygon;
-      console.log("POLÍGONO DE DIBUJO (para `turf.intersect`):", JSON.stringify(drawingPolygonGeoJSON, null, 2));
-
-
+      const geojsonFormat = new GeoJSON();
       const intersectionResults: Feature<Geometry>[] = [];
   
-      // Step 2: Loop through analysis features
+      const drawingGeom = drawingPolygonFeature.getGeometry() as Polygon;
+      const drawingGeom4326 = drawingGeom.clone().transform('EPSG:3857', 'EPSG:4326');
+      const drawingPolygonGeoJSON = geojsonFormat.writeGeometryObject(drawingGeom4326) as TurfPolygon;
+      console.log("POLÍGONO DE DIBUJO (para `turf.intersect`):", drawingPolygonGeoJSON);
+  
       for (const feature of analysisSource.getFeatures()) {
           const featureGeom = feature.getGeometry();
           if (!featureGeom) continue;
-
-          // Step 2a: Convert analysis feature to GeoJSON in EPSG:4326
-          const featureGeoJSONObject = geojsonFormat.writeFeatureObject(feature);
-
-          if (!featureGeoJSONObject || !featureGeoJSONObject.geometry) {
-              console.warn(`No se pudo convertir la entidad ${feature.getId()} a GeoJSON.`);
+  
+          // Step 1: Clone and transform the analysis geometry to EPSG:4326
+          const featureGeom4326 = featureGeom.clone().transform('EPSG:3857', 'EPSG:4326');
+          
+          // Step 2: Convert the transformed geometry to a GeoJSON object
+          const featureGeoJSONGeometry = geojsonFormat.writeGeometryObject(featureGeom4326);
+          console.log(`GEOMETRÍA DE ANÁLISIS ID ${feature.getId()} (para \`turf.intersect\`):`, featureGeoJSONGeometry);
+  
+          if (!featureGeoJSONGeometry) {
+              console.warn(`No se pudo convertir la geometría de la entidad ${feature.getId()} a GeoJSON.`);
               continue;
           }
-
-          let intersection: TurfFeature<TurfPolygon | TurfMultiPolygon> | null = null;
-          
-          console.log(`--- INTENTANDO INTERSECCIÓN PARA ENTIDAD ID: ${feature.getId()} ---`);
-          console.log("GEOMETRÍA DE ANÁLISIS (para `turf.intersect`):", JSON.stringify(featureGeoJSONObject.geometry, null, 2));
 
           try {
-              intersection = turf.intersect(drawingPolygonGeoJSON, featureGeoJSONObject);
+              // Step 3: Perform the intersection with valid GeoJSON geometries
+              const intersection = turf.intersect(drawingPolygonGeoJSON, featureGeoJSONGeometry as any);
+  
+              if (intersection) {
+                  // Step 4: Convert the intersection result back to an OpenLayers feature
+                  const intersectionFeature = new GeoJSON({ featureProjection: 'EPSG:3857' }).readFeature(intersection);
+                  intersectionFeature.setProperties(feature.getProperties()); // Copy original attributes
+                  intersectionResults.push(intersectionFeature);
+              }
           } catch (error) {
               console.warn(`Error de Turf.js en la intersección para la entidad ${feature.getId()}:`, error);
-              continue;
-          }
-          
-          console.log("RESULTADO DE `turf.intersect`:", intersection);
-
-          if (intersection) {
-              const intersectionFeature = geojsonFormat.readFeature(intersection);
-              intersectionFeature.setProperties(feature.getProperties()); // Copy original attributes
-              intersectionResults.push(intersectionFeature);
           }
       }
   
