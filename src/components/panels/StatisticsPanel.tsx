@@ -185,6 +185,9 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
   }, [drawingSource, onAddLayer, toast]);
   
   const handleExtractByDrawing = useCallback(() => {
+    console.clear(); // Clear console for a fresh debug session
+    console.log("--- INICIANDO EXTRACCIÓN POR DIBUJO ---");
+
     if (!layer || !drawingSource) {
       toast({ description: "Seleccione una capa y dibuje un polígono.", variant: "destructive" });
       return;
@@ -197,13 +200,11 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
     }
 
     const analysisSource = layer.olLayer.getSource();
-    if (!analysisSource) {
-      toast({ description: "La capa de análisis no tiene fuente de datos.", variant: "destructive" });
+    if (!analysisSource || analysisSource.getFeatures().length === 0) {
+      toast({ description: "La capa de análisis no tiene entidades.", variant: "destructive" });
       return;
     }
 
-    // THIS IS THE CRUCIAL FIX: Create a single formatter that knows how to read from the map's projection
-    // and write to the standard GeoJSON projection for Turf.
     const geojsonFormat = new GeoJSON({
       featureProjection: 'EPSG:3857',
       dataProjection: 'EPSG:4326'
@@ -211,41 +212,66 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
 
     const drawingOlGeom = drawingPolygonFeature.getGeometry();
     if (!drawingOlGeom) return;
+    
+    // STEP 1: Log the drawing polygon
     const drawingPolygonGeoJSON = geojsonFormat.writeGeometryObject(drawingOlGeom) as TurfPolygon;
+    console.log("PASO 1: Polígono de Dibujo (GeoJSON EPSG:4326):", JSON.parse(JSON.stringify(drawingPolygonGeoJSON)));
+
     const intersectionResults: { feature: Feature<Geometry>; intersection: TurfFeature<TurfPolygon | TurfMultiPolygon> }[] = [];
 
+    // STEP 2: Log a sample analysis feature
+    const firstAnalysisFeature = analysisSource.getFeatures()[0];
+    if (firstAnalysisFeature && firstAnalysisFeature.getGeometry()) {
+        const firstFeatureGeoJSON = geojsonFormat.writeGeometryObject(firstAnalysisFeature.getGeometry()!) as TurfFeature<TurfPolygon | TurfMultiPolygon>;
+        console.log("PASO 2: Muestra de Entidad de Análisis (GeoJSON EPSG:4326):", JSON.parse(JSON.stringify(firstFeatureGeoJSON)));
+    } else {
+        console.log("PASO 2: No se pudo obtener la primera entidad de la capa de análisis.");
+    }
+
+    console.log("PASO 3: Iniciando bucle de intersección...");
+    let featureCount = 0;
     for (const feature of analysisSource.getFeatures()) {
+      featureCount++;
       const olGeometry = feature.getGeometry();
-      if (!olGeometry) continue;
+      if (!olGeometry) {
+        console.log(` - Entidad #${featureCount} (ID: ${feature.getId()}) saltada: sin geometría.`);
+        continue;
+      }
 
       const featureGeoJSON = geojsonFormat.writeGeometryObject(olGeometry) as TurfFeature<TurfPolygon | TurfMultiPolygon>;
-      if (!featureGeoJSON || !featureGeoJSON.geometry) continue;
+      if (!featureGeoJSON || !featureGeoJSON.geometry) {
+        console.log(` - Entidad #${featureCount} (ID: ${feature.getId()}) saltada: geometría GeoJSON inválida.`);
+        continue;
+      }
 
       const polygonsToIntersect = featureGeoJSON.geometry.type === 'MultiPolygon'
         ? featureGeoJSON.geometry.coordinates.map(coords => turf.polygon(coords, featureGeoJSON.properties))
-        : [featureGeoJSON];
+        : [turf.polygon(featureGeoJSON.geometry.coordinates, featureGeoJSON.properties)];
 
       for (const polygon of polygonsToIntersect) {
         try {
-          // Clean the coordinates to prevent turf.js errors with invalid geometries
           const cleanedDrawingPoly = turf.cleanCoords(drawingPolygonGeoJSON);
           const cleanedFeaturePoly = turf.cleanCoords(polygon);
 
+          console.log(` - Entidad #${featureCount} (ID: ${feature.getId()}) - Intentando intersección...`);
           const intersection = turf.intersect(cleanedDrawingPoly, cleanedFeaturePoly);
+          console.log(` - Resultado de la intersección:`, intersection);
 
           if (intersection) {
             intersectionResults.push({ feature, intersection });
           }
         } catch (error) {
-          console.warn(`Error de intersección de Turf.js para una entidad, saltando:`, { error, featureId: feature.getId() });
+          console.warn(` - ERROR de intersección de Turf.js para Entidad #${featureCount} (ID: ${feature.getId()}), saltando.`, { error });
           continue;
         }
       }
     }
 
+    console.log("--- FIN DEL PROCESO DE EXTRACCIÓN ---");
+    console.log(`Se encontraron ${intersectionResults.length} intersecciones.`);
+
     if (intersectionResults.length > 0) {
       const intersectionFeatures = intersectionResults.map(result => {
-        // Read the result back into an OpenLayers feature, reprojecting it correctly to the map's projection
         const intersectionFeature = geojsonFormat.readFeature(result.intersection);
         const originalProperties = result.feature.getProperties();
         intersectionFeature.setProperties(originalProperties);
