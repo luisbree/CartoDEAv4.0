@@ -185,122 +185,120 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
   }, [drawingSource, onAddLayer, toast]);
   
   const handleExtractByDrawing = useCallback(() => {
-    console.clear(); // Clear console for a fresh debug session
-    console.log("--- INICIANDO EXTRACCIÓN POR DIBUJO ---");
-
-    if (!layer || !drawingSource) {
-      toast({ description: "Seleccione una capa y dibuje un polígono.", variant: "destructive" });
-      return;
-    }
-
-    const drawingPolygonFeature = drawingSource.getFeatures().find(f => f.getGeometry()?.getType() === 'Polygon');
-    if (!drawingPolygonFeature) {
-      toast({ description: "No se encontró un polígono dibujado para la extracción.", variant: "destructive" });
-      return;
-    }
-
-    const analysisSource = layer.olLayer.getSource();
-    if (!analysisSource || analysisSource.getFeatures().length === 0) {
-      toast({ description: "La capa de análisis no tiene entidades.", variant: "destructive" });
-      return;
-    }
-
-    const geojsonFormat = new GeoJSON({
-      featureProjection: 'EPSG:3857',
-      dataProjection: 'EPSG:4326'
-    });
-
-    const drawingOlGeom = drawingPolygonFeature.getGeometry();
-    if (!drawingOlGeom) return;
-    
-    // STEP 1: Log the drawing polygon
-    const drawingPolygonGeoJSON = geojsonFormat.writeGeometryObject(drawingOlGeom) as TurfPolygon;
-    console.log("PASO 1: Polígono de Dibujo (GeoJSON EPSG:4326):", JSON.parse(JSON.stringify(drawingPolygonGeoJSON)));
-
-    const intersectionResults: { feature: Feature<Geometry>; intersection: TurfFeature<TurfPolygon | TurfMultiPolygon> }[] = [];
-
-    // STEP 2: Log a sample analysis feature
-    const firstAnalysisFeature = analysisSource.getFeatures()[0];
-    if (firstAnalysisFeature && firstAnalysisFeature.getGeometry()) {
-        const firstFeatureGeoJSON = geojsonFormat.writeGeometryObject(firstAnalysisFeature.getGeometry()!) as TurfFeature<TurfPolygon | TurfMultiPolygon>;
-        console.log("PASO 2: Muestra de Entidad de Análisis (GeoJSON EPSG:4326):", JSON.parse(JSON.stringify(firstFeatureGeoJSON)));
-    } else {
-        console.log("PASO 2: No se pudo obtener la primera entidad de la capa de análisis.");
-    }
-
-    console.log("PASO 3: Iniciando bucle de intersección...");
-    let featureCount = 0;
-    for (const feature of analysisSource.getFeatures()) {
-      featureCount++;
-      const olGeometry = feature.getGeometry();
-      if (!olGeometry) {
-        console.log(` - Entidad #${featureCount} (ID: ${feature.getId()}) saltada: sin geometría.`);
-        continue;
+      console.clear();
+      console.log("--- INICIANDO EXTRACCIÓN POR DIBUJO ---");
+  
+      if (!layer || !drawingSource) {
+          toast({ description: "Seleccione una capa y dibuje un polígono.", variant: "destructive" });
+          return;
       }
-
-      const featureGeoJSON = geojsonFormat.writeGeometryObject(olGeometry) as TurfFeature<TurfPolygon | TurfMultiPolygon>;
-      if (!featureGeoJSON || !featureGeoJSON.geometry) {
-        console.log(` - Entidad #${featureCount} (ID: ${feature.getId()}) saltada: geometría GeoJSON inválida.`);
-        continue;
+  
+      const drawingPolygonFeature = drawingSource.getFeatures().find(f => f.getGeometry()?.getType() === 'Polygon');
+      if (!drawingPolygonFeature) {
+          toast({ description: "No se encontró un polígono dibujado para la extracción.", variant: "destructive" });
+          return;
       }
-
-      const polygonsToIntersect = featureGeoJSON.geometry.type === 'MultiPolygon'
-        ? featureGeoJSON.geometry.coordinates.map(coords => turf.polygon(coords, featureGeoJSON.properties))
-        : [turf.polygon(featureGeoJSON.geometry.coordinates, featureGeoJSON.properties)];
-
-      for (const polygon of polygonsToIntersect) {
-        try {
-          const cleanedDrawingPoly = turf.cleanCoords(drawingPolygonGeoJSON);
-          const cleanedFeaturePoly = turf.cleanCoords(polygon);
-
-          console.log(` - Entidad #${featureCount} (ID: ${feature.getId()}) - Intentando intersección...`);
-          const intersection = turf.intersect(cleanedDrawingPoly, cleanedFeaturePoly);
-          console.log(` - Resultado de la intersección:`, intersection);
-
-          if (intersection) {
-            intersectionResults.push({ feature, intersection });
+  
+      const analysisSource = layer.olLayer.getSource();
+      if (!analysisSource || analysisSource.getFeatures().length === 0) {
+          toast({ description: "La capa de análisis no tiene entidades.", variant: "destructive" });
+          return;
+      }
+  
+      const geojsonFormat = new GeoJSON({
+          featureProjection: 'EPSG:3857',
+          dataProjection: 'EPSG:4326'
+      });
+  
+      const drawingOlGeom = drawingPolygonFeature.getGeometry();
+      if (!drawingOlGeom) return;
+  
+      const drawingPolygonGeoJSON = geojsonFormat.writeGeometryObject(drawingOlGeom) as TurfPolygon;
+      console.log("PASO 1: Polígono de Dibujo (GeoJSON EPSG:4326):", JSON.parse(JSON.stringify(drawingPolygonGeoJSON)));
+  
+      const intersectionResults: { feature: Feature<Geometry>; intersection: TurfFeature<TurfPolygon | TurfMultiPolygon> }[] = [];
+  
+      const firstAnalysisFeature = analysisSource.getFeatures()[0];
+      if (firstAnalysisFeature && firstAnalysisFeature.getGeometry()) {
+          const firstFeatureGeoJSON = geojsonFormat.writeGeometryObject(firstAnalysisFeature.getGeometry()!) as TurfFeature<TurfPolygon | TurfMultiPolygon>;
+          console.log("PASO 2: Muestra de Entidad de Análisis (GeoJSON EPSG:4326):", JSON.parse(JSON.stringify(firstFeatureGeoJSON)));
+      } else {
+          console.log("PASO 2: No se pudo obtener la primera entidad de la capa de análisis.");
+      }
+  
+      console.log("PASO 3: Iniciando bucle de intersección...");
+      let featureCount = 0;
+      for (const feature of analysisSource.getFeatures()) {
+          featureCount++;
+          const olGeometry = feature.getGeometry();
+          if (!olGeometry) {
+              console.log(` - Entidad #${featureCount} (ID: ${feature.getId()}) saltada: sin geometría.`);
+              continue;
           }
-        } catch (error) {
-          console.warn(` - ERROR de intersección de Turf.js para Entidad #${featureCount} (ID: ${feature.getId()}), saltando.`, { error });
-          continue;
-        }
+  
+          const featureGeoJSONObject = geojsonFormat.writeFeatureObject(feature);
+          if (!featureGeoJSONObject || !featureGeoJSONObject.geometry) {
+              console.log(` - Entidad #${featureCount} (ID: ${feature.getId()}) saltada: geometría GeoJSON inválida.`);
+              continue;
+          }
+  
+          const polygonsToIntersect = featureGeoJSONObject.geometry.type === 'MultiPolygon'
+              ? featureGeoJSONObject.geometry.coordinates.map(coords => turf.polygon(coords, featureGeoJSONObject.properties))
+              : [turf.polygon(featureGeoJSONObject.geometry.coordinates, featureGeoJSONObject.properties)];
+  
+          for (const polygon of polygonsToIntersect) {
+              try {
+                  const cleanedDrawingPoly = turf.cleanCoords(drawingPolygonGeoJSON);
+                  const cleanedFeaturePoly = turf.cleanCoords(polygon);
+  
+                  console.log(` - Entidad #${featureCount} (ID: ${feature.getId()}) - Intentando intersección con polígono:`, cleanedFeaturePoly);
+                  const intersection = turf.intersect(cleanedDrawingPoly, cleanedFeaturePoly);
+                  console.log(` - Resultado de la intersección:`, intersection);
+  
+                  if (intersection) {
+                      intersectionResults.push({ feature, intersection: intersection as TurfFeature<TurfPolygon | TurfMultiPolygon> });
+                  }
+              } catch (error) {
+                  console.warn(` - ERROR de intersección de Turf.js para Entidad #${featureCount} (ID: ${feature.getId()}), saltando.`, { error });
+                  continue;
+              }
+          }
       }
-    }
-
-    console.log("--- FIN DEL PROCESO DE EXTRACCIÓN ---");
-    console.log(`Se encontraron ${intersectionResults.length} intersecciones.`);
-
-    if (intersectionResults.length > 0) {
-      const intersectionFeatures = intersectionResults.map(result => {
-        const intersectionFeature = geojsonFormat.readFeature(result.intersection);
-        const originalProperties = result.feature.getProperties();
-        intersectionFeature.setProperties(originalProperties);
-        return intersectionFeature;
-      });
-
-      const layerName = `Recorte de ${layer.name}`;
-      const source = new VectorSource({ features: intersectionFeatures });
-      const layerId = `intersection-${nanoid()}`;
-      const olLayer = new VectorLayer({
-        source,
-        properties: { id: layerId, name: layerName, type: 'vector' },
-        style: new Style({
-          stroke: new Stroke({ color: 'rgba(255, 0, 0, 1)', width: 2 }),
-          fill: new Fill({ color: 'rgba(255, 0, 0, 0.5)' }),
-        }),
-      });
-      onAddLayer({
-        id: layerId,
-        name: layerName,
-        olLayer,
-        visible: true,
-        opacity: 1,
-        type: 'vector',
-      }, true);
-      toast({ description: `Se creó la capa de recorte "${layerName}" con ${intersectionFeatures.length} entidades.` });
-    } else {
-      toast({ description: "No se encontraron intersecciones para crear una capa de recorte." });
-    }
+  
+      console.log("--- FIN DEL PROCESO DE EXTRACCIÓN ---");
+      console.log(`Se encontraron ${intersectionResults.length} intersecciones.`);
+  
+      if (intersectionResults.length > 0) {
+          const intersectionFeatures = intersectionResults.map(result => {
+              const intersectionFeature = geojsonFormat.readFeature(result.intersection);
+              const originalProperties = result.feature.getProperties();
+              intersectionFeature.setProperties(originalProperties);
+              return intersectionFeature;
+          });
+  
+          const layerName = `Recorte de ${layer.name}`;
+          const source = new VectorSource({ features: intersectionFeatures });
+          const layerId = `intersection-${nanoid()}`;
+          const olLayer = new VectorLayer({
+              source,
+              properties: { id: layerId, name: layerName, type: 'vector' },
+              style: new Style({
+                  stroke: new Stroke({ color: 'rgba(255, 0, 0, 1)', width: 2 }),
+                  fill: new Fill({ color: 'rgba(255, 0, 0, 0.5)' }),
+              }),
+          });
+          onAddLayer({
+              id: layerId,
+              name: layerName,
+              olLayer,
+              visible: true,
+              opacity: 1,
+              type: 'vector',
+          }, true);
+          toast({ description: `Se creó la capa de recorte "${layerName}" con ${intersectionFeatures.length} entidades.` });
+      } else {
+          toast({ description: "No se encontraron intersecciones para crear una capa de recorte." });
+      }
   }, [layer, drawingSource, toast, onAddLayer]);
 
 
