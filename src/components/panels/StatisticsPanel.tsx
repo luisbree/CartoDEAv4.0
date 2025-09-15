@@ -183,7 +183,7 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
     toast({ description: `Se creó la capa "${layerName}".` });
   }, [drawingSource, onAddLayer, toast]);
   
- const handleExtractByDrawing = useCallback(() => {
+  const handleExtractByDrawing = useCallback(() => {
     if (!layer || !drawingSource) {
         toast({ description: "Seleccione una capa y dibuje un polígono.", variant: "destructive" });
         return;
@@ -199,44 +199,46 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
         return;
     }
 
-    // This GeoJSON format object is crucial. It reads from the map's projection and writes to the standard GeoJSON projection.
     const geojsonFormat = new GeoJSON({
         featureProjection: 'EPSG:3857',
         dataProjection: 'EPSG:4326'
     });
 
-    const intersectionResults: GeoJSONFeature[] = [];
     const drawingGeom = drawingPolygonFeature.getGeometry() as OlPolygon;
     const drawingPolygonGeoJSON = geojsonFormat.writeGeometryObject(drawingGeom) as TurfPolygon;
-    
-    // Create a full Turf.js Feature for the drawing polygon
     const drawingFeatureTurf = turf.feature(drawingPolygonGeoJSON);
+
+    console.log("POLYGON 1 (Dibujo):", JSON.parse(JSON.stringify(drawingFeatureTurf)));
+
+    const intersectionResults: GeoJSONFeature[] = [];
 
     for (const feature of analysisSource.getFeatures()) {
         const featureGeom = feature.getGeometry();
         if (!featureGeom) continue;
 
-        const analysisGeomGeoJSON = geojsonFormat.writeGeometryObject(featureGeom) as TurfPolygon | TurfMultiPolygon;
+        const featureGeoJSONObject = geojsonFormat.writeFeatureObject(feature);
+        if (!featureGeoJSONObject || !featureGeoJSONObject.geometry) {
+            continue;
+        }
 
-        // Ensure we handle both Polygon and MultiPolygon from the analysis layer
         const analysisGeometries: TurfPolygon[] = [];
-        if (analysisGeomGeoJSON.type === 'Polygon') {
-            analysisGeometries.push(analysisGeomGeoJSON);
-        } else if (analysisGeomGeoJSON.type === 'MultiPolygon') {
-            analysisGeomGeoJSON.coordinates.forEach(polyCoords => {
+        if (featureGeoJSONObject.geometry.type === 'Polygon') {
+            analysisGeometries.push(featureGeoJSONObject.geometry as TurfPolygon);
+        } else if (featureGeoJSONObject.geometry.type === 'MultiPolygon') {
+            (featureGeoJSONObject.geometry as TurfMultiPolygon).coordinates.forEach(polyCoords => {
                 analysisGeometries.push(turf.polygon(polyCoords).geometry);
             });
         }
         
         for (const analysisPolygon of analysisGeometries) {
              try {
-                // Create a full Turf.js Feature for the analysis polygon
                 const analysisFeatureTurf = turf.feature(analysisPolygon);
-
+                console.log("POLYGON 2 (Análisis):", JSON.parse(JSON.stringify(analysisFeatureTurf)));
+                console.log('Llamando a turf.intersect con:', drawingFeatureTurf, analysisFeatureTurf);
+                
                 const intersection = turf.intersect(drawingFeatureTurf, analysisFeatureTurf);
 
                 if (intersection) {
-                    // Create a new feature with the intersected geometry and original properties
                     const intersectionWithProps = turf.feature(intersection.geometry, feature.getProperties());
                     intersectionResults.push(intersectionWithProps);
                 }
@@ -247,7 +249,6 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
     }
 
     if (intersectionResults.length > 0) {
-        // Convert the resulting GeoJSON features back to OpenLayers features
         const features = new GeoJSON({ featureProjection: 'EPSG:3857' }).readFeatures({
             type: 'FeatureCollection',
             features: intersectionResults,
