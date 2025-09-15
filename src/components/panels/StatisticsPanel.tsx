@@ -200,13 +200,14 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
           return;
       }
   
-      const geojsonFormat = new GeoJSON(); // No projection config needed here
+      // IMPORTANT: Create a GeoJSON format object that knows the source and destination projections.
+      const geojsonFormat = new GeoJSON({
+          dataProjection: 'EPSG:4326',
+          featureProjection: 'EPSG:3857',
+      });
   
-      // Step 1: Force transform drawing polygon and convert to GeoJSON
-      const drawingOlGeom = drawingPolygonFeature.getGeometry()?.clone().transform('EPSG:3857', 'EPSG:4326');
-      if (!drawingOlGeom) return;
-      
-      const drawingPolygonGeoJSON = geojsonFormat.writeGeometryObject(drawingOlGeom) as TurfPolygon;
+      // Step 1: Convert drawing polygon to GeoJSON in EPSG:4326
+      const drawingPolygonGeoJSON = geojsonFormat.writeGeometryObject(drawingPolygonFeature.getGeometry() as Polygon) as TurfPolygon;
       console.log("POLÍGONO DE DIBUJO (para `turf.intersect`):", JSON.stringify(drawingPolygonGeoJSON, null, 2));
 
 
@@ -217,19 +218,21 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
           const featureGeom = feature.getGeometry();
           if (!featureGeom) continue;
 
-          // Step 2a: Force transform analysis feature and convert to GeoJSON
-          const featureGeom4326 = featureGeom.clone().transform('EPSG:3857', 'EPSG:4326');
-          const featureGeoJSONObject = geojsonFormat.writeGeometryObject(featureGeom4326, { rightHanded: true });
+          // Step 2a: Convert analysis feature to GeoJSON in EPSG:4326
+          const featureGeoJSONObject = geojsonFormat.writeFeatureObject(feature);
 
-          if (!featureGeoJSONObject) continue;
+          if (!featureGeoJSONObject || !featureGeoJSONObject.geometry) {
+              console.warn(`No se pudo convertir la entidad ${feature.getId()} a GeoJSON.`);
+              continue;
+          }
 
           let intersection: TurfFeature<TurfPolygon | TurfMultiPolygon> | null = null;
           
           console.log(`--- INTENTANDO INTERSECCIÓN PARA ENTIDAD ID: ${feature.getId()} ---`);
-          console.log("GEOMETRÍA DE ANÁLISIS (para `turf.intersect`):", JSON.stringify(featureGeoJSONObject, null, 2));
+          console.log("GEOMETRÍA DE ANÁLISIS (para `turf.intersect`):", JSON.stringify(featureGeoJSONObject.geometry, null, 2));
 
           try {
-              intersection = turf.intersect(drawingPolygonGeoJSON, featureGeoJSONObject as any);
+              intersection = turf.intersect(drawingPolygonGeoJSON, featureGeoJSONObject);
           } catch (error) {
               console.warn(`Error de Turf.js en la intersección para la entidad ${feature.getId()}:`, error);
               continue;
@@ -238,10 +241,7 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
           console.log("RESULTADO DE `turf.intersect`:", intersection);
 
           if (intersection) {
-              const intersectionFeature = geojsonFormat.readFeature(intersection, {
-                  dataProjection: 'EPSG:4326',
-                  featureProjection: 'EPSG:3857',
-              });
+              const intersectionFeature = geojsonFormat.readFeature(intersection);
               intersectionFeature.setProperties(feature.getProperties()); // Copy original attributes
               intersectionResults.push(intersectionFeature);
           }
