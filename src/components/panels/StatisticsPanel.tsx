@@ -15,7 +15,7 @@ import VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
 import GeoJSON from 'ol/format/GeoJSON';
 import * as turf from '@turf/turf';
-import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as TurfMultiPolygon, Position } from 'geojson';
+import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as TurfMultiPolygon, Position, Feature as GeoJSONFeature } from 'geojson';
 import { calculateWeightedSum } from '@/services/spatial-analysis';
 import { useToast } from '@/hooks/use-toast';
 import { nanoid } from 'nanoid';
@@ -185,86 +185,99 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
   }, [drawingSource, onAddLayer, toast]);
   
   const handleExtractByDrawing = useCallback(() => {
-      if (!layer || !drawingSource) {
-          toast({ description: "Seleccione una capa y dibuje un polígono.", variant: "destructive" });
-          return;
-      }
-      const drawingPolygonFeature = drawingSource.getFeatures().find(f => f.getGeometry()?.getType() === 'Polygon');
-      if (!drawingPolygonFeature) {
-          toast({ description: "No se encontró un polígono dibujado para la extracción.", variant: "destructive" });
-          return;
-      }
-      const analysisSource = layer.olLayer.getSource();
-      if (!analysisSource || analysisSource.getFeatures().length === 0) {
-          toast({ description: "La capa de análisis no tiene entidades.", variant: "destructive" });
-          return;
-      }
-  
-      const geojsonFormat = new GeoJSON();
-      const intersectionResults: Feature<Geometry>[] = [];
-  
-      const drawingGeom = drawingPolygonFeature.getGeometry() as Polygon;
-      const drawingGeom4326 = drawingGeom.clone().transform('EPSG:3857', 'EPSG:4326');
-      const drawingPolygonGeoJSON = geojsonFormat.writeGeometryObject(drawingGeom4326) as TurfPolygon;
-      console.log("POLÍGONO DE DIBUJO (para `turf.intersect`):", drawingPolygonGeoJSON);
-  
-      for (const feature of analysisSource.getFeatures()) {
-          const featureGeom = feature.getGeometry();
-          if (!featureGeom) continue;
-  
-          // Step 1: Clone and transform the analysis geometry to EPSG:4326
-          const featureGeom4326 = featureGeom.clone().transform('EPSG:3857', 'EPSG:4326');
-          
-          // Step 2: Convert the transformed geometry to a GeoJSON object
-          const featureGeoJSONGeometry = geojsonFormat.writeGeometryObject(featureGeom4326);
-          console.log(`GEOMETRÍA DE ANÁLISIS ID ${feature.getId()} (para \`turf.intersect\`):`, featureGeoJSONGeometry);
-  
-          if (!featureGeoJSONGeometry) {
-              console.warn(`No se pudo convertir la geometría de la entidad ${feature.getId()} a GeoJSON.`);
-              continue;
-          }
+    if (!layer || !drawingSource) {
+        toast({ description: "Seleccione una capa y dibuje un polígono.", variant: "destructive" });
+        return;
+    }
+    const drawingPolygonFeature = drawingSource.getFeatures().find(f => f.getGeometry()?.getType() === 'Polygon');
+    if (!drawingPolygonFeature) {
+        toast({ description: "No se encontró un polígono dibujado para la extracción.", variant: "destructive" });
+        return;
+    }
+    const analysisSource = layer.olLayer.getSource();
+    if (!analysisSource || analysisSource.getFeatures().length === 0) {
+        toast({ description: "La capa de análisis no tiene entidades.", variant: "destructive" });
+        return;
+    }
 
-          try {
-              // Step 3: Perform the intersection with valid GeoJSON geometries
-              const intersection = turf.intersect(drawingPolygonGeoJSON, featureGeoJSONGeometry as any);
-  
-              if (intersection) {
-                  // Step 4: Convert the intersection result back to an OpenLayers feature
-                  const intersectionFeature = new GeoJSON({ featureProjection: 'EPSG:3857' }).readFeature(intersection);
-                  intersectionFeature.setProperties(feature.getProperties()); // Copy original attributes
-                  intersectionResults.push(intersectionFeature);
-              }
-          } catch (error) {
-              console.warn(`Error de Turf.js en la intersección para la entidad ${feature.getId()}:`, error);
-          }
-      }
-  
-      if (intersectionResults.length > 0) {
-          intersectionResults.forEach(f => f.setId(nanoid()));
-          const layerName = `Recorte de ${layer.name}`;
-          const source = new VectorSource({ features: intersectionResults });
-          const layerId = `intersection-${nanoid()}`;
-          const olLayer = new VectorLayer({
-              source,
-              properties: { id: layerId, name: layerName, type: 'vector' },
-              style: new Style({
-                  stroke: new Stroke({ color: 'rgba(255, 0, 0, 1)', width: 2 }),
-                  fill: new Fill({ color: 'rgba(255, 0, 0, 0.5)' }),
-              }),
-          });
-          onAddLayer({
-              id: layerId,
-              name: layerName,
-              olLayer,
-              visible: true,
-              opacity: 1,
-              type: 'vector',
-          }, true);
-          toast({ description: `Se creó la capa de recorte "${layerName}" con ${intersectionResults.length} entidades.` });
-      } else {
-          toast({ description: "No se encontraron intersecciones para crear una capa de recorte." });
-      }
-  }, [layer, drawingSource, toast, onAddLayer]);
+    const geojsonFormat = new GeoJSON({
+        dataProjection: 'EPSG:4326',
+        featureProjection: 'EPSG:3857'
+    });
+
+    const intersectionResults: GeoJSONFeature[] = [];
+    const drawingGeom = drawingPolygonFeature.getGeometry() as Polygon;
+    const drawingPolygonGeoJSON = geojsonFormat.writeGeometryObject(drawingGeom) as TurfPolygon;
+    
+    console.log("POLÍGONO DE DIBUJO (para `turf.intersect`):", JSON.parse(JSON.stringify(drawingPolygonGeoJSON)));
+
+    for (const feature of analysisSource.getFeatures()) {
+        const featureGeom = feature.getGeometry();
+        if (!featureGeom) continue;
+
+        const featureGeoJSONObject = geojsonFormat.writeFeatureObject(feature);
+
+        if (!featureGeoJSONObject.geometry) {
+            continue;
+        }
+
+        const analysisGeometries: TurfPolygon[] = [];
+        if (featureGeoJSONObject.geometry.type === 'Polygon') {
+            analysisGeometries.push(featureGeoJSONObject.geometry as TurfPolygon);
+        } else if (featureGeoJSONObject.geometry.type === 'MultiPolygon') {
+            (featureGeoJSONObject.geometry as TurfMultiPolygon).coordinates.forEach(polyCoords => {
+                analysisGeometries.push(turf.polygon(polyCoords).geometry);
+            });
+        }
+
+        for (const analysisPolygon of analysisGeometries) {
+            console.log(`GEOMETRÍA DE ANÁLISIS ID ${feature.getId()} (para 'turf.intersect'):`, JSON.parse(JSON.stringify(analysisPolygon)));
+
+            try {
+                const intersection = turf.intersect(drawingPolygonGeoJSON, analysisPolygon);
+
+                if (intersection) {
+                    const intersectionWithProps = turf.feature(intersection.geometry, feature.getProperties());
+                    intersectionResults.push(intersectionWithProps);
+                }
+            } catch (error) {
+                console.warn(`Error de Turf.js en la intersección para la entidad ${feature.getId()}:`, error);
+            }
+        }
+    }
+
+    if (intersectionResults.length > 0) {
+        const features = new GeoJSON({ featureProjection: 'EPSG:3857' }).readFeatures({
+            type: 'FeatureCollection',
+            features: intersectionResults,
+        });
+
+        features.forEach(f => f.setId(nanoid()));
+        
+        const layerName = `Recorte de ${layer.name}`;
+        const source = new VectorSource({ features });
+        const layerId = `intersection-${nanoid()}`;
+        const olLayer = new VectorLayer({
+            source,
+            properties: { id: layerId, name: layerName, type: 'vector' },
+            style: new Style({
+                stroke: new Stroke({ color: 'rgba(255, 0, 0, 1)', width: 2 }),
+                fill: new Fill({ color: 'rgba(255, 0, 0, 0.5)' }),
+            }),
+        });
+        onAddLayer({
+            id: layerId,
+            name: layerName,
+            olLayer,
+            visible: true,
+            opacity: 1,
+            type: 'vector',
+        }, true);
+        toast({ description: `Se creó la capa de recorte "${layerName}" con ${features.length} entidades.` });
+    } else {
+        toast({ description: "No se encontraron intersecciones para crear una capa de recorte." });
+    }
+}, [layer, drawingSource, toast, onAddLayer]);
 
 
   const handleCalculateWeightedSum = useCallback(async () => {
