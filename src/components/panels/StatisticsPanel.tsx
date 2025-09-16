@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
@@ -210,45 +209,48 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
         return;
     }
 
-    const geojsonFormat = new GeoJSON();
-    const mapProjection = getProjection('EPSG:3857');
-    const dataProjection = getProjection('EPSG:4326');
+    const geojsonFormat = new GeoJSON({
+        featureProjection: 'EPSG:3857',
+        dataProjection: 'EPSG:4326',
+    });
     
-    const drawingGeom = drawingPolygonFeature.getGeometry()?.clone().transform(mapProjection!, dataProjection!);
-    if (!drawingGeom) {
+    const drawingFeatureGeoJSON = geojsonFormat.writeFeatureObject(drawingPolygonFeature);
+    const drawingPolygonGeoJSON = drawingFeatureGeoJSON.geometry;
+
+    if (!drawingPolygonGeoJSON) {
         toast({ description: "La geometría del dibujo es inválida.", variant: "destructive" });
         return;
     }
-    const drawingPolygonGeoJSON = geojsonFormat.writeGeometryObject(drawingGeom) as TurfPolygon | TurfMultiPolygon;
     
     const intersectionResults: GeoJSONFeature[] = [];
 
     analysisSource.getFeatures().forEach(feature => {
-        const featureGeom = feature.getGeometry()?.clone().transform(mapProjection!, dataProjection!);
-        if (!featureGeom) return;
-        
-        const analysisPolygon = geojsonFormat.writeGeometryObject(featureGeom) as TurfPolygon | TurfMultiPolygon;
-        
-        console.log("POLYGON 1 (Dibujo):", drawingPolygonGeoJSON);
-        console.log("POLYGON 2 (Análisis):", analysisPolygon);
-        
-        // Wrap geometries in a turf.feature to ensure they are valid for intersection
-        const drawingFeatureTurf = turf.feature(drawingPolygonGeoJSON);
-        const analysisFeatureTurf = turf.feature(analysisPolygon);
-
-        try {
-          const intersection = turf.intersect(drawingFeatureTurf, analysisFeatureTurf);
-          console.log('Resultado de la intersección:', intersection);
-        
-          if (intersection) {
-            const intersectedFeature = turf.feature(intersection.geometry, feature.getProperties());
-            intersectionResults.push(intersectedFeature);
-          }
-        } catch (error) {
-          console.warn(`Error de Turf.js en la intersección para la entidad ${feature.getId()}:`, error);
+        const featureGeoJSONObject = geojsonFormat.writeFeatureObject(feature);
+        if (!featureGeoJSONObject || !featureGeoJSONObject.geometry) {
+            return;
         }
-    });
 
+        const analysisPolygons: (TurfPolygon | TurfMultiPolygon)[] = [];
+        if (featureGeoJSONObject.geometry.type === 'Polygon') {
+            analysisPolygons.push(featureGeoJSONObject.geometry);
+        } else if (featureGeoJSONObject.geometry.type === 'MultiPolygon') {
+            analysisPolygons.push(...featureGeoJSONObject.geometry.coordinates.map(coords => ({ type: 'Polygon', coordinates: coords } as TurfPolygon)));
+        }
+
+        analysisPolygons.forEach(analysisPolygon => {
+            try {
+                const drawingFeatureTurf = turf.feature(drawingPolygonGeoJSON);
+                const analysisFeatureTurf = turf.feature(analysisPolygon);
+                 const intersection = turf.intersect(drawingFeatureTurf, analysisFeatureTurf);
+                if (intersection) {
+                    const intersectedFeature = turf.feature(intersection.geometry, feature.getProperties());
+                    intersectionResults.push(intersectedFeature);
+                }
+            } catch (error) {
+                console.warn(`Error de Turf.js en la intersección para la entidad ${feature.getId()}:`, error);
+            }
+        });
+    });
 
     if (intersectionResults.length > 0) {
         const features = new GeoJSON({ featureProjection: 'EPSG:3857' }).readFeatures({
@@ -324,17 +326,17 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
             <div className="flex items-center gap-2">
                  <Button 
                     onClick={handleToggleDrawRectangle}
-                    className={cn("h-8 text-xs", isDrawingRectangle && "bg-primary hover:bg-primary/90")}
+                    size="icon"
+                    className={cn("h-8 w-8 text-xs border-white/30 bg-black/20", isDrawingRectangle && "bg-primary hover:bg-primary/90")}
                     variant="outline"
                     title={isDrawingRectangle ? "Cancelar dibujo" : "Dibujar un rectángulo en el mapa para usar como área de análisis"}
                 >
-                    <Square className="mr-2 h-4 w-4" />
-                    {isDrawingRectangle ? "Dibujando..." : "Dibujar Rectángulo de Análisis"}
+                    <Square className="h-4 w-4" />
                 </Button>
                 <Button 
                     onClick={handleExtractByDrawing} 
                     disabled={!analysisPolygonRef.current || !layer}
-                    className="h-8 text-xs"
+                    className="h-8 text-xs border-white/30 bg-black/20"
                     variant="outline"
                     title={!analysisPolygonRef.current ? "Dibuje un rectángulo de análisis primero" : "Extraer entidades de la capa por el área dibujada"}
                 >
@@ -345,7 +347,7 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
              <Button 
                 onClick={handleCalculate} 
                 disabled={!selectedField} 
-                className="w-full h-8 text-xs"
+                className="w-full h-8 text-xs border-white/30 bg-black/20"
                 variant="secondary"
             >
                 <Sigma className="mr-2 h-4 w-4" />
@@ -354,7 +356,7 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
              <Button 
                 onClick={handleCalculateWeightedSum} 
                 disabled={!selectedField || !analysisPolygonRef.current} 
-                className="w-full h-8 text-xs"
+                className="w-full h-8 text-xs border-white/30 bg-black/20"
                 variant="secondary"
                 title={!analysisPolygonRef.current ? "Dibuje un polígono en el mapa primero" : ""}
             >
