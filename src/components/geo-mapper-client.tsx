@@ -1010,6 +1010,7 @@ export default function GeoMapperClient() {
         {isMounted && panels.statistics && !panels.statistics.isMinimized && statisticsLayer && (
             <StatisticsPanel
                 layer={statisticsLayer}
+                allLayers={layerManagerHook.layers}
                 selectedFeatures={featureInspectionHook.selectedFeatures}
                 drawingSource={drawingSourceRef.current}
                 onAddLayer={(layer: MapLayer, bringToTop?: boolean) => layerManagerHook.addLayer(layer, bringToTop)}
