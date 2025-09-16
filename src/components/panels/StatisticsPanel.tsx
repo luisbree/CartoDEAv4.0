@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
@@ -199,6 +198,7 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
         return;
     }
 
+    // This formatter will read map geometries (EPSG:3857) and write them as standard GeoJSON (EPSG:4326)
     const geojsonFormat = new GeoJSON({
         featureProjection: 'EPSG:3857',
         dataProjection: 'EPSG:4326'
@@ -206,9 +206,6 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
 
     const drawingGeom = drawingPolygonFeature.getGeometry() as OlPolygon;
     const drawingPolygonGeoJSON = geojsonFormat.writeGeometryObject(drawingGeom) as TurfPolygon;
-    const drawingFeatureTurf = turf.feature(drawingPolygonGeoJSON);
-
-    console.log("POLYGON 1 (Dibujo):", JSON.parse(JSON.stringify(drawingFeatureTurf)));
 
     const intersectionResults: GeoJSONFeature[] = [];
 
@@ -232,12 +229,9 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
         
         for (const analysisPolygon of analysisGeometries) {
              try {
-                const analysisFeatureTurf = turf.feature(analysisPolygon);
-                console.log("POLYGON 2 (Análisis):", JSON.parse(JSON.stringify(analysisFeatureTurf)));
-                console.log('Llamando a turf.intersect con:', drawingFeatureTurf, analysisFeatureTurf);
+                // Pass the geometry objects directly to turf.intersect
+                const intersection = turf.intersect(drawingPolygonGeoJSON, analysisPolygon);
                 
-                const intersection = turf.intersect(drawingFeatureTurf, analysisFeatureTurf);
-
                 if (intersection) {
                     const intersectionWithProps = turf.feature(intersection.geometry, feature.getProperties());
                     intersectionResults.push(intersectionWithProps);
