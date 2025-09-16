@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
@@ -65,8 +66,8 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
   const [results, setResults] = useState<StatResults | null>(null);
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [isDrawingRectangle, setIsDrawingRectangle] = useState(false);
-  const drawInteractionRef = useRef<Draw | null>(null);
   const analysisPolygonRef = useRef<Feature<OlPolygon> | null>(null);
+  const drawInteractionRef = useRef<Draw | null>(null);
 
   const { toast } = useToast();
 
@@ -126,7 +127,6 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
       
       draw.once('drawend', (event) => {
           const feature = event.feature as Feature<OlPolygon>;
-          // Set properties on the feature so it has attributes
           feature.setProperties({
               name: 'Área de Análisis',
               created_at: new Date().toISOString(),
@@ -196,7 +196,7 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
   }, [layer, selectedField, selectedFeatures]);
 
   
-  const handleExtractByDrawing = useCallback(() => {
+ const handleExtractByDrawing = useCallback(() => {
     if (!layer || !analysisPolygonRef.current) {
         toast({ description: "Seleccione una capa y dibuje un polígono de análisis.", variant: "destructive" });
         return;
@@ -215,13 +215,8 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
     });
     
     const drawingFeatureGeoJSON = geojsonFormat.writeFeatureObject(drawingPolygonFeature);
-    const drawingPolygonGeoJSON = drawingFeatureGeoJSON.geometry;
+    const clipBbox = turf.bbox(drawingFeatureGeoJSON);
 
-    if (!drawingPolygonGeoJSON) {
-        toast({ description: "La geometría del dibujo es inválida.", variant: "destructive" });
-        return;
-    }
-    
     const intersectionResults: GeoJSONFeature[] = [];
 
     analysisSource.getFeatures().forEach(feature => {
@@ -230,26 +225,14 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
             return;
         }
 
-        const analysisPolygons: (TurfPolygon | TurfMultiPolygon)[] = [];
-        if (featureGeoJSONObject.geometry.type === 'Polygon') {
-            analysisPolygons.push(featureGeoJSONObject.geometry);
-        } else if (featureGeoJSONObject.geometry.type === 'MultiPolygon') {
-            analysisPolygons.push(...featureGeoJSONObject.geometry.coordinates.map(coords => ({ type: 'Polygon', coordinates: coords } as TurfPolygon)));
-        }
-
-        analysisPolygons.forEach(analysisPolygon => {
-            try {
-                const drawingFeatureTurf = turf.feature(drawingPolygonGeoJSON);
-                const analysisFeatureTurf = turf.feature(analysisPolygon);
-                 const intersection = turf.intersect(drawingFeatureTurf, analysisFeatureTurf);
-                if (intersection) {
-                    const intersectedFeature = turf.feature(intersection.geometry, feature.getProperties());
-                    intersectionResults.push(intersectedFeature);
-                }
-            } catch (error) {
-                console.warn(`Error de Turf.js en la intersección para la entidad ${feature.getId()}:`, error);
+        try {
+            const clipped = turf.bboxClip(featureGeoJSONObject as TurfFeature, clipBbox);
+            if (clipped) {
+                intersectionResults.push(clipped as GeoJSONFeature);
             }
-        });
+        } catch (error) {
+            console.warn(`Error de Turf.js al recortar la entidad ${feature.getId()}:`, error);
+        }
     });
 
     if (intersectionResults.length > 0) {
