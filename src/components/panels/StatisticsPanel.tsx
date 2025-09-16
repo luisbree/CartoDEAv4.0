@@ -270,42 +270,55 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
     const analysisSource = layer.olLayer.getSource();
     if (!analysisSource) return;
 
-    const geojsonFormat = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
-    const drawingFeatureGeoJSON = geojsonFormat.writeFeatureObject(analysisFeatureRef.current);
-    const drawingPolygon = drawingFeatureGeoJSON.geometry;
+    const geojsonFormat = new GeoJSON({ featureProjection: 'EPSG:3857' });
+    const drawingFeatureGeoJSON = geojsonFormat.writeFeatureObject(analysisFeatureRef.current) as turf.Feature<turf.Polygon>;
     
     let totalWeightedSum = 0;
     let totalIntersectionArea = 0;
 
+    console.log(`--- Iniciando Cálculo Ponderado para el campo "${selectedField}" ---`);
+
     analysisSource.getFeatures().forEach(feature => {
         const featureValue = feature.get(selectedField);
-        if (typeof featureValue !== 'number' || !isFinite(featureValue)) return;
+        if (typeof featureValue !== 'number' || !isFinite(featureValue)) {
+            return; // Omitir entidades sin valor numérico válido en el campo seleccionado
+        }
         
-        const featureGeoJSONObject = geojsonFormat.writeFeatureObject(feature);
+        const featureGeoJSONObject = geojsonFormat.writeFeatureObject(feature) as turf.Feature<turf.Polygon | turf.MultiPolygon>;
         if (!featureGeoJSONObject.geometry) return;
 
         try {
-            const intersection = turf.intersect(drawingPolygon, featureGeoJSONObject.geometry);
+            // Realizar la intersección geométrica
+            const intersection = turf.intersect(drawingFeatureGeoJSON, featureGeoJSONObject);
+            
+            // Si hay una intersección (se superponen)
             if (intersection) {
+                // Calcular el área de la porción intersectada en metros cuadrados
                 const intersectionArea = turf.area(intersection);
-                totalWeightedSum += featureValue * intersectionArea;
-                totalIntersectionArea += intersectionArea;
+                console.log(`Entidad ID ${feature.getId()}: Intersección encontrada. Área de intersección: ${intersectionArea.toFixed(2)} m²`);
+
+                if (intersectionArea > 0) {
+                    const weightedValue = featureValue * intersectionArea;
+                    totalWeightedSum += weightedValue;
+                    totalIntersectionArea += intersectionArea;
+                    console.log(`   - Valor del campo: ${featureValue}`);
+                    console.log(`   - Valor ponderado (valor * área): ${weightedValue.toFixed(2)}`);
+                }
             }
         } catch (error) {
-            console.warn(`Error en la intersección para la entidad ${feature.getId()}:`, error);
+            console.warn(`Error en la intersección de Turf.js para la entidad ${feature.getId()}:`, error);
         }
     });
 
     const weightedAverage = totalIntersectionArea > 0 ? totalWeightedSum / totalIntersectionArea : 0;
 
+    console.log(`--- Cálculo Finalizado ---`);
+    console.log(`Suma Ponderada Total: ${totalWeightedSum.toFixed(2)}`);
+    console.log(`Área Total de Intersección: ${totalIntersectionArea.toFixed(2)} m²`);
+    console.log(`Promedio Ponderado Final: ${weightedAverage.toFixed(4)}`);
+
     setResults(prev => ({
-        ...prev,
-        sum: prev?.sum ?? 0,
-        mean: prev?.mean ?? 0,
-        median: prev?.median ?? 0,
-        count: prev?.count ?? 0,
-        min: prev?.min ?? 0,
-        max: prev?.max ?? 0,
+        ...(prev || { sum: 0, mean: 0, median: 0, count: 0, min: 0, max: 0 }), // Mantener estadísticas básicas si ya existen
         weightedSum: totalWeightedSum,
         weightedAverage: weightedAverage,
     }));
@@ -412,4 +425,3 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
 };
 
 export default StatisticsPanel;
-
