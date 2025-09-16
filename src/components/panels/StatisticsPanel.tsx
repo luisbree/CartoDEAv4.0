@@ -1,12 +1,12 @@
 
 "use client";
 
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import DraggablePanel from './DraggablePanel';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { BarChartHorizontal, Sigma, Maximize, Layers, Scissors } from 'lucide-react';
+import { BarChartHorizontal, Sigma, Maximize, Layers, Scissors, Square } from 'lucide-react';
 import type { MapLayer, VectorMapLayer } from '@/lib/types';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type Feature from 'ol/Feature';
@@ -19,6 +19,9 @@ import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as Tu
 import { useToast } from '@/hooks/use-toast';
 import { nanoid } from 'nanoid';
 import { Style, Fill, Stroke } from 'ol/style';
+import type { Map } from 'ol';
+import Draw, { createBox } from 'ol/interaction/Draw';
+import { cn } from '@/lib/utils';
 
 interface StatisticsPanelProps {
   panelRef: React.RefObject<HTMLDivElement>;
@@ -31,6 +34,7 @@ interface StatisticsPanelProps {
   drawingSource: VectorSource<Feature<Geometry>> | null;
   onAddLayer: (layer: MapLayer, bringToTop?: boolean) => void;
   style?: React.CSSProperties;
+  mapRef: React.RefObject<Map | null>;
 }
 
 interface StatResults {
@@ -54,11 +58,15 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
   drawingSource,
   onAddLayer,
   style,
+  mapRef,
 }) => {
   const [selectedField, setSelectedField] = useState<string>('');
   const [results, setResults] = useState<StatResults | null>(null);
   const [isSelectionMode, setIsSelectionMode] = useState(false);
-  const [isDrawingPolygonAvailable, setIsDrawingPolygonAvailable] = useState(false);
+  const [isDrawingRectangle, setIsDrawingRectangle] = useState(false);
+  const drawInteractionRef = useRef<Draw | null>(null);
+  const analysisPolygonRef = useRef<Feature<OlPolygon> | null>(null);
+
   const { toast } = useToast();
 
   const numericFields = useMemo(() => {
@@ -87,26 +95,61 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
     }
   }, [layer, numericFields]);
 
-  // Effect to check for an available drawing polygon
-  useEffect(() => {
-    const source = drawingSource;
-    if (!source) {
-      setIsDrawingPolygonAvailable(false);
-      return;
-    }
+  const stopDrawing = useCallback(() => {
+      if (drawInteractionRef.current && mapRef.current) {
+          mapRef.current.removeInteraction(drawInteractionRef.current);
+          drawInteractionRef.current = null;
+          setIsDrawingRectangle(false);
+          toast({ description: "Herramienta de dibujo desactivada." });
+      }
+  }, [mapRef, toast]);
 
-    const checkPolygon = () => {
-      const hasPolygon = source.getFeatures().some(f => f.getGeometry()?.getType() === 'Polygon');
-      setIsDrawingPolygonAvailable(hasPolygon);
-    };
 
-    source.on(['addfeature', 'removefeature', 'clear'], checkPolygon);
-    checkPolygon(); // Initial check
+  const handleToggleDrawRectangle = useCallback(() => {
+      if (!mapRef.current) return;
+      if (isDrawingRectangle) {
+          stopDrawing();
+          return;
+      }
+      
+      setIsDrawingRectangle(true);
+      toast({ description: "Haz clic en dos esquinas opuestas en el mapa para dibujar un rectángulo." });
+      
+      const draw = new Draw({
+          type: 'Circle',
+          geometryFunction: createBox(),
+      });
 
-    return () => {
-      source.un(['addfeature', 'removefeature', 'clear'], checkPolygon);
-    };
-  }, [drawingSource]);
+      drawInteractionRef.current = draw;
+      mapRef.current.addInteraction(draw);
+      
+      draw.once('drawend', (event) => {
+          const feature = event.feature as Feature<OlPolygon>;
+          analysisPolygonRef.current = feature;
+          
+          const layerName = `Área de Análisis`;
+          const source = new VectorSource({ features: [feature] });
+          const layerId = `analysis-poly-${nanoid()}`;
+          const olLayer = new VectorLayer({
+              source,
+              properties: { id: layerId, name: layerName, type: 'analysis' },
+              style: new Style({
+                  stroke: new Stroke({ color: 'rgba(0, 255, 255, 1)', width: 2.5 }),
+                  fill: new Fill({ color: 'rgba(0, 255, 255, 0.3)' }),
+              }),
+          });
+          onAddLayer({
+              id: layerId,
+              name: layerName,
+              olLayer,
+              visible: true,
+              opacity: 1,
+              type: 'analysis',
+          }, true);
+          toast({ description: `Se creó la capa "${layerName}".` });
+          stopDrawing();
+      });
+  }, [mapRef, isDrawingRectangle, stopDrawing, onAddLayer, toast]);
 
 
   const handleCalculate = useCallback(() => {
@@ -147,76 +190,37 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
     setResults({ sum, mean, median, count, min, max });
   }, [layer, selectedField, selectedFeatures]);
 
-  const handleCreateLayerFromDrawing = useCallback(() => {
-    if (!drawingSource) {
-        toast({ description: "No hay fuente de dibujo disponible.", variant: "destructive"});
-        return;
-    }
-    const drawingPolygonFeature = drawingSource.getFeatures().find(f => f.getGeometry()?.getType() === 'Polygon');
-    if (!drawingPolygonFeature) {
-        toast({ description: "No se encontró un polígono dibujado para crear la capa.", variant: "destructive"});
-        return;
-    }
-
-    const clonedFeature = drawingPolygonFeature.clone();
-    clonedFeature.setId(nanoid()); // Give it a new ID
-
-    const layerName = `Polígono de Análisis`;
-    const source = new VectorSource({ features: [clonedFeature] });
-    const layerId = `analysis-poly-${nanoid()}`;
-    const olLayer = new VectorLayer({
-        source,
-        properties: { id: layerId, name: layerName, type: 'vector' },
-        style: new Style({
-            stroke: new Stroke({ color: 'rgba(0, 255, 255, 1)', width: 2.5 }),
-            fill: new Fill({ color: 'rgba(0, 255, 255, 0.3)' }),
-        }),
-    });
-    onAddLayer({
-        id: layerId,
-        name: layerName,
-        olLayer,
-        visible: true,
-        opacity: 1,
-        type: 'vector',
-    }, true);
-    toast({ description: `Se creó la capa "${layerName}".` });
-  }, [drawingSource, onAddLayer, toast]);
   
   const handleExtractByDrawing = useCallback(() => {
-    if (!layer || !drawingSource) {
-        toast({ description: "Seleccione una capa y dibuje un polígono.", variant: "destructive" });
+    if (!layer || !analysisPolygonRef.current) {
+        toast({ description: "Seleccione una capa y dibuje un polígono de análisis.", variant: "destructive" });
         return;
     }
-    const drawingPolygonFeature = drawingSource.getFeatures().find(f => f.getGeometry()?.getType() === 'Polygon');
-    if (!drawingPolygonFeature) {
-        toast({ description: "No se encontró un polígono dibujado para la extracción.", variant: "destructive" });
-        return;
-    }
+    const drawingPolygonFeature = analysisPolygonRef.current;
+    
     const analysisSource = layer.olLayer.getSource();
     if (!analysisSource || analysisSource.getFeatures().length === 0) {
         toast({ description: "La capa de análisis no tiene entidades.", variant: "destructive" });
         return;
     }
 
-    // This formatter will read map geometries (EPSG:3857) and write them as standard GeoJSON (EPSG:4326)
     const geojsonFormat = new GeoJSON({
         featureProjection: 'EPSG:3857',
         dataProjection: 'EPSG:4326'
     });
-
-    const drawingGeom = drawingPolygonFeature.getGeometry() as OlPolygon;
-    const drawingPolygonGeoJSON = geojsonFormat.writeGeometryObject(drawingGeom) as TurfPolygon;
+    
+    const drawingPolygonGeoJSON = geojsonFormat.writeGeometryObject(drawingPolygonFeature.getGeometry() as OlPolygon) as TurfPolygon;
+    console.log("POLYGON 1 (Dibujo):", drawingPolygonGeoJSON);
 
     const intersectionResults: GeoJSONFeature[] = [];
 
-    for (const feature of analysisSource.getFeatures()) {
+    analysisSource.getFeatures().forEach(feature => {
         const featureGeom = feature.getGeometry();
-        if (!featureGeom) continue;
+        if (!featureGeom) return;
 
         const featureGeoJSONObject = geojsonFormat.writeFeatureObject(feature);
         if (!featureGeoJSONObject || !featureGeoJSONObject.geometry) {
-            continue;
+            return;
         }
 
         const analysisGeometries: TurfPolygon[] = [];
@@ -230,12 +234,9 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
         
         for (const analysisPolygon of analysisGeometries) {
              if (analysisPolygon) {
-                console.log("POLYGON 1 (Dibujo):", drawingPolygonGeoJSON);
                 console.log("POLYGON 2 (Análisis):", analysisPolygon);
-                 try {
-                    // Use the geometry properties directly for intersection
+                try {
                     const intersection = turf.intersect(drawingPolygonGeoJSON, analysisPolygon);
-                    
                     if (intersection) {
                         const intersectionWithProps = turf.feature(intersection.geometry, feature.getProperties());
                         intersectionResults.push(intersectionWithProps);
@@ -245,7 +246,8 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
                 }
              }
         }
-    }
+    });
+
 
     if (intersectionResults.length > 0) {
         const features = new GeoJSON({ featureProjection: 'EPSG:3857' }).readFeatures({
@@ -278,7 +280,7 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
     } else {
         toast({ description: "No se encontraron intersecciones para crear una capa de recorte." });
     }
-}, [layer, drawingSource, toast, onAddLayer]);
+}, [layer, toast, onAddLayer]);
 
 
   const handleCalculateWeightedSum = useCallback(async () => {
@@ -321,21 +323,20 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
             
             <div className="flex items-center gap-2">
                  <Button 
-                    onClick={handleCreateLayerFromDrawing} 
-                    disabled={!isDrawingPolygonAvailable} 
-                    className="h-8 text-xs"
+                    onClick={handleToggleDrawRectangle}
+                    className={cn("h-8 text-xs", isDrawingRectangle && "bg-primary hover:bg-primary/90")}
                     variant="outline"
-                    title={!isDrawingPolygonAvailable ? "Dibuje un polígono en el mapa primero" : "Crear una capa a partir del polígono dibujado"}
+                    title={isDrawingRectangle ? "Cancelar dibujo" : "Dibujar un rectángulo en el mapa para usar como área de análisis"}
                 >
-                    <Layers className="mr-2 h-4 w-4" />
-                    Crear Capa desde Dibujo
+                    <Square className="mr-2 h-4 w-4" />
+                    {isDrawingRectangle ? "Dibujando..." : "Dibujar Rectángulo de Análisis"}
                 </Button>
                 <Button 
                     onClick={handleExtractByDrawing} 
-                    disabled={!isDrawingPolygonAvailable || !layer}
+                    disabled={!analysisPolygonRef.current || !layer}
                     className="h-8 text-xs"
                     variant="outline"
-                    title={!isDrawingPolygonAvailable ? "Dibuje un polígono en el mapa primero" : "Extraer entidades de la capa por el área dibujada"}
+                    title={!analysisPolygonRef.current ? "Dibuje un rectángulo de análisis primero" : "Extraer entidades de la capa por el área dibujada"}
                 >
                     <Scissors className="mr-2 h-4 w-4" />
                     Extraer por Dibujo
@@ -352,10 +353,10 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
             </Button>
              <Button 
                 onClick={handleCalculateWeightedSum} 
-                disabled={!selectedField || !isDrawingPolygonAvailable} 
+                disabled={!selectedField || !analysisPolygonRef.current} 
                 className="w-full h-8 text-xs"
                 variant="secondary"
-                title={!isDrawingPolygonAvailable ? "Dibuje un polígono en el mapa primero" : ""}
+                title={!analysisPolygonRef.current ? "Dibuje un polígono en el mapa primero" : ""}
             >
                 <Maximize className="mr-2 h-4 w-4" />
                 Suma Ponderada (WIP)
@@ -387,5 +388,3 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
 };
 
 export default StatisticsPanel;
-
-    

@@ -1022,6 +1022,7 @@ export default function GeoMapperClient() {
                 }}
                 onMouseDownHeader={(e) => handlePanelMouseDown(e, 'statistics')}
                 style={{ top: `${panels.statistics.position.y}px`, left: `${panels.statistics.position.x}px`, zIndex: panels.statistics.zIndex }}
+                mapRef={mapRef}
             />
         )}
 

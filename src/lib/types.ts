@@ -40,7 +40,7 @@ export interface MapLayer {
   olLayer: Layer<Source, any>;
   visible: boolean;
   opacity: number;
-  type: 'wms' | 'wfs' | 'vector' | 'osm' | 'drawing' | 'sentinel' | 'landsat' | 'gee' | 'geotiff';
+  type: 'wms' | 'wfs' | 'vector' | 'osm' | 'drawing' | 'sentinel' | 'landsat' | 'gee' | 'geotiff' | 'analysis';
   isDeas?: boolean;
   graduatedSymbology?: GraduatedSymbology;
   categorizedSymbology?: CategorizedSymbology;
@@ -48,7 +48,7 @@ export interface MapLayer {
 
 export interface VectorMapLayer extends MapLayer {
   olLayer: VectorLayer<VectorSource<Feature<Geometry>>>;
-  type: 'wfs' | 'vector' | 'osm' | 'drawing' | 'sentinel' | 'landsat';
+  type: 'wfs' | 'vector' | 'osm' | 'drawing' | 'sentinel' | 'landsat' | 'analysis';
 }
 
 export interface OSMCategoryConfig {
