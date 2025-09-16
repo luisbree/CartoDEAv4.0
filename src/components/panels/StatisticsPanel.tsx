@@ -221,7 +221,6 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
         return;
     }
     const drawingPolygonGeoJSON = geojsonFormat.writeGeometryObject(drawingGeom) as TurfPolygon | TurfMultiPolygon;
-    const drawingFeatureTurf = turf.feature(drawingPolygonGeoJSON, drawingPolygonFeature.getProperties() || {});
     
     const intersectionResults: GeoJSONFeature[] = [];
 
@@ -230,7 +229,9 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
         if (!featureGeom) return;
 
         const analysisPolygon = geojsonFormat.writeGeometryObject(featureGeom) as TurfPolygon | TurfMultiPolygon;
-        const analysisFeatureTurf = turf.feature(analysisPolygon, feature.getProperties() || {});
+        
+        console.log("POLYGON 1 (Dibujo):", drawingPolygonGeoJSON);
+        console.log("POLYGON 2 (Análisis):", analysisPolygon);
 
         try {
           // 1. CALCULAR LA INTERSECCIÓN
@@ -238,7 +239,8 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
           //    Toma dos geometrías (el polígono dibujado y el polígono de la capa de análisis)
           //    y devuelve una nueva geometría que representa SOLO la parte donde se superponen.
           //    Si no se superponen en absoluto, devuelve `null`.
-          const intersection = turf.intersect(drawingFeatureTurf, analysisFeatureTurf);
+          const intersection = turf.intersect(drawingPolygonGeoJSON, analysisPolygon);
+          console.log('Resultado de la intersección:', intersection);
         
           // 2. VERIFICAR SI HUBO UNA INTERSECCIÓN
           //    Este `if` comprueba si la variable `intersection` no es `null`.
