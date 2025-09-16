@@ -22,6 +22,8 @@ import { Style, Fill, Stroke } from 'ol/style';
 import type { Map } from 'ol';
 import Draw, { createBox } from 'ol/interaction/Draw';
 import { cn } from '@/lib/utils';
+import { get as getProjection, transform } from 'ol/proj';
+
 
 interface StatisticsPanelProps {
   panelRef: React.RefObject<HTMLDivElement>;
@@ -125,6 +127,12 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
       
       draw.once('drawend', (event) => {
           const feature = event.feature as Feature<OlPolygon>;
+          // Set properties on the feature so it has attributes
+          feature.setProperties({
+              name: 'Área de Análisis',
+              created_at: new Date().toISOString(),
+          });
+          feature.setId(`analysis-poly-feature-${nanoid()}`);
           analysisPolygonRef.current = feature;
           
           const layerName = `Área de Análisis`;
@@ -160,9 +168,7 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
     const source = layer.olLayer.getSource();
     if (!source) return;
 
-    // Determine if we should use the selection
     const relevantSelectedFeatures = selectedFeatures.filter(feature => {
-        // A feature from the selection is relevant if it exists in the current layer's source.
         return source.getFeatureById(feature.getId() as string | number) !== null;
     });
 
@@ -204,56 +210,45 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
         return;
     }
 
-    const geojsonFormat = new GeoJSON({
-        featureProjection: 'EPSG:3857',
-        dataProjection: 'EPSG:4326'
-    });
+    const geojsonFormat = new GeoJSON();
+    const mapProjection = getProjection('EPSG:3857');
+    const dataProjection = getProjection('EPSG:4326');
     
-    // Process the drawing polygon
-    const drawingGeom4326 = drawingPolygonFeature.getGeometry()!.clone().transform('EPSG:3857', 'EPSG:4326');
-    const drawingPolygonGeoJSON = geojsonFormat.writeGeometryObject(drawingGeom4326);
-    
-    if (!drawingPolygonGeoJSON) {
-        toast({ description: "No se pudo convertir la geometría del dibujo.", variant: "destructive" });
+    // 1. Convert drawing polygon to a valid Turf-ready GeoJSON feature
+    const drawingGeom = drawingPolygonFeature.getGeometry()?.clone().transform(mapProjection!, dataProjection!);
+    if (!drawingGeom) {
+        toast({ description: "La geometría del dibujo es inválida.", variant: "destructive" });
         return;
     }
-
+    const drawingPolygonGeoJSON = geojsonFormat.writeGeometryObject(drawingGeom) as TurfPolygon | TurfMultiPolygon;
+    const drawingFeatureTurf = turf.feature(drawingPolygonGeoJSON, drawingPolygonFeature.getProperties());
+    
     const intersectionResults: GeoJSONFeature[] = [];
 
     analysisSource.getFeatures().forEach(feature => {
         const featureGeom = feature.getGeometry();
         if (!featureGeom) return;
 
-        const featureGeom4326 = featureGeom.clone().transform('EPSG:3857', 'EPSG:4326');
-        const featureGeoJSONObject = geojsonFormat.writeGeometryObject(featureGeom4326);
+        const featureGeoJSONObject = geojsonFormat.writeFeatureObject(feature.clone(), {
+            dataProjection: 'EPSG:4326',
+            featureProjection: 'EPSG:3857'
+        });
         
-        if (!featureGeoJSONObject) return;
-
-        const analysisGeometries: (TurfPolygon | TurfMultiPolygon)[] = [];
-        if (featureGeoJSONObject.type === 'Polygon') {
-            analysisGeometries.push(featureGeoJSONObject as TurfPolygon);
-        } else if (featureGeoJSONObject.type === 'MultiPolygon') {
-             // Turf handles MultiPolygon directly
-            analysisGeometries.push(featureGeoJSONObject as TurfMultiPolygon);
+        if (!featureGeoJSONObject || !featureGeoJSONObject.geometry) {
+            console.warn(`Could not convert feature ${feature.getId()} to GeoJSON.`);
+            return;
         }
-        
-        for (const analysisPolygon of analysisGeometries) {
-             if (analysisPolygon) {
-                try {
-                    // Use turf.cleanCoords to prevent topology errors
-                    const cleanedDrawing = turf.cleanCoords(drawingPolygonGeoJSON);
-                    const cleanedAnalysis = turf.cleanCoords(analysisPolygon);
-                    
-                    const intersection = turf.intersect(cleanedDrawing, cleanedAnalysis);
 
-                    if (intersection) {
-                        const intersectionWithProps = turf.feature(intersection.geometry, feature.getProperties());
-                        intersectionResults.push(intersectionWithProps);
-                    }
-                } catch (error) {
-                    console.warn(`Error de Turf.js en la intersección para la entidad ${feature.getId()}:`, error);
-                }
-             }
+        const analysisFeatureTurf = turf.feature(featureGeoJSONObject.geometry, featureGeoJSONObject.properties);
+
+        try {
+            const intersection = turf.intersect(drawingFeatureTurf, analysisFeatureTurf);
+            if (intersection) {
+                const intersectedFeature = turf.feature(intersection.geometry, feature.getProperties());
+                intersectionResults.push(intersectedFeature);
+            }
+        } catch (error) {
+            console.warn(`Error de Turf.js en la intersección para la entidad ${feature.getId()}:`, error);
         }
     });
 
@@ -293,7 +288,6 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
 
 
   const handleCalculateWeightedSum = useCallback(async () => {
-    // This function can be implemented later once the extraction is confirmed to work.
     toast({ description: "Función de suma ponderada aún no implementada en este panel."});
   }, [toast]);
 
@@ -397,3 +391,5 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
 };
 
 export default StatisticsPanel;
+
+    
