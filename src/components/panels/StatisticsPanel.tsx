@@ -10,19 +10,18 @@ import { BarChartHorizontal, Sigma, Maximize, Layers, Scissors, Square } from 'l
 import type { MapLayer, VectorMapLayer } from '@/lib/types';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type Feature from 'ol/Feature';
-import type { Geometry, Polygon as OlPolygon, MultiPolygon as OlMultiPolygon } from 'ol/geom';
+import type { Geometry, Polygon as OlPolygon } from 'ol/geom';
 import VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
 import GeoJSON from 'ol/format/GeoJSON';
 import * as turf from '@turf/turf';
-import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as TurfMultiPolygon, Position, Feature as GeoJSONFeature, Geometry as GeoJSONGeometry } from 'geojson';
+import bboxClip from '@turf/bbox-clip';
 import { useToast } from '@/hooks/use-toast';
 import { nanoid } from 'nanoid';
 import { Style, Fill, Stroke } from 'ol/style';
 import type { Map } from 'ol';
 import Draw, { createBox } from 'ol/interaction/Draw';
 import { cn } from '@/lib/utils';
-import { get as getProjection, transform } from 'ol/proj';
 
 
 interface StatisticsPanelProps {
@@ -47,7 +46,13 @@ interface StatResults {
   min: number;
   max: number;
   weightedSum?: number;
+  weightedAverage?: number;
 }
+
+const analysisLayerStyle = new Style({
+    stroke: new Stroke({ color: 'rgba(0, 255, 255, 1)', width: 2.5, lineDash: [8, 8] }),
+    fill: new Fill({ color: 'rgba(0, 255, 255, 0.2)' }),
+});
 
 const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
   panelRef,
@@ -66,9 +71,10 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
   const [results, setResults] = useState<StatResults | null>(null);
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [isDrawingRectangle, setIsDrawingRectangle] = useState(false);
-  const analysisPolygonRef = useRef<Feature<OlPolygon> | null>(null);
+  
+  const analysisFeatureRef = useRef<Feature<OlPolygon> | null>(null);
+  const analysisLayerRef = useRef<VectorLayer<VectorSource<Feature<OlPolygon>>> | null>(null);
   const drawInteractionRef = useRef<Draw | null>(null);
-
   const { toast } = useToast();
 
   const numericFields = useMemo(() => {
@@ -88,6 +94,27 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
     return Array.from(keys).sort();
   }, [layer]);
 
+  const stopDrawing = useCallback(() => {
+      if (drawInteractionRef.current && mapRef.current) {
+          mapRef.current.removeInteraction(drawInteractionRef.current);
+          drawInteractionRef.current = null;
+          setIsDrawingRectangle(false);
+      }
+  }, [mapRef]);
+
+  // Cleanup effect for removing the analysis layer and interaction when the panel is closed or component unmounts
+  useEffect(() => {
+    return () => {
+        stopDrawing();
+        if (analysisLayerRef.current && mapRef.current) {
+            mapRef.current.removeLayer(analysisLayerRef.current);
+            analysisLayerRef.current = null;
+            analysisFeatureRef.current = null;
+        }
+    };
+  }, [mapRef, stopDrawing]);
+
+
   // Reset state when layer changes
   useEffect(() => {
     if (layer) {
@@ -96,15 +123,6 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
       setIsSelectionMode(false);
     }
   }, [layer, numericFields]);
-
-  const stopDrawing = useCallback(() => {
-      if (drawInteractionRef.current && mapRef.current) {
-          mapRef.current.removeInteraction(drawInteractionRef.current);
-          drawInteractionRef.current = null;
-          setIsDrawingRectangle(false);
-          toast({ description: "Herramienta de dibujo desactivada." });
-      }
-  }, [mapRef, toast]);
 
 
   const handleToggleDrawRectangle = useCallback(() => {
@@ -127,36 +145,24 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
       
       draw.once('drawend', (event) => {
           const feature = event.feature as Feature<OlPolygon>;
-          feature.setProperties({
-              name: 'Área de Análisis',
-              created_at: new Date().toISOString(),
-          });
-          feature.setId(`analysis-poly-feature-${nanoid()}`);
-          analysisPolygonRef.current = feature;
+          analysisFeatureRef.current = feature;
           
-          const layerName = `Área de Análisis`;
-          const source = new VectorSource({ features: [feature] });
-          const layerId = `analysis-poly-${nanoid()}`;
-          const olLayer = new VectorLayer({
-              source,
-              properties: { id: layerId, name: layerName, type: 'analysis' },
-              style: new Style({
-                  stroke: new Stroke({ color: 'rgba(0, 255, 255, 1)', width: 2.5 }),
-                  fill: new Fill({ color: 'rgba(0, 255, 255, 0.3)' }),
-              }),
-          });
-          onAddLayer({
-              id: layerId,
-              name: layerName,
-              olLayer,
-              visible: true,
-              opacity: 1,
-              type: 'analysis',
-          }, true);
-          toast({ description: `Se creó la capa "${layerName}".` });
+          if (!analysisLayerRef.current) {
+            const source = new VectorSource();
+            analysisLayerRef.current = new VectorLayer({
+                source,
+                style: analysisLayerStyle,
+                properties: { id: `internal-analysis-layer-${nanoid()}`, name: 'Capa de Análisis Interna' },
+            });
+            mapRef.current?.addLayer(analysisLayerRef.current);
+          }
+          analysisLayerRef.current.getSource()?.clear();
+          analysisLayerRef.current.getSource()?.addFeature(feature);
+          
+          toast({ description: `Área de análisis definida.` });
           stopDrawing();
       });
-  }, [mapRef, isDrawingRectangle, stopDrawing, onAddLayer, toast]);
+  }, [mapRef, isDrawingRectangle, stopDrawing, toast]);
 
 
   const handleCalculate = useCallback(() => {
@@ -197,11 +203,10 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
 
   
  const handleExtractByDrawing = useCallback(() => {
-    if (!layer || !analysisPolygonRef.current) {
+    if (!layer || !analysisFeatureRef.current) {
         toast({ description: "Seleccione una capa y dibuje un polígono de análisis.", variant: "destructive" });
         return;
     }
-    const drawingPolygonFeature = analysisPolygonRef.current;
     
     const analysisSource = layer.olLayer.getSource();
     if (!analysisSource || analysisSource.getFeatures().length === 0) {
@@ -209,26 +214,17 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
         return;
     }
 
-    const geojsonFormat = new GeoJSON({
-        featureProjection: 'EPSG:3857',
-        dataProjection: 'EPSG:4326',
-    });
-    
-    const drawingFeatureGeoJSON = geojsonFormat.writeFeatureObject(drawingPolygonFeature);
+    const geojsonFormat = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
+    const drawingFeatureGeoJSON = geojsonFormat.writeFeatureObject(analysisFeatureRef.current);
     const clipBbox = turf.bbox(drawingFeatureGeoJSON);
-
-    const intersectionResults: GeoJSONFeature[] = [];
+    const intersectionResults: any[] = [];
 
     analysisSource.getFeatures().forEach(feature => {
         const featureGeoJSONObject = geojsonFormat.writeFeatureObject(feature);
-        if (!featureGeoJSONObject || !featureGeoJSONObject.geometry) {
-            return;
-        }
-
         try {
-            const clipped = turf.bboxClip(featureGeoJSONObject as TurfFeature, clipBbox);
-            if (clipped) {
-                intersectionResults.push(clipped as GeoJSONFeature);
+            const clipped = bboxClip(featureGeoJSONObject, clipBbox);
+            if (clipped && clipped.geometry && clipped.geometry.coordinates.length > 0) {
+                intersectionResults.push(clipped);
             }
         } catch (error) {
             console.warn(`Error de Turf.js al recortar la entidad ${feature.getId()}:`, error);
@@ -240,7 +236,6 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
             type: 'FeatureCollection',
             features: intersectionResults,
         });
-
         features.forEach(f => f.setId(nanoid()));
         
         const layerName = `Recorte de ${layer.name}`;
@@ -249,10 +244,7 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
         const olLayer = new VectorLayer({
             source,
             properties: { id: layerId, name: layerName, type: 'vector' },
-            style: new Style({
-                stroke: new Stroke({ color: 'rgba(255, 0, 0, 1)', width: 2 }),
-                fill: new Fill({ color: 'rgba(255, 0, 0, 0.5)' }),
-            }),
+            style: layer.olLayer.getStyle(), // Inherit style from parent
         });
         onAddLayer({
             id: layerId,
@@ -270,8 +262,55 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
 
 
   const handleCalculateWeightedSum = useCallback(async () => {
-    toast({ description: "Función de suma ponderada aún no implementada en este panel."});
-  }, [toast]);
+    if (!layer || !selectedField || !analysisFeatureRef.current) {
+        toast({ description: "Seleccione capa, campo y dibuje un área de análisis.", variant: "destructive" });
+        return;
+    }
+
+    const analysisSource = layer.olLayer.getSource();
+    if (!analysisSource) return;
+
+    const geojsonFormat = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
+    const drawingFeatureGeoJSON = geojsonFormat.writeFeatureObject(analysisFeatureRef.current);
+    const drawingPolygon = drawingFeatureGeoJSON.geometry;
+    
+    let totalWeightedSum = 0;
+    let totalIntersectionArea = 0;
+
+    analysisSource.getFeatures().forEach(feature => {
+        const featureValue = feature.get(selectedField);
+        if (typeof featureValue !== 'number' || !isFinite(featureValue)) return;
+        
+        const featureGeoJSONObject = geojsonFormat.writeFeatureObject(feature);
+        if (!featureGeoJSONObject.geometry) return;
+
+        try {
+            const intersection = turf.intersect(drawingPolygon, featureGeoJSONObject.geometry);
+            if (intersection) {
+                const intersectionArea = turf.area(intersection);
+                totalWeightedSum += featureValue * intersectionArea;
+                totalIntersectionArea += intersectionArea;
+            }
+        } catch (error) {
+            console.warn(`Error en la intersección para la entidad ${feature.getId()}:`, error);
+        }
+    });
+
+    const weightedAverage = totalIntersectionArea > 0 ? totalWeightedSum / totalIntersectionArea : 0;
+
+    setResults(prev => ({
+        ...prev,
+        sum: prev?.sum ?? 0,
+        mean: prev?.mean ?? 0,
+        median: prev?.median ?? 0,
+        count: prev?.count ?? 0,
+        min: prev?.min ?? 0,
+        max: prev?.max ?? 0,
+        weightedSum: totalWeightedSum,
+        weightedAverage: weightedAverage,
+    }));
+    toast({ description: "Cálculo de promedio ponderado completado." });
+  }, [layer, selectedField, toast]);
 
 
   const panelTitle = `Estadísticas: ${layer?.name || ''}${isSelectionMode ? ' (Selección)' : ''}`;
@@ -318,10 +357,10 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
                 </Button>
                 <Button 
                     onClick={handleExtractByDrawing} 
-                    disabled={!analysisPolygonRef.current || !layer}
+                    disabled={!analysisFeatureRef.current || !layer}
                     className="h-8 text-xs border-white/30 bg-black/20"
                     variant="outline"
-                    title={!analysisPolygonRef.current ? "Dibuje un rectángulo de análisis primero" : "Extraer entidades de la capa por el área dibujada"}
+                    title={!analysisFeatureRef.current ? "Dibuje un rectángulo de análisis primero" : "Extraer entidades de la capa por el área dibujada"}
                 >
                     <Scissors className="mr-2 h-4 w-4" />
                     Extraer por Dibujo
@@ -338,13 +377,13 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
             </Button>
              <Button 
                 onClick={handleCalculateWeightedSum} 
-                disabled={!selectedField || !analysisPolygonRef.current} 
+                disabled={!selectedField || !analysisFeatureRef.current} 
                 className="w-full h-8 text-xs border-white/30 bg-black/20"
                 variant="secondary"
-                title={!analysisPolygonRef.current ? "Dibuje un polígono en el mapa primero" : ""}
+                title={!analysisFeatureRef.current ? "Dibuje un polígono en el mapa primero" : ""}
             >
                 <Maximize className="mr-2 h-4 w-4" />
-                Suma Ponderada (WIP)
+                Calcular Promedio Ponderado
             </Button>
 
             {results && (
@@ -357,10 +396,10 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
                             <TableRow><TableCell className="text-xs text-gray-300 p-1.5">Mínimo</TableCell><TableCell className="text-xs text-white p-1.5 text-right font-mono">{results.min.toLocaleString(undefined, { maximumFractionDigits: 2 })}</TableCell></TableRow>
                             <TableRow><TableCell className="text-xs text-gray-300 p-1.5">Máximo</TableCell><TableCell className="text-xs text-white p-1.5 text-right font-mono">{results.max.toLocaleString(undefined, { maximumFractionDigits: 2 })}</TableCell></TableRow>
                             <TableRow><TableCell className="text-xs text-gray-300 p-1.5">Cantidad</TableCell><TableCell className="text-xs text-white p-1.5 text-right font-mono">{results.count.toLocaleString()}</TableCell></TableRow>
-                             {results.weightedSum !== undefined && (
+                             {results.weightedAverage !== undefined && (
                                 <TableRow className="bg-primary/20">
-                                    <TableCell className="text-xs text-primary-foreground p-1.5 font-semibold">Suma Ponderada (por área dibujada)</TableCell>
-                                    <TableCell className="text-xs text-primary-foreground p-1.5 text-right font-mono font-semibold">{results.weightedSum.toLocaleString(undefined, { maximumFractionDigits: 2 })}</TableCell>
+                                    <TableCell className="text-xs text-primary-foreground p-1.5 font-semibold">Promedio Ponderado (por área)</TableCell>
+                                    <TableCell className="text-xs text-primary-foreground p-1.5 text-right font-mono font-semibold">{results.weightedAverage.toLocaleString(undefined, { maximumFractionDigits: 4 })}</TableCell>
                                 </TableRow>
                             )}
                         </TableBody>
@@ -373,3 +412,4 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
 };
 
 export default StatisticsPanel;
+
