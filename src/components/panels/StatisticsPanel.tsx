@@ -197,7 +197,7 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
   }, [layer, selectedField, selectedFeatures]);
 
   
- const handleExtractByDrawing = useCallback(() => {
+  const handleExtractByDrawing = useCallback(() => {
     if (!layer || !analysisPolygonRef.current) {
         toast({ description: "Seleccione una capa y dibuje un polígono de análisis.", variant: "destructive" });
         return;
@@ -221,34 +221,47 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
         return;
     }
     const drawingPolygonGeoJSON = geojsonFormat.writeGeometryObject(drawingGeom) as TurfPolygon | TurfMultiPolygon;
-    const drawingFeatureTurf = turf.feature(drawingPolygonGeoJSON, drawingPolygonFeature.getProperties());
+    const drawingFeatureTurf = turf.feature(drawingPolygonGeoJSON, drawingPolygonFeature.getProperties() || {});
     
     const intersectionResults: GeoJSONFeature[] = [];
 
     analysisSource.getFeatures().forEach(feature => {
-        const featureGeom = feature.getGeometry();
+        const featureGeom = feature.getGeometry()?.clone().transform(mapProjection!, dataProjection!);
         if (!featureGeom) return;
 
-        const featureGeoJSONObject = geojsonFormat.writeFeatureObject(feature.clone(), {
-            dataProjection: 'EPSG:4326',
-            featureProjection: 'EPSG:3857'
-        });
-        
-        if (!featureGeoJSONObject || !featureGeoJSONObject.geometry) {
-            console.warn(`Could not convert feature ${feature.getId()} to GeoJSON.`);
-            return;
-        }
-
-        const analysisFeatureTurf = turf.feature(featureGeoJSONObject.geometry, featureGeoJSONObject.properties);
+        const analysisPolygon = geojsonFormat.writeGeometryObject(featureGeom) as TurfPolygon | TurfMultiPolygon;
+        const analysisFeatureTurf = turf.feature(analysisPolygon, feature.getProperties() || {});
 
         try {
-            const intersection = turf.intersect(drawingFeatureTurf, analysisFeatureTurf);
-            if (intersection) {
-                const intersectedFeature = turf.feature(intersection.geometry, feature.getProperties());
-                intersectionResults.push(intersectedFeature);
-            }
+          // 1. CALCULAR LA INTERSECCIÓN
+          //    Esta es la función principal de la librería Turf.js.
+          //    Toma dos geometrías (el polígono dibujado y el polígono de la capa de análisis)
+          //    y devuelve una nueva geometría que representa SOLO la parte donde se superponen.
+          //    Si no se superponen en absoluto, devuelve `null`.
+          const intersection = turf.intersect(drawingFeatureTurf, analysisFeatureTurf);
+        
+          // 2. VERIFICAR SI HUBO UNA INTERSECCIÓN
+          //    Este `if` comprueba si la variable `intersection` no es `null`.
+          //    Si es `null` (no hubo superposición), el código dentro del `if` no se ejecuta.
+          if (intersection) {
+        
+            // 3. CREAR UNA NUEVA ENTIDAD (FEATURE)
+            //    Si hubo una intersección, creamos una nueva entidad geográfica.
+            //    - Geometría: Usamos la nueva geometría de la intersección que acabamos de calcular.
+            //    - Propiedades: Copiamos todos los atributos (como nombre, área, etc.) de la entidad original de la capa de análisis.
+            const intersectedFeature = turf.feature(intersection.geometry, feature.getProperties());
+        
+            // 4. GUARDAR EL RESULTADO
+            //    Añadimos esta nueva entidad (que es el "recorte") a nuestro array de resultados.
+            intersectionResults.push(intersectedFeature);
+          }
         } catch (error) {
-            console.warn(`Error de Turf.js en la intersección para la entidad ${feature.getId()}:`, error);
+          // 5. MANEJO DE ERRORES
+          //    A veces, las geometrías pueden tener errores internos (micro-bucles, etc.).
+          //    Si `turf.intersect` falla, este bloque `catch` se activa.
+          //    Imprime un aviso en la consola del navegador con el ID de la entidad que causó el problema,
+          //    pero permite que el programa continúe con la siguiente entidad sin detenerse.
+          console.warn(`Error de Turf.js en la intersección para la entidad ${feature.getId()}:`, error);
         }
     });
 
@@ -391,5 +404,3 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
 };
 
 export default StatisticsPanel;
-
-    
