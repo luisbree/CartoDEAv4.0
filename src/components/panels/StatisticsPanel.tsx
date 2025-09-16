@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
@@ -228,17 +229,21 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
         }
         
         for (const analysisPolygon of analysisGeometries) {
-             try {
-                // Pass the geometry objects directly to turf.intersect
-                const intersection = turf.intersect(drawingPolygonGeoJSON, analysisPolygon);
-                
-                if (intersection) {
-                    const intersectionWithProps = turf.feature(intersection.geometry, feature.getProperties());
-                    intersectionResults.push(intersectionWithProps);
+             if (analysisPolygon) {
+                console.log("POLYGON 1 (Dibujo):", drawingPolygonGeoJSON);
+                console.log("POLYGON 2 (Análisis):", analysisPolygon);
+                 try {
+                    // Use the geometry properties directly for intersection
+                    const intersection = turf.intersect(drawingPolygonGeoJSON, analysisPolygon);
+                    
+                    if (intersection) {
+                        const intersectionWithProps = turf.feature(intersection.geometry, feature.getProperties());
+                        intersectionResults.push(intersectionWithProps);
+                    }
+                } catch (error) {
+                    console.warn(`Error de Turf.js en la intersección para la entidad ${feature.getId()}:`, error);
                 }
-            } catch (error) {
-                console.warn(`Error de Turf.js en la intersección para la entidad ${feature.getId()}:`, error);
-            }
+             }
         }
     }
 
@@ -382,3 +387,5 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
 };
 
 export default StatisticsPanel;
+
+    
