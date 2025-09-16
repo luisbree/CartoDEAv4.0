@@ -214,7 +214,6 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
     const mapProjection = getProjection('EPSG:3857');
     const dataProjection = getProjection('EPSG:4326');
     
-    // 1. Convert drawing polygon to a valid Turf-ready GeoJSON feature
     const drawingGeom = drawingPolygonFeature.getGeometry()?.clone().transform(mapProjection!, dataProjection!);
     if (!drawingGeom) {
         toast({ description: "La geometría del dibujo es inválida.", variant: "destructive" });
@@ -227,42 +226,25 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
     analysisSource.getFeatures().forEach(feature => {
         const featureGeom = feature.getGeometry()?.clone().transform(mapProjection!, dataProjection!);
         if (!featureGeom) return;
-
+        
         const analysisPolygon = geojsonFormat.writeGeometryObject(featureGeom) as TurfPolygon | TurfMultiPolygon;
         
         console.log("POLYGON 1 (Dibujo):", drawingPolygonGeoJSON);
         console.log("POLYGON 2 (Análisis):", analysisPolygon);
+        
+        // Wrap geometries in a turf.feature to ensure they are valid for intersection
+        const drawingFeatureTurf = turf.feature(drawingPolygonGeoJSON);
+        const analysisFeatureTurf = turf.feature(analysisPolygon);
 
         try {
-          // 1. CALCULAR LA INTERSECCIÓN
-          //    Esta es la función principal de la librería Turf.js.
-          //    Toma dos geometrías (el polígono dibujado y el polígono de la capa de análisis)
-          //    y devuelve una nueva geometría que representa SOLO la parte donde se superponen.
-          //    Si no se superponen en absoluto, devuelve `null`.
-          const intersection = turf.intersect(drawingPolygonGeoJSON, analysisPolygon);
+          const intersection = turf.intersect(drawingFeatureTurf, analysisFeatureTurf);
           console.log('Resultado de la intersección:', intersection);
         
-          // 2. VERIFICAR SI HUBO UNA INTERSECCIÓN
-          //    Este `if` comprueba si la variable `intersection` no es `null`.
-          //    Si es `null` (no hubo superposición), el código dentro del `if` no se ejecuta.
           if (intersection) {
-        
-            // 3. CREAR UNA NUEVA ENTIDAD (FEATURE)
-            //    Si hubo una intersección, creamos una nueva entidad geográfica.
-            //    - Geometría: Usamos la nueva geometría de la intersección que acabamos de calcular.
-            //    - Propiedades: Copiamos todos los atributos (como nombre, área, etc.) de la entidad original de la capa de análisis.
             const intersectedFeature = turf.feature(intersection.geometry, feature.getProperties());
-        
-            // 4. GUARDAR EL RESULTADO
-            //    Añadimos esta nueva entidad (que es el "recorte") a nuestro array de resultados.
             intersectionResults.push(intersectedFeature);
           }
         } catch (error) {
-          // 5. MANEJO DE ERRORES
-          //    A veces, las geometrías pueden tener errores internos (micro-bucles, etc.).
-          //    Si `turf.intersect` falla, este bloque `catch` se activa.
-          //    Imprime un aviso en la consola del navegador con el ID de la entidad que causó el problema,
-          //    pero permite que el programa continúe con la siguiente entidad sin detenerse.
           console.warn(`Error de Turf.js en la intersección para la entidad ${feature.getId()}:`, error);
         }
     });
