@@ -191,7 +191,7 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
   }, [layer, selectedField, selectedFeatures]);
 
   
-  const handleExtractByDrawing = useCallback(() => {
+ const handleExtractByDrawing = useCallback(() => {
     if (!layer || !analysisPolygonRef.current) {
         toast({ description: "Seleccione una capa y dibuje un polígono de análisis.", variant: "destructive" });
         return;
@@ -209,8 +209,14 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
         dataProjection: 'EPSG:4326'
     });
     
-    const drawingPolygonGeoJSON = geojsonFormat.writeGeometryObject(drawingPolygonFeature.getGeometry() as OlPolygon) as TurfPolygon;
-    console.log("POLYGON 1 (Dibujo):", drawingPolygonGeoJSON);
+    // Process the drawing polygon
+    const drawingGeom4326 = drawingPolygonFeature.getGeometry()!.clone().transform('EPSG:3857', 'EPSG:4326');
+    const drawingPolygonGeoJSON = geojsonFormat.writeGeometryObject(drawingGeom4326);
+    
+    if (!drawingPolygonGeoJSON) {
+        toast({ description: "No se pudo convertir la geometría del dibujo.", variant: "destructive" });
+        return;
+    }
 
     const intersectionResults: GeoJSONFeature[] = [];
 
@@ -218,25 +224,28 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
         const featureGeom = feature.getGeometry();
         if (!featureGeom) return;
 
-        const featureGeoJSONObject = geojsonFormat.writeFeatureObject(feature);
-        if (!featureGeoJSONObject || !featureGeoJSONObject.geometry) {
-            return;
-        }
+        const featureGeom4326 = featureGeom.clone().transform('EPSG:3857', 'EPSG:4326');
+        const featureGeoJSONObject = geojsonFormat.writeGeometryObject(featureGeom4326);
+        
+        if (!featureGeoJSONObject) return;
 
-        const analysisGeometries: TurfPolygon[] = [];
-        if (featureGeoJSONObject.geometry.type === 'Polygon') {
-            analysisGeometries.push(featureGeoJSONObject.geometry as TurfPolygon);
-        } else if (featureGeoJSONObject.geometry.type === 'MultiPolygon') {
-            (featureGeoJSONObject.geometry as TurfMultiPolygon).coordinates.forEach(polyCoords => {
-                analysisGeometries.push(turf.polygon(polyCoords).geometry);
-            });
+        const analysisGeometries: (TurfPolygon | TurfMultiPolygon)[] = [];
+        if (featureGeoJSONObject.type === 'Polygon') {
+            analysisGeometries.push(featureGeoJSONObject as TurfPolygon);
+        } else if (featureGeoJSONObject.type === 'MultiPolygon') {
+             // Turf handles MultiPolygon directly
+            analysisGeometries.push(featureGeoJSONObject as TurfMultiPolygon);
         }
         
         for (const analysisPolygon of analysisGeometries) {
              if (analysisPolygon) {
-                console.log("POLYGON 2 (Análisis):", analysisPolygon);
                 try {
-                    const intersection = turf.intersect(drawingPolygonGeoJSON, analysisPolygon);
+                    // Use turf.cleanCoords to prevent topology errors
+                    const cleanedDrawing = turf.cleanCoords(drawingPolygonGeoJSON);
+                    const cleanedAnalysis = turf.cleanCoords(analysisPolygon);
+                    
+                    const intersection = turf.intersect(cleanedDrawing, cleanedAnalysis);
+
                     if (intersection) {
                         const intersectionWithProps = turf.feature(intersection.geometry, feature.getProperties());
                         intersectionResults.push(intersectionWithProps);
