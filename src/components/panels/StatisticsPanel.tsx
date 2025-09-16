@@ -16,6 +16,7 @@ import VectorLayer from 'ol/layer/Vector';
 import GeoJSON from 'ol/format/GeoJSON';
 import * as turf from '@turf/turf';
 import bboxClip from '@turf/bbox-clip';
+import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as TurfMultiPolygon } from 'geojson';
 import { useToast } from '@/hooks/use-toast';
 import { nanoid } from 'nanoid';
 import { Style, Fill, Stroke } from 'ol/style';
@@ -273,12 +274,11 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
     if (!analysisSource) return;
 
     const geojsonFormat = new GeoJSON({ featureProjection: 'EPSG:3857' });
-    const drawingFeatureTurf = turf.feature((geojsonFormat.writeFeature(analysisFeatureRef.current) as any).geometry);
+    const drawingFeatureGeoJSON = geojsonFormat.writeFeatureObject(analysisFeatureRef.current) as TurfFeature<TurfPolygon>;
+    const clipBbox = turf.bbox(drawingFeatureGeoJSON);
     
     let totalWeightedSum = 0;
     let totalIntersectionArea = 0;
-
-    console.log(`--- Iniciando Cálculo Ponderado para el campo "${selectedField}" ---`);
 
     analysisSource.getFeatures().forEach(feature => {
         const featureValue = feature.get(selectedField);
@@ -286,22 +286,18 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
             return;
         }
         
-        const analysisFeatureTurf = turf.feature((geojsonFormat.writeFeature(feature) as any).geometry, feature.getProperties());
-        if (!analysisFeatureTurf.geometry) return;
+        const analysisFeatureGeoJSON = geojsonFormat.writeFeatureObject(feature) as TurfFeature<TurfPolygon | TurfMultiPolygon>;
+        if (!analysisFeatureGeoJSON.geometry) return;
 
         try {
-            const clippedFeature = turf.clip(analysisFeatureTurf, drawingFeatureTurf);
+            const clippedFeature = bboxClip(analysisFeatureGeoJSON, clipBbox);
             
-            if (clippedFeature) {
+            if (clippedFeature && clippedFeature.geometry) {
                 const intersectionArea = turf.area(clippedFeature);
-                console.log(`Entidad ID ${feature.getId()}: Intersección encontrada. Área de intersección: ${intersectionArea.toFixed(2)} m²`);
-
                 if (intersectionArea > 0) {
                     const weightedValue = featureValue * intersectionArea;
                     totalWeightedSum += weightedValue;
                     totalIntersectionArea += intersectionArea;
-                    console.log(`   - Valor del campo: ${featureValue}`);
-                    console.log(`   - Valor ponderado (valor * área): ${weightedValue.toFixed(2)}`);
                 }
             }
         } catch (error) {
@@ -310,11 +306,6 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
     });
 
     const weightedAverage = totalIntersectionArea > 0 ? totalWeightedSum / totalIntersectionArea : 0;
-
-    console.log(`--- Cálculo Finalizado ---`);
-    console.log(`Suma Ponderada Total: ${totalWeightedSum.toFixed(2)}`);
-    console.log(`Área Total de Intersección: ${totalIntersectionArea.toFixed(2)} m²`);
-    console.log(`Promedio Ponderado Final: ${weightedAverage.toFixed(4)}`);
 
     setResults(prev => ({
         ...(prev || { sum: 0, mean: 0, median: 0, count: 0, min: 0, max: 0 }),
