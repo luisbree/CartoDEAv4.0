@@ -14,8 +14,7 @@ import type { Geometry, Polygon as OlPolygon } from 'ol/geom';
 import VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
 import GeoJSON from 'ol/format/GeoJSON';
-import * as turf from '@turf/turf';
-import intersect from '@turf/intersect';
+import { area as turfArea, intersect, featureCollection } from '@turf/turf';
 import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as TurfMultiPolygon, FeatureCollection, Geometry as GeoJSONGeometry } from 'geojson';
 import { useToast } from '@/hooks/use-toast';
 import { nanoid } from 'nanoid';
@@ -259,21 +258,26 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
         toast({ description: "Seleccione una capa y defina un área de análisis.", variant: "destructive" });
         return;
     }
-    const formatTo4326 = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
-    const formatFrom4326 = new GeoJSON({ dataProjection: 'EPSG:4326', featureProjection: 'EPSG:3857' });
+    const format = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
+    const formatForMap = new GeoJSON({ dataProjection: 'EPSG:4326', featureProjection: 'EPSG:3857' });
     const inputSource = layer.olLayer.getSource();
     if (!inputSource || inputSource.getFeatures().length === 0) return;
     
-    const maskGeoJSON = formatTo4326.writeFeatureObject(analysisFeatureRef.current) as TurfFeature<TurfPolygon | TurfMultiPolygon>;
-    const unifiedMask = maskGeoJSON; // Already a single feature
+    const maskGeoJSON = format.writeFeatureObject(analysisFeatureRef.current) as TurfFeature<TurfPolygon | TurfMultiPolygon>;
     
-    const inputGeoJSON = formatTo4326.writeFeaturesObject(inputSource.getFeatures()) as FeatureCollection;
+    const maskPolygons = maskGeoJSON.geometry.type === 'Polygon' 
+        ? [maskGeoJSON.geometry.coordinates] 
+        : maskGeoJSON.geometry.coordinates;
+    const unifiedMask = multiPolygon(maskPolygons);
+    
+    const inputGeoJSON = format.writeFeaturesObject(inputSource.getFeatures()) as FeatureCollection;
     const clippedFeaturesGeoJSON: TurfFeature<GeoJSONGeometry>[] = [];
 
     for (const inputFeature of inputGeoJSON.features) {
         try {
-            const intersectionResult = intersect(inputFeature, unifiedMask);
-            if (intersectionResult) {
+            const collectionForIntersect = featureCollection([unifiedMask, inputFeature]);
+            const intersectionResult = intersect(collectionForIntersect);
+            if (intersectionResult && intersectionResult.geometry && intersectionResult.geometry.coordinates.length > 0) {
                 intersectionResult.properties = inputFeature.properties;
                 clippedFeaturesGeoJSON.push(intersectionResult);
             }
@@ -281,7 +285,7 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
     }
 
     if (clippedFeaturesGeoJSON.length > 0) {
-        const finalOLFeatures = formatFrom4326.readFeatures({ type: 'FeatureCollection', features: clippedFeaturesGeoJSON });
+        const finalOLFeatures = formatForMap.readFeatures({ type: 'FeatureCollection', features: clippedFeaturesGeoJSON });
         finalOLFeatures.forEach(f => f.setId(nanoid()));
         
         const layerName = `Recorte de ${layer.name}`;
@@ -316,12 +320,16 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
     const analysisSource = layer.olLayer.getSource();
     if (!analysisSource || analysisSource.getFeatures().length === 0) return;
     
-    const formatTo4326 = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
+    const format = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
     
-    const maskGeoJSON = formatTo4326.writeFeatureObject(analysisFeatureRef.current) as TurfFeature<TurfPolygon | TurfMultiPolygon>;
+    const maskGeoJSON = format.writeFeatureObject(analysisFeatureRef.current) as TurfFeature<TurfPolygon | TurfMultiPolygon>;
+    const maskPolygons = maskGeoJSON.geometry.type === 'Polygon' 
+        ? [maskGeoJSON.geometry.coordinates] 
+        : maskGeoJSON.geometry.coordinates;
+    const unifiedMask = multiPolygon(maskPolygons);
     
     const featuresToProcess = analysisSource.getFeaturesInExtent(analysisFeatureRef.current.getGeometry()!.getExtent());
-    const inputGeoJSON = formatTo4326.writeFeaturesObject(featuresToProcess);
+    const inputGeoJSON = format.writeFeaturesObject(featuresToProcess);
 
     let totalWeightedSum = 0;
     let totalIntersectionArea = 0;
@@ -333,9 +341,10 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
         }
 
         try {
-            const intersectionResult = intersect(maskGeoJSON, feature);
+            const collectionForIntersect = featureCollection([unifiedMask, feature]);
+            const intersectionResult = intersect(collectionForIntersect);
             if (intersectionResult) {
-                const intersectionArea = turf.area(intersectionResult);
+                const intersectionArea = turfArea(intersectionResult);
                 if (intersectionArea > 0) {
                     const weightedValue = featureValue * intersectionArea;
                     totalWeightedSum += weightedValue;

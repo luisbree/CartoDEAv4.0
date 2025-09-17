@@ -15,9 +15,9 @@ import { nanoid } from 'nanoid';
 import GeoJSON from 'ol/format/GeoJSON';
 import VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
-import intersect from '@turf/intersect';
+import { intersect, featureCollection } from '@turf/turf';
 import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as TurfMultiPolygon, FeatureCollection as TurfFeatureCollection, Geometry as TurfGeometry } from 'geojson';
-import { polygon, multiPolygon, featureCollection } from '@turf/helpers';
+import { multiPolygon } from '@turf/helpers';
 
 interface AnalysisPanelProps {
   panelRef: React.RefObject<HTMLDivElement>;
@@ -88,13 +88,12 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 
     const outputName = clipOutputName.trim() || `Recorte de ${inputLayer.name}`;
     
-    const formatTo4326 = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
-    const formatFrom4326 = new GeoJSON({ dataProjection: 'EPSG:4326', featureProjection: 'EPSG:3857' });
+    const format = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
+    const formatForMap = new GeoJSON({ dataProjection: 'EPSG:4326', featureProjection: 'EPSG:3857' });
 
     const maskFeatures = maskSource.getFeatures();
-    const maskGeoJSON = formatTo4326.writeFeaturesObject(maskFeatures) as TurfFeatureCollection<TurfPolygon | TurfMultiPolygon>;
+    const maskGeoJSON = format.writeFeaturesObject(maskFeatures) as TurfFeatureCollection<TurfPolygon | TurfMultiPolygon>;
     
-    // Unify all mask polygons into one MultiPolygon for intersection
     const maskPolygons = maskGeoJSON.features.flatMap(f => 
         f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.coordinates
     );
@@ -105,14 +104,17 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     const unifiedMask = multiPolygon(maskPolygons);
 
     const inputFeatures = inputSource.getFeatures();
-    const inputGeoJSON = formatTo4326.writeFeaturesObject(inputFeatures) as TurfFeatureCollection;
+    const inputGeoJSON = format.writeFeaturesObject(inputFeatures) as TurfFeatureCollection;
 
     const clippedFeaturesGeoJSON: TurfFeature<TurfGeometry>[] = [];
 
     for (const inputFeature of inputGeoJSON.features) {
         try {
-            const intersectionResult = intersect(inputFeature, unifiedMask);
-            if (intersectionResult) {
+            // Per the user's example, create a feature collection with just the two features to intersect
+            const collectionForIntersect = featureCollection([unifiedMask, inputFeature]);
+            const intersectionResult = intersect(collectionForIntersect);
+
+            if (intersectionResult && intersectionResult.geometry && intersectionResult.geometry.coordinates.length > 0) {
                 intersectionResult.properties = inputFeature.properties;
                 clippedFeaturesGeoJSON.push(intersectionResult);
             }
@@ -122,7 +124,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     }
     
     if (clippedFeaturesGeoJSON.length > 0) {
-        const finalOLFeatures = formatFrom4326.readFeatures({
+        const finalOLFeatures = formatForMap.readFeatures({
             type: 'FeatureCollection',
             features: clippedFeaturesGeoJSON
         });
