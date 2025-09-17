@@ -6,7 +6,7 @@ import type { Map, MapBrowserEvent } from 'ol';
 import VectorLayer from 'ol/layer/Vector';
 import TileLayer from 'ol/layer/Tile';
 import TileWMS from 'ol/source/TileWMS';
-import type Feature from 'ol/Feature';
+import Feature from 'ol/Feature';
 import { Circle as CircleStyle, Fill, Stroke, Style, RegularShape } from 'ol/style';
 import { useToast } from "@/hooks/use-toast";
 import type { Geometry, Point } from 'ol/geom';
