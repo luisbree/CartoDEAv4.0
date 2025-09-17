@@ -377,6 +377,7 @@ export default function GeoMapperClient() {
     mapRef, isMapReady, drawingSourceRef: drawingSourceRef,
     activeTool: activeTool.type === 'draw' ? activeTool.id : null,
     setActiveTool: (id) => handleSetActiveTool({ type: 'draw', id }),
+    addLayer: layerManagerHook.addLayer,
   });
 
   const measurementHook = useMeasurement({ 
@@ -909,7 +910,7 @@ export default function GeoMapperClient() {
             activeDrawTool={drawingInteractions.activeTool}
             onToggleDrawingTool={drawingInteractions.toggleTool}
             onClearDrawnFeatures={drawingInteractions.clearDrawnFeatures}
-            onSaveDrawnFeaturesAsKML={drawingInteractions.saveDrawnFeaturesAsKML}
+            onConvertDrawingsToLayer={drawingInteractions.convertDrawingsToLayer}
             measurementHook={measurementHook}
             isFetchingOSM={osmDataHook.isFetchingOSM}
             onFetchOSMDataTrigger={osmDataHook.fetchOSMData}

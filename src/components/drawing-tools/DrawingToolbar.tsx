@@ -3,21 +3,21 @@
 
 import React from 'react';
 import { Button } from '@/components/ui/button';
-import { Square, PenLine, Dot, Eraser, Save, RectangleVertical, Brush } from 'lucide-react'; 
+import { Square, PenLine, Dot, Eraser, Layers, RectangleVertical, Brush } from 'lucide-react'; 
 import type { DrawToolId } from '@/lib/types';
 
 interface DrawingToolbarProps {
   activeDrawTool: DrawToolId | null;
   onToggleDrawingTool: (toolType: DrawToolId) => void;
   onClearDrawnFeatures: () => void;
-  onSaveDrawnFeaturesAsKML: () => void;
+  onConvertDrawingsToLayer: () => void;
 }
 
 const DrawingToolbar: React.FC<DrawingToolbarProps> = ({
   activeDrawTool,
   onToggleDrawingTool,
   onClearDrawnFeatures,
-  onSaveDrawnFeaturesAsKML,
+  onConvertDrawingsToLayer,
 }) => {
   const iconButtonBaseClass = "h-8 w-8 p-0 flex items-center justify-center focus-visible:ring-primary";
   const activeClass = "bg-primary hover:bg-primary/90 text-primary-foreground";
@@ -90,13 +90,13 @@ const DrawingToolbar: React.FC<DrawingToolbarProps> = ({
       <div className="flex-grow"></div>
 
       <Button 
-        onClick={onSaveDrawnFeaturesAsKML} 
+        onClick={onConvertDrawingsToLayer} 
         className={`${iconButtonBaseClass} bg-primary hover:bg-primary/90 text-primary-foreground`}
         disabled={!!activeDrawTool}
-        title="Guardar Dibujos (KML)"
-        aria-label="Guardar todos los dibujos del mapa como archivo KML"
+        title="Convertir Dibujos a Capa"
+        aria-label="Convertir todos los dibujos del mapa a una nueva capa"
       >
-        <Save className="h-4 w-4" />
+        <Layers className="h-4 w-4" />
       </Button>
     </div>
   );

@@ -3,11 +3,13 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import type { Map } from 'ol';
-import type VectorSource from 'ol/source/Vector';
+import VectorSource from 'ol/source/Vector';
+import VectorLayer from 'ol/layer/Vector';
 import Draw, { createBox } from 'ol/interaction/Draw';
 import KML from 'ol/format/KML';
 import { useToast } from "@/hooks/use-toast";
-import type { DrawToolId } from '@/lib/types';
+import type { DrawToolId, MapLayer } from '@/lib/types';
+import { nanoid } from 'nanoid';
 
 interface UseDrawingInteractionsProps {
   mapRef: React.RefObject<Map | null>;
@@ -15,6 +17,7 @@ interface UseDrawingInteractionsProps {
   drawingSourceRef: React.RefObject<VectorSource>;
   activeTool: DrawToolId | null;
   setActiveTool: (toolId: DrawToolId | null) => void;
+  addLayer: (layer: MapLayer) => void;
 }
 
 export const useDrawingInteractions = ({
@@ -23,6 +26,7 @@ export const useDrawingInteractions = ({
   drawingSourceRef,
   activeTool,
   setActiveTool,
+  addLayer,
 }: UseDrawingInteractionsProps) => {
   const { toast } = useToast();
   const drawInteractionRef = useRef<Draw | null>(null);
@@ -89,44 +93,53 @@ export const useDrawingInteractions = ({
       toast({ description: 'Dibujos borrados del mapa.' });
     }
   }, [drawingSourceRef, toast, setActiveTool]);
-
-  const saveDrawnFeaturesAsKML = useCallback(() => {
+  
+  const convertDrawingsToLayer = useCallback(() => {
     if (!drawingSourceRef.current || drawingSourceRef.current.getFeatures().length === 0) {
-      toast({ description: 'No hay nada que guardar.' });
+      toast({ description: 'No hay nada para convertir a capa.' });
       return;
     }
 
     try {
-      const kmlFormat = new KML({
-        extractStyles: true,
-        showPointNames: true,
-      });
       const features = drawingSourceRef.current.getFeatures();
-      const kmlString = kmlFormat.writeFeatures(features, {
-        dataProjection: 'EPSG:4326',
-        featureProjection: mapRef.current?.getView().getProjection() ?? 'EPSG:3857',
+      const clonedFeatures = features.map(f => {
+        const clone = f.clone();
+        clone.setId(nanoid()); // Assign a new unique ID
+        return clone;
       });
       
-      const blob = new Blob([kmlString], { type: 'application/vnd.google-earth.kml+xml' });
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = `dibujos_mapa_${new Date().toISOString().split('T')[0]}.kml`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(link.href);
+      const layerName = "Capa Dibujada";
+      const source = new VectorSource({ features: clonedFeatures });
+      const layerId = `${layerName.replace(/ /g, '_')}-${nanoid()}`;
+      const olLayer = new VectorLayer({
+          source,
+          properties: { id: layerId, name: layerName, type: 'drawing' },
+      });
       
-      toast({ description: 'Dibujos guardados como KML.' });
+      addLayer({
+          id: layerId,
+          name: layerName,
+          olLayer,
+          visible: true,
+          opacity: 1,
+          type: 'drawing',
+      });
+
+      // Clear the original drawing source after converting
+      clearDrawnFeatures();
+
+      toast({ description: 'Dibujos convertidos a una nueva capa.' });
+
     } catch (error) {
-      console.error("Error saving KML:", error);
-      toast({ description: 'Error al guardar el archivo KML.' });
+      console.error("Error converting drawings to layer:", error);
+      toast({ description: 'Error al convertir los dibujos a capa.' });
     }
-  }, [drawingSourceRef, mapRef, toast]);
+  }, [drawingSourceRef, addLayer, clearDrawnFeatures, toast]);
 
   return {
     activeTool,
     toggleTool,
     clearDrawnFeatures,
-    saveDrawnFeaturesAsKML,
+    convertDrawingsToLayer,
   };
 };

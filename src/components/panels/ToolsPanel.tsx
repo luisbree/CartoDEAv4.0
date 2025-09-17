@@ -36,7 +36,7 @@ interface ToolsPanelProps {
   activeDrawTool: DrawToolId | null;
   onToggleDrawingTool: (toolType: DrawToolId) => void;
   onClearDrawnFeatures: () => void;
-  onSaveDrawnFeaturesAsKML: () => void;
+  onConvertDrawingsToLayer: () => void;
   
   // Measurement props
   measurementHook: ReturnType<typeof useMeasurement>;
@@ -65,7 +65,7 @@ const SectionHeader: React.FC<{ title: string; description?: string; icon: React
 
 const ToolsPanel: React.FC<ToolsPanelProps> = ({
   panelRef, isCollapsed, onToggleCollapse, onClosePanel, onMouseDownHeader,
-  activeDrawTool, onToggleDrawingTool, onClearDrawnFeatures, onSaveDrawnFeaturesAsKML,
+  activeDrawTool, onToggleDrawingTool, onClearDrawnFeatures, onConvertDrawingsToLayer,
   measurementHook,
   isFetchingOSM, onFetchOSMDataTrigger, osmCategoriesForSelection, selectedOSMCategoryIds, 
   onSelectedOSMCategoriesChange,
@@ -95,7 +95,7 @@ const ToolsPanel: React.FC<ToolsPanelProps> = ({
                 activeDrawTool={activeDrawTool}
                 onToggleDrawingTool={onToggleDrawingTool}
                 onClearDrawnFeatures={onClearDrawnFeatures}
-                onSaveDrawnFeaturesAsKML={onSaveDrawnFeaturesAsKML}
+                onConvertDrawingsToLayer={onConvertDrawingsToLayer}
             />
             <MeasurementToolbar
                 activeMeasureTool={measurementHook.activeTool}
