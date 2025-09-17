@@ -58,7 +58,7 @@ export const useFeatureInspection = ({
   const [selectedFeatures, setSelectedFeatures] = useState<Feature<Geometry>[]>([]);
   const [inspectedFeatureData, setInspectedFeatureData] = useState<PlainFeatureData[] | null>([]);
   const [currentInspectedLayerName, setCurrentInspectedLayerName] = useState<string | null>(null);
-  const [rasterQueryOverlays, setRasterQueryOverlays] = useState<Overlay[]>([]);
+  const rasterQueryOverlaysRef = useRef<Overlay[]>([]);
 
   const selectInteractionRef = useRef<Select | null>(null);
   const dragBoxInteractionRef = useRef<DragBox | null>(null);
@@ -80,11 +80,11 @@ export const useFeatureInspection = ({
   }, [toast]);
   
   const clearRasterQueryOverlays = useCallback(() => {
-    if (mapRef.current) {
-        rasterQueryOverlays.forEach(overlay => mapRef.current!.removeOverlay(overlay));
+    if (mapRef.current && rasterQueryOverlaysRef.current.length > 0) {
+        rasterQueryOverlaysRef.current.forEach(overlay => mapRef.current!.removeOverlay(overlay));
+        rasterQueryOverlaysRef.current = [];
     }
-    setRasterQueryOverlays([]);
-  }, [rasterQueryOverlays, mapRef]);
+  }, [mapRef]);
 
   const clearSelection = useCallback(() => {
     if (selectInteractionRef.current) {
@@ -161,7 +161,7 @@ export const useFeatureInspection = ({
                 });
 
                 map.addOverlay(overlay);
-                setRasterQueryOverlays(prev => [...prev, overlay]);
+                rasterQueryOverlaysRef.current.push(overlay);
                 resultsFound = true;
             };
 
@@ -210,7 +210,7 @@ export const useFeatureInspection = ({
                 }
                 
                 // Handle GEE layers
-                const geeParams = layer.get('geeParams') as GeeValueQueryInput | undefined;
+                const geeParams = layer.get('geeParams') as Omit<GeeValueQueryInput, 'lon' | 'lat'> | undefined;
                 if (layer.get('type') === 'gee' && geeParams) {
                     try {
                         const [lon, lat] = transform(e.coordinate, map.getView().getProjection(), 'EPSG:4326');
