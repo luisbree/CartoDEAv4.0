@@ -1,38 +1,42 @@
 
 "use client";
 
-import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as TurfMultiPolygon } from 'geojson';
-import * as turf from '@turf/turf';
+import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as TurfMultiPolygon, FeatureCollection as TurfFeatureCollection, Geometry as TurfGeometry } from 'geojson';
+import { area as turfArea, intersect, featureCollection } from '@turf/turf';
+import { multiPolygon } from '@turf/helpers';
 
-interface WeightedSumParams {
-    analysisFeaturesGeoJSON: TurfFeature<TurfPolygon | TurfMultiPolygon>[];
+interface IntersectionParams {
+    analysisFeaturesGeoJSON: TurfFeatureCollection;
     drawingPolygonGeoJSON: TurfPolygon | TurfMultiPolygon;
     field: string;
 }
 
 /**
- * Calculates a surface-weighted sum of a numeric field based on the intersection
- * with a drawing polygon using Turf.js. This function now expects GeoJSON inputs.
+ * Calculates a surface-weighted average of a numeric field based on the intersection
+ * with a drawing polygon using Turf.js.
  * @param params - The parameters for the calculation.
- * @returns A promise that resolves to the calculated weighted sum.
+ * @returns A promise that resolves to the calculated weighted average.
  */
 export async function calculateWeightedSum({
     analysisFeaturesGeoJSON,
     drawingPolygonGeoJSON,
     field
-}: WeightedSumParams): Promise<number> {
+}: IntersectionParams): Promise<number> {
     
     if (!analysisFeaturesGeoJSON || !drawingPolygonGeoJSON || !field) {
         throw new Error("Parámetros inválidos para el cálculo.");
     }
     
-    if (analysisFeaturesGeoJSON.length === 0) {
-        return 0; // No features to analyze
-    }
+    const unifiedMask = multiPolygon(
+        drawingPolygonGeoJSON.type === 'Polygon'
+            ? [drawingPolygonGeoJSON.coordinates]
+            : drawingPolygonGeoJSON.coordinates
+    );
 
     let totalWeightedSum = 0;
+    let totalIntersectionArea = 0;
 
-    for (const featureGeoJSON of analysisFeaturesGeoJSON) {
+    for (const featureGeoJSON of analysisFeaturesGeoJSON.features) {
         const featureValue = featureGeoJSON.properties?.[field];
 
         if (
@@ -42,29 +46,76 @@ export async function calculateWeightedSum({
             isFinite(featureValue)
         ) {
             try {
-                // The intersection is already calculated in the panel, here we just calculate the proportion
-                const intersectionArea = turf.area(featureGeoJSON.geometry);
-                const totalArea = turf.area(featureGeoJSON); // This seems incorrect, should be based on original feature area.
+                const intersectionResult = intersect(featureCollection([unifiedMask, featureGeoJSON]));
 
-                // This function is now simplified as the core logic moved to the panel.
-                // It assumes the passed `analysisFeaturesGeoJSON` are already the intersected portions.
-                const originalFeatureArea = featureGeoJSON.properties?.original_area; // Assuming we pass this in
-                
-                if (originalFeatureArea && originalFeatureArea > 0) {
-                     const proportion = intersectionArea / originalFeatureArea;
-                     totalWeightedSum += featureValue * proportion;
-                } else if (intersectionArea > 0) {
-                    // Fallback if original_area isn't passed - this will be incorrect for partial intersections.
-                    // The calling function should handle this correctly.
-                    totalWeightedSum += featureValue;
+                if (intersectionResult) {
+                    const intersectionArea = turfArea(intersectionResult);
+                    if (intersectionArea > 0) {
+                        const weightedValue = featureValue * intersectionArea;
+                        totalWeightedSum += weightedValue;
+                        totalIntersectionArea += intersectionArea;
+                    }
                 }
-
             } catch (error) {
-                console.warn(`Error processing area for a feature:`, error);
+                console.warn(`Error procesando intersección para una entidad:`, error);
                 continue;
             }
         }
     }
 
-    return totalWeightedSum;
+    return totalIntersectionArea > 0 ? totalWeightedSum / totalIntersectionArea : 0;
+}
+
+/**
+ * Calculates a proportional sum of a numeric field based on the intersection
+ * with a drawing polygon.
+ * @param params - The parameters for the calculation.
+ * @returns A promise that resolves to the calculated proportional sum.
+ */
+export async function calculateProportionalSum({
+    analysisFeaturesGeoJSON,
+    drawingPolygonGeoJSON,
+    field
+}: IntersectionParams): Promise<number> {
+    
+    if (!analysisFeaturesGeoJSON || !drawingPolygonGeoJSON || !field) {
+        throw new Error("Parámetros inválidos para el cálculo.");
+    }
+    
+    const unifiedMask = multiPolygon(
+        drawingPolygonGeoJSON.type === 'Polygon'
+            ? [drawingPolygonGeoJSON.coordinates]
+            : drawingPolygonGeoJSON.coordinates
+    );
+    
+    let totalProportionalSum = 0;
+
+    for (const featureGeoJSON of analysisFeaturesGeoJSON.features) {
+        const featureValue = featureGeoJSON.properties?.[field];
+
+        if (
+            featureGeoJSON.geometry &&
+            (featureGeoJSON.geometry.type === 'Polygon' || featureGeoJSON.geometry.type === 'MultiPolygon') &&
+            typeof featureValue === 'number' &&
+            isFinite(featureValue)
+        ) {
+            try {
+                const intersectionResult = intersect(featureCollection([unifiedMask, featureGeoJSON]));
+                
+                if (intersectionResult) {
+                    const intersectionArea = turfArea(intersectionResult);
+                    const originalArea = turfArea(featureGeoJSON);
+
+                    if (originalArea > 0) {
+                        const proportion = intersectionArea / originalArea;
+                        totalProportionalSum += featureValue * proportion;
+                    }
+                }
+            } catch (error) {
+                console.warn(`Error procesando intersección para una entidad:`, error);
+                continue;
+            }
+        }
+    }
+    return totalProportionalSum;
 }
