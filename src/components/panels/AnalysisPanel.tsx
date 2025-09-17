@@ -16,8 +16,8 @@ import GeoJSON from 'ol/format/GeoJSON';
 import VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
 import * as turf from '@turf/turf';
-import bboxClip from '@turf/bbox-clip';
-import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as TurfMultiPolygon, BBox, FeatureCollection as TurfFeatureCollection } from 'geojson';
+import intersect from '@turf/intersect';
+import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as TurfMultiPolygon, BBox, FeatureCollection as TurfFeatureCollection, Geometry as TurfGeometry } from 'geojson';
 
 
 interface AnalysisPanelProps {
@@ -88,35 +88,48 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     }
 
     const outputName = clipOutputName.trim() || `Recorte de ${inputLayer.name}`;
-    const format = new GeoJSON({ featureProjection: 'EPSG:3857' });
+    const format = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
 
     const maskFeatures = maskSource.getFeatures();
-    const maskGeoJSON = format.writeFeaturesObject(maskFeatures);
-    const maskBbox = turf.bbox(maskGeoJSON);
+    const maskGeoJSON = format.writeFeaturesObject(maskFeatures) as TurfFeatureCollection<TurfPolygon | TurfMultiPolygon>;
+    
+    // Union of all mask polygons into one for efficient clipping
+    let maskPolygon: TurfFeature<TurfPolygon | TurfMultiPolygon> | null = null;
+    if (maskGeoJSON.features.length > 1) {
+        let unioned = maskGeoJSON.features[0];
+        for (let i = 1; i < maskGeoJSON.features.length; i++) {
+            unioned = turf.union(unioned, maskGeoJSON.features[i]);
+        }
+        maskPolygon = unioned as TurfFeature<TurfPolygon | TurfMultiPolygon>;
+    } else {
+        maskPolygon = maskGeoJSON.features[0];
+    }
+
+    if (!maskPolygon) {
+        toast({ description: "La capa de máscara no contiene una geometría válida.", variant: "destructive" });
+        return;
+    }
 
     const inputFeatures = inputSource.getFeatures();
-    const inputGeoJSON = format.writeFeaturesObject(inputFeatures);
+    const inputGeoJSON = format.writeFeaturesObject(inputFeatures) as TurfFeatureCollection;
 
-    const clippedFeaturesGeoJSON: TurfFeature[] = [];
+    const clippedFeaturesGeoJSON: TurfFeature<TurfGeometry>[] = [];
 
     for (const feature of inputGeoJSON.features) {
         try {
-            const clippedFeature = bboxClip(feature as TurfFeature, maskBbox);
-
-            // **CRITICAL FILTERING LOGIC**
-            if (clippedFeature.geometry && clippedFeature.geometry.coordinates && clippedFeature.geometry.coordinates.length > 0) {
-                // For Polygons/MultiPolygons, the first array of coordinates should also not be empty.
-                if (Array.isArray(clippedFeature.geometry.coordinates[0]) && clippedFeature.geometry.coordinates[0].length > 0) {
-                    clippedFeaturesGeoJSON.push(clippedFeature);
-                }
+            const intersectionResult = intersect(maskPolygon, feature);
+            if (intersectionResult) {
+                // Keep original properties, but with new intersected geometry
+                intersectionResult.properties = feature.properties;
+                clippedFeaturesGeoJSON.push(intersectionResult);
             }
         } catch (e) {
-            console.warn("Error clipping a feature, skipping it.", e);
+            console.warn("Error intersecting a feature, skipping it.", e);
         }
     }
     
     if (clippedFeaturesGeoJSON.length > 0) {
-        const formatForReading = new GeoJSON({ featureProjection: 'EPSG:3857' });
+        const formatForReading = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
         
         const finalOLFeatures = formatForReading.readFeatures({
             type: 'FeatureCollection',
