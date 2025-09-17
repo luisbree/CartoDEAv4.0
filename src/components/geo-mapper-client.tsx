@@ -1038,6 +1038,8 @@ export default function GeoMapperClient() {
             onToggleCollapse={() => togglePanelCollapse('analysis')}
             onClosePanel={() => togglePanelMinimize('analysis')}
             onMouseDownHeader={(e) => handlePanelMouseDown(e, 'analysis')}
+            allLayers={layerManagerHook.layers}
+            onAddLayer={(layer: MapLayer, bringToTop?: boolean) => layerManagerHook.addLayer(layer, bringToTop)}
             style={{ top: `${panels.analysis.position.y}px`, left: `${panels.analysis.position.x}px`, zIndex: panels.analysis.zIndex }}
           />
         )}

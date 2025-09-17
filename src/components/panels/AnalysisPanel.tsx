@@ -1,9 +1,23 @@
 
 "use client";
 
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import DraggablePanel from './DraggablePanel';
-import { DraftingCompass } from 'lucide-react';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DraftingCompass, Scissors, Layers, CircleDotDashed } from 'lucide-react';
+import type { MapLayer, VectorMapLayer } from '@/lib/types';
+import { useToast } from '@/hooks/use-toast';
+import { nanoid } from 'nanoid';
+import GeoJSON from 'ol/format/GeoJSON';
+import VectorSource from 'ol/source/Vector';
+import VectorLayer from 'ol/layer/Vector';
+import * as turf from '@turf/turf';
+import bboxClip from '@turf/bbox-clip';
+
 
 interface AnalysisPanelProps {
   panelRef: React.RefObject<HTMLDivElement>;
@@ -11,8 +25,18 @@ interface AnalysisPanelProps {
   onToggleCollapse: () => void;
   onClosePanel: () => void;
   onMouseDownHeader: (e: React.MouseEvent<HTMLDivElement>) => void;
+  allLayers: MapLayer[];
+  onAddLayer: (layer: MapLayer, bringToTop?: boolean) => void;
   style?: React.CSSProperties;
 }
+
+const SectionHeader: React.FC<{ icon: React.ElementType; title: string; }> = ({ icon: Icon, title }) => (
+    <div className="flex items-center w-full">
+        <Icon className="h-4 w-4 mr-3 text-primary/90" />
+        <span className="text-sm font-semibold">{title}</span>
+    </div>
+);
+
 
 const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   panelRef,
@@ -20,8 +44,102 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   onToggleCollapse,
   onClosePanel,
   onMouseDownHeader,
+  allLayers,
+  onAddLayer,
   style,
 }) => {
+  const [activeAccordionItem, setActiveAccordionItem] = useState<string | undefined>('overlay-tools');
+  const [clipInputLayerId, setClipInputLayerId] = useState<string>('');
+  const [clipMaskLayerId, setClipMaskLayerId] = useState<string>('');
+  const [clipOutputName, setClipOutputName] = useState('');
+  const { toast } = useToast();
+
+  const vectorLayers = useMemo(() => {
+    return allLayers.filter((l): l is VectorMapLayer => l.type !== 'wms' && l.type !== 'gee' && l.type !== 'geotiff');
+  }, [allLayers]);
+  
+  const polygonLayers = useMemo(() => {
+    return vectorLayers.filter(l => {
+      const source = l.olLayer.getSource();
+      const features = source?.getFeatures();
+      if (features && features.length > 0) {
+        const geomType = features[0].getGeometry()?.getType();
+        return geomType === 'Polygon' || geomType === 'MultiPolygon';
+      }
+      return false;
+    });
+  }, [vectorLayers]);
+
+  const handleRunClip = () => {
+    const inputLayer = vectorLayers.find(l => l.id === clipInputLayerId);
+    const maskLayer = polygonLayers.find(l => l.id === clipMaskLayerId);
+
+    if (!inputLayer || !maskLayer) {
+        toast({ description: "Por favor, seleccione una capa de entrada y una de recorte.", variant: "destructive" });
+        return;
+    }
+    
+    const outputName = clipOutputName.trim() || `Recorte de ${inputLayer.name}`;
+    
+    const inputSource = inputLayer.olLayer.getSource();
+    const maskSource = maskLayer.olLayer.getSource();
+    if (!inputSource || !maskSource || maskSource.getFeatures().length === 0) return;
+
+    const geojsonFormat = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
+    const maskFeaturesGeoJSON = maskSource.getFeatures().map(f => geojsonFormat.writeFeatureObject(f));
+    const maskCollection = turf.featureCollection(maskFeaturesGeoJSON);
+    const clipBbox = turf.bbox(maskCollection);
+
+    const clippedFeaturesGeoJSON: any[] = [];
+    inputSource.getFeatures().forEach(feature => {
+        const featureGeoJSON = geojsonFormat.writeFeatureObject(feature);
+        try {
+            const clipped = bboxClip(featureGeoJSON as any, clipBbox);
+            if (clipped && clipped.geometry && clipped.geometry.coordinates.length > 0) {
+                // IMPORTANT: Keep the original properties, do not modify attributes.
+                const clippedFeatureWithProps = turf.feature(clipped.geometry, feature.getProperties());
+                clippedFeaturesGeoJSON.push(clippedFeatureWithProps);
+            }
+        } catch (error) {
+            console.warn(`Error de Turf.js al recortar la entidad ${feature.getId()}:`, error);
+        }
+    });
+
+    if (clippedFeaturesGeoJSON.length > 0) {
+        const features = new GeoJSON({ featureProjection: 'EPSG:3857' }).readFeatures({
+            type: 'FeatureCollection',
+            features: clippedFeaturesGeoJSON,
+        });
+        features.forEach(f => f.setId(nanoid()));
+        
+        const newLayerId = `clip-result-${nanoid()}`;
+        const source = new VectorSource({ features });
+        const olLayer = new VectorLayer({
+            source,
+            properties: { id: newLayerId, name: outputName, type: 'analysis' },
+            style: inputLayer.olLayer.getStyle(),
+        });
+
+        onAddLayer({
+            id: newLayerId,
+            name: outputName,
+            olLayer,
+            visible: true,
+            opacity: 1,
+            type: 'analysis',
+        }, true);
+        toast({ description: `Se creó la capa de recorte "${outputName}" con ${features.length} entidades.` });
+        
+        // Reset form
+        setClipInputLayerId('');
+        setClipMaskLayerId('');
+        setClipOutputName('');
+
+    } else {
+        toast({ description: "No se encontraron entidades resultantes de la operación de recorte." });
+    }
+  };
+
   return (
     <DraggablePanel
       title="Análisis Espacial"
@@ -35,16 +153,66 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
       showCloseButton={true}
       style={style}
       zIndex={style?.zIndex as number | undefined}
-      initialSize={{ width: 350, height: 400 }}
+      initialSize={{ width: 350, height: 450 }}
       minSize={{ width: 300, height: 250 }}
     >
-      <div className="flex flex-col h-full items-center justify-center p-4">
-        <DraftingCompass className="w-16 h-16 text-gray-500 mb-4" />
-        <h3 className="text-lg font-semibold text-white">Herramientas de Geoprocesamiento</h3>
-        <p className="text-sm text-center text-gray-400 mt-2">
-          Este panel contendrá herramientas de análisis como Buffer, Intersección, Unión Espacial y más.
-        </p>
-      </div>
+       <Accordion
+          type="single"
+          collapsible
+          value={activeAccordionItem}
+          onValueChange={setActiveAccordionItem}
+          className="w-full space-y-1"
+        >
+            <AccordionItem value="overlay-tools" className="border-b-0 bg-white/5 rounded-md">
+              <AccordionTrigger className="p-3 hover:no-underline hover:bg-white/10 rounded-t-md data-[state=open]:rounded-b-none">
+                <SectionHeader icon={Layers} title="Herramientas de Superposición" />
+              </AccordionTrigger>
+              <AccordionContent className="p-3 pt-2 space-y-3 border-t border-white/10 bg-transparent rounded-b-md">
+                  <div className="space-y-1">
+                      <Label className="text-xs font-semibold">Recorte (Clip)</Label>
+                      <div className="space-y-2 p-2 border border-white/10 rounded-md">
+                          <div>
+                              <Label htmlFor="clip-input-layer" className="text-xs">Capa de Entrada (a recortar)</Label>
+                              <Select value={clipInputLayerId} onValueChange={setClipInputLayerId}>
+                                <SelectTrigger id="clip-input-layer" className="h-8 text-xs bg-black/20"><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
+                                <SelectContent className="bg-gray-700 text-white border-gray-600">
+                                  {vectorLayers.map(l => <SelectItem key={l.id} value={l.id} className="text-xs">{l.name}</SelectItem>)}
+                                </SelectContent>
+                              </Select>
+                          </div>
+                          <div>
+                              <Label htmlFor="clip-mask-layer" className="text-xs">Capa de Recorte (molde)</Label>
+                              <Select value={clipMaskLayerId} onValueChange={setClipMaskLayerId}>
+                                <SelectTrigger id="clip-mask-layer" className="h-8 text-xs bg-black/20"><SelectValue placeholder="Seleccionar capa de polígonos..." /></SelectTrigger>
+                                <SelectContent className="bg-gray-700 text-white border-gray-600">
+                                  {polygonLayers.map(l => <SelectItem key={l.id} value={l.id} className="text-xs">{l.name}</SelectItem>)}
+                                </SelectContent>
+                              </Select>
+                          </div>
+                          <div>
+                              <Label htmlFor="clip-output-name" className="text-xs">Nombre de la Capa de Salida</Label>
+                              <Input id="clip-output-name" value={clipOutputName} onChange={(e) => setClipOutputName(e.target.value)} placeholder="Ej: Recorte_de_CapaX" className="h-8 text-xs bg-black/20"/>
+                          </div>
+                           <Button onClick={handleRunClip} size="sm" className="w-full h-8 text-xs" disabled={!clipInputLayerId || !clipMaskLayerId}>
+                              <Scissors className="mr-2 h-3.5 w-3.5" />
+                              Ejecutar Recorte
+                          </Button>
+                      </div>
+                  </div>
+              </AccordionContent>
+            </AccordionItem>
+            
+            <AccordionItem value="proximity-tools" className="border-b-0 bg-white/5 rounded-md">
+                <AccordionTrigger className="p-3 hover:no-underline hover:bg-white/10 rounded-t-md data-[state=open]:rounded-b-none">
+                    <SectionHeader icon={CircleDotDashed} title="Herramientas de Proximidad" />
+                </AccordionTrigger>
+                <AccordionContent className="p-3 pt-2 border-t border-white/10 bg-transparent rounded-b-md">
+                    <p className="text-center text-xs text-gray-400 p-4">
+                        Próximamente: Buffer, Unión Espacial y más.
+                    </p>
+                </AccordionContent>
+            </AccordionItem>
+        </Accordion>
     </DraggablePanel>
   );
 };
