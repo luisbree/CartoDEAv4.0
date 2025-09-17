@@ -100,7 +100,7 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
 
   const polygonLayers = useMemo(() => {
     return allLayers.filter((l): l is VectorMapLayer => {
-        if (l.type === 'vector' || l.type === 'wfs' || l.type === 'osm' || l.type === 'drawing') {
+        if (l.type === 'vector' || l.type === 'wfs' || l.type === 'osm' || l.type === 'drawing' || l.type === 'analysis') {
             const source = (l as VectorMapLayer).olLayer.getSource();
             if (source && source.getFeatures().length > 0) {
                 const geomType = source.getFeatures()[0].getGeometry()?.getType();
@@ -265,15 +265,18 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
         return;
     }
 
-    const geojsonFormat = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
-    const drawingFeatureGeoJSON = geojsonFormat.writeFeatureObject(analysisFeatureRef.current);
-    const clipBbox = turf.bbox(drawingFeatureGeoJSON);
+    const format4326 = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
+    const format3857 = new GeoJSON({ dataProjection: 'EPSG:4326', featureProjection: 'EPSG:3857' });
+    
+    const drawingFeature4326 = format4326.writeFeatureObject(analysisFeatureRef.current);
+    const clipBbox = turf.bbox(drawingFeature4326);
+    
     const intersectionResults: any[] = [];
 
     analysisSource.getFeatures().forEach(feature => {
-        const featureGeoJSONObject = geojsonFormat.writeFeatureObject(feature);
+        const feature4326 = format4326.writeFeatureObject(feature);
         try {
-            const clipped = bboxClip(featureGeoJSONObject as any, clipBbox);
+            const clipped = bboxClip(feature4326 as any, clipBbox);
             if (clipped && clipped.geometry && clipped.geometry.coordinates.length > 0) {
                 const clippedFeatureWithProps = turf.feature(clipped.geometry, feature.getProperties());
                 intersectionResults.push(clippedFeatureWithProps);
@@ -284,7 +287,7 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
     });
 
     if (intersectionResults.length > 0) {
-        const features = new GeoJSON({ featureProjection: 'EPSG:3857' }).readFeatures({
+        const features = format3857.readFeatures({
             type: 'FeatureCollection',
             features: intersectionResults,
         });
@@ -321,25 +324,26 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
 
     const analysisSource = layer.olLayer.getSource();
     if (!analysisSource) return;
-
-    const geojsonFormat = new GeoJSON({ featureProjection: 'EPSG:3857' });
-    const drawingFeatureGeoJSON = geojsonFormat.writeFeatureObject(analysisFeatureRef.current) as TurfFeature<TurfPolygon>;
-    const clipBbox = turf.bbox(drawingFeatureGeoJSON);
     
+    const format4326 = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
+    
+    const drawingFeature4326 = format4326.writeFeatureObject(analysisFeatureRef.current);
+    const clipBbox = turf.bbox(drawingFeature4326);
+
     let totalWeightedSum = 0;
     let totalIntersectionArea = 0;
-
+    
     analysisSource.getFeatures().forEach(feature => {
         const featureValue = feature.get(selectedField);
         if (typeof featureValue !== 'number' || !isFinite(featureValue)) {
             return;
         }
         
-        const analysisFeatureGeoJSON = geojsonFormat.writeFeatureObject(feature) as TurfFeature<TurfPolygon | TurfMultiPolygon>;
-        if (!analysisFeatureGeoJSON.geometry) return;
+        const analysisFeature4326 = format4326.writeFeatureObject(feature) as TurfFeature<TurfPolygon | TurfMultiPolygon>;
+        if (!analysisFeature4326.geometry) return;
 
         try {
-            const clippedFeature = bboxClip(analysisFeatureGeoJSON, clipBbox);
+            const clippedFeature = bboxClip(analysisFeature4326, clipBbox);
             
             if (clippedFeature && clippedFeature.geometry) {
                 const intersectionArea = turf.area(clippedFeature);
