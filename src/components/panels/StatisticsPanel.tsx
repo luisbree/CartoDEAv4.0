@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
@@ -6,7 +5,7 @@ import DraggablePanel from './DraggablePanel';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { BarChartHorizontal, Sigma, Maximize, Square, Eraser, Brush, Percent } from 'lucide-react';
+import { BarChartHorizontal, Sigma, Maximize, Square, Eraser, Brush, Percent, Target } from 'lucide-react';
 import type { VectorMapLayer } from '@/lib/types';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type Feature from 'ol/Feature';
@@ -20,7 +19,7 @@ import { Style, Fill, Stroke } from 'ol/style';
 import type { Map } from 'ol';
 import Draw, { createBox } from 'ol/interaction/Draw';
 import { cn } from '@/lib/utils';
-import { calculateWeightedSum, calculateProportionalSum } from '@/services/spatial-analysis';
+import { calculateSpatialStats } from '@/services/spatial-analysis';
 
 
 interface StatisticsPanelProps {
@@ -36,12 +35,12 @@ interface StatisticsPanelProps {
 }
 
 interface StatResults {
-  sum: number;
-  mean: number;
-  median: number;
-  count: number;
-  min: number;
-  max: number;
+  sum?: number;
+  mean?: number;
+  median?: number;
+  count?: number;
+  min?: number;
+  max?: number;
   weightedAverage?: number;
   proportionalSum?: number;
 }
@@ -176,7 +175,7 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
   }, [stopDrawing, toast]);
 
 
-  const handleCalculate = useCallback(() => {
+  const handleCalculateBasicStats = useCallback(() => {
     if (!layer || !selectedField) {
       setResults(null);
       return;
@@ -212,15 +211,12 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
     setResults({ sum, mean, median, count, min, max });
   }, [layer, selectedField, selectedFeatures]);
 
-  const performIntersectionCalculation = useCallback(async (
-    calculationFn: (params: any) => Promise<number>,
-    resultKey: 'weightedAverage' | 'proportionalSum'
-  ) => {
+  const performSpatialAnalysis = useCallback(async () => {
     if (!layer || !selectedField || !analysisFeatureRef.current) {
-        toast({ description: "Seleccione capa, campo y defina un área de análisis.", variant: "destructive" });
+        toast({ description: "Seleccione capa, campo y defina un área de análisis por dibujo.", variant: "destructive" });
         return;
     }
-    toast({ description: "Realizando cálculo espacial..." });
+    toast({ description: "Realizando análisis espacial..." });
 
     const analysisSource = layer.olLayer.getSource();
     if (!analysisSource || analysisSource.getFeatures().length === 0) return;
@@ -230,19 +226,18 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
     const drawingPolygonGeoJSON = format.writeFeatureObject(analysisFeatureRef.current).geometry;
     
     try {
-        const resultValue = await calculationFn({
+        const { weightedAverage, proportionalSum } = await calculateSpatialStats({
             analysisFeaturesGeoJSON,
             drawingPolygonGeoJSON,
             field: selectedField
         });
-
-        setResults(prev => ({
-            ...(prev || { sum: 0, mean: 0, median: 0, count: 0, min: 0, max: 0 }),
-            [resultKey]: resultValue,
-        }));
-        toast({ description: "Cálculo completado." });
+        
+        // Clear previous results and set only the spatial ones
+        setResults({ weightedAverage, proportionalSum });
+        
+        toast({ description: "Análisis espacial completado." });
     } catch (error: any) {
-        console.error(`Error during ${resultKey} calculation:`, error);
+        console.error(`Error during spatial analysis calculation:`, error);
         toast({ title: "Error de Cálculo", description: error.message, variant: "destructive" });
     }
   }, [layer, selectedField, toast]);
@@ -315,33 +310,23 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
 
             <div className="flex items-center gap-2 flex-wrap">
                  <Button 
-                    onClick={handleCalculate} 
+                    onClick={handleCalculateBasicStats} 
                     disabled={!selectedField} 
-                    className="h-8 text-xs border-white/30 bg-black/20 flex-grow text-white hover:text-black"
+                    className="h-8 text-xs border-white/30 bg-black/20 flex-grow text-white hover:bg-white hover:text-black"
                     variant="secondary"
                 >
                     <Sigma className="mr-2 h-4 w-4" />
                     Estadísticas
                 </Button>
                  <Button 
-                    onClick={() => performIntersectionCalculation(calculateWeightedSum, 'weightedAverage')} 
+                    onClick={performSpatialAnalysis}
                     disabled={!selectedField || !analysisFeatureRef.current} 
-                    className="h-8 text-xs border-white/30 bg-black/20 text-white hover:text-black"
+                    className="h-8 text-xs border-white/30 bg-black/20 flex-grow text-white hover:bg-white hover:text-black"
                     variant="secondary"
-                    title={!analysisFeatureRef.current ? "Defina un área de análisis primero" : ""}
+                    title={!analysisFeatureRef.current ? "Defina un área de análisis por dibujo primero" : ""}
                 >
-                    <Maximize className="mr-2 h-4 w-4" />
-                    Prom. Ponderado
-                </Button>
-                <Button 
-                    onClick={() => performIntersectionCalculation(calculateProportionalSum, 'proportionalSum')}
-                    disabled={!selectedField || !analysisFeatureRef.current} 
-                    className="h-8 text-xs border-white/30 bg-black/20 text-white hover:text-black"
-                    variant="secondary"
-                    title={!analysisFeatureRef.current ? "Defina un área de análisis primero" : ""}
-                >
-                    <Percent className="mr-2 h-4 w-4" />
-                    Suma Proporcional
+                    <Target className="mr-2 h-4 w-4" />
+                    Análisis Espacial
                 </Button>
             </div>
 
@@ -349,12 +334,13 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
                 <div className="pt-2 border-t border-white/10">
                     <Table>
                         <TableBody>
-                            <TableRow><TableCell className="text-xs text-gray-300 p-1.5">Suma</TableCell><TableCell className="text-xs text-white p-1.5 text-right font-mono">{results.sum.toLocaleString(undefined, { maximumFractionDigits: 2 })}</TableCell></TableRow>
-                            <TableRow><TableCell className="text-xs text-gray-300 p-1.5">Promedio</TableCell><TableCell className="text-xs text-white p-1.5 text-right font-mono">{results.mean.toLocaleString(undefined, { maximumFractionDigits: 2 })}</TableCell></TableRow>
-                            <TableRow><TableCell className="text-xs text-gray-300 p-1.5">Mediana</TableCell><TableCell className="text-xs text-white p-1.5 text-right font-mono">{results.median.toLocaleString(undefined, { maximumFractionDigits: 2 })}</TableCell></TableRow>
-                            <TableRow><TableCell className="text-xs text-gray-300 p-1.5">Mínimo</TableCell><TableCell className="text-xs text-white p-1.5 text-right font-mono">{results.min.toLocaleString(undefined, { maximumFractionDigits: 2 })}</TableCell></TableRow>
-                            <TableRow><TableCell className="text-xs text-gray-300 p-1.5">Máximo</TableCell><TableCell className="text-xs text-white p-1.5 text-right font-mono">{results.max.toLocaleString(undefined, { maximumFractionDigits: 2 })}</TableCell></TableRow>
-                            <TableRow><TableCell className="text-xs text-gray-300 p-1.5">Cantidad</TableCell><TableCell className="text-xs text-white p-1.5 text-right font-mono">{results.count.toLocaleString()}</TableCell></TableRow>
+                            {results.sum !== undefined && <TableRow><TableCell className="text-xs text-gray-300 p-1.5">Suma</TableCell><TableCell className="text-xs text-white p-1.5 text-right font-mono">{results.sum.toLocaleString(undefined, { maximumFractionDigits: 2 })}</TableCell></TableRow>}
+                            {results.mean !== undefined && <TableRow><TableCell className="text-xs text-gray-300 p-1.5">Promedio</TableCell><TableCell className="text-xs text-white p-1.5 text-right font-mono">{results.mean.toLocaleString(undefined, { maximumFractionDigits: 2 })}</TableCell></TableRow>}
+                            {results.median !== undefined && <TableRow><TableCell className="text-xs text-gray-300 p-1.5">Mediana</TableCell><TableCell className="text-xs text-white p-1.5 text-right font-mono">{results.median.toLocaleString(undefined, { maximumFractionDigits: 2 })}</TableCell></TableRow>}
+                            {results.min !== undefined && <TableRow><TableCell className="text-xs text-gray-300 p-1.5">Mínimo</TableCell><TableCell className="text-xs text-white p-1.5 text-right font-mono">{results.min.toLocaleString(undefined, { maximumFractionDigits: 2 })}</TableCell></TableRow>}
+                            {results.max !== undefined && <TableRow><TableCell className="text-xs text-gray-300 p-1.5">Máximo</TableCell><TableCell className="text-xs text-white p-1.5 text-right font-mono">{results.max.toLocaleString(undefined, { maximumFractionDigits: 2 })}</TableCell></TableRow>}
+                            {results.count !== undefined && <TableRow><TableCell className="text-xs text-gray-300 p-1.5">Cantidad</TableCell><TableCell className="text-xs text-white p-1.5 text-right font-mono">{results.count.toLocaleString()}</TableCell></TableRow>}
+                            
                             {results.proportionalSum !== undefined && (
                                 <TableRow className="bg-primary/20">
                                     <TableCell className="text-xs text-primary-foreground p-1.5 font-semibold">Suma Proporcional</TableCell>
