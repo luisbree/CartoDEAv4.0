@@ -70,10 +70,9 @@ export const useFeatureInspection = ({
   const [selectedFeatures, setSelectedFeatures] = useState<Feature<Geometry>[]>([]);
   const [inspectedFeatureData, setInspectedFeatureData] = useState<PlainFeatureData[] | null>([]);
   const [currentInspectedLayerName, setCurrentInspectedLayerName] = useState<string | null>(null);
-  const rasterQueryOverlaysRef = useRef<Overlay[]>([]);
   
+  const rasterQueryOverlaysRef = useRef<Overlay[]>([]);
   const rasterQueryMarkersLayerRef = useRef<VectorLayer<VectorSource<Feature<Point>>> | null>(null);
-
   const selectInteractionRef = useRef<Select | null>(null);
   const dragBoxInteractionRef = useRef<DragBox | null>(null);
   
@@ -137,9 +136,14 @@ export const useFeatureInspection = ({
     setSelectedFeatures(featuresToSelect);
   }, [mapRef]);
   
-  // Effect to initialize the query markers layer
+  
+
   useEffect(() => {
-    if (isMapReady && mapRef.current && !rasterQueryMarkersLayerRef.current) {
+    if (!isMapReady || !mapRef.current) return;
+    const map = mapRef.current;
+
+    // --- Initialize the query markers layer if it doesn't exist ---
+    if (!rasterQueryMarkersLayerRef.current) {
         const markerSource = new VectorSource();
         const markerLayer = new VectorLayer({
             source: markerSource,
@@ -147,14 +151,8 @@ export const useFeatureInspection = ({
             properties: { id: 'raster-query-markers' }
         });
         rasterQueryMarkersLayerRef.current = markerLayer;
-        mapRef.current.addLayer(markerLayer);
+        map.addLayer(markerLayer);
     }
-  }, [isMapReady, mapRef]);
-  
-
-  useEffect(() => {
-    if (!isMapReady || !mapRef.current) return;
-    const map = mapRef.current;
 
     // --- Cleanup previous interactions ---
     if (selectInteractionRef.current) map.removeInteraction(selectInteractionRef.current);

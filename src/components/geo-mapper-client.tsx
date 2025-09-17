@@ -1017,7 +1017,6 @@ export default function GeoMapperClient() {
                 layer={statisticsLayer}
                 allLayers={layerManagerHook.layers}
                 selectedFeatures={featureInspectionHook.selectedFeatures}
-                drawingSource={drawingSourceRef.current}
                 onAddLayer={(layer: MapLayer, bringToTop?: boolean) => layerManagerHook.addLayer(layer, bringToTop)}
                 panelRef={statisticsPanelRef}
                 isCollapsed={panels.statistics.isCollapsed}
