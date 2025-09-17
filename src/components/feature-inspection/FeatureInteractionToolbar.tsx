@@ -3,7 +3,7 @@
 
 import React from 'react';
 import { Button } from '@/components/ui/button';
-import { BoxSelect, Eraser, Info } from 'lucide-react';
+import { BoxSelect, Eraser, Info, Crosshair } from 'lucide-react';
 import {
   Tooltip,
   TooltipContent,
@@ -66,6 +66,23 @@ const FeatureInteractionToolbar: React.FC<FeatureInteractionToolbarProps> = ({
           </TooltipTrigger>
           <TooltipContent side="bottom" className="bg-gray-700 text-white border-gray-600">
             <p className="text-xs">Seleccionar por clic o caja</p>
+          </TooltipContent>
+        </Tooltip>
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button 
+              onClick={() => handleToggleTool('queryRaster')}
+              className={`${iconButtonBaseClass} ${
+                activeTool === 'queryRaster' ? activeClass : inactiveClass
+              }`}
+              aria-label={activeTool === 'queryRaster' ? "Desactivar Consulta Raster" : "Activar Consulta Raster"}
+            >
+              <Crosshair className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" className="bg-gray-700 text-white border-gray-600">
+            <p className="text-xs">Consultar valor de capa ráster</p>
           </TooltipContent>
         </Tooltip>
 

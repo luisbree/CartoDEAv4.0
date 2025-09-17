@@ -106,7 +106,7 @@ export interface PlainFeatureData {
 // Types for tool management
 export type DrawToolId = 'Polygon' | 'LineString' | 'Point' | 'Rectangle' | 'FreehandPolygon';
 export type MeasureToolId = 'LineString' | 'Polygon';
-export type InteractionToolId = 'inspect' | 'selectBox';
+export type InteractionToolId = 'inspect' | 'selectBox' | 'queryRaster';
 export type MapActionToolId = 'zoomToArea';
 
 export interface ActiveTool {

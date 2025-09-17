@@ -2,15 +2,17 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import type { Map } from 'ol';
+import type { Map, MapBrowserEvent } from 'ol';
 import VectorLayer from 'ol/layer/Vector';
+import TileLayer from 'ol/layer/Tile';
+import TileWMS from 'ol/source/TileWMS';
 import type Feature from 'ol/Feature';
 import { Circle as CircleStyle, Fill, Stroke, Style } from 'ol/style';
 import { useToast } from "@/hooks/use-toast";
 import type { Geometry } from 'ol/geom';
 import Select, { type SelectEvent } from 'ol/interaction/Select';
 import DragBox from 'ol/interaction/DragBox';
-import { singleClick } from 'ol/events/condition';
+import { singleClick, never } from 'ol/events/condition';
 import type { PlainFeatureData, InteractionToolId } from '@/lib/types';
 
 interface UseFeatureInspectionProps {
@@ -107,27 +109,92 @@ export const useFeatureInspection = ({
     if (!isMapReady || !mapRef.current) return;
     const map = mapRef.current;
 
+    // --- Cleanup previous interactions ---
     if (selectInteractionRef.current) map.removeInteraction(selectInteractionRef.current);
     if (dragBoxInteractionRef.current) map.removeInteraction(dragBoxInteractionRef.current);
     selectInteractionRef.current = null;
     dragBoxInteractionRef.current = null;
     if (mapElementRef.current) mapElementRef.current.style.cursor = 'default';
 
+    // --- Handle tool deactivation ---
     if (!activeTool) {
       clearSelection();
       return;
     }
 
+    // --- Set cursor style ---
     if (mapElementRef.current) {
         mapElementRef.current.style.cursor = 'crosshair';
     }
+    
+    // --- Raster Query Logic ---
+    if (activeTool === 'queryRaster') {
+        const handleRasterQuery = async (e: MapBrowserEvent<any>) => {
+            const view = map.getView();
+            const viewResolution = view.getResolution();
+            if (!viewResolution) return;
 
+            let resultsFound = false;
+            toast({ description: "Consultando capas raster..." });
+
+            for (const layer of map.getAllLayers()) {
+                if (layer.getVisible() && layer instanceof TileLayer) {
+                    const source = layer.getSource();
+                    if (source instanceof TileWMS) {
+                        const url = source.getFeatureInfoUrl(
+                            e.coordinate,
+                            viewResolution,
+                            view.getProjection(),
+                            {'INFO_FORMAT': 'application/json', 'FEATURE_COUNT': '1'}
+                        );
+                        if (url) {
+                            const proxyUrl = `/api/geoserver-proxy?url=${encodeURIComponent(url)}`;
+                            try {
+                                const response = await fetch(proxyUrl);
+                                if (response.ok) {
+                                    const data = await response.json();
+                                    if (data.features && data.features.length > 0) {
+                                        resultsFound = true;
+                                        const properties = data.features[0].properties;
+                                        let resultText = `Capa: ${layer.get('name') || 'WMS'}`;
+                                        for (const key in properties) {
+                                            resultText += ` | ${key}: ${properties[key]}`;
+                                        }
+                                        toast({
+                                            title: "Valor de Píxel Encontrado",
+                                            description: resultText,
+                                            duration: 10000,
+                                        });
+                                    }
+                                }
+                            } catch (error) {
+                                console.error("Error en GetFeatureInfo:", error);
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (!resultsFound) {
+                toast({ description: "No se encontraron valores en las capas raster en este punto." });
+            }
+        };
+
+        map.on('singleclick', handleRasterQuery);
+        return () => {
+            map.un('singleclick', handleRasterQuery);
+            if (mapElementRef.current) mapElementRef.current.style.cursor = 'default';
+        };
+    }
+
+
+    // --- Vector Inspection and Selection Logic ---
     const select = new Select({
         style: highlightStyle,
         multi: true,
         condition: singleClick,
         filter: (feature, layer) => layer && !layer.get('isBaseLayer') && !layer.get('isDrawingLayer'),
-        useInteractingStyle: false, // Prevents select interaction from overriding feature styles
+        useInteractingStyle: false,
     });
     selectInteractionRef.current = select;
     map.addInteraction(select);
