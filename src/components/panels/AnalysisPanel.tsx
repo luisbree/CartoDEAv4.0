@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useMemo } from 'react';
@@ -15,9 +16,8 @@ import GeoJSON from 'ol/format/GeoJSON';
 import VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
 import bboxClip from '@turf/bbox-clip';
-import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as TurfMultiPolygon, BBox, FeatureCollection } from 'geojson';
+import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as TurfMultiPolygon, BBox } from 'geojson';
 import { flatten } from '@turf/turf';
-import * as turf from '@turf/turf';
 
 
 interface AnalysisPanelProps {
@@ -84,7 +84,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     
     const inputSource = inputLayer.olLayer.getSource();
     const maskSource = maskLayer.olLayer.getSource();
-    if (!inputSource || maskSource.getFeatures().length === 0) {
+    if (!inputSource || !maskSource || maskSource.getFeatures().length === 0) {
         toast({ description: "Una de las capas seleccionadas no tiene entidades.", variant: "destructive" });
         return;
     }
@@ -94,7 +94,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     
     const maskFeatures4326 = maskSource.getFeatures().map(f => format4326.writeFeatureObject(f) as TurfFeature<TurfPolygon | TurfMultiPolygon>);
     const maskCollection = { type: 'FeatureCollection', features: maskFeatures4326 };
-    const clipBbox = turf.bbox(maskCollection) as BBox;
+    const clipBbox = flatten(maskCollection).bbox as BBox;
 
     const finalClippedFeatures: TurfFeature<any>[] = [];
     
@@ -126,12 +126,14 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
             features: finalClippedFeatures,
         };
         const features = format3857.readFeatures(geojsonResult);
+        
+        // **CRITICAL FIX**: Ensure every new feature has a unique ID
         features.forEach(f => f.setId(nanoid()));
         
         const newLayerId = `clip-result-${nanoid()}`;
-        const source = new VectorSource({ features });
-        const olLayer = new VectorLayer({
-            source,
+        const newSource = new VectorSource({ features });
+        const newOlLayer = new VectorLayer({
+            source: newSource,
             properties: { id: newLayerId, name: outputName, type: 'analysis' },
             style: inputLayer.olLayer.getStyle(),
         });
@@ -139,7 +141,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         onAddLayer({
             id: newLayerId,
             name: outputName,
-            olLayer,
+            olLayer: newOlLayer,
             visible: true,
             opacity: 1,
             type: 'analysis',
@@ -233,4 +235,6 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+    
+
     
