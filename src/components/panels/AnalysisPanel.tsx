@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useMemo } from 'react';
@@ -18,6 +17,7 @@ import VectorLayer from 'ol/layer/Vector';
 import bboxClip from '@turf/bbox-clip';
 import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as TurfMultiPolygon, BBox, FeatureCollection } from 'geojson';
 import { flatten } from '@turf/turf';
+import * as turf from '@turf/turf';
 
 
 interface AnalysisPanelProps {
@@ -84,7 +84,10 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     
     const inputSource = inputLayer.olLayer.getSource();
     const maskSource = maskLayer.olLayer.getSource();
-    if (!inputSource || !maskSource || maskSource.getFeatures().length === 0) return;
+    if (!inputSource || maskSource.getFeatures().length === 0) {
+        toast({ description: "Una de las capas seleccionadas no tiene entidades.", variant: "destructive" });
+        return;
+    }
 
     const format4326 = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
     const format3857 = new GeoJSON({ dataProjection: 'EPSG:4326', featureProjection: 'EPSG:3857' });
@@ -100,12 +103,9 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         try {
             const clippedResult = bboxClip(feature4326, clipBbox);
             
-            // bboxClip can return a FeatureCollection if the input is complex.
-            // We need to flatten it to individual features.
             if (clippedResult.geometry.type === 'GeometryCollection') {
                 const flattened = flatten(clippedResult as TurfFeature<any>);
                 flattened.features.forEach(flatFeature => {
-                    // Create a new feature for each geometry, preserving properties
                     finalClippedFeatures.push({
                         type: 'Feature',
                         geometry: flatFeature.geometry,
@@ -121,10 +121,11 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     });
 
     if (finalClippedFeatures.length > 0) {
-        const features = format3857.readFeatures({
+        const geojsonResult = {
             type: 'FeatureCollection',
             features: finalClippedFeatures,
-        });
+        };
+        const features = format3857.readFeatures(geojsonResult);
         features.forEach(f => f.setId(nanoid()));
         
         const newLayerId = `clip-result-${nanoid()}`;
