@@ -6,7 +6,7 @@ import DraggablePanel from './DraggablePanel';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { BarChartHorizontal, Sigma, Maximize, Layers, Scissors, Square } from 'lucide-react';
+import { BarChartHorizontal, Sigma, Maximize, Layers, Scissors, Square, Eraser } from 'lucide-react';
 import type { MapLayer, VectorMapLayer } from '@/lib/types';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type Feature from 'ol/Feature';
@@ -215,6 +215,17 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
     }
   };
 
+  const handleClearAnalysisArea = useCallback(() => {
+    stopDrawing();
+    if (analysisLayerRef.current) {
+      analysisLayerRef.current.getSource()?.clear();
+    }
+    analysisFeatureRef.current = null;
+    setSelectedAnalysisLayerId('');
+    setResults(null);
+    toast({ description: "Área de análisis limpiada." });
+  }, [stopDrawing, toast]);
+
 
   const handleCalculate = useCallback(() => {
     if (!layer || !selectedField) {
@@ -361,6 +372,15 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
                             {polygonLayers.map(l => <SelectItem key={l.id} value={l.id} className="text-xs">{l.name}</SelectItem>)}
                         </SelectContent>
                     </Select>
+                    <Button
+                        onClick={handleClearAnalysisArea}
+                        size="icon"
+                        className="h-8 w-8 text-xs border-white/30 bg-black/20 hover:bg-red-500/20 hover:text-red-300"
+                        variant="outline"
+                        title="Limpiar área de análisis"
+                    >
+                        <Eraser className="h-4 w-4" />
+                    </Button>
                 </div>
             </div>
 
