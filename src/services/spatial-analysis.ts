@@ -2,7 +2,7 @@
 "use client";
 
 import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as TurfMultiPolygon, FeatureCollection as TurfFeatureCollection, Geometry as TurfGeometry } from 'geojson';
-import { area as turfArea, intersect, featureCollection, buffer as turfBuffer } from '@turf/turf';
+import { area as turfArea, intersect, featureCollection, buffer as turfBuffer, cleanCoords } from '@turf/turf';
 import { multiPolygon } from '@turf/helpers';
 import type Feature from 'ol/Feature';
 import GeoJSON from 'ol/format/GeoJSON';
@@ -114,7 +114,10 @@ export async function performBufferAnalysis({
     try {
         const featuresGeoJSON = format.writeFeaturesObject(features);
         
-        const bufferedGeoJSON = turfBuffer(featuresGeoJSON, distance, { units });
+        // Clean coordinates to prevent Turf.js errors with invalid geometries
+        const cleanedFeaturesGeoJSON = cleanCoords(featuresGeoJSON);
+        
+        const bufferedGeoJSON = turfBuffer(cleanedFeaturesGeoJSON, distance, { units });
         
         if (!bufferedGeoJSON || !bufferedGeoJSON.geometry) {
             throw new Error("Buffer operation resulted in empty geometry.");
