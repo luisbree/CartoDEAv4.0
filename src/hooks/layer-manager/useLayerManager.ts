@@ -663,7 +663,6 @@ export const useLayerManager = ({
         if (source) {
             const features = source.getFeatures();
             if (features.length > 0) {
-                // Convert features to plain data before passing to the panel
                 const plainData: PlainFeatureData[] = features.map(feature => ({
                     id: feature.getId() as string,
                     attributes: feature.getProperties(),
