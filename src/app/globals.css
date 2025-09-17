@@ -134,7 +134,7 @@ body {
   border-radius: 4px;
 }
 
-/* Custom styles for measurement tooltips */
+/* Custom styles for tooltips (shared base) */
 .ol-tooltip {
   position: relative;
   background: rgba(0, 0, 0, 0.6);
@@ -148,6 +148,8 @@ body {
   user-select: none;
   pointer-events: none; /* Make sure tooltips don't interfere with map events */
 }
+
+/* Specific style for measurement tooltips */
 .ol-tooltip-measure {
   opacity: 1;
   font-weight: bold;
@@ -170,6 +172,16 @@ body {
 }
 .ol-tooltip-static:before {
   border-top-color: #ffcc33;
+}
+
+/* New style for raster query tooltips */
+.ol-tooltip-query {
+  background-color: rgba(56, 189, 248, 0.8); /* A light blue color */
+  color: #075985; /* Dark blue text */
+  font-weight: bold;
+  border: 1px solid white;
+  padding: 3px 6px;
+  border-radius: 4px;
 }
 
 

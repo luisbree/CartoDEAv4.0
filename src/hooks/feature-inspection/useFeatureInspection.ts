@@ -17,6 +17,9 @@ import type { PlainFeatureData, InteractionToolId } from '@/lib/types';
 import { getGeeValueAtPoint } from '@/ai/flows/gee-flow';
 import { transform } from 'ol/proj';
 import type { GeeValueQueryInput } from '@/ai/flows/gee-types';
+import Overlay from 'ol/Overlay';
+import { nanoid } from 'nanoid';
+
 
 interface UseFeatureInspectionProps {
   mapRef: React.RefObject<Map | null>;
@@ -55,6 +58,7 @@ export const useFeatureInspection = ({
   const [selectedFeatures, setSelectedFeatures] = useState<Feature<Geometry>[]>([]);
   const [inspectedFeatureData, setInspectedFeatureData] = useState<PlainFeatureData[] | null>([]);
   const [currentInspectedLayerName, setCurrentInspectedLayerName] = useState<string | null>(null);
+  const [rasterQueryOverlays, setRasterQueryOverlays] = useState<Overlay[]>([]);
 
   const selectInteractionRef = useRef<Select | null>(null);
   const dragBoxInteractionRef = useRef<DragBox | null>(null);
@@ -75,6 +79,13 @@ export const useFeatureInspection = ({
     
   }, [toast]);
   
+  const clearRasterQueryOverlays = useCallback(() => {
+    if (mapRef.current) {
+        rasterQueryOverlays.forEach(overlay => mapRef.current!.removeOverlay(overlay));
+    }
+    setRasterQueryOverlays([]);
+  }, [rasterQueryOverlays, mapRef]);
+
   const clearSelection = useCallback(() => {
     if (selectInteractionRef.current) {
       selectInteractionRef.current.getFeatures().clear();
@@ -82,7 +93,8 @@ export const useFeatureInspection = ({
     setSelectedFeatures([]);
     setInspectedFeatureData(null);
     setCurrentInspectedLayerName(null);
-  }, []);
+    clearRasterQueryOverlays();
+  }, [clearRasterQueryOverlays]);
 
   const selectFeaturesById = useCallback((featureIds: string[]) => {
     if (!selectInteractionRef.current || !mapRef.current) return;
@@ -133,12 +145,25 @@ export const useFeatureInspection = ({
     // --- Raster Query Logic ---
     if (activeTool === 'queryRaster') {
         const handleRasterQuery = async (e: MapBrowserEvent<any>) => {
-            const view = map.getView();
-            const viewResolution = view.getResolution();
-            if (!viewResolution) return;
-
             let resultsFound = false;
             toast({ description: "Consultando capas raster..." });
+            
+            const createAndAddOverlay = (content: string) => {
+                const tooltipElement = document.createElement('div');
+                tooltipElement.className = 'ol-tooltip ol-tooltip-query';
+                tooltipElement.innerHTML = content;
+                
+                const overlay = new Overlay({
+                    element: tooltipElement,
+                    offset: [10, -10],
+                    positioning: 'bottom-left',
+                    position: e.coordinate,
+                });
+
+                map.addOverlay(overlay);
+                setRasterQueryOverlays(prev => [...prev, overlay]);
+                resultsFound = true;
+            };
 
             for (const layer of map.getAllLayers()) {
                 if (!layer.getVisible() || !(layer instanceof TileLayer)) continue;
@@ -147,6 +172,10 @@ export const useFeatureInspection = ({
                 
                 // Handle WMS layers
                 if (source instanceof TileWMS) {
+                    const view = map.getView();
+                    const viewResolution = view.getResolution();
+                    if (!viewResolution) continue;
+
                     const url = source.getFeatureInfoUrl(
                         e.coordinate,
                         viewResolution,
@@ -160,17 +189,18 @@ export const useFeatureInspection = ({
                             if (response.ok) {
                                 const data = await response.json();
                                 if (data.features && data.features.length > 0) {
-                                    resultsFound = true;
                                     const properties = data.features[0].properties;
-                                    let resultText = `Capa: ${layer.get('name') || 'WMS'}`;
+                                    let resultText = '';
                                     for (const key in properties) {
-                                        resultText += ` | ${key}: ${properties[key]}`;
+                                        // Simple heuristic to find a value-like property
+                                        if (typeof properties[key] === 'number' || (typeof properties[key] === 'string' && !isNaN(parseFloat(properties[key])))) {
+                                            resultText = `${parseFloat(properties[key]).toFixed(2)}`;
+                                            break;
+                                        }
                                     }
-                                    toast({
-                                        title: "Valor de Píxel Encontrado (WMS)",
-                                        description: resultText,
-                                        duration: 10000,
-                                    });
+                                    if (resultText) {
+                                      createAndAddOverlay(resultText);
+                                    }
                                 }
                             }
                         } catch (error) {
@@ -183,25 +213,18 @@ export const useFeatureInspection = ({
                 const geeParams = layer.get('geeParams') as GeeValueQueryInput | undefined;
                 if (layer.get('type') === 'gee' && geeParams) {
                     try {
-                        const [lon, lat] = transform(e.coordinate, view.getProjection(), 'EPSG:4326');
+                        const [lon, lat] = transform(e.coordinate, map.getView().getProjection(), 'EPSG:4326');
                         const result = await getGeeValueAtPoint({ ...geeParams, lon, lat });
 
                         if (result.value !== null && result.value !== undefined) {
-                            resultsFound = true;
                              let valueStr = result.value;
                              if (typeof valueStr === 'number') {
                                 valueStr = valueStr.toFixed(4);
                              }
-
-                            toast({
-                                title: "Valor de Píxel Encontrado (GEE)",
-                                description: `Capa: ${layer.get('name')} | Valor: ${valueStr}`,
-                                duration: 10000,
-                            });
+                            createAndAddOverlay(String(valueStr));
                         }
                     } catch (error: any) {
                         console.error("Error querying GEE value:", error);
-                        toast({ title: "Error de Consulta GEE", description: error.message, variant: "destructive" });
                     }
                 }
             }
