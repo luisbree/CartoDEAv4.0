@@ -5,9 +5,9 @@ import DraggablePanel from './DraggablePanel';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { BarChartHorizontal, Sigma, Maximize, Square, Eraser, Brush, Percent, Target } from 'lucide-react';
-import type { VectorMapLayer } from '@/lib/types';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { BarChartHorizontal, Sigma, Square, Eraser, Brush, Target } from 'lucide-react';
+import type { MapLayer, VectorMapLayer } from '@/lib/types';
+import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 import type Feature from 'ol/Feature';
 import type { Geometry, Polygon as OlPolygon } from 'ol/geom';
 import VectorSource from 'ol/source/Vector';
@@ -20,6 +20,8 @@ import type { Map } from 'ol';
 import Draw, { createBox } from 'ol/interaction/Draw';
 import { cn } from '@/lib/utils';
 import { calculateSpatialStats } from '@/services/spatial-analysis';
+import { multiPolygon } from '@turf/helpers';
+import type { Polygon as TurfPolygon, MultiPolygon as TurfMultiPolygon } from 'geojson';
 
 
 interface StatisticsPanelProps {
@@ -29,6 +31,7 @@ interface StatisticsPanelProps {
   onClosePanel: () => void;
   onMouseDownHeader: (e: React.MouseEvent<HTMLDivElement>) => void;
   layer: VectorMapLayer | null;
+  allLayers: MapLayer[];
   selectedFeatures: Feature<Geometry>[];
   style?: React.CSSProperties;
   mapRef: React.RefObject<Map | null>;
@@ -57,11 +60,13 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
   onClosePanel,
   onMouseDownHeader,
   layer,
+  allLayers,
   selectedFeatures,
   style,
   mapRef,
 }) => {
   const [selectedField, setSelectedField] = useState<string>('');
+  const [maskLayerId, setMaskLayerId] = useState<string>('');
   const [results, setResults] = useState<StatResults | null>(null);
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [activeDrawTool, setActiveDrawTool] = useState<'Rectangle' | 'FreehandPolygon' | null>(null);
@@ -87,6 +92,22 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
     }
     return Array.from(keys).sort();
   }, [layer]);
+
+  const polygonLayersForMask = useMemo(() => {
+    return allLayers.filter((l): l is VectorMapLayer => 
+        l.id !== layer?.id && // Exclude the layer being analyzed
+        (l.type === 'vector' || l.type === 'wfs' || l.type === 'osm' || l.type === 'drawing' || l.type === 'analysis')
+    ).filter(l => {
+      const source = l.olLayer.getSource();
+      const features = source?.getFeatures();
+      if (features && features.length > 0) {
+        const geomType = features[0].getGeometry()?.getType();
+        return geomType === 'Polygon' || geomType === 'MultiPolygon';
+      }
+      return false;
+    });
+  }, [allLayers, layer]);
+
 
   const stopDrawing = useCallback(() => {
       if (drawInteractionRef.current && mapRef.current) {
@@ -114,16 +135,27 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
       setSelectedField(numericFields[0] || '');
       setResults(null);
       setIsSelectionMode(false);
+      setMaskLayerId('');
       analysisFeatureRef.current = null;
       if (analysisLayerRef.current) {
         analysisLayerRef.current.getSource()?.clear();
       }
     }
   }, [layer, numericFields]);
+  
+  const handleSelectMaskLayer = (layerId: string) => {
+    setMaskLayerId(layerId);
+    // Using a layer as a mask is mutually exclusive with drawing a mask
+    handleClearAnalysisArea(false); // Don't show toast
+    if (layerId) {
+      toast({ description: `Se usará la capa seleccionada como área de análisis.` });
+    }
+  };
 
   const handleToggleDrawTool = useCallback((tool: 'Rectangle' | 'FreehandPolygon') => {
       if (!mapRef.current) return;
-
+      
+      setMaskLayerId(''); // Clear layer mask selection
       stopDrawing(); // Stop any current drawing first
 
       if (activeDrawTool === tool) { // If clicking the same tool, just deactivate it
@@ -164,14 +196,17 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
       });
   }, [mapRef, activeDrawTool, stopDrawing, toast]);
 
-  const handleClearAnalysisArea = useCallback(() => {
+  const handleClearAnalysisArea = useCallback((showToast = true) => {
     stopDrawing();
+    setMaskLayerId('');
     if (analysisLayerRef.current) {
       analysisLayerRef.current.getSource()?.clear();
     }
     analysisFeatureRef.current = null;
     setResults(null);
-    toast({ description: "Área de análisis limpiada." });
+    if (showToast) {
+        toast({ description: "Área de análisis limpiada." });
+    }
   }, [stopDrawing, toast]);
 
 
@@ -212,27 +247,50 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
   }, [layer, selectedField, selectedFeatures]);
 
   const performSpatialAnalysis = useCallback(async () => {
-    if (!layer || !selectedField || !analysisFeatureRef.current) {
-        toast({ description: "Seleccione capa, campo y defina un área de análisis por dibujo.", variant: "destructive" });
-        return;
+    if (!layer || !selectedField) {
+      toast({ description: "Seleccione una capa y un campo para analizar.", variant: "destructive" });
+      return;
     }
+
+    let maskGeometry: TurfPolygon | TurfMultiPolygon | null = null;
+    const format = new GeoJSON({ featureProjection: 'EPSG:3857' });
+    
+    if (maskLayerId) {
+        const maskLayer = polygonLayersForMask.find(l => l.id === maskLayerId);
+        const maskSource = maskLayer?.olLayer.getSource();
+        if (maskSource && maskSource.getFeatures().length > 0) {
+            const maskFeatures = maskSource.getFeatures();
+            const maskGeoJSON = format.writeFeaturesObject(maskFeatures);
+            const maskPolygons = maskGeoJSON.features.flatMap(f =>
+                f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.coordinates
+            );
+            if (maskPolygons.length > 0) {
+                maskGeometry = multiPolygon(maskPolygons).geometry;
+            }
+        }
+    } else if (analysisFeatureRef.current) {
+        maskGeometry = format.writeFeatureObject(analysisFeatureRef.current).geometry as TurfPolygon;
+    }
+
+    if (!maskGeometry) {
+      toast({ description: "Defina un área de análisis dibujando en el mapa o seleccionando una capa de polígonos.", variant: "destructive" });
+      return;
+    }
+
     toast({ description: "Realizando análisis espacial..." });
 
     const analysisSource = layer.olLayer.getSource();
     if (!analysisSource || analysisSource.getFeatures().length === 0) return;
     
-    const format = new GeoJSON({ featureProjection: 'EPSG:3857' });
     const analysisFeaturesGeoJSON = format.writeFeaturesObject(analysisSource.getFeatures());
-    const drawingPolygonGeoJSON = format.writeFeatureObject(analysisFeatureRef.current).geometry;
     
     try {
         const { weightedAverage, proportionalSum } = await calculateSpatialStats({
             analysisFeaturesGeoJSON,
-            drawingPolygonGeoJSON,
+            drawingPolygonGeoJSON: maskGeometry,
             field: selectedField
         });
         
-        // Clear previous results and set only the spatial ones
         setResults({ weightedAverage, proportionalSum });
         
         toast({ description: "Análisis espacial completado." });
@@ -240,7 +298,7 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
         console.error(`Error during spatial analysis calculation:`, error);
         toast({ title: "Error de Cálculo", description: error.message, variant: "destructive" });
     }
-  }, [layer, selectedField, toast]);
+  }, [layer, selectedField, toast, maskLayerId, polygonLayersForMask]);
   
 
   const panelTitle = `Estadísticas: ${layer?.name || ''}${isSelectionMode ? ' (Selección)' : ''}`;
@@ -274,9 +332,10 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
                     </SelectContent>
                 </Select>
             </div>
-            
+
             <div className="space-y-2">
-                <Label className="text-xs">Definir Área de Análisis por Dibujo</Label>
+              <Label className="text-xs">Definir Área de Análisis</Label>
+              <div className="space-y-2 p-2 border border-white/10 rounded-md">
                 <div className="flex items-center gap-2">
                      <Button 
                         onClick={() => handleToggleDrawTool('Rectangle')}
@@ -297,7 +356,7 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
                         <Brush className="h-4 w-4" />
                     </Button>
                     <Button
-                        onClick={handleClearAnalysisArea}
+                        onClick={() => handleClearAnalysisArea(true)}
                         size="icon"
                         className="h-8 w-8 text-xs border-white/30 bg-black/20 hover:bg-red-500/20 hover:text-red-300"
                         variant="outline"
@@ -306,13 +365,27 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
                         <Eraser className="h-4 w-4" />
                     </Button>
                 </div>
+                <div className="flex items-center gap-2">
+                  <div className="flex-grow border-t border-dashed border-gray-600"></div>
+                  <span className="text-xs text-gray-400">o</span>
+                  <div className="flex-grow border-t border-dashed border-gray-600"></div>
+                </div>
+                 <Select value={maskLayerId} onValueChange={handleSelectMaskLayer} disabled={polygonLayersForMask.length === 0}>
+                    <SelectTrigger className="h-8 text-xs bg-black/20">
+                        <SelectValue placeholder="Usar capa como área..." />
+                    </SelectTrigger>
+                    <SelectContent className="bg-gray-700 text-white border-gray-600">
+                        {polygonLayersForMask.map(l => <SelectItem key={l.id} value={l.id} className="text-xs">{l.name}</SelectItem>)}
+                    </SelectContent>
+                </Select>
+              </div>
             </div>
 
             <div className="flex items-center gap-2 flex-wrap">
                  <Button 
                     onClick={handleCalculateBasicStats} 
                     disabled={!selectedField} 
-                    className="h-8 text-xs border-white/30 bg-black/20 flex-grow text-white hover:bg-white hover:text-black"
+                    className="h-8 text-xs border-white/30 bg-black/20 flex-grow text-white hover:bg-white/5"
                     variant="secondary"
                 >
                     <Sigma className="mr-2 h-4 w-4" />
@@ -320,10 +393,10 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
                 </Button>
                  <Button 
                     onClick={performSpatialAnalysis}
-                    disabled={!selectedField || !analysisFeatureRef.current} 
-                    className="h-8 text-xs border-white/30 bg-black/20 flex-grow text-white hover:bg-white hover:text-black"
+                    disabled={!selectedField || (!analysisFeatureRef.current && !maskLayerId)} 
+                    className="h-8 text-xs border-white/30 bg-black/20 flex-grow text-white hover:bg-white/5"
                     variant="secondary"
-                    title={!analysisFeatureRef.current ? "Defina un área de análisis por dibujo primero" : ""}
+                    title={!analysisFeatureRef.current && !maskLayerId ? "Defina un área de análisis primero" : ""}
                 >
                     <Target className="mr-2 h-4 w-4" />
                     Análisis Espacial
