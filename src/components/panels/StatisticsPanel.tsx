@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
@@ -143,10 +144,28 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
     }
   }, [layer, numericFields]);
   
+ const handleClearAnalysisArea = useCallback((showToast = true) => {
+    stopDrawing();
+    setMaskLayerId('');
+    if (analysisLayerRef.current) {
+      analysisLayerRef.current.getSource()?.clear();
+    }
+    analysisFeatureRef.current = null;
+    setResults(null);
+    if (showToast) {
+        toast({ description: "Área de análisis limpiada." });
+    }
+  }, [stopDrawing, toast]);
+
+
   const handleSelectMaskLayer = (layerId: string) => {
     setMaskLayerId(layerId);
-    // Using a layer as a mask is mutually exclusive with drawing a mask
-    handleClearAnalysisArea(false); // Don't show toast
+    // Mutually exclusive: Clear any drawn area if a layer is selected
+    if (analysisLayerRef.current) {
+        analysisLayerRef.current.getSource()?.clear();
+        analysisFeatureRef.current = null;
+    }
+    stopDrawing();
     if (layerId) {
       toast({ description: `Se usará la capa seleccionada como área de análisis.` });
     }
@@ -155,13 +174,16 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
   const handleToggleDrawTool = useCallback((tool: 'Rectangle' | 'FreehandPolygon') => {
       if (!mapRef.current) return;
       
-      setMaskLayerId(''); // Clear layer mask selection
+      const isDeactivating = activeDrawTool === tool;
       stopDrawing(); // Stop any current drawing first
-
-      if (activeDrawTool === tool) { // If clicking the same tool, just deactivate it
+      
+      if (isDeactivating) {
           setActiveDrawTool(null);
           return;
       }
+      
+      // Mutually exclusive: Clear layer mask selection when starting to draw
+      setMaskLayerId('');
       
       setActiveDrawTool(tool);
       toast({ description: `Haz clic y arrastra en el mapa para dibujar un ${tool === 'Rectangle' ? 'rectángulo' : 'área a mano alzada'}.` });
@@ -195,19 +217,6 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
           stopDrawing();
       });
   }, [mapRef, activeDrawTool, stopDrawing, toast]);
-
-  const handleClearAnalysisArea = useCallback((showToast = true) => {
-    stopDrawing();
-    setMaskLayerId('');
-    if (analysisLayerRef.current) {
-      analysisLayerRef.current.getSource()?.clear();
-    }
-    analysisFeatureRef.current = null;
-    setResults(null);
-    if (showToast) {
-        toast({ description: "Área de análisis limpiada." });
-    }
-  }, [stopDrawing, toast]);
 
 
   const handleCalculateBasicStats = useCallback(() => {
