@@ -15,6 +15,9 @@ import { nanoid } from 'nanoid';
 import GeoJSON from 'ol/format/GeoJSON';
 import VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
+import * as turf from '@turf/turf';
+import bboxClip from '@turf/bbox-clip';
+import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as TurfMultiPolygon, BBox, FeatureCollection as TurfFeatureCollection } from 'geojson';
 
 
 interface AnalysisPanelProps {
@@ -68,7 +71,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     });
   }, [vectorLayers]);
 
-  const handleRunClip = () => {
+ const handleRunClip = () => {
     const inputLayer = vectorLayers.find(l => l.id === clipInputLayerId);
     const maskLayer = polygonLayers.find(l => l.id === clipMaskLayerId);
 
@@ -77,30 +80,60 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         return;
     }
     
-    const outputName = clipOutputName.trim() || `Recorte de ${inputLayer.name}`;
-    
     const inputSource = inputLayer.olLayer.getSource();
     const maskSource = maskLayer.olLayer.getSource();
     if (!inputSource || !maskSource || maskSource.getFeatures().length === 0) {
         toast({ description: "Una de las capas seleccionadas no tiene entidades.", variant: "destructive" });
         return;
     }
+
+    const outputName = clipOutputName.trim() || `Recorte de ${inputLayer.name}`;
+    const format = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
+
+    // Convert mask layer to a single GeoJSON feature collection for bbox calculation
+    const maskFeatures = maskSource.getFeatures();
+    const maskGeoJSON = format.writeFeaturesObject(maskFeatures);
     
-    const maskExtent = maskSource.getExtent();
+    // Calculate the bounding box of the entire mask layer
+    const maskBbox = turf.bbox(maskGeoJSON);
 
-    const finalClippedFeatures = inputSource.getFeatures().filter(feature => {
-        const featureGeom = feature.getGeometry();
-        return featureGeom ? featureGeom.intersectsExtent(maskExtent) : false;
-    }).map(f => {
-        const clone = f.clone();
-        clone.setId(nanoid()); // Assign a new unique ID to the clone
-        return clone;
-    });
+    // Convert input features to GeoJSON
+    const inputFeatures = inputSource.getFeatures();
+    const inputGeoJSON = format.writeFeaturesObject(inputFeatures);
 
+    const clippedFeaturesGeoJSON: TurfFeature[] = [];
 
-    if (finalClippedFeatures.length > 0) {
+    // Iterate through each feature of the input layer and clip it
+    for (const feature of inputGeoJSON.features) {
+        try {
+            // Clip the individual feature
+            const clippedFeature = bboxClip(feature, maskBbox);
+
+            // *** THIS IS THE CRITICAL FIX ***
+            // Check if the clipped geometry has actual coordinates.
+            // bboxClip can return a geometry with an empty coordinates array if there's no overlap.
+            if (clippedFeature.geometry && clippedFeature.geometry.coordinates && clippedFeature.geometry.coordinates.length > 0) {
+                // Ensure nested arrays for polygons also aren't empty
+                if (Array.isArray(clippedFeature.geometry.coordinates[0]) && clippedFeature.geometry.coordinates[0].length > 0) {
+                    clippedFeaturesGeoJSON.push(clippedFeature);
+                }
+            }
+        } catch (e) {
+            console.warn("Error clipping a feature, skipping it.", e);
+        }
+    }
+    
+    if (clippedFeaturesGeoJSON.length > 0) {
+        const formatForReading = new GeoJSON({ dataProjection: 'EPSG:4326', featureProjection: 'EPSG:3857' });
+        const finalOLFeatures = formatForReading.readFeatures({
+            type: 'FeatureCollection',
+            features: clippedFeaturesGeoJSON
+        });
+
+        finalOLFeatures.forEach(f => f.setId(nanoid()));
+
         const newLayerId = `clip-result-${nanoid()}`;
-        const newSource = new VectorSource({ features: finalClippedFeatures });
+        const newSource = new VectorSource({ features: finalOLFeatures });
         const newOlLayer = new VectorLayer({
             source: newSource,
             properties: { id: newLayerId, name: outputName, type: 'analysis' },
@@ -115,7 +148,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
             opacity: 1,
             type: 'analysis',
         }, true);
-        toast({ description: `Se creó la capa de recorte "${outputName}" con ${finalClippedFeatures.length} entidades.` });
+        toast({ description: `Se creó la capa de recorte "${outputName}" con ${finalOLFeatures.length} entidades.` });
         
         setClipInputLayerId('');
         setClipMaskLayerId('');
@@ -125,6 +158,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         toast({ description: "No se encontraron entidades resultantes de la operación de recorte." });
     }
   };
+
 
   return (
     <DraggablePanel
