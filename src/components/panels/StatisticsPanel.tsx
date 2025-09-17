@@ -253,64 +253,6 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
   }, [layer, selectedField, selectedFeatures]);
 
   
- const handleExtractByDrawing = useCallback(() => {
-    if (!layer || !analysisFeatureRef.current) {
-        toast({ description: "Seleccione una capa y defina un área de análisis.", variant: "destructive" });
-        return;
-    }
-    const format = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
-    const formatForMap = new GeoJSON({ dataProjection: 'EPSG:4326', featureProjection: 'EPSG:3857' });
-    const inputSource = layer.olLayer.getSource();
-    if (!inputSource || inputSource.getFeatures().length === 0) return;
-    
-    const maskGeoJSON = format.writeFeatureObject(analysisFeatureRef.current) as TurfFeature<TurfPolygon | TurfMultiPolygon>;
-    
-    const maskPolygons = maskGeoJSON.geometry.type === 'Polygon' 
-        ? [maskGeoJSON.geometry.coordinates] 
-        : maskGeoJSON.geometry.coordinates;
-    const unifiedMask = multiPolygon(maskPolygons);
-    
-    const inputGeoJSON = format.writeFeaturesObject(inputSource.getFeatures()) as FeatureCollection;
-    const clippedFeaturesGeoJSON: TurfFeature<GeoJSONGeometry>[] = [];
-
-    for (const inputFeature of inputGeoJSON.features) {
-        try {
-            const collectionForIntersect = featureCollection([unifiedMask, inputFeature]);
-            const intersectionResult = intersect(collectionForIntersect);
-            if (intersectionResult && intersectionResult.geometry && intersectionResult.geometry.coordinates.length > 0) {
-                intersectionResult.properties = inputFeature.properties;
-                clippedFeaturesGeoJSON.push(intersectionResult);
-            }
-        } catch (e) { console.warn("Error intersecting a feature", e); }
-    }
-
-    if (clippedFeaturesGeoJSON.length > 0) {
-        const finalOLFeatures = formatForMap.readFeatures({ type: 'FeatureCollection', features: clippedFeaturesGeoJSON });
-        finalOLFeatures.forEach(f => f.setId(nanoid()));
-        
-        const layerName = `Recorte de ${layer.name}`;
-        const source = new VectorSource({ features: finalOLFeatures });
-        const layerId = `intersection-${nanoid()}`;
-        const olLayer = new VectorLayer({
-            source,
-            properties: { id: layerId, name: layerName, type: 'vector' },
-            style: layer.olLayer.getStyle(),
-        });
-        onAddLayer({
-            id: layerId,
-            name: layerName,
-            olLayer,
-            visible: true,
-            opacity: 1,
-            type: 'vector',
-        }, true);
-        toast({ description: `Se creó la capa de recorte "${layerName}" con ${finalOLFeatures.length} entidades.` });
-    } else {
-        toast({ description: "No se encontraron entidades dentro del área para crear una capa de recorte." });
-    }
-}, [layer, toast, onAddLayer]);
-
-
   const handleCalculateWeightedSum = useCallback(async () => {
     if (!layer || !selectedField || !analysisFeatureRef.current) {
         toast({ description: "Seleccione capa, campo y defina un área de análisis.", variant: "destructive" });
@@ -426,33 +368,23 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
                  <Button 
                     onClick={handleCalculate} 
                     disabled={!selectedField} 
-                    className="h-8 text-xs border-white/30 bg-black/20 flex-grow"
+                    className="h-8 text-xs border-white/30 bg-black/20 flex-grow text-white hover:text-black"
                     variant="secondary"
                 >
                     <Sigma className="mr-2 h-4 w-4" />
                     Calcular Estadísticas
                 </Button>
                  <Button 
-                    onClick={handleExtractByDrawing} 
-                    disabled={!analysisFeatureRef.current || !layer}
-                    className="h-8 text-xs border-white/30 bg-black/20"
-                    variant="outline"
-                    title={!analysisFeatureRef.current ? "Defina un área de análisis primero" : "Extraer entidades de la capa por el área de análisis"}
+                    onClick={handleCalculateWeightedSum} 
+                    disabled={!selectedField || !analysisFeatureRef.current} 
+                    className="h-8 text-xs border-white/30 bg-black/20 text-white hover:text-black"
+                    variant="secondary"
+                    title={!analysisFeatureRef.current ? "Defina un área de análisis primero" : ""}
                 >
-                    <Scissors className="mr-2 h-4 w-4" />
-                    Extraer
+                    <Maximize className="mr-2 h-4 w-4" />
+                    Promedio Ponderado
                 </Button>
             </div>
-             <Button 
-                onClick={handleCalculateWeightedSum} 
-                disabled={!selectedField || !analysisFeatureRef.current} 
-                className="w-full h-8 text-xs border-white/30 bg-black/20"
-                variant="secondary"
-                title={!analysisFeatureRef.current ? "Defina un área de análisis primero" : ""}
-            >
-                <Maximize className="mr-2 h-4 w-4" />
-                Calcular Promedio Ponderado por Área
-            </Button>
 
             {results && (
                 <div className="pt-2 border-t border-white/10">
@@ -480,3 +412,5 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
 };
 
 export default StatisticsPanel;
+
+    
