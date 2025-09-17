@@ -16,7 +16,7 @@ import GeoJSON from 'ol/format/GeoJSON';
 import VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
 import * as turf from '@turf/turf';
-import bboxClip from '@turf/bbox-clip';
+import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as TurfMultiPolygon } from 'geojson';
 
 
 interface AnalysisPanelProps {
@@ -85,29 +85,44 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     const maskSource = maskLayer.olLayer.getSource();
     if (!inputSource || !maskSource || maskSource.getFeatures().length === 0) return;
 
+    // 1. Prepare formatters for projection transformation
     const format4326 = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
     const format3857 = new GeoJSON({ dataProjection: 'EPSG:4326', featureProjection: 'EPSG:3857' });
     
+    // 2. Transform mask features to GeoJSON in EPSG:4326
     const maskFeatures4326 = maskSource.getFeatures().map(f => format4326.writeFeatureObject(f));
-    const maskCollection = turf.featureCollection(maskFeatures4326 as any);
-    const clipBbox = turf.bbox(maskCollection);
+    const maskCollection = turf.featureCollection(maskFeatures4326 as TurfFeature<TurfPolygon | TurfMultiPolygon>[]);
+    // Union all mask polygons into one for clipping
+    const maskUnion = maskCollection.features.reduce((acc, feature) => {
+        return acc ? turf.union(acc, feature) : feature;
+    }, null as TurfFeature<TurfPolygon | TurfMultiPolygon> | null);
+
+    if (!maskUnion) {
+        toast({ description: "La capa de máscara no contiene geometrías válidas para unir.", variant: "destructive" });
+        return;
+    }
 
     const clippedFeaturesGeoJSON: any[] = [];
     
+    // 3. Iterate, transform, and clip each input feature
     inputSource.getFeatures().forEach(feature => {
-        const feature4326 = format4326.writeFeatureObject(feature);
+        const feature4326 = format4326.writeFeatureObject(feature) as TurfFeature<any>;
         try {
-            const clipped = bboxClip(feature4326 as any, clipBbox);
-            if (clipped && clipped.geometry && clipped.geometry.coordinates.length > 0) {
-                const clippedFeatureWithProps = turf.feature(clipped.geometry, feature.getProperties());
+            // Use turf.intersect for precise clipping
+            const intersection = turf.intersect(feature4326, maskUnion);
+
+            if (intersection) {
+                // Keep original properties, but use the new clipped geometry
+                const clippedFeatureWithProps = turf.feature(intersection.geometry, feature.getProperties());
                 clippedFeaturesGeoJSON.push(clippedFeatureWithProps);
             }
         } catch (error) {
-            console.warn(`Error de Turf.js al recortar la entidad ${feature.getId()}:`, error);
+            console.warn(`Error de Turf.js al intersectar la entidad ${feature.getId()}:`, error);
         }
     });
 
     if (clippedFeaturesGeoJSON.length > 0) {
+        // 4. Transform results back to map's projection and create new layer
         const features = format3857.readFeatures({
             type: 'FeatureCollection',
             features: clippedFeaturesGeoJSON,
@@ -219,3 +234,5 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
+    
