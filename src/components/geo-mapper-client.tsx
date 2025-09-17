@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { MapPin, Database, Wrench, ListTree, ListChecks, Sparkles, ClipboardCheck, Library, LifeBuoy, Printer, Server, BrainCircuit, Camera, Loader2, SlidersHorizontal, ZoomIn, Undo2, BarChartHorizontal } from 'lucide-react';
+import { MapPin, Database, Wrench, ListTree, ListChecks, Sparkles, ClipboardCheck, Library, LifeBuoy, Printer, Server, BrainCircuit, Camera, Loader2, SlidersHorizontal, ZoomIn, Undo2, BarChartHorizontal, DraftingCompass } from 'lucide-react';
 import { Style, Fill, Stroke, Circle as CircleStyle, Text as TextStyle } from 'ol/style';
 import { transform, transformExtent } from 'ol/proj';
 import type { Extent } from 'ol/extent';
@@ -37,6 +37,7 @@ import HelpPanel from '@/components/panels/HelpPanel';
 import PrintComposerPanel from '@/components/panels/PrintComposerPanel';
 import GeeProcessingPanel from '@/components/panels/GeeProcessingPanel';
 import StatisticsPanel from '@/components/panels/StatisticsPanel';
+import AnalysisPanel from '@/components/panels/AnalysisPanel';
 import WfsLoadingIndicator from '@/components/feedback/WfsLoadingIndicator';
 import LocationSearch from '@/components/location-search/LocationSearch';
 import BaseLayerSelector from '@/components/layer-manager/BaseLayerSelector';
@@ -130,6 +131,7 @@ const PANEL_PADDING = 8;
 const panelToggleConfigs = [
   { id: 'wfsLibrary', IconComponent: Library, name: "Biblioteca de Servidores" },
   { id: 'tools', IconComponent: Wrench, name: "Herramientas" },
+  { id: 'analysis', IconComponent: DraftingCompass, name: "Análisis Espacial" },
   { id: 'trello', IconComponent: ClipboardCheck, name: "Trello" },
   { id: 'attributes', IconComponent: ListChecks, name: "Atributos" },
   { id: 'printComposer', IconComponent: Printer, name: "Impresión" },
@@ -151,6 +153,7 @@ export default function GeoMapperClient() {
   const printComposerPanelRef = useRef<HTMLDivElement>(null);
   const geePanelRef = useRef<HTMLDivElement>(null);
   const statisticsPanelRef = useRef<HTMLDivElement>(null);
+  const analysisPanelRef = useRef<HTMLDivElement>(null);
   const trelloPopupRef = useRef<Window | null>(null);
   const [isMounted, setIsMounted] = useState(false);
 
@@ -175,6 +178,7 @@ export default function GeoMapperClient() {
     printComposerPanelRef,
     geePanelRef,
     statisticsPanelRef,
+    analysisPanelRef,
     mapAreaRef,
     panelWidth: PANEL_WIDTH,
     panelPadding: PANEL_PADDING,
@@ -1025,6 +1029,17 @@ export default function GeoMapperClient() {
                 style={{ top: `${panels.statistics.position.y}px`, left: `${panels.statistics.position.x}px`, zIndex: panels.statistics.zIndex }}
                 mapRef={mapRef}
             />
+        )}
+
+        {isMounted && panels.analysis && !panels.analysis.isMinimized && (
+          <AnalysisPanel
+            panelRef={analysisPanelRef}
+            isCollapsed={panels.analysis.isCollapsed}
+            onToggleCollapse={() => togglePanelCollapse('analysis')}
+            onClosePanel={() => togglePanelMinimize('analysis')}
+            onMouseDownHeader={(e) => handlePanelMouseDown(e, 'analysis')}
+            style={{ top: `${panels.analysis.position.y}px`, left: `${panels.analysis.position.x}px`, zIndex: panels.analysis.zIndex }}
+          />
         )}
 
         {isMounted && panels.ai && !panels.ai.isMinimized && (
