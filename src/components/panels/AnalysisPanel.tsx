@@ -15,9 +15,9 @@ import { nanoid } from 'nanoid';
 import GeoJSON from 'ol/format/GeoJSON';
 import VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
-import * as turf from '@turf/turf';
 import bboxClip from '@turf/bbox-clip';
-import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as TurfMultiPolygon, BBox } from 'geojson';
+import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as TurfMultiPolygon, BBox, FeatureCollection } from 'geojson';
+import { flatten } from '@turf/turf';
 
 
 interface AnalysisPanelProps {
@@ -89,27 +89,41 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     const format4326 = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
     const format3857 = new GeoJSON({ dataProjection: 'EPSG:4326', featureProjection: 'EPSG:3857' });
     
-    const maskFeatures4326 = maskSource.getFeatures().map(f => format4326.writeFeatureObject(f));
-    const maskCollection = turf.featureCollection(maskFeatures4326 as TurfFeature<TurfPolygon | TurfMultiPolygon>[]);
+    const maskFeatures4326 = maskSource.getFeatures().map(f => format4326.writeFeatureObject(f) as TurfFeature<TurfPolygon | TurfMultiPolygon>);
+    const maskCollection = { type: 'FeatureCollection', features: maskFeatures4326 };
     const clipBbox = turf.bbox(maskCollection) as BBox;
 
-    const clippedFeaturesGeoJSON: any[] = [];
+    const finalClippedFeatures: TurfFeature<any>[] = [];
     
     inputSource.getFeatures().forEach(feature => {
         const feature4326 = format4326.writeFeatureObject(feature) as TurfFeature<any>;
         try {
-            const clippedFeature = bboxClip(feature4326, clipBbox);
-            // bboxClip returns a feature with the original properties.
-            clippedFeaturesGeoJSON.push(clippedFeature);
+            const clippedResult = bboxClip(feature4326, clipBbox);
+            
+            // bboxClip can return a FeatureCollection if the input is complex.
+            // We need to flatten it to individual features.
+            if (clippedResult.geometry.type === 'GeometryCollection') {
+                const flattened = flatten(clippedResult as TurfFeature<any>);
+                flattened.features.forEach(flatFeature => {
+                    // Create a new feature for each geometry, preserving properties
+                    finalClippedFeatures.push({
+                        type: 'Feature',
+                        geometry: flatFeature.geometry,
+                        properties: { ...feature4326.properties }
+                    });
+                });
+            } else {
+                 finalClippedFeatures.push(clippedResult);
+            }
         } catch (error) {
             console.warn(`Error de Turf.js al recortar la entidad ${feature.getId()}:`, error);
         }
     });
 
-    if (clippedFeaturesGeoJSON.length > 0) {
+    if (finalClippedFeatures.length > 0) {
         const features = format3857.readFeatures({
             type: 'FeatureCollection',
-            features: clippedFeaturesGeoJSON,
+            features: finalClippedFeatures,
         });
         features.forEach(f => f.setId(nanoid()));
         
