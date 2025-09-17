@@ -23,6 +23,7 @@ import KML from 'ol/format/KML';
 import shp from 'shpjs';
 import JSZip from 'jszip';
 import { bbox as bboxStrategy } from 'ol/loadingstrategy';
+import type { GeeValueQueryInput } from '@/ai/flows/gee-types';
 
 
 interface UseLayerManagerProps {
@@ -337,7 +338,7 @@ export const useLayerManager = ({
       }
   }, [isMapReady, mapRef, addLayer, updateGeoServerDiscoveredLayerState, toast]);
 
-  const addGeeLayerToMap = useCallback((tileUrl: string, layerName: string) => {
+  const addGeeLayerToMap = useCallback((tileUrl: string, layerName: string, geeParams: Omit<GeeValueQueryInput, 'lon' | 'lat'>) => {
     if (!mapRef.current) return;
 
     const layerId = `gee-${nanoid()}`;
@@ -353,6 +354,7 @@ export const useLayerManager = ({
         id: layerId,
         name: layerName,
         type: 'gee',
+        geeParams: geeParams, // Store the params for querying later
       }
     });
 

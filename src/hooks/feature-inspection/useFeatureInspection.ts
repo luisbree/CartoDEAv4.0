@@ -14,6 +14,9 @@ import Select, { type SelectEvent } from 'ol/interaction/Select';
 import DragBox from 'ol/interaction/DragBox';
 import { singleClick, never } from 'ol/events/condition';
 import type { PlainFeatureData, InteractionToolId } from '@/lib/types';
+import { getGeeValueAtPoint } from '@/ai/flows/gee-flow';
+import { transform } from 'ol/proj';
+import type { GeeValueQueryInput } from '@/ai/flows/gee-types';
 
 interface UseFeatureInspectionProps {
   mapRef: React.RefObject<Map | null>;
@@ -138,39 +141,67 @@ export const useFeatureInspection = ({
             toast({ description: "Consultando capas raster..." });
 
             for (const layer of map.getAllLayers()) {
-                if (layer.getVisible() && layer instanceof TileLayer) {
-                    const source = layer.getSource();
-                    if (source instanceof TileWMS) {
-                        const url = source.getFeatureInfoUrl(
-                            e.coordinate,
-                            viewResolution,
-                            view.getProjection(),
-                            {'INFO_FORMAT': 'application/json', 'FEATURE_COUNT': '1'}
-                        );
-                        if (url) {
-                            const proxyUrl = `/api/geoserver-proxy?url=${encodeURIComponent(url)}`;
-                            try {
-                                const response = await fetch(proxyUrl);
-                                if (response.ok) {
-                                    const data = await response.json();
-                                    if (data.features && data.features.length > 0) {
-                                        resultsFound = true;
-                                        const properties = data.features[0].properties;
-                                        let resultText = `Capa: ${layer.get('name') || 'WMS'}`;
-                                        for (const key in properties) {
-                                            resultText += ` | ${key}: ${properties[key]}`;
-                                        }
-                                        toast({
-                                            title: "Valor de Píxel Encontrado",
-                                            description: resultText,
-                                            duration: 10000,
-                                        });
+                if (!layer.getVisible() || !(layer instanceof TileLayer)) continue;
+                
+                const source = layer.getSource();
+                
+                // Handle WMS layers
+                if (source instanceof TileWMS) {
+                    const url = source.getFeatureInfoUrl(
+                        e.coordinate,
+                        viewResolution,
+                        view.getProjection(),
+                        {'INFO_FORMAT': 'application/json', 'FEATURE_COUNT': '1'}
+                    );
+                    if (url) {
+                        const proxyUrl = `/api/geoserver-proxy?url=${encodeURIComponent(url)}`;
+                        try {
+                            const response = await fetch(proxyUrl);
+                            if (response.ok) {
+                                const data = await response.json();
+                                if (data.features && data.features.length > 0) {
+                                    resultsFound = true;
+                                    const properties = data.features[0].properties;
+                                    let resultText = `Capa: ${layer.get('name') || 'WMS'}`;
+                                    for (const key in properties) {
+                                        resultText += ` | ${key}: ${properties[key]}`;
                                     }
+                                    toast({
+                                        title: "Valor de Píxel Encontrado (WMS)",
+                                        description: resultText,
+                                        duration: 10000,
+                                    });
                                 }
-                            } catch (error) {
-                                console.error("Error en GetFeatureInfo:", error);
                             }
+                        } catch (error) {
+                            console.error("Error en GetFeatureInfo:", error);
                         }
+                    }
+                }
+                
+                // Handle GEE layers
+                const geeParams = layer.get('geeParams') as GeeValueQueryInput | undefined;
+                if (layer.get('type') === 'gee' && geeParams) {
+                    try {
+                        const [lon, lat] = transform(e.coordinate, view.getProjection(), 'EPSG:4326');
+                        const result = await getGeeValueAtPoint({ ...geeParams, lon, lat });
+
+                        if (result.value !== null && result.value !== undefined) {
+                            resultsFound = true;
+                             let valueStr = result.value;
+                             if (typeof valueStr === 'number') {
+                                valueStr = valueStr.toFixed(4);
+                             }
+
+                            toast({
+                                title: "Valor de Píxel Encontrado (GEE)",
+                                description: `Capa: ${layer.get('name')} | Valor: ${valueStr}`,
+                                duration: 10000,
+                            });
+                        }
+                    } catch (error: any) {
+                        console.error("Error querying GEE value:", error);
+                        toast({ title: "Error de Consulta GEE", description: error.message, variant: "destructive" });
                     }
                 }
             }

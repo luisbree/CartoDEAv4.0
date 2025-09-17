@@ -10,8 +10,8 @@
 import { ai } from '@/ai/genkit';
 import ee from '@google/earthengine';
 import { promisify } from 'util';
-import type { GeeTileLayerInput, GeeTileLayerOutput, GeeVectorizationInput } from './gee-types';
-import { GeeTileLayerInputSchema, GeeTileLayerOutputSchema, GeeVectorizationInputSchema } from './gee-types';
+import type { GeeTileLayerInput, GeeTileLayerOutput, GeeVectorizationInput, GeeValueQueryInput } from './gee-types';
+import { GeeTileLayerInputSchema, GeeTileLayerOutputSchema, GeeVectorizationInputSchema, GeeValueQueryInputSchema } from './gee-types';
 import { z } from 'zod';
 
 // Main exported function for the frontend to call
@@ -22,6 +22,11 @@ export async function getGeeTileLayer(input: GeeTileLayerInput): Promise<GeeTile
 // New exported function for vectorization
 export async function getGeeVectorDownloadUrl(input: GeeVectorizationInput): Promise<{ downloadUrl: string }> {
     return geeVectorizationFlow(input);
+}
+
+// New function to get value at a point
+export async function getGeeValueAtPoint(input: GeeValueQueryInput): Promise<{ value: number | string | null }> {
+    return geeGetValueAtPointFlow(input);
 }
 
 
@@ -41,7 +46,7 @@ export async function authenticateWithGee(): Promise<{ success: boolean; message
 
 const getImageForProcessing = (input: GeeTileLayerInput) => {
     const { aoi, bandCombination, startDate, endDate, minElevation, maxElevation } = input;
-    const geometry = ee.Geometry.Rectangle([aoi.minLon, aoi.minLat, aoi.maxLon, aoi.maxLat]);
+    const geometry = aoi ? ee.Geometry.Rectangle([aoi.minLon, aoi.minLat, aoi.maxLon, aoi.maxLat]) : ee.Geometry.Point([0,0]);
       
     let finalImage;
     let visParams: { bands?: string[]; min: number; max: number; gamma?: number, palette?: string[] };
@@ -53,9 +58,12 @@ const getImageForProcessing = (input: GeeTileLayerInput) => {
 
     if (bandCombination !== 'JRC_WATER_OCCURRENCE' && bandCombination !== 'OPENLANDMAP_SOC' && bandCombination !== 'DYNAMIC_WORLD' && bandCombination !== 'NASADEM_ELEVATION') {
         let s2ImageCollection = ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
-          .filterBounds(geometry)
           .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 20));
         
+        if (geometry) {
+            s2ImageCollection = s2ImageCollection.filterBounds(geometry);
+        }
+
         if (startDate && endDate) {
             s2ImageCollection = s2ImageCollection.filterDate(startDate, endDate);
         } else {
@@ -87,7 +95,10 @@ const getImageForProcessing = (input: GeeTileLayerInput) => {
             break;
         }
     } else if (bandCombination === 'DYNAMIC_WORLD') {
-        const dwCollection = ee.ImageCollection('GOOGLE/DYNAMICWORLD/V1').filterBounds(geometry).filterDate(startDate, endDate);
+        const dwCollection = ee.ImageCollection('GOOGLE/DYNAMICWORLD/V1').filterDate(startDate, endDate);
+        if (geometry) {
+            dwCollection.filterBounds(geometry);
+        }
         finalImage = ee.Image(dwCollection.mode()).select('label');
         visParams = { min: 0, max: 8, palette: DYNAMIC_WORLD_PALETTE };
     } else if (bandCombination === 'NASADEM_ELEVATION') {
@@ -189,6 +200,64 @@ const geeVectorizationFlow = ai.defineFlow(
         });
     }
 );
+
+const DYNAMIC_WORLD_LABELS: Record<number, string> = {
+    0: 'Agua', 1: 'Árboles', 2: 'Césped', 3: 'Vegetación Inundada',
+    4: 'Cultivos', 5: 'Arbustos', 6: 'Área Construida',
+    7: 'Suelo Desnudo', 8: 'Nieve y Hielo'
+};
+
+
+// Define the Genkit flow for getting a value at a point
+const geeGetValueAtPointFlow = ai.defineFlow(
+    {
+        name: 'geeGetValueAtPointFlow',
+        inputSchema: GeeValueQueryInputSchema,
+        outputSchema: z.object({ value: z.union([z.number(), z.string(), z.null()]) }),
+    },
+    async (input) => {
+        await initializeEe();
+        
+        const point = ee.Geometry.Point([input.lon, input.lat]);
+        
+        // We reuse getImageForProcessing, but we don't need AOI for a point query.
+        // We pass a dummy AOI because the function expects it.
+        const { finalImage } = getImageForProcessing({
+            aoi: { minLon: 0, minLat: 0, maxLon: 0, maxLat: 0 }, // Dummy AOI
+            zoom: 15, // Dummy zoom
+            bandCombination: input.bandCombination,
+            startDate: input.startDate,
+            endDate: input.endDate,
+            minElevation: input.minElevation,
+            maxElevation: input.maxElevation,
+        });
+
+        return new Promise((resolve, reject) => {
+            const dictionary = finalImage.reduceRegion({
+                reducer: ee.Reducer.first(),
+                geometry: point,
+                scale: 10, // Use a reasonable scale
+            });
+
+            dictionary.evaluate((result: any, error: string) => {
+                if (error) {
+                    console.error("GEE reduceRegion Error:", error);
+                    return reject(new Error(`Error al consultar el valor en GEE: ${error}`));
+                }
+                
+                const bandName = finalImage.bandNames().get(0).getInfo();
+                let value = result ? result[bandName] : null;
+
+                if (value !== null && input.bandCombination === 'DYNAMIC_WORLD') {
+                    value = DYNAMIC_WORLD_LABELS[value as number] || `Clase Desconocida (${value})`;
+                }
+                
+                resolve({ value });
+            });
+        });
+    }
+);
+
 
 
 // --- Earth Engine Initialization ---

@@ -40,3 +40,16 @@ export const GeeVectorizationInputSchema = z.object({
     endDate: z.string().describe("The end date for the Dynamic World image search in YYYY-MM-DD format."),
 });
 export type GeeVectorizationInput = z.infer<typeof GeeVectorizationInputSchema>;
+
+// New schema for querying value at a point
+export const GeeValueQueryInputSchema = z.object({
+  lon: z.number().describe("The longitude of the point to query."),
+  lat: z.number().describe("The latitude of the point to query."),
+  // Reuse fields from the tile layer input to reconstruct the image
+  bandCombination: GeeTileLayerInputSchema.shape.bandCombination,
+  startDate: GeeTileLayerInputSchema.shape.startDate,
+  endDate: GeeTileLayerInputSchema.shape.endDate,
+  minElevation: GeeTileLayerInputSchema.shape.minElevation,
+  maxElevation: GeeTileLayerInputSchema.shape.maxElevation,
+});
+export type GeeValueQueryInput = z.infer<typeof GeeValueQueryInputSchema>;
