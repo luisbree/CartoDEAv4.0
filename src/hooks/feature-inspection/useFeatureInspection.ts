@@ -7,9 +7,9 @@ import VectorLayer from 'ol/layer/Vector';
 import TileLayer from 'ol/layer/Tile';
 import TileWMS from 'ol/source/TileWMS';
 import type Feature from 'ol/Feature';
-import { Circle as CircleStyle, Fill, Stroke, Style } from 'ol/style';
+import { Circle as CircleStyle, Fill, Stroke, Style, RegularShape } from 'ol/style';
 import { useToast } from "@/hooks/use-toast";
-import type { Geometry } from 'ol/geom';
+import type { Geometry, Point } from 'ol/geom';
 import Select, { type SelectEvent } from 'ol/interaction/Select';
 import DragBox from 'ol/interaction/DragBox';
 import { singleClick, never } from 'ol/events/condition';
@@ -19,6 +19,7 @@ import { transform } from 'ol/proj';
 import type { GeeValueQueryInput } from '@/ai/flows/gee-types';
 import Overlay from 'ol/Overlay';
 import { nanoid } from 'nanoid';
+import VectorSource from 'ol/source/Vector';
 
 
 interface UseFeatureInspectionProps {
@@ -46,6 +47,17 @@ const highlightStyle = new Style({
   zIndex: Infinity,
 });
 
+const crossStyle = new Style({
+    image: new RegularShape({
+        fill: new Fill({ color: 'rgba(255, 0, 0, 0.7)' }),
+        stroke: new Stroke({ color: 'rgba(255, 0, 0, 0.7)', width: 1.5 }),
+        points: 4,
+        radius: 6,
+        radius2: 0,
+        angle: Math.PI / 4,
+    }),
+});
+
 export const useFeatureInspection = ({
   mapRef,
   mapElementRef,
@@ -59,6 +71,8 @@ export const useFeatureInspection = ({
   const [inspectedFeatureData, setInspectedFeatureData] = useState<PlainFeatureData[] | null>([]);
   const [currentInspectedLayerName, setCurrentInspectedLayerName] = useState<string | null>(null);
   const rasterQueryOverlaysRef = useRef<Overlay[]>([]);
+  
+  const rasterQueryMarkersLayerRef = useRef<VectorLayer<VectorSource<Feature<Point>>> | null>(null);
 
   const selectInteractionRef = useRef<Select | null>(null);
   const dragBoxInteractionRef = useRef<DragBox | null>(null);
@@ -79,10 +93,14 @@ export const useFeatureInspection = ({
     
   }, [toast]);
   
-  const clearRasterQueryOverlays = useCallback(() => {
-    if (mapRef.current && rasterQueryOverlaysRef.current.length > 0) {
+  const clearRasterQueryVisuals = useCallback(() => {
+    if (mapRef.current) {
         rasterQueryOverlaysRef.current.forEach(overlay => mapRef.current!.removeOverlay(overlay));
         rasterQueryOverlaysRef.current = [];
+        
+        if (rasterQueryMarkersLayerRef.current) {
+            rasterQueryMarkersLayerRef.current.getSource()?.clear();
+        }
     }
   }, [mapRef]);
 
@@ -93,8 +111,8 @@ export const useFeatureInspection = ({
     setSelectedFeatures([]);
     setInspectedFeatureData(null);
     setCurrentInspectedLayerName(null);
-    clearRasterQueryOverlays();
-  }, [clearRasterQueryOverlays]);
+    clearRasterQueryVisuals();
+  }, [clearRasterQueryVisuals]);
 
   const selectFeaturesById = useCallback((featureIds: string[]) => {
     if (!selectInteractionRef.current || !mapRef.current) return;
@@ -118,6 +136,20 @@ export const useFeatureInspection = ({
     selectInteractionRef.current.getFeatures().extend(featuresToSelect);
     setSelectedFeatures(featuresToSelect);
   }, [mapRef]);
+  
+  // Effect to initialize the query markers layer
+  useEffect(() => {
+    if (isMapReady && mapRef.current && !rasterQueryMarkersLayerRef.current) {
+        const markerSource = new VectorSource();
+        const markerLayer = new VectorLayer({
+            source: markerSource,
+            style: crossStyle,
+            properties: { id: 'raster-query-markers' }
+        });
+        rasterQueryMarkersLayerRef.current = markerLayer;
+        mapRef.current.addLayer(markerLayer);
+    }
+  }, [isMapReady, mapRef]);
   
 
   useEffect(() => {
@@ -148,7 +180,8 @@ export const useFeatureInspection = ({
             let resultsFound = false;
             toast({ description: "Consultando capas raster..." });
             
-            const createAndAddOverlay = (content: string) => {
+            const createAndAddVisuals = (content: string) => {
+                // Create text overlay
                 const tooltipElement = document.createElement('div');
                 tooltipElement.className = 'ol-tooltip ol-tooltip-query';
                 tooltipElement.innerHTML = content;
@@ -162,6 +195,15 @@ export const useFeatureInspection = ({
 
                 map.addOverlay(overlay);
                 rasterQueryOverlaysRef.current.push(overlay);
+
+                // Create cross marker feature
+                if (rasterQueryMarkersLayerRef.current) {
+                    const markerFeature = new Feature({
+                        geometry: new (require('ol/geom/Point').default)(e.coordinate),
+                    });
+                    rasterQueryMarkersLayerRef.current.getSource()?.addFeature(markerFeature);
+                }
+                
                 resultsFound = true;
             };
 
@@ -199,7 +241,7 @@ export const useFeatureInspection = ({
                                         }
                                     }
                                     if (resultText) {
-                                      createAndAddOverlay(resultText);
+                                      createAndAddVisuals(resultText);
                                     }
                                 }
                             }
@@ -221,7 +263,7 @@ export const useFeatureInspection = ({
                              if (typeof valueStr === 'number') {
                                 valueStr = valueStr.toFixed(4);
                              }
-                            createAndAddOverlay(String(valueStr));
+                            createAndAddVisuals(String(valueStr));
                         }
                     } catch (error: any) {
                         console.error("Error querying GEE value:", error);
