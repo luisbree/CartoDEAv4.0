@@ -17,7 +17,7 @@ import VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
 import bboxClip from '@turf/bbox-clip';
 import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as TurfMultiPolygon, BBox } from 'geojson';
-import { flatten } from '@turf/turf';
+import { flatten, area as turfArea } from '@turf/turf';
 
 
 interface AnalysisPanelProps {
@@ -84,7 +84,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     
     const inputSource = inputLayer.olLayer.getSource();
     const maskSource = maskLayer.olLayer.getSource();
-    if (!inputSource || !maskSource || maskSource.getFeatures().length === 0) {
+    if (!inputSource || maskSource.getFeatures().length === 0) {
         toast({ description: "Una de las capas seleccionadas no tiene entidades.", variant: "destructive" });
         return;
     }
@@ -103,17 +103,20 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         try {
             const clippedResult = bboxClip(feature4326, clipBbox);
             
-            if (clippedResult.geometry.type === 'GeometryCollection') {
+            // --- CRITICAL FIX ---
+            // Check if the resulting geometry has actual coordinates before adding it.
+            if (turfArea(clippedResult) > 0) {
                 const flattened = flatten(clippedResult as TurfFeature<any>);
                 flattened.features.forEach(flatFeature => {
-                    finalClippedFeatures.push({
-                        type: 'Feature',
-                        geometry: flatFeature.geometry,
-                        properties: { ...feature4326.properties }
-                    });
+                    // Check again after flattening, just in case
+                    if (turfArea(flatFeature) > 0) {
+                        finalClippedFeatures.push({
+                            type: 'Feature',
+                            geometry: flatFeature.geometry,
+                            properties: { ...feature4326.properties }
+                        });
+                    }
                 });
-            } else {
-                 finalClippedFeatures.push(clippedResult);
             }
         } catch (error) {
             console.warn(`Error de Turf.js al recortar la entidad ${feature.getId()}:`, error);
@@ -127,7 +130,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         };
         const features = format3857.readFeatures(geojsonResult);
         
-        // **CRITICAL FIX**: Ensure every new feature has a unique ID
+        // Ensure every new feature has a unique ID
         features.forEach(f => f.setId(nanoid()));
         
         const newLayerId = `clip-result-${nanoid()}`;
