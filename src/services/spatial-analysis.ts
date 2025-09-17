@@ -114,10 +114,13 @@ export async function performBufferAnalysis({
     try {
         const featuresGeoJSON = format.writeFeaturesObject(features);
         
-        // Clean coordinates to prevent Turf.js errors with invalid geometries
-        const cleanedFeaturesGeoJSON = cleanCoords(featuresGeoJSON);
+        // Clean coordinates for each feature individually
+        const cleanedFeatures = featuresGeoJSON.features.map(feature => {
+            return cleanCoords(feature); // cleanCoords works on a single Feature or Geometry
+        });
+        const cleanedFeatureCollection = featureCollection(cleanedFeatures);
         
-        const bufferedGeoJSON = turfBuffer(cleanedFeaturesGeoJSON, distance, { units });
+        const bufferedGeoJSON = turfBuffer(cleanedFeatureCollection, distance, { units });
         
         if (!bufferedGeoJSON || !bufferedGeoJSON.geometry) {
             throw new Error("Buffer operation resulted in empty geometry.");
