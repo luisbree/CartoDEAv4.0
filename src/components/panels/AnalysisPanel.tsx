@@ -30,7 +30,7 @@ interface AnalysisPanelProps {
   onClosePanel: () => void;
   onMouseDownHeader: (e: React.MouseEvent<HTMLDivElement>) => void;
   allLayers: MapLayer[];
-  selectedFeatures: Feature<Geometry>[]; // Now receiving selected features
+  selectedFeatures: Feature<Geometry>[];
   onAddLayer: (layer: MapLayer, bringToTop?: boolean) => void;
   style?: React.CSSProperties;
 }
@@ -185,7 +185,8 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         return;
     }
     
-    const relevantSelectedFeatures = selectedFeatures.filter(feature => 
+    const safeSelectedFeatures = selectedFeatures || [];
+    const relevantSelectedFeatures = safeSelectedFeatures.filter(feature => 
         inputSource.getFeatureById(feature.getId() as string | number) !== null
     );
 

@@ -1039,6 +1039,7 @@ export default function GeoMapperClient() {
             onClosePanel={() => togglePanelMinimize('analysis')}
             onMouseDownHeader={(e) => handlePanelMouseDown(e, 'analysis')}
             allLayers={layerManagerHook.layers}
+            selectedFeatures={featureInspectionHook.selectedFeatures}
             onAddLayer={(layer: MapLayer, bringToTop?: boolean) => layerManagerHook.addLayer(layer, bringToTop)}
             style={{ top: `${panels.analysis.position.y}px`, left: `${panels.analysis.position.x}px`, zIndex: panels.analysis.zIndex }}
           />
