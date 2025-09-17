@@ -88,7 +88,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     }
 
     const outputName = clipOutputName.trim() || `Recorte de ${inputLayer.name}`;
-    const format = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
+    const format = new GeoJSON({ featureProjection: 'EPSG:3857' });
 
     const maskFeatures = maskSource.getFeatures();
     const maskGeoJSON = format.writeFeaturesObject(maskFeatures);
@@ -101,10 +101,9 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 
     for (const feature of inputGeoJSON.features) {
         try {
-            const clippedFeature = bboxClip(feature, maskBbox);
+            const clippedFeature = bboxClip(feature as TurfFeature, maskBbox);
 
             // **CRITICAL FILTERING LOGIC**
-            // Check if the clipped geometry exists and has valid, non-empty coordinates.
             if (clippedFeature.geometry && clippedFeature.geometry.coordinates && clippedFeature.geometry.coordinates.length > 0) {
                 // For Polygons/MultiPolygons, the first array of coordinates should also not be empty.
                 if (Array.isArray(clippedFeature.geometry.coordinates[0]) && clippedFeature.geometry.coordinates[0].length > 0) {
@@ -117,7 +116,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     }
     
     if (clippedFeaturesGeoJSON.length > 0) {
-        const formatForReading = new GeoJSON({ dataProjection: 'EPSG:4326', featureProjection: 'EPSG:3857' });
+        const formatForReading = new GeoJSON({ featureProjection: 'EPSG:3857' });
         
         const finalOLFeatures = formatForReading.readFeatures({
             type: 'FeatureCollection',
