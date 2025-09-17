@@ -23,6 +23,7 @@ import { Style, Fill, Stroke } from 'ol/style';
 import type { Map } from 'ol';
 import Draw, { createBox } from 'ol/interaction/Draw';
 import { cn } from '@/lib/utils';
+import { multiPolygon } from '@turf/helpers';
 
 
 interface StatisticsPanelProps {
@@ -264,13 +265,14 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
     if (!inputSource || inputSource.getFeatures().length === 0) return;
     
     const maskGeoJSON = formatTo4326.writeFeatureObject(analysisFeatureRef.current) as TurfFeature<TurfPolygon | TurfMultiPolygon>;
+    const unifiedMask = maskGeoJSON; // Already a single feature
     
     const inputGeoJSON = formatTo4326.writeFeaturesObject(inputSource.getFeatures()) as FeatureCollection;
     const clippedFeaturesGeoJSON: TurfFeature<GeoJSONGeometry>[] = [];
 
     for (const inputFeature of inputGeoJSON.features) {
         try {
-            const intersectionResult = intersect(maskGeoJSON, inputFeature);
+            const intersectionResult = intersect(inputFeature, unifiedMask);
             if (intersectionResult) {
                 intersectionResult.properties = inputFeature.properties;
                 clippedFeaturesGeoJSON.push(intersectionResult);
@@ -469,5 +471,3 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
 };
 
 export default StatisticsPanel;
-
-    

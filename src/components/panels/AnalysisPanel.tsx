@@ -17,7 +17,7 @@ import VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
 import intersect from '@turf/intersect';
 import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as TurfMultiPolygon, FeatureCollection as TurfFeatureCollection, Geometry as TurfGeometry } from 'geojson';
-
+import { polygon, multiPolygon, featureCollection } from '@turf/helpers';
 
 interface AnalysisPanelProps {
   panelRef: React.RefObject<HTMLDivElement>;
@@ -88,38 +88,40 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 
     const outputName = clipOutputName.trim() || `Recorte de ${inputLayer.name}`;
     
-    // IMPORTANT: Create a GeoJSON format object that transforms features TO EPSG:4326 for Turf.js
     const formatTo4326 = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
-    
-    // IMPORTANT: Create a GeoJSON format object that transforms features FROM EPSG:4326 back to the map's projection
     const formatFrom4326 = new GeoJSON({ dataProjection: 'EPSG:4326', featureProjection: 'EPSG:3857' });
 
     const maskFeatures = maskSource.getFeatures();
     const maskGeoJSON = formatTo4326.writeFeaturesObject(maskFeatures) as TurfFeatureCollection<TurfPolygon | TurfMultiPolygon>;
     
+    // Unify all mask polygons into one MultiPolygon for intersection
+    const maskPolygons = maskGeoJSON.features.flatMap(f => 
+        f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.coordinates
+    );
+    if (maskPolygons.length === 0) {
+        toast({ description: "La capa de máscara no contiene polígonos válidos.", variant: "destructive" });
+        return;
+    }
+    const unifiedMask = multiPolygon(maskPolygons);
+
     const inputFeatures = inputSource.getFeatures();
     const inputGeoJSON = formatTo4326.writeFeaturesObject(inputFeatures) as TurfFeatureCollection;
 
     const clippedFeaturesGeoJSON: TurfFeature<TurfGeometry>[] = [];
 
-    for (const maskFeature of maskGeoJSON.features) {
-        for (const inputFeature of inputGeoJSON.features) {
-            try {
-                // Perform intersection on geometries in EPSG:4326
-                const intersectionResult = intersect(maskFeature, inputFeature);
-                if (intersectionResult) {
-                    // Keep original properties, but with new intersected geometry
-                    intersectionResult.properties = inputFeature.properties;
-                    clippedFeaturesGeoJSON.push(intersectionResult);
-                }
-            } catch (e) {
-                console.warn("Error intersecting a feature, skipping it.", e);
+    for (const inputFeature of inputGeoJSON.features) {
+        try {
+            const intersectionResult = intersect(inputFeature, unifiedMask);
+            if (intersectionResult) {
+                intersectionResult.properties = inputFeature.properties;
+                clippedFeaturesGeoJSON.push(intersectionResult);
             }
+        } catch (e) {
+            console.warn("Error intersecting a feature, skipping it.", e);
         }
     }
     
     if (clippedFeaturesGeoJSON.length > 0) {
-        // Convert the clipped GeoJSON features (in EPSG:4326) back to OpenLayers features (in EPSG:3857)
         const finalOLFeatures = formatFrom4326.readFeatures({
             type: 'FeatureCollection',
             features: clippedFeaturesGeoJSON
@@ -233,5 +235,3 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
-
-    
