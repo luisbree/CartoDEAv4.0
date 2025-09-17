@@ -15,7 +15,6 @@ import VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
 import GeoJSON from 'ol/format/GeoJSON';
 import * as turf from '@turf/turf';
-import bboxClip from '@turf/bbox-clip';
 import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as TurfMultiPolygon, BBox, Position, Feature as GeoJSONFeature, Geometry as GeoJSONGeometry } from 'geojson';
 import { useToast } from '@/hooks/use-toast';
 import { nanoid } from 'nanoid';
@@ -260,39 +259,26 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
     }
     
     const inputSource = layer.olLayer.getSource();
-    if (!inputSource || inputSource.getFeatures().length === 0) {
-        toast({ description: "La capa de análisis no tiene entidades.", variant: "destructive" });
+    const analysisGeom = analysisFeatureRef.current.getGeometry();
+    if (!inputSource || !analysisGeom || inputSource.getFeatures().length === 0) {
+        toast({ description: "La capa de análisis o el área de dibujo están vacías.", variant: "destructive" });
         return;
     }
-
-    const format4326 = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
-    const format3857 = new GeoJSON({ dataProjection: 'EPSG:4326', featureProjection: 'EPSG:3857' });
     
-    const maskFeature4326 = format4326.writeFeatureObject(analysisFeatureRef.current);
-    const clipBbox = turf.bbox(maskFeature4326 as any) as BBox;
+    const analysisExtent = analysisGeom.getExtent();
 
-
-    const clippedFeaturesGeoJSON: any[] = [];
-
-    inputSource.getFeatures().forEach(feature => {
-        const feature4326 = format4326.writeFeatureObject(feature);
-        try {
-            const clippedFeature = bboxClip(feature4326 as any, clipBbox);
-            clippedFeaturesGeoJSON.push(clippedFeature);
-        } catch (error) {
-            console.warn(`Error de Turf.js al recortar la entidad ${feature.getId()}:`, error);
-        }
+    const intersectingFeatures = inputSource.getFeatures().filter(feature => {
+        const featureGeom = feature.getGeometry();
+        return featureGeom ? featureGeom.intersectsExtent(analysisExtent) : false;
+    }).map(f => {
+        const clone = f.clone();
+        clone.setId(nanoid());
+        return clone;
     });
 
-    if (clippedFeaturesGeoJSON.length > 0) {
-        const features = format3857.readFeatures({
-            type: 'FeatureCollection',
-            features: clippedFeaturesGeoJSON,
-        });
-        features.forEach(f => f.setId(nanoid()));
-        
+    if (intersectingFeatures.length > 0) {
         const layerName = `Recorte de ${layer.name}`;
-        const source = new VectorSource({ features });
+        const source = new VectorSource({ features: intersectingFeatures });
         const layerId = `intersection-${nanoid()}`;
         const olLayer = new VectorLayer({
             source,
@@ -307,7 +293,7 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
             opacity: 1,
             type: 'vector',
         }, true);
-        toast({ description: `Se creó la capa de recorte "${layerName}" con ${features.length} entidades.` });
+        toast({ description: `Se creó la capa de recorte "${layerName}" con ${intersectingFeatures.length} entidades.` });
     } else {
         toast({ description: "No se encontraron entidades dentro del área para crear una capa de recorte." });
     }
@@ -323,34 +309,42 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
     const analysisSource = layer.olLayer.getSource();
     if (!analysisSource) return;
     
-    const format4326 = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
+    const format = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
     
-    const maskFeature4326 = format4326.writeFeatureObject(analysisFeatureRef.current) as TurfFeature<TurfPolygon | TurfMultiPolygon>;
-    const clipBbox = turf.bbox(maskFeature4326 as any) as BBox;
+    const maskFeature4326 = format.writeFeatureObject(analysisFeatureRef.current) as TurfFeature<TurfPolygon | TurfMultiPolygon>;
+    if (!maskFeature4326 || !maskFeature4326.geometry) {
+        toast({ description: "La geometría del área de análisis es inválida.", variant: "destructive" });
+        return;
+    }
+    
+    const analysisExtent = analysisFeatureRef.current.getGeometry()!.getExtent();
 
     let totalWeightedSum = 0;
     let totalIntersectionArea = 0;
     
-    analysisSource.getFeatures().forEach(feature => {
+    const featuresToProcess = analysisSource.getFeaturesInExtent(analysisExtent);
+
+    featuresToProcess.forEach(feature => {
         const featureValue = feature.get(selectedField);
         if (typeof featureValue !== 'number' || !isFinite(featureValue)) {
-            return;
+            return; // Skip features without a valid numeric value in the selected field
         }
         
-        const analysisFeature4326 = format4326.writeFeatureObject(feature) as TurfFeature<TurfPolygon | TurfMultiPolygon>;
+        const analysisFeature4326 = format.writeFeatureObject(feature) as TurfFeature<TurfPolygon | TurfMultiPolygon>;
         if (!analysisFeature4326.geometry) return;
 
         try {
-            const clippedPortion = bboxClip(analysisFeature4326, clipBbox);
-            const intersectionArea = turf.area(clippedPortion);
-            
-            if (intersectionArea > 0) {
-                const weightedValue = featureValue * intersectionArea;
-                totalWeightedSum += weightedValue;
-                totalIntersectionArea += intersectionArea;
+            const intersection = turf.intersect(maskFeature4326, analysisFeature4326);
+            if (intersection) {
+                const intersectionArea = turf.area(intersection);
+                if (intersectionArea > 0) {
+                    const weightedValue = featureValue * intersectionArea;
+                    totalWeightedSum += weightedValue;
+                    totalIntersectionArea += intersectionArea;
+                }
             }
         } catch (error) {
-            console.warn(`Error en la operación de recorte de Turf.js para la entidad ${feature.getId()}:`, error);
+            console.warn(`Error en la operación de intersección de Turf.js para la entidad ${feature.getId()}:`, error);
         }
     });
 
@@ -478,4 +472,3 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
 };
 
 export default StatisticsPanel;
-    

@@ -15,9 +15,6 @@ import { nanoid } from 'nanoid';
 import GeoJSON from 'ol/format/GeoJSON';
 import VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
-import bboxClip from '@turf/bbox-clip';
-import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as TurfMultiPolygon, BBox } from 'geojson';
-import { flatten, area as turfArea } from '@turf/turf';
 
 
 interface AnalysisPanelProps {
@@ -88,53 +85,22 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         toast({ description: "Una de las capas seleccionadas no tiene entidades.", variant: "destructive" });
         return;
     }
-
-    const format4326 = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
-    const format3857 = new GeoJSON({ dataProjection: 'EPSG:4326', featureProjection: 'EPSG:3857' });
     
-    const maskFeatures4326 = maskSource.getFeatures().map(f => format4326.writeFeatureObject(f) as TurfFeature<TurfPolygon | TurfMultiPolygon>);
-    const maskCollection = { type: 'FeatureCollection', features: maskFeatures4326 };
-    const clipBbox = flatten(maskCollection).bbox as BBox;
+    const maskExtent = maskSource.getExtent();
 
-    const finalClippedFeatures: TurfFeature<any>[] = [];
-    
-    inputSource.getFeatures().forEach(feature => {
-        const feature4326 = format4326.writeFeatureObject(feature) as TurfFeature<any>;
-        try {
-            const clippedResult = bboxClip(feature4326, clipBbox);
-            
-            // --- CRITICAL FIX ---
-            // Check if the resulting geometry has actual surface area before adding it.
-            if (turfArea(clippedResult) > 0) {
-                const flattened = flatten(clippedResult as TurfFeature<any>);
-                flattened.features.forEach(flatFeature => {
-                    // Check again after flattening, just in case
-                    if (turfArea(flatFeature) > 0) {
-                        finalClippedFeatures.push({
-                            type: 'Feature',
-                            geometry: flatFeature.geometry,
-                            properties: { ...feature4326.properties }
-                        });
-                    }
-                });
-            }
-        } catch (error) {
-            console.warn(`Error de Turf.js al recortar la entidad ${feature.getId()}:`, error);
-        }
+    const finalClippedFeatures = inputSource.getFeatures().filter(feature => {
+        const featureGeom = feature.getGeometry();
+        return featureGeom ? featureGeom.intersectsExtent(maskExtent) : false;
+    }).map(f => {
+        const clone = f.clone();
+        clone.setId(nanoid()); // Assign a new unique ID to the clone
+        return clone;
     });
 
+
     if (finalClippedFeatures.length > 0) {
-        const geojsonResult = {
-            type: 'FeatureCollection',
-            features: finalClippedFeatures,
-        };
-        const features = format3857.readFeatures(geojsonResult);
-        
-        // Ensure every new feature has a unique ID
-        features.forEach(f => f.setId(nanoid()));
-        
         const newLayerId = `clip-result-${nanoid()}`;
-        const newSource = new VectorSource({ features });
+        const newSource = new VectorSource({ features: finalClippedFeatures });
         const newOlLayer = new VectorLayer({
             source: newSource,
             properties: { id: newLayerId, name: outputName, type: 'analysis' },
@@ -149,7 +115,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
             opacity: 1,
             type: 'analysis',
         }, true);
-        toast({ description: `Se creó la capa de recorte "${outputName}" con ${features.length} entidades.` });
+        toast({ description: `Se creó la capa de recorte "${outputName}" con ${finalClippedFeatures.length} entidades.` });
         
         setClipInputLayerId('');
         setClipMaskLayerId('');
@@ -238,5 +204,3 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
-
-    
