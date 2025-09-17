@@ -90,30 +90,23 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     const outputName = clipOutputName.trim() || `Recorte de ${inputLayer.name}`;
     const format = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
 
-    // Convert mask layer to a single GeoJSON feature collection for bbox calculation
     const maskFeatures = maskSource.getFeatures();
     const maskGeoJSON = format.writeFeaturesObject(maskFeatures);
-    
-    // Calculate the bounding box of the entire mask layer
     const maskBbox = turf.bbox(maskGeoJSON);
 
-    // Convert input features to GeoJSON
     const inputFeatures = inputSource.getFeatures();
     const inputGeoJSON = format.writeFeaturesObject(inputFeatures);
 
     const clippedFeaturesGeoJSON: TurfFeature[] = [];
 
-    // Iterate through each feature of the input layer and clip it
     for (const feature of inputGeoJSON.features) {
         try {
-            // Clip the individual feature
             const clippedFeature = bboxClip(feature, maskBbox);
 
-            // *** THIS IS THE CRITICAL FIX ***
-            // Check if the clipped geometry has actual coordinates.
-            // bboxClip can return a geometry with an empty coordinates array if there's no overlap.
+            // **CRITICAL FILTERING LOGIC**
+            // Check if the clipped geometry exists and has valid, non-empty coordinates.
             if (clippedFeature.geometry && clippedFeature.geometry.coordinates && clippedFeature.geometry.coordinates.length > 0) {
-                // Ensure nested arrays for polygons also aren't empty
+                // For Polygons/MultiPolygons, the first array of coordinates should also not be empty.
                 if (Array.isArray(clippedFeature.geometry.coordinates[0]) && clippedFeature.geometry.coordinates[0].length > 0) {
                     clippedFeaturesGeoJSON.push(clippedFeature);
                 }
@@ -125,6 +118,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     
     if (clippedFeaturesGeoJSON.length > 0) {
         const formatForReading = new GeoJSON({ dataProjection: 'EPSG:4326', featureProjection: 'EPSG:3857' });
+        
         const finalOLFeatures = formatForReading.readFeatures({
             type: 'FeatureCollection',
             features: clippedFeaturesGeoJSON
