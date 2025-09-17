@@ -9,7 +9,7 @@ import TileWMS from 'ol/source/TileWMS';
 import Feature from 'ol/Feature';
 import { Circle as CircleStyle, Fill, Stroke, Style, RegularShape } from 'ol/style';
 import { useToast } from "@/hooks/use-toast";
-import type { Geometry, Point } from 'ol/geom';
+import { Geometry, Point } from 'ol/geom';
 import Select, { type SelectEvent } from 'ol/interaction/Select';
 import DragBox from 'ol/interaction/DragBox';
 import { singleClick, never } from 'ol/events/condition';
@@ -199,7 +199,7 @@ export const useFeatureInspection = ({
                 // Create cross marker feature
                 if (rasterQueryMarkersLayerRef.current) {
                     const markerFeature = new Feature({
-                        geometry: new (require('ol/geom/Point').default)(e.coordinate),
+                        geometry: new Point(e.coordinate),
                     });
                     rasterQueryMarkersLayerRef.current.getSource()?.addFeature(markerFeature);
                 }
