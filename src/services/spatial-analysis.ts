@@ -2,7 +2,7 @@
 "use client";
 
 import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as TurfMultiPolygon, FeatureCollection as TurfFeatureCollection, Geometry as TurfGeometry } from 'geojson';
-import { area as turfArea, intersect, featureCollection, buffer as turfBuffer, cleanCoords } from '@turf/turf';
+import { area as turfArea, intersect, featureCollection, buffer as turfBuffer, union } from '@turf/turf';
 import { multiPolygon } from '@turf/helpers';
 import type Feature from 'ol/Feature';
 import GeoJSON from 'ol/format/GeoJSON';
@@ -114,23 +114,35 @@ export async function performBufferAnalysis({
     try {
         const featuresGeoJSON = format.writeFeaturesObject(features);
         
-        // Clean coordinates for each feature individually
-        const cleanedFeatures = featuresGeoJSON.features.map(feature => {
-            return cleanCoords(feature); // cleanCoords works on a single Feature or Geometry
-        });
-        const cleanedFeatureCollection = featureCollection(cleanedFeatures);
-        
-        const bufferedGeoJSON = turfBuffer(cleanedFeatureCollection, distance, { units });
-        
-        if (!bufferedGeoJSON || !bufferedGeoJSON.geometry) {
-            throw new Error("Buffer operation resulted in empty geometry.");
+        const bufferedFeatures: TurfFeature<TurfPolygon | TurfMultiPolygon>[] = [];
+        for (const feature of featuresGeoJSON.features) {
+            try {
+                // Buffer each feature individually
+                const buffered = turfBuffer(feature, distance, { units });
+                if (buffered) {
+                    bufferedFeatures.push(buffered as TurfFeature<TurfPolygon | TurfMultiPolygon>);
+                }
+            } catch (individualError) {
+                console.warn("Skipping a feature that could not be buffered:", individualError);
+            }
         }
         
-        // The result of turf/buffer on a FeatureCollection is a single feature with a MultiPolygon geometry
-        // We convert this single feature back to an OL Feature
+        if (bufferedFeatures.length === 0) {
+            throw new Error("Buffer operation resulted in empty geometry for all features.");
+        }
+
+        // Union all the buffered features into a single feature
+        let finalGeometry = bufferedFeatures[0];
+        if (bufferedFeatures.length > 1) {
+             for (let i = 1; i < bufferedFeatures.length; i++) {
+                // @ts-ignore
+                finalGeometry = union(finalGeometry, bufferedFeatures[i]);
+            }
+        }
+        
         const olFeatures = formatForMap.readFeatures({
             type: 'FeatureCollection',
-            features: [bufferedGeoJSON]
+            features: [finalGeometry] // Create a collection with the single unioned feature
         });
 
         return olFeatures;
