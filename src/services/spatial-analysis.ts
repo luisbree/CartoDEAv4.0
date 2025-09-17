@@ -1,8 +1,13 @@
+
 "use client";
 
 import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as TurfMultiPolygon, FeatureCollection as TurfFeatureCollection, Geometry as TurfGeometry } from 'geojson';
-import { area as turfArea, intersect, featureCollection } from '@turf/turf';
+import { area as turfArea, intersect, featureCollection, buffer as turfBuffer } from '@turf/turf';
 import { multiPolygon } from '@turf/helpers';
+import type Feature from 'ol/Feature';
+import GeoJSON from 'ol/format/GeoJSON';
+import type { Geometry } from 'ol/geom';
+
 
 interface IntersectionParams {
     analysisFeaturesGeoJSON: TurfFeatureCollection;
@@ -77,4 +82,55 @@ export async function calculateSpatialStats({
         weightedAverage,
         proportionalSum: totalProportionalSum
     };
+}
+
+
+interface BufferParams {
+    features: Feature<Geometry>[];
+    distance: number;
+    units: 'meters' | 'kilometers' | 'miles';
+}
+
+/**
+ * Creates a buffer around a set of features.
+ * @param params - The parameters for the buffer operation.
+ * @returns A promise that resolves to an array of buffered OpenLayers Features.
+ */
+export async function performBufferAnalysis({
+    features,
+    distance,
+    units,
+}: BufferParams): Promise<Feature<Geometry>[]> {
+    if (!features || features.length === 0) {
+        throw new Error("No features provided to buffer.");
+    }
+    if (distance <= 0) {
+        throw new Error("Buffer distance must be positive.");
+    }
+
+    const format = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
+    const formatForMap = new GeoJSON({ dataProjection: 'EPSG:4326', featureProjection: 'EPSG:3857' });
+
+    try {
+        const featuresGeoJSON = format.writeFeaturesObject(features);
+        
+        const bufferedGeoJSON = turfBuffer(featuresGeoJSON, distance, { units });
+        
+        if (!bufferedGeoJSON || !bufferedGeoJSON.geometry) {
+            throw new Error("Buffer operation resulted in empty geometry.");
+        }
+        
+        // The result of turf/buffer on a FeatureCollection is a single feature with a MultiPolygon geometry
+        // We convert this single feature back to an OL Feature
+        const olFeatures = formatForMap.readFeatures({
+            type: 'FeatureCollection',
+            features: [bufferedGeoJSON]
+        });
+
+        return olFeatures;
+
+    } catch (error: any) {
+        console.error("Error during buffer analysis:", error);
+        throw new Error(`Turf.js buffer failed: ${error.message}`);
+    }
 }

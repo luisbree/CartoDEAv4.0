@@ -18,6 +18,10 @@ import VectorLayer from 'ol/layer/Vector';
 import { intersect, featureCollection } from '@turf/turf';
 import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as TurfMultiPolygon, FeatureCollection as TurfFeatureCollection, Geometry as TurfGeometry } from 'geojson';
 import { multiPolygon } from '@turf/helpers';
+import type Feature from 'ol/Feature';
+import type { Geometry } from 'ol/geom';
+import { performBufferAnalysis } from '@/services/spatial-analysis';
+
 
 interface AnalysisPanelProps {
   panelRef: React.RefObject<HTMLDivElement>;
@@ -26,6 +30,7 @@ interface AnalysisPanelProps {
   onClosePanel: () => void;
   onMouseDownHeader: (e: React.MouseEvent<HTMLDivElement>) => void;
   allLayers: MapLayer[];
+  selectedFeatures: Feature<Geometry>[]; // Now receiving selected features
   onAddLayer: (layer: MapLayer, bringToTop?: boolean) => void;
   style?: React.CSSProperties;
 }
@@ -45,13 +50,23 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   onClosePanel,
   onMouseDownHeader,
   allLayers,
+  selectedFeatures,
   onAddLayer,
   style,
 }) => {
-  const [activeAccordionItem, setActiveAccordionItem] = useState<string | undefined>('overlay-tools');
+  const [activeAccordionItem, setActiveAccordionItem] = useState<string | undefined>('proximity-tools');
+  
+  // State for Clip tool
   const [clipInputLayerId, setClipInputLayerId] = useState<string>('');
   const [clipMaskLayerId, setClipMaskLayerId] = useState<string>('');
   const [clipOutputName, setClipOutputName] = useState('');
+  
+  // State for Buffer tool
+  const [bufferInputLayerId, setBufferInputLayerId] = useState<string>('');
+  const [bufferDistance, setBufferDistance] = useState<number>(100);
+  const [bufferUnits, setBufferUnits] = useState<'meters' | 'kilometers' | 'miles'>('meters');
+  const [bufferOutputName, setBufferOutputName] = useState('');
+
   const { toast } = useToast();
 
   const vectorLayers = useMemo(() => {
@@ -110,9 +125,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 
     for (const inputFeature of inputGeoJSON.features) {
         try {
-            // Per the user's example, create a feature collection with just the two features to intersect
-            const collectionForIntersect = featureCollection([unifiedMask, inputFeature]);
-            const intersectionResult = intersect(collectionForIntersect);
+            const intersectionResult = intersect(featureCollection([unifiedMask, inputFeature]));
 
             if (intersectionResult && intersectionResult.geometry && intersectionResult.geometry.coordinates.length > 0) {
                 intersectionResult.properties = inputFeature.properties;
@@ -155,6 +168,66 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 
     } else {
         toast({ description: "No se encontraron entidades resultantes de la operación de recorte." });
+    }
+  };
+
+
+ const handleRunBuffer = async () => {
+    const inputLayer = vectorLayers.find(l => l.id === bufferInputLayerId);
+    if (!inputLayer) {
+        toast({ description: "Por favor, seleccione una capa de entrada para el buffer.", variant: "destructive" });
+        return;
+    }
+
+    const inputSource = inputLayer.olLayer.getSource();
+    if (!inputSource || inputSource.getFeatures().length === 0) {
+        toast({ description: "La capa de entrada seleccionada no tiene entidades.", variant: "destructive" });
+        return;
+    }
+    
+    const relevantSelectedFeatures = selectedFeatures.filter(feature => 
+        inputSource.getFeatureById(feature.getId() as string | number) !== null
+    );
+
+    const featuresToBuffer = relevantSelectedFeatures.length > 0 ? relevantSelectedFeatures : inputSource.getFeatures();
+    const outputName = bufferOutputName.trim() || `Buffer de ${inputLayer.name}`;
+
+    toast({ description: `Calculando buffer para ${featuresToBuffer.length} entidad(es)...` });
+
+    try {
+      const bufferedFeatures = await performBufferAnalysis({
+        features: featuresToBuffer,
+        distance: bufferDistance,
+        units: bufferUnits,
+      });
+
+      bufferedFeatures.forEach(f => f.setId(nanoid()));
+
+      const newLayerId = `buffer-result-${nanoid()}`;
+      const newSource = new VectorSource({ features: bufferedFeatures });
+      const newOlLayer = new VectorLayer({
+          source: newSource,
+          properties: { id: newLayerId, name: outputName, type: 'analysis' },
+      });
+
+      onAddLayer({
+          id: newLayerId,
+          name: outputName,
+          olLayer: newOlLayer,
+          visible: true,
+          opacity: 1,
+          type: 'analysis',
+      }, true);
+
+      toast({ description: `Se creó la capa de buffer "${outputName}".` });
+
+      setBufferInputLayerId('');
+      setBufferOutputName('');
+      setBufferDistance(100);
+
+    } catch (error: any) {
+        console.error("Buffer analysis failed:", error);
+        toast({ title: "Error de Buffer", description: error.message, variant: "destructive" });
     }
   };
 
@@ -225,10 +298,47 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                 <AccordionTrigger className="p-3 hover:no-underline hover:bg-white/10 rounded-t-md data-[state=open]:rounded-b-none">
                     <SectionHeader icon={CircleDotDashed} title="Herramientas de Proximidad" />
                 </AccordionTrigger>
-                <AccordionContent className="p-3 pt-2 border-t border-white/10 bg-transparent rounded-b-md">
-                    <p className="text-center text-xs text-gray-400 p-4">
-                        Próximamente: Buffer, Unión Espacial y más.
-                    </p>
+                <AccordionContent className="p-3 pt-2 space-y-3 border-t border-white/10 bg-transparent rounded-b-md">
+                    <div className="space-y-1">
+                      <Label className="text-xs font-semibold">Área de Influencia (Buffer)</Label>
+                      <div className="space-y-2 p-2 border border-white/10 rounded-md">
+                           <div>
+                              <Label htmlFor="buffer-input-layer" className="text-xs">Capa de Entrada</Label>
+                              <Select value={bufferInputLayerId} onValueChange={setBufferInputLayerId}>
+                                <SelectTrigger id="buffer-input-layer" className="h-8 text-xs bg-black/20"><SelectValue placeholder="Seleccionar capa..." /></SelectTrigger>
+                                <SelectContent className="bg-gray-700 text-white border-gray-600">
+                                  {vectorLayers.map(l => <SelectItem key={l.id} value={l.id} className="text-xs">{l.name}</SelectItem>)}
+                                </SelectContent>
+                              </Select>
+                              <p className="text-xs text-gray-400 mt-1">Si hay entidades seleccionadas, se usará la selección. Si no, se usará la capa completa.</p>
+                          </div>
+                          <div className="flex items-end gap-2">
+                            <div className="flex-grow">
+                                <Label htmlFor="buffer-distance" className="text-xs">Distancia</Label>
+                                <Input id="buffer-distance" type="number" value={bufferDistance} onChange={(e) => setBufferDistance(Number(e.target.value))} min="0" className="h-8 text-xs bg-black/20"/>
+                            </div>
+                             <div>
+                                <Label htmlFor="buffer-units" className="text-xs">Unidades</Label>
+                                <Select value={bufferUnits} onValueChange={(v) => setBufferUnits(v as any)}>
+                                    <SelectTrigger id="buffer-units" className="h-8 text-xs bg-black/20 w-[120px]"><SelectValue /></SelectTrigger>
+                                    <SelectContent className="bg-gray-700 text-white border-gray-600">
+                                      <SelectItem value="meters" className="text-xs">Metros</SelectItem>
+                                      <SelectItem value="kilometers" className="text-xs">Kilómetros</SelectItem>
+                                      <SelectItem value="miles" className="text-xs">Millas</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                          </div>
+                          <div>
+                              <Label htmlFor="buffer-output-name" className="text-xs">Nombre de la Capa de Salida</Label>
+                              <Input id="buffer-output-name" value={bufferOutputName} onChange={(e) => setBufferOutputName(e.target.value)} placeholder="Ej: Buffer_de_CapaX" className="h-8 text-xs bg-black/20"/>
+                          </div>
+                           <Button onClick={handleRunBuffer} size="sm" className="w-full h-8 text-xs" disabled={!bufferInputLayerId}>
+                              <CircleDotDashed className="mr-2 h-3.5 w-3.5" />
+                              Ejecutar Buffer
+                          </Button>
+                      </div>
+                    </div>
                 </AccordionContent>
             </AccordionItem>
         </Accordion>
