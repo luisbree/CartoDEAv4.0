@@ -85,18 +85,24 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     const maskSource = maskLayer.olLayer.getSource();
     if (!inputSource || !maskSource || maskSource.getFeatures().length === 0) return;
 
-    const geojsonFormat = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
-    const maskFeaturesGeoJSON = maskSource.getFeatures().map(f => geojsonFormat.writeFeatureObject(f));
-    const maskCollection = turf.featureCollection(maskFeaturesGeoJSON);
+    // Correctly define GeoJSON formatters for projection transformation
+    const format4326 = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
+    const format3857 = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
+    
+    // Transform mask features to EPSG:4326 for Turf.js
+    const maskFeatures4326 = maskSource.getFeatures().map(f => format4326.writeFeatureObject(f));
+    const maskCollection = turf.featureCollection(maskFeatures4326);
     const clipBbox = turf.bbox(maskCollection);
 
     const clippedFeaturesGeoJSON: any[] = [];
+    
+    // Transform input features to EPSG:4326, clip, and store results
     inputSource.getFeatures().forEach(feature => {
-        const featureGeoJSON = geojsonFormat.writeFeatureObject(feature);
+        const feature4326 = format4326.writeFeatureObject(feature);
         try {
-            const clipped = bboxClip(featureGeoJSON as any, clipBbox);
+            const clipped = bboxClip(feature4326 as any, clipBbox);
             if (clipped && clipped.geometry && clipped.geometry.coordinates.length > 0) {
-                // IMPORTANT: Keep the original properties, do not modify attributes.
+                // IMPORTANT: Keep the original properties
                 const clippedFeatureWithProps = turf.feature(clipped.geometry, feature.getProperties());
                 clippedFeaturesGeoJSON.push(clippedFeatureWithProps);
             }
@@ -106,7 +112,8 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     });
 
     if (clippedFeaturesGeoJSON.length > 0) {
-        const features = new GeoJSON({ featureProjection: 'EPSG:3857' }).readFeatures({
+        // Transform the clipped features back to EPSG:3857 to display on the map
+        const features = format3857.readFeatures({
             type: 'FeatureCollection',
             features: clippedFeaturesGeoJSON,
         });
