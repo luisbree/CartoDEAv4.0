@@ -84,7 +84,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     
     const inputSource = inputLayer.olLayer.getSource();
     const maskSource = maskLayer.olLayer.getSource();
-    if (!inputSource || maskSource.getFeatures().length === 0) {
+    if (!inputSource || !maskSource || maskSource.getFeatures().length === 0) {
         toast({ description: "Una de las capas seleccionadas no tiene entidades.", variant: "destructive" });
         return;
     }
@@ -104,7 +104,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
             const clippedResult = bboxClip(feature4326, clipBbox);
             
             // --- CRITICAL FIX ---
-            // Check if the resulting geometry has actual coordinates before adding it.
+            // Check if the resulting geometry has actual surface area before adding it.
             if (turfArea(clippedResult) > 0) {
                 const flattened = flatten(clippedResult as TurfFeature<any>);
                 flattened.features.forEach(flatFeature => {
@@ -238,6 +238,5 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
-    
 
     
