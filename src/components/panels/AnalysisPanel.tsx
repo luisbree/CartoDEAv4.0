@@ -8,19 +8,19 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DraftingCompass, Scissors, Layers, CircleDotDashed, MinusSquare, BoxSelect, Droplet } from 'lucide-react';
+import { DraftingCompass, Scissors, Layers, CircleDotDashed, MinusSquare, BoxSelect, Droplet, Sparkles, Loader2 } from 'lucide-react';
 import type { MapLayer, VectorMapLayer } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { nanoid } from 'nanoid';
 import GeoJSON from 'ol/format/GeoJSON';
 import VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
-import { intersect, difference, featureCollection } from '@turf/turf';
+import { intersect, featureCollection, difference } from '@turf/turf';
 import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as TurfMultiPolygon, FeatureCollection as TurfFeatureCollection, Geometry as TurfGeometry } from 'geojson';
 import { multiPolygon } from '@turf/helpers';
 import type Feature from 'ol/Feature';
 import type { Geometry } from 'ol/geom';
-import { performBufferAnalysis, performConvexHull, performConcaveHull } from '@/services/spatial-analysis';
+import { performBufferAnalysis, performConvexHull, performConcaveHull, calculateOptimalConcavity } from '@/services/spatial-analysis';
 import { Slider } from '../ui/slider';
 
 
@@ -77,6 +77,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   const [hullInputLayerId, setHullInputLayerId] = useState<string>('');
   const [hullOutputName, setHullOutputName] = useState('');
   const [concavity, setConcavity] = useState<number>(2);
+  const [isCalculatingConcavity, setIsCalculatingConcavity] = useState(false);
 
   const { toast } = useToast();
 
@@ -376,6 +377,10 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
             ? await performConvexHull({ features: featuresToProcess })
             : await performConcaveHull({ features: featuresToProcess, concavity: concavity });
         
+        if (!hullFeatures) {
+             throw new Error("No se pudo generar el polígono. Pruebe con un valor de concavidad mayor o verifique la distribución de los puntos.");
+        }
+        
         hullFeatures.forEach(f => f.setId(nanoid()));
         const newLayerId = `${type}-hull-result-${nanoid()}`;
         const newSource = new VectorSource({ features: hullFeatures });
@@ -400,6 +405,37 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     } catch (error: any) {
         console.error(`${operationName} failed:`, error);
         toast({ title: `Error de ${operationName}`, description: error.message, variant: "destructive" });
+    }
+  };
+
+  const handleSuggestConcavity = async () => {
+    const inputLayer = vectorLayers.find(l => l.id === hullInputLayerId);
+    if (!inputLayer) {
+      toast({ description: "Por favor, seleccione una capa de entrada para calcular la concavidad.", variant: "destructive" });
+      return;
+    }
+    const inputSource = inputLayer.olLayer.getSource();
+    if (!inputSource || inputSource.getFeatures().length === 0) {
+      toast({ description: "La capa de entrada no tiene entidades.", variant: "destructive" });
+      return;
+    }
+    
+    setIsCalculatingConcavity(true);
+    toast({ description: 'Calculando valor de concavidad sugerido...' });
+    
+    const safeSelectedFeatures = selectedFeatures || [];
+    const relevantSelectedFeatures = safeSelectedFeatures.filter(f => inputSource.getFeatureById(f.getId() as string | number) !== null);
+    const featuresToProcess = relevantSelectedFeatures.length > 0 ? relevantSelectedFeatures : inputSource.getFeatures();
+
+    try {
+        const optimalValue = await calculateOptimalConcavity({ features: featuresToProcess });
+        setConcavity(optimalValue);
+        toast({ description: `Valor de concavidad sugerido: ${optimalValue.toFixed(2)} km` });
+    } catch (error: any) {
+        console.error("Error calculating optimal concavity:", error);
+        toast({ title: "Error de Cálculo", description: error.message, variant: "destructive" });
+    } finally {
+        setIsCalculatingConcavity(false);
     }
   };
 
@@ -569,7 +605,13 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                 <Input id="hull-output-name" value={hullOutputName} onChange={(e) => setHullOutputName(e.target.value)} placeholder="Ej: Envolvente_CapaX" className="h-8 text-xs bg-black/20"/>
                             </div>
                             <div className="space-y-2 pt-2 border-t border-white/20">
-                                <Label htmlFor="concavity-slider" className="text-xs">Concavidad (km)</Label>
+                                <div className="flex items-center justify-between">
+                                  <Label htmlFor="concavity-slider" className="text-xs">Concavidad (km)</Label>
+                                  <Button onClick={handleSuggestConcavity} size="sm" variant="ghost" className="h-6 text-xs" disabled={!hullInputLayerId || isCalculatingConcavity}>
+                                    {isCalculatingConcavity ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1.5 h-3.5 w-3.5" />}
+                                    Sugerir
+                                  </Button>
+                                </div>
                                 <div className="flex items-center gap-2">
                                   <Slider
                                       id="concavity-slider"

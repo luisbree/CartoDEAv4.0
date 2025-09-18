@@ -1,8 +1,8 @@
 
 "use client";
 
-import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as TurfMultiPolygon, FeatureCollection as TurfFeatureCollection, Geometry as TurfGeometry } from 'geojson';
-import { area as turfArea, intersect, featureCollection, buffer as turfBuffer, union, difference, convex, concave } from '@turf/turf';
+import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as TurfMultiPolygon, FeatureCollection as TurfFeatureCollection, Geometry as TurfGeometry, Point as TurfPoint } from 'geojson';
+import { area as turfArea, intersect, featureCollection, buffer as turfBuffer, union, convex, concave, nearestPoint } from '@turf/turf';
 import { multiPolygon } from '@turf/helpers';
 import type Feature from 'ol/Feature';
 import GeoJSON from 'ol/format/GeoJSON';
@@ -206,7 +206,7 @@ export async function performConvexHull({ features }: HullParams): Promise<Featu
  * @param params - The parameters for the hull operation, including concavity.
  * @returns A promise that resolves to an array of OpenLayers Features (containing one hull polygon).
  */
-export async function performConcaveHull({ features, concavity = 2 }: HullParams): Promise<Feature<Geometry>[]> {
+export async function performConcaveHull({ features, concavity = 2 }: HullParams): Promise<Feature<Geometry>[] | null> {
     if (!features || features.length < 3) {
         throw new Error("Se requieren al menos 3 puntos para generar un Concave Hull.");
     }
@@ -226,7 +226,7 @@ export async function performConcaveHull({ features, concavity = 2 }: HullParams
         const hullPolygon = concave(featureCollection(points), { maxEdge: concavity, units: 'kilometers' });
 
         if (!hullPolygon) {
-            throw new Error("No se pudo generar el polígono. Pruebe con un valor de concavidad mayor o verifique la distribución de los puntos.");
+            return null;
         }
 
         return formatForMap.readFeatures({
@@ -236,5 +236,53 @@ export async function performConcaveHull({ features, concavity = 2 }: HullParams
     } catch (error: any) {
         console.error("Error during Concave Hull analysis:", error);
         throw new Error(`Turf.js concave hull failed: ${error.message}`);
+    }
+}
+
+
+/**
+ * Calculates a suggested concavity value for a set of features.
+ * @param params - The features to analyze.
+ * @returns A promise that resolves to the suggested concavity value in kilometers.
+ */
+export async function calculateOptimalConcavity({ features }: HullParams): Promise<number> {
+    if (!features || features.length < 2) {
+        throw new Error("Se requieren al menos 2 puntos para calcular la concavidad.");
+    }
+
+    const format = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
+
+    try {
+        const featuresGeoJSON = format.writeFeaturesObject(features);
+        const points = featuresGeoJSON.features.filter(f => f.geometry.type === 'Point') as TurfFeature<TurfPoint>[];
+
+        if (points.length < 2) {
+            throw new Error("La capa no contiene suficientes puntos.");
+        }
+        
+        const pointCollection = featureCollection(points);
+        let totalNearestDistance = 0;
+        
+        // This can be slow for a very large number of points. Consider sampling for > 5000 points.
+        const pointsToProcess = points.length > 5000 ? points.slice(0, 5000) : points;
+
+        for (const point of pointsToProcess) {
+            const nearest = nearestPoint(point, pointCollection);
+            // distance is in kilometers by default in nearestPoint
+            totalNearestDistance += nearest.properties.distanceToPoint;
+        }
+
+        const averageDistance = totalNearestDistance / pointsToProcess.length;
+        
+        // Suggest a value slightly larger than the average nearest distance
+        // This factor (e.g., 1.5) can be tuned.
+        const suggestedConcavity = averageDistance * 1.5;
+
+        // Return a rounded, sensible value.
+        return Math.round(suggestedConcavity * 100) / 100;
+
+    } catch (error: any) {
+        console.error("Error calculating optimal concavity:", error);
+        throw new Error(`Cálculo de concavidad falló: ${error.message}`);
     }
 }
