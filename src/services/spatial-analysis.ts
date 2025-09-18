@@ -210,9 +210,8 @@ export async function performDifferenceAnalysis({
             throw new Error("La capa de borrado no contiene geometrías de polígono válidas.");
         }
         
-        // 3. Perform a single difference operation.
-        // @ts-ignore
-        const diffResult = difference(unionedInput, eraseMask);
+        // 3. Perform a single difference operation using a FeatureCollection
+        const diffResult = difference(featureCollection([unionedInput, eraseMask]));
 
         if (!diffResult) {
             return []; // Return empty array if difference results in nothing
