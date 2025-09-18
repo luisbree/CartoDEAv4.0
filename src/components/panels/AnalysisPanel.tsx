@@ -108,7 +108,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     });
   }, [vectorLayers]);
 
- const handleRunClip = () => {
+  const handleRunClip = () => {
     const inputLayer = vectorLayers.find(l => l.id === clipInputLayerId);
     const maskLayer = polygonLayers.find(l => l.id === clipMaskLayerId);
 
@@ -193,7 +193,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         toast({ description: "No se encontraron entidades resultantes de la operación de recorte." });
     }
   };
-
+  
   const handleRunErase = () => {
     const inputLayer = vectorLayers.find(l => l.id === eraseInputLayerId);
     const maskLayer = polygonLayers.find(l => l.id === eraseMaskLayerId);
@@ -238,23 +238,22 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     }
     const eraseMask = multiPolygon(maskPolygons);
 
-    const inputGeoJSON = format.writeFeaturesObject(featuresToProcess) as TurfFeatureCollection;
-
     const erasedFeaturesGeoJSON: TurfFeature<TurfGeometry>[] = [];
 
-    for (const inputFeature of inputGeoJSON.features) {
+    for (const inputFeature of featuresToProcess) {
         try {
-            const differenceResult = difference(inputFeature, eraseMask);
+            const inputFeatureGeoJSON = format.writeFeatureObject(inputFeature);
+            const differenceResult = difference(inputFeatureGeoJSON, eraseMask);
 
             if (differenceResult && differenceResult.geometry && differenceResult.geometry.coordinates.length > 0) {
-                differenceResult.properties = inputFeature.properties;
+                differenceResult.properties = inputFeatureGeoJSON.properties;
                 erasedFeaturesGeoJSON.push(differenceResult);
             } else {
-                 erasedFeaturesGeoJSON.push(inputFeature);
+                 erasedFeaturesGeoJSON.push(inputFeatureGeoJSON);
             }
         } catch (e) {
             console.warn("Error performing difference on a feature, including original feature.", e);
-            erasedFeaturesGeoJSON.push(inputFeature);
+            erasedFeaturesGeoJSON.push(format.writeFeatureObject(inputFeature));
         }
     }
 
@@ -291,8 +290,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         toast({ description: "La operación de diferencia no produjo entidades resultantes." });
     }
   };
-
-
+  
  const handleRunBuffer = async () => {
     const inputLayer = vectorLayers.find(l => l.id === bufferInputLayerId);
     if (!inputLayer) {
@@ -581,7 +579,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                   />
                                   <span className="text-xs font-mono w-12 text-center">{concavity} km</span>
                                 </div>
-                                <p className="text-xs text-gray-400">Distancia máxima entre puntos en el borde. Afecta solo a la envolvente cóncava.</p>
+                                <p className="text-xs text-gray-400">Controla el detalle del polígono cóncavo (distancia máxima de los lados). Un valor más bajo genera una forma más ajustada.</p>
                             </div>
                             <div className="flex items-center gap-2 pt-2">
                                 <Button onClick={() => handleRunHull('convex')} size="sm" className="w-full h-8 text-xs" disabled={!hullInputLayerId}>
