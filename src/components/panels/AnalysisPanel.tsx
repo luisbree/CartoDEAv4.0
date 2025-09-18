@@ -15,12 +15,12 @@ import { nanoid } from 'nanoid';
 import GeoJSON from 'ol/format/GeoJSON';
 import VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
-import { intersect, featureCollection } from '@turf/turf';
+import { intersect, difference, featureCollection } from '@turf/turf';
 import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as TurfMultiPolygon, FeatureCollection as TurfFeatureCollection, Geometry as TurfGeometry } from 'geojson';
 import { multiPolygon } from '@turf/helpers';
 import type Feature from 'ol/Feature';
 import type { Geometry } from 'ol/geom';
-import { performBufferAnalysis, performDifferenceAnalysis } from '@/services/spatial-analysis';
+import { performBufferAnalysis } from '@/services/spatial-analysis';
 
 
 interface AnalysisPanelProps {
@@ -176,9 +176,10 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     }
   };
 
-  const handleRunErase = async () => {
+  const handleRunErase = () => {
     const inputLayer = vectorLayers.find(l => l.id === eraseInputLayerId);
     const maskLayer = polygonLayers.find(l => l.id === eraseMaskLayerId);
+
     if (!inputLayer || !maskLayer) {
         toast({ description: "Por favor, seleccione una capa de entrada y una de borrado.", variant: "destructive" });
         return;
@@ -189,30 +190,64 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         toast({ description: "Una de las capas seleccionadas no tiene entidades.", variant: "destructive" });
         return;
     }
-    
+
     const safeSelectedFeatures = selectedFeatures || [];
     const relevantSelectedFeatures = safeSelectedFeatures.filter(feature => 
         inputSource.getFeatureById(feature.getId() as string | number) !== null
     );
+    const featuresToProcess = relevantSelectedFeatures.length > 0 ? relevantSelectedFeatures : inputSource.getFeatures();
+    
+    if (featuresToProcess.length === 0) {
+        toast({ description: "No hay entidades de entrada para procesar.", variant: "destructive" });
+        return;
+    }
 
-    const featuresToErase = relevantSelectedFeatures.length > 0 ? relevantSelectedFeatures : inputSource.getFeatures();
     const outputName = eraseOutputName.trim() || `Diferencia de ${inputLayer.name}`;
-    toast({ description: `Calculando diferencia para ${featuresToErase.length} entidad(es)...` });
+    toast({ description: `Calculando diferencia para ${featuresToProcess.length} entidad(es)...` });
+    
+    const format = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
+    const formatForMap = new GeoJSON({ dataProjection: 'EPSG:4326', featureProjection: 'EPSG:3857' });
 
-    try {
-        const erasedFeatures = await performDifferenceAnalysis({
-            inputFeatures: featuresToErase,
-            eraseFeatures: maskSource.getFeatures(),
+    const maskFeatures = maskSource.getFeatures();
+    const maskGeoJSON = format.writeFeaturesObject(maskFeatures) as TurfFeatureCollection<TurfPolygon | TurfMultiPolygon>;
+    
+    const maskPolygons = maskGeoJSON.features.flatMap(f => 
+        f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.coordinates
+    );
+    if (maskPolygons.length === 0) {
+        toast({ description: "La capa de borrado no contiene polígonos válidos.", variant: "destructive" });
+        return;
+    }
+    const eraseMask = multiPolygon(maskPolygons);
+
+    const inputGeoJSON = format.writeFeaturesObject(featuresToProcess) as TurfFeatureCollection;
+
+    const erasedFeaturesGeoJSON: TurfFeature<TurfGeometry>[] = [];
+
+    for (const inputFeature of inputGeoJSON.features) {
+        try {
+            // The first feature in the collection is the one to be erased from, the second is the eraser
+            const differenceResult = difference(featureCollection([inputFeature, eraseMask]));
+
+            if (differenceResult && differenceResult.geometry && differenceResult.geometry.coordinates.length > 0) {
+                differenceResult.properties = inputFeature.properties;
+                erasedFeaturesGeoJSON.push(differenceResult);
+            }
+        } catch (e) {
+            console.warn("Error performing difference on a feature, skipping it.", e);
+        }
+    }
+
+    if (erasedFeaturesGeoJSON.length > 0) {
+        const finalOLFeatures = formatForMap.readFeatures({
+            type: 'FeatureCollection',
+            features: erasedFeaturesGeoJSON
         });
 
-        if (erasedFeatures.length === 0) {
-            toast({ description: "La operación de diferencia no produjo entidades resultantes." });
-            return;
-        }
+        finalOLFeatures.forEach(f => f.setId(nanoid()));
 
-        erasedFeatures.forEach(f => f.setId(nanoid()));
         const newLayerId = `erase-result-${nanoid()}`;
-        const newSource = new VectorSource({ features: erasedFeatures });
+        const newSource = new VectorSource({ features: finalOLFeatures });
         const newOlLayer = new VectorLayer({
             source: newSource,
             properties: { id: newLayerId, name: outputName, type: 'analysis' },
@@ -228,14 +263,12 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
             type: 'analysis',
         }, true);
 
-        toast({ description: `Se creó la capa de diferencia "${outputName}" con ${erasedFeatures.length} entidades.` });
+        toast({ description: `Se creó la capa de diferencia "${outputName}" con ${finalOLFeatures.length} entidades.` });
         setEraseInputLayerId('');
         setEraseMaskLayerId('');
         setEraseOutputName('');
-
-    } catch (error: any) {
-        console.error("Difference analysis failed:", error);
-        toast({ title: "Error de Diferencia", description: error.message, variant: "destructive" });
+    } else {
+        toast({ description: "La operación de diferencia no produjo entidades resultantes." });
     }
   };
 
@@ -448,5 +481,3 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
-
-    

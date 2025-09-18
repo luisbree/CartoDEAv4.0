@@ -2,7 +2,7 @@
 "use client";
 
 import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as TurfMultiPolygon, FeatureCollection as TurfFeatureCollection, Geometry as TurfGeometry } from 'geojson';
-import { area as turfArea, intersect, featureCollection, buffer as turfBuffer, union, difference } from '@turf/turf';
+import { area as turfArea, intersect, featureCollection, buffer as turfBuffer, union } from '@turf/turf';
 import { multiPolygon } from '@turf/helpers';
 import type Feature from 'ol/Feature';
 import GeoJSON from 'ol/format/GeoJSON';
@@ -148,78 +148,5 @@ export async function performBufferAnalysis({
     } catch (error: any) {
         console.error("Error during buffer analysis:", error);
         throw new Error(`Turf.js buffer failed: ${error.message}`);
-    }
-}
-
-interface DifferenceParams {
-    inputFeatures: Feature<Geometry>[];
-    eraseFeatures: Feature<Geometry>[];
-}
-
-/**
- * Performs a difference (erase) operation.
- * @param params - The parameters for the difference operation.
- * @returns A promise that resolves to an array of resulting OpenLayers Features.
- */
-export async function performDifferenceAnalysis({
-    inputFeatures,
-    eraseFeatures,
-}: DifferenceParams): Promise<Feature<Geometry>[]> {
-    if (!inputFeatures || inputFeatures.length === 0 || !eraseFeatures || eraseFeatures.length === 0) {
-        throw new Error("Se requieren entidades de entrada y de borrado.");
-    }
-    
-    const format = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
-    const formatForMap = new GeoJSON({ dataProjection: 'EPSG:4326', featureProjection: 'EPSG:3857' });
-
-    try {
-        const inputGeoJSON = format.writeFeaturesObject(inputFeatures);
-        const eraseGeoJSON = format.writeFeaturesObject(eraseFeatures);
-
-        const validPolygonOrMultiPolygon = (feature: TurfFeature): feature is TurfFeature<TurfPolygon | TurfMultiPolygon> => 
-            feature.geometry !== null && (feature.geometry.type === 'Polygon' || feature.geometry.type === 'MultiPolygon');
-
-        // 1. Union all valid input features into one single feature.
-        const inputPolygons = inputGeoJSON.features.filter(validPolygonOrMultiPolygon);
-        if (inputPolygons.length === 0) {
-            throw new Error("La capa de entrada no contiene geometrías de polígono válidas.");
-        }
-        // @ts-ignore
-        const unionedInputFeature = inputPolygons.length > 1 ? union(...inputPolygons) : inputPolygons[0];
-
-
-        // 2. Union all valid erase features into one single mask feature.
-        const erasePolygons = eraseGeoJSON.features.filter(validPolygonOrMultiPolygon);
-        if (erasePolygons.length === 0) {
-            throw new Error("La capa de borrado no contiene geometrías de polígono válidas.");
-        }
-        // @ts-ignore
-        const eraseMaskFeature = erasePolygons.length > 1 ? union(...erasePolygons) : erasePolygons[0];
-
-
-        if (!unionedInputFeature || !eraseMaskFeature) {
-            throw new Error("Una de las capas no contiene geometrías válidas para la operación.");
-        }
-
-        // 3. Create a FeatureCollection with polygon1 and polygon2.
-        const differenceCollection = featureCollection([unionedInputFeature, eraseMaskFeature]);
-        
-        // 4. Call turf.difference with the single FeatureCollection.
-        const diffResult = difference(differenceCollection);
-
-        if (!diffResult) {
-            return []; // Return empty array if difference results in nothing
-        }
-        
-        const olFeatures = formatForMap.readFeatures({
-            type: 'FeatureCollection',
-            features: [diffResult]
-        });
-        
-        return olFeatures;
-
-    } catch (error: any) {
-        console.error("Error during difference analysis:", error);
-        throw new Error(`Turf.js difference failed: ${error.message}`);
     }
 }
