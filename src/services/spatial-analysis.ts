@@ -2,7 +2,7 @@
 "use client";
 
 import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as TurfMultiPolygon, FeatureCollection as TurfFeatureCollection, Geometry as TurfGeometry } from 'geojson';
-import { area as turfArea, intersect, featureCollection, buffer as turfBuffer, union } from '@turf/turf';
+import { area as turfArea, intersect, featureCollection, buffer as turfBuffer, union, difference } from '@turf/turf';
 import { multiPolygon } from '@turf/helpers';
 import type Feature from 'ol/Feature';
 import GeoJSON from 'ol/format/GeoJSON';
@@ -150,5 +150,73 @@ export async function performBufferAnalysis({
     } catch (error: any) {
         console.error("Error during buffer analysis:", error);
         throw new Error(`Turf.js buffer failed: ${error.message}`);
+    }
+}
+
+interface DifferenceParams {
+    inputFeatures: Feature<Geometry>[];
+    eraseFeatures: Feature<Geometry>[];
+}
+
+/**
+ * Performs a difference (erase) operation.
+ * @param params - The parameters for the difference operation.
+ * @returns A promise that resolves to an array of resulting OpenLayers Features.
+ */
+export async function performDifferenceAnalysis({
+    inputFeatures,
+    eraseFeatures,
+}: DifferenceParams): Promise<Feature<Geometry>[]> {
+    if (!inputFeatures || inputFeatures.length === 0 || !eraseFeatures || eraseFeatures.length === 0) {
+        throw new Error("Se requieren entidades de entrada y de borrado.");
+    }
+    
+    const format = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
+    const formatForMap = new GeoJSON({ dataProjection: 'EPSG:4326', featureProjection: 'EPSG:3857' });
+
+    try {
+        const inputGeoJSON = format.writeFeaturesObject(inputFeatures);
+        const eraseGeoJSON = format.writeFeaturesObject(eraseFeatures);
+
+        // Union all erase features into one for a single difference operation
+        let eraseMask: TurfFeature<TurfPolygon | TurfMultiPolygon> | null = null;
+        for (const feature of eraseGeoJSON.features) {
+             if (feature.geometry && (feature.geometry.type === 'Polygon' || feature.geometry.type === 'MultiPolygon')) {
+                if (!eraseMask) {
+                    eraseMask = feature as TurfFeature<TurfPolygon | TurfMultiPolygon>;
+                } else {
+                    // @ts-ignore Turf union can handle mixed geometry types
+                    eraseMask = union(eraseMask, feature);
+                }
+            }
+        }
+        
+        if (!eraseMask) {
+            throw new Error("La capa de borrado no contiene geometrías de polígono válidas.");
+        }
+
+        const resultFeatures: TurfFeature<TurfGeometry>[] = [];
+        for (const inputFeature of inputGeoJSON.features) {
+            try {
+                // @ts-ignore
+                const diffResult = difference(inputFeature, eraseMask);
+                if (diffResult) {
+                    resultFeatures.push(diffResult);
+                }
+            } catch (individualError) {
+                 console.warn("Error calculando la diferencia para una entidad, saltando.", individualError);
+            }
+        }
+        
+        const olFeatures = formatForMap.readFeatures({
+            type: 'FeatureCollection',
+            features: resultFeatures
+        });
+        
+        return olFeatures;
+
+    } catch (error: any) {
+        console.error("Error during difference analysis:", error);
+        throw new Error(`Turf.js difference failed: ${error.message}`);
     }
 }

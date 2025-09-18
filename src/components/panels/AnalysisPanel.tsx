@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DraftingCompass, Scissors, Layers, CircleDotDashed } from 'lucide-react';
+import { DraftingCompass, Scissors, Layers, CircleDotDashed, MinusSquare } from 'lucide-react';
 import type { MapLayer, VectorMapLayer } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { nanoid } from 'nanoid';
@@ -20,7 +20,7 @@ import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as Tu
 import { multiPolygon } from '@turf/helpers';
 import type Feature from 'ol/Feature';
 import type { Geometry } from 'ol/geom';
-import { performBufferAnalysis } from '@/services/spatial-analysis';
+import { performBufferAnalysis, performDifferenceAnalysis } from '@/services/spatial-analysis';
 
 
 interface AnalysisPanelProps {
@@ -60,6 +60,11 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   const [clipInputLayerId, setClipInputLayerId] = useState<string>('');
   const [clipMaskLayerId, setClipMaskLayerId] = useState<string>('');
   const [clipOutputName, setClipOutputName] = useState('');
+
+  // State for Difference (Erase) tool
+  const [eraseInputLayerId, setEraseInputLayerId] = useState<string>('');
+  const [eraseMaskLayerId, setEraseMaskLayerId] = useState<string>('');
+  const [eraseOutputName, setEraseOutputName] = useState('');
   
   // State for Buffer tool
   const [bufferInputLayerId, setBufferInputLayerId] = useState<string>('');
@@ -168,6 +173,63 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 
     } else {
         toast({ description: "No se encontraron entidades resultantes de la operación de recorte." });
+    }
+  };
+
+  const handleRunErase = async () => {
+    const inputLayer = vectorLayers.find(l => l.id === eraseInputLayerId);
+    const maskLayer = polygonLayers.find(l => l.id === eraseMaskLayerId);
+    if (!inputLayer || !maskLayer) {
+        toast({ description: "Por favor, seleccione una capa de entrada y una de borrado.", variant: "destructive" });
+        return;
+    }
+    const inputSource = inputLayer.olLayer.getSource();
+    const maskSource = maskLayer.olLayer.getSource();
+    if (!inputSource || !maskSource || maskSource.getFeatures().length === 0) {
+        toast({ description: "Una de las capas seleccionadas no tiene entidades.", variant: "destructive" });
+        return;
+    }
+
+    const outputName = eraseOutputName.trim() || `Diferencia de ${inputLayer.name}`;
+    toast({ description: `Calculando diferencia para ${inputLayer.name}...` });
+
+    try {
+        const erasedFeatures = await performDifferenceAnalysis({
+            inputFeatures: inputSource.getFeatures(),
+            eraseFeatures: maskSource.getFeatures(),
+        });
+
+        if (erasedFeatures.length === 0) {
+            toast({ description: "La operación de diferencia no produjo entidades resultantes." });
+            return;
+        }
+
+        erasedFeatures.forEach(f => f.setId(nanoid()));
+        const newLayerId = `erase-result-${nanoid()}`;
+        const newSource = new VectorSource({ features: erasedFeatures });
+        const newOlLayer = new VectorLayer({
+            source: newSource,
+            properties: { id: newLayerId, name: outputName, type: 'analysis' },
+            style: inputLayer.olLayer.getStyle(),
+        });
+
+        onAddLayer({
+            id: newLayerId,
+            name: outputName,
+            olLayer: newOlLayer,
+            visible: true,
+            opacity: 1,
+            type: 'analysis',
+        }, true);
+
+        toast({ description: `Se creó la capa de diferencia "${outputName}" con ${erasedFeatures.length} entidades.` });
+        setEraseInputLayerId('');
+        setEraseMaskLayerId('');
+        setEraseOutputName('');
+
+    } catch (error: any) {
+        console.error("Difference analysis failed:", error);
+        toast({ title: "Error de Diferencia", description: error.message, variant: "destructive" });
     }
   };
 
@@ -289,6 +351,37 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                            <Button onClick={handleRunClip} size="sm" className="w-full h-8 text-xs" disabled={!clipInputLayerId || !clipMaskLayerId}>
                               <Scissors className="mr-2 h-3.5 w-3.5" />
                               Ejecutar Recorte
+                          </Button>
+                      </div>
+                  </div>
+                  <div className="space-y-1">
+                      <Label className="text-xs font-semibold">Diferencia (Erase)</Label>
+                      <div className="space-y-2 p-2 border border-white/10 rounded-md">
+                          <div>
+                              <Label htmlFor="erase-input-layer" className="text-xs">Capa de Entrada (a borrar)</Label>
+                              <Select value={eraseInputLayerId} onValueChange={setEraseInputLayerId}>
+                                <SelectTrigger id="erase-input-layer" className="h-8 text-xs bg-black/20"><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
+                                <SelectContent className="bg-gray-700 text-white border-gray-600">
+                                  {vectorLayers.map(l => <SelectItem key={l.id} value={l.id} className="text-xs">{l.name}</SelectItem>)}
+                                </SelectContent>
+                              </Select>
+                          </div>
+                          <div>
+                              <Label htmlFor="erase-mask-layer" className="text-xs">Capa de Borrado (molde)</Label>
+                              <Select value={eraseMaskLayerId} onValueChange={setEraseMaskLayerId}>
+                                <SelectTrigger id="erase-mask-layer" className="h-8 text-xs bg-black/20"><SelectValue placeholder="Seleccionar capa de polígonos..." /></SelectTrigger>
+                                <SelectContent className="bg-gray-700 text-white border-gray-600">
+                                  {polygonLayers.map(l => <SelectItem key={l.id} value={l.id} className="text-xs">{l.name}</SelectItem>)}
+                                </SelectContent>
+                              </Select>
+                          </div>
+                          <div>
+                              <Label htmlFor="erase-output-name" className="text-xs">Nombre de la Capa de Salida</Label>
+                              <Input id="erase-output-name" value={eraseOutputName} onChange={(e) => setEraseOutputName(e.target.value)} placeholder="Ej: Diferencia_de_CapaX" className="h-8 text-xs bg-black/20"/>
+                          </div>
+                           <Button onClick={handleRunErase} size="sm" className="w-full h-8 text-xs" disabled={!eraseInputLayerId || !eraseMaskLayerId}>
+                              <MinusSquare className="mr-2 h-3.5 w-3.5" />
+                              Ejecutar Diferencia
                           </Button>
                       </div>
                   </div>

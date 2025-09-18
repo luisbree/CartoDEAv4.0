@@ -1,4 +1,3 @@
-
 {
-  "notes": "### Lista de Tareas y Mejoras para CartoDEA v4.0\n\nEste es tu bloc de notas personal para llevar un registro de las ideas, errores o mejoras para la aplicación. Todo lo que escribas aquí se guardará como parte del código fuente.\n\n**Ideas Principales:**\n\n- [ ] \n- [ ] \n- [ ] \n\n**Errores a Investigar:**\n\n- \n\n**Mejoras de UI/UX:**\n\n- \n"
+  "notes": "### Lista de Tareas y Mejoras para CartoDEA v4.0\n\nEste es tu bloc de notas personal para llevar un registro de las ideas, errores o mejoras para la aplicación. Todo lo que escribas aquí se guardará como parte del código fuente.\n\n**Ideas Principales:**\n\n- [Análisis espacial ] \n- [Notificaciones ] \n- [Sesiones de usuario ] \n- [ ] \n\n**Errores a Investigar:**\n\n- \n\n**Mejoras de UI/UX:**\n\n- Mejorar sustancialmente la carga por teselas, el manejo, la representación, la consulta de archivos ráster.\n-Mejorar sustancialmente el manejo de fuentes externas tipo Geoserver.\n"
 }
