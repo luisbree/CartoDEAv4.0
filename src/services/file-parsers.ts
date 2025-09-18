@@ -11,6 +11,8 @@ import type { useToast } from '@/hooks/use-toast';
 import type Feature from 'ol/Feature';
 import WebGLTileLayer from 'ol/layer/WebGLTile';
 import GeoTIFF from 'ol/source/GeoTIFF';
+import { Circle as CircleStyle, Fill, Stroke, Style } from 'ol/style';
+
 
 interface FileUploadParams {
     selectedFile: File | null;
@@ -29,6 +31,21 @@ const getBaseName = (filename: string): string => {
     return lastDotIndex > 0 ? filename.substring(0, lastDotIndex) : filename;
 };
 
+// --- Style rotation for new layers ---
+let styleCounter = 0;
+const RANDOM_STYLES = [
+    { stroke: '#0077b6', fill: 'rgba(0, 119, 182, 0.2)' },   // Blue
+    { stroke: '#e63946', fill: 'rgba(230, 57, 70, 0.2)' },    // Red
+    { stroke: '#2a9d8f', fill: 'rgba(42, 157, 143, 0.2)' },   // Green
+    { stroke: '#f4a261', fill: 'rgba(244, 162, 97, 0.2)' },   // Orange
+    { stroke: '#8338ec', fill: 'rgba(131, 56, 236, 0.2)' },   // Violet
+    { stroke: '#ffbe0b', fill: 'rgba(255, 190, 11, 0.2)' },   // Yellow
+    { stroke: '#fb5607', fill: 'rgba(251, 86, 7, 0.2)' },     // Dark Orange
+    { stroke: '#00ffff', fill: 'rgba(0, 255, 255, 0.2)' },     // Cyan
+    { stroke: '#ff00ff', fill: 'rgba(255, 0, 255, 0.2)' },     // Magenta
+    { stroke: '#3a86ff', fill: 'rgba(58, 134, 255, 0.2)' },   // Light Blue
+];
+
 const createVectorLayer = (features: Feature[], layerName: string): MapLayer => {
     // Ensure all features have a unique ID for selection to work correctly.
     features.forEach(feature => {
@@ -39,10 +56,35 @@ const createVectorLayer = (features: Feature[], layerName: string): MapLayer => 
 
     const source = new VectorSource({ features });
     const layerId = `${layerName}-${nanoid()}`;
+
+    // Get the next style from the palette
+    const styleDef = RANDOM_STYLES[styleCounter % RANDOM_STYLES.length];
+    styleCounter++; // Increment for the next layer
+
     const olLayer = new VectorLayer({
         source,
         properties: { id: layerId, name: layerName, type: 'vector' },
+        style: new Style({
+            stroke: new Stroke({
+                color: styleDef.stroke,
+                width: 2
+            }),
+            fill: new Fill({
+                color: styleDef.fill
+            }),
+            image: new CircleStyle({
+                radius: 5,
+                fill: new Fill({
+                    color: styleDef.fill
+                }),
+                stroke: new Stroke({
+                    color: styleDef.stroke,
+                    width: 1.5
+                })
+            })
+        })
     });
+
     return {
         id: layerId,
         name: layerName,
