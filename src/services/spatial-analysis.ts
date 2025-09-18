@@ -134,10 +134,8 @@ export async function performBufferAnalysis({
         // Union all the buffered features into a single feature
         let finalGeometry = bufferedFeatures[0];
         if (bufferedFeatures.length > 1) {
-             for (let i = 1; i < bufferedFeatures.length; i++) {
-                // @ts-ignore
-                finalGeometry = union(finalGeometry, bufferedFeatures[i]);
-            }
+            // @ts-ignore - Turf's union typing can be tricky with spread operator
+            finalGeometry = union(...bufferedFeatures);
         }
         
         const olFeatures = formatForMap.readFeatures({
@@ -182,26 +180,25 @@ export async function performDifferenceAnalysis({
             feature.geometry !== null && (feature.geometry.type === 'Polygon' || feature.geometry.type === 'MultiPolygon');
 
         // 1. Union all valid input features into one single feature.
-        const unionedInputFeature = inputGeoJSON.features
-            .filter(validPolygonOrMultiPolygon)
-            .reduce<TurfFeature<TurfPolygon | TurfMultiPolygon> | null>((acc, feature) => {
-                if (!acc) return feature;
-                // @ts-ignore
-                return union(acc, feature);
-            }, null);
+        const inputPolygons = inputGeoJSON.features.filter(validPolygonOrMultiPolygon);
+        if (inputPolygons.length === 0) {
+            throw new Error("La capa de entrada no contiene geometrías de polígono válidas.");
+        }
+        // @ts-ignore
+        const unionedInputFeature = inputPolygons.length > 1 ? union(...inputPolygons) : inputPolygons[0];
+
 
         // 2. Union all valid erase features into one single mask feature.
-        const eraseMaskFeature = eraseGeoJSON.features
-            .filter(validPolygonOrMultiPolygon)
-            .reduce<TurfFeature<TurfPolygon | TurfMultiPolygon> | null>((acc, feature) => {
-                if (!acc) return feature;
-                // @ts-ignore
-                return union(acc, feature);
-            }, null);
+        const erasePolygons = eraseGeoJSON.features.filter(validPolygonOrMultiPolygon);
+        if (erasePolygons.length === 0) {
+            throw new Error("La capa de borrado no contiene geometrías de polígono válidas.");
+        }
+        // @ts-ignore
+        const eraseMaskFeature = erasePolygons.length > 1 ? union(...erasePolygons) : erasePolygons[0];
 
 
         if (!unionedInputFeature || !eraseMaskFeature) {
-            throw new Error("Una de las capas no contiene geometrías de polígono válidas para la operación.");
+            throw new Error("Una de las capas no contiene geometrías válidas para la operación.");
         }
 
         // 3. Create a FeatureCollection with polygon1 and polygon2.
