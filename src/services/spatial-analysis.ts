@@ -226,7 +226,7 @@ export async function performConcaveHull({ features, concavity = 2 }: HullParams
         const hullPolygon = concave(featureCollection(points), { maxEdge: concavity, units: 'kilometers' });
 
         if (!hullPolygon) {
-            throw new Error("La operación Concave Hull no produjo resultados. Pruebe con un valor de concavidad mayor.");
+            throw new Error("No se pudo generar el polígono. Pruebe con un valor de concavidad mayor o verifique la distribución de los puntos.");
         }
 
         return formatForMap.readFeatures({
