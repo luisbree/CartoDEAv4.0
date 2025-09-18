@@ -2,7 +2,7 @@
 "use client";
 
 import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as TurfMultiPolygon, FeatureCollection as TurfFeatureCollection, Geometry as TurfGeometry } from 'geojson';
-import { area as turfArea, intersect, featureCollection, buffer as turfBuffer, union, difference } from '@turf/turf';
+import { area as turfArea, intersect, featureCollection, buffer as turfBuffer, union, difference, convex, concave } from '@turf/turf';
 import { multiPolygon } from '@turf/helpers';
 import type Feature from 'ol/Feature';
 import GeoJSON from 'ol/format/GeoJSON';
@@ -159,5 +159,82 @@ export async function performBufferAnalysis({
     } catch (error: any) {
         console.error("Error during buffer analysis:", error);
         throw new Error(`Turf.js buffer failed: ${error.message}`);
+    }
+}
+
+
+// --- New Hull functions ---
+
+interface HullParams {
+    features: Feature<Geometry>[];
+    concavity?: number; // For concave hull
+}
+
+/**
+ * Creates a convex hull polygon around a set of features.
+ * @param params - The parameters for the hull operation.
+ * @returns A promise that resolves to an array of OpenLayers Features (containing one hull polygon).
+ */
+export async function performConvexHull({ features }: HullParams): Promise<Feature<Geometry>[]> {
+    if (!features || features.length < 3) {
+        throw new Error("Se requieren al menos 3 entidades para generar un Convex Hull.");
+    }
+
+    const format = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
+    const formatForMap = new GeoJSON({ dataProjection: 'EPSG:4326', featureProjection: 'EPSG:3857' });
+
+    try {
+        const featuresGeoJSON = format.writeFeaturesObject(features);
+        const hullPolygon = convex(featuresGeoJSON);
+
+        if (!hullPolygon) {
+            throw new Error("La operación Convex Hull no produjo resultados.");
+        }
+
+        return formatForMap.readFeatures({
+            type: 'FeatureCollection',
+            features: [hullPolygon]
+        });
+    } catch (error: any) {
+        console.error("Error during Convex Hull analysis:", error);
+        throw new Error(`Turf.js convex hull failed: ${error.message}`);
+    }
+}
+
+/**
+ * Creates a concave hull polygon around a set of point features.
+ * @param params - The parameters for the hull operation, including concavity.
+ * @returns A promise that resolves to an array of OpenLayers Features (containing one hull polygon).
+ */
+export async function performConcaveHull({ features, concavity = 2 }: HullParams): Promise<Feature<Geometry>[]> {
+    if (!features || features.length < 3) {
+        throw new Error("Se requieren al menos 3 puntos para generar un Concave Hull.");
+    }
+
+    const format = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
+    const formatForMap = new GeoJSON({ dataProjection: 'EPSG:4326', featureProjection: 'EPSG:3857' });
+
+    try {
+        const featuresGeoJSON = format.writeFeaturesObject(features);
+        
+        // Ensure all features are points for concave hull
+        const points = featuresGeoJSON.features.filter(f => f.geometry.type === 'Point');
+        if (points.length < 3) {
+            throw new Error("La capa de entrada no contiene suficientes puntos para la operación.");
+        }
+        
+        const hullPolygon = concave(featureCollection(points), { maxEdge: concavity, units: 'kilometers' });
+
+        if (!hullPolygon) {
+            throw new Error("La operación Concave Hull no produjo resultados. Pruebe con un valor de concavidad mayor.");
+        }
+
+        return formatForMap.readFeatures({
+            type: 'FeatureCollection',
+            features: [hullPolygon]
+        });
+    } catch (error: any) {
+        console.error("Error during Concave Hull analysis:", error);
+        throw new Error(`Turf.js concave hull failed: ${error.message}`);
     }
 }

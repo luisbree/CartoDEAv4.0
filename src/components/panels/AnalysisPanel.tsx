@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DraftingCompass, Scissors, Layers, CircleDotDashed, MinusSquare } from 'lucide-react';
+import { DraftingCompass, Scissors, Layers, CircleDotDashed, MinusSquare, BoxSelect, Droplet } from 'lucide-react';
 import type { MapLayer, VectorMapLayer } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { nanoid } from 'nanoid';
@@ -20,7 +20,8 @@ import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as Tu
 import { multiPolygon } from '@turf/helpers';
 import type Feature from 'ol/Feature';
 import type { Geometry } from 'ol/geom';
-import { performBufferAnalysis } from '@/services/spatial-analysis';
+import { performBufferAnalysis, performConvexHull, performConcaveHull } from '@/services/spatial-analysis';
+import { Slider } from '../ui/slider';
 
 
 interface AnalysisPanelProps {
@@ -72,11 +73,28 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   const [bufferUnits, setBufferUnits] = useState<'meters' | 'kilometers' | 'miles'>('meters');
   const [bufferOutputName, setBufferOutputName] = useState('');
 
+  // State for Hull tools
+  const [hullInputLayerId, setHullInputLayerId] = useState<string>('');
+  const [hullOutputName, setHullOutputName] = useState('');
+  const [concavity, setConcavity] = useState<number>(2);
+
   const { toast } = useToast();
 
   const vectorLayers = useMemo(() => {
     return allLayers.filter((l): l is VectorMapLayer => l.type !== 'wms' && l.type !== 'gee' && l.type !== 'geotiff');
   }, [allLayers]);
+  
+  const pointLayers = useMemo(() => {
+    return vectorLayers.filter(l => {
+        const source = l.olLayer.getSource();
+        const features = source?.getFeatures();
+        if (features && features.length > 0) {
+            const geomType = features[0].getGeometry()?.getType();
+            return geomType === 'Point' || geomType === 'MultiPoint';
+        }
+        return false;
+    });
+  }, [vectorLayers]);
   
   const polygonLayers = useMemo(() => {
     return vectorLayers.filter(l => {
@@ -226,15 +244,17 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 
     for (const inputFeature of inputGeoJSON.features) {
         try {
-            // The first feature in the collection is the one to be erased from, the second is the eraser
-            const differenceResult = difference(featureCollection([inputFeature, eraseMask]));
+            const differenceResult = difference(inputFeature, eraseMask);
 
             if (differenceResult && differenceResult.geometry && differenceResult.geometry.coordinates.length > 0) {
                 differenceResult.properties = inputFeature.properties;
                 erasedFeaturesGeoJSON.push(differenceResult);
+            } else {
+                 erasedFeaturesGeoJSON.push(inputFeature);
             }
         } catch (e) {
-            console.warn("Error performing difference on a feature, skipping it.", e);
+            console.warn("Error performing difference on a feature, including original feature.", e);
+            erasedFeaturesGeoJSON.push(inputFeature);
         }
     }
 
@@ -330,6 +350,58 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     } catch (error: any) {
         console.error("Buffer analysis failed:", error);
         toast({ title: "Error de Buffer", description: error.message, variant: "destructive" });
+    }
+  };
+  
+ const handleRunHull = async (type: 'convex' | 'concave') => {
+    const inputLayer = vectorLayers.find(l => l.id === hullInputLayerId);
+    if (!inputLayer) {
+      toast({ description: "Por favor, seleccione una capa de entrada.", variant: "destructive" });
+      return;
+    }
+    const inputSource = inputLayer.olLayer.getSource();
+    if (!inputSource || inputSource.getFeatures().length === 0) {
+      toast({ description: "La capa de entrada no tiene entidades.", variant: "destructive" });
+      return;
+    }
+    const safeSelectedFeatures = selectedFeatures || [];
+    const relevantSelectedFeatures = safeSelectedFeatures.filter(f => inputSource.getFeatureById(f.getId() as string | number) !== null);
+    const featuresToProcess = relevantSelectedFeatures.length > 0 ? relevantSelectedFeatures : inputSource.getFeatures();
+    
+    const operationName = type === 'convex' ? "Envolvente Convexa" : "Envolvente Cóncava";
+    const outputName = hullOutputName.trim() || `${operationName} de ${inputLayer.name}`;
+
+    toast({ description: `Calculando ${operationName}...` });
+
+    try {
+        const hullFeatures = type === 'convex'
+            ? await performConvexHull({ features: featuresToProcess })
+            : await performConcaveHull({ features: featuresToProcess, concavity: concavity });
+        
+        hullFeatures.forEach(f => f.setId(nanoid()));
+        const newLayerId = `${type}-hull-result-${nanoid()}`;
+        const newSource = new VectorSource({ features: hullFeatures });
+        const newOlLayer = new VectorLayer({
+            source: newSource,
+            properties: { id: newLayerId, name: outputName, type: 'analysis' },
+        });
+
+        onAddLayer({
+            id: newLayerId,
+            name: outputName,
+            olLayer: newOlLayer,
+            visible: true,
+            opacity: 1,
+            type: 'analysis',
+        }, true);
+
+        toast({ description: `Se creó la capa "${outputName}".` });
+        setHullInputLayerId('');
+        setHullOutputName('');
+
+    } catch (error: any) {
+        console.error(`${operationName} failed:`, error);
+        toast({ title: `Error de ${operationName}`, description: error.message, variant: "destructive" });
     }
   };
 
@@ -472,6 +544,56 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                               Ejecutar Buffer
                           </Button>
                       </div>
+                    </div>
+                </AccordionContent>
+            </AccordionItem>
+
+            <AccordionItem value="geometry-tools" className="border-b-0 bg-white/5 rounded-md">
+                <AccordionTrigger className="p-3 hover:no-underline hover:bg-white/10 rounded-t-md data-[state=open]:rounded-b-none">
+                    <SectionHeader icon={BoxSelect} title="Herramientas de Geometría" />
+                </AccordionTrigger>
+                <AccordionContent className="p-3 pt-2 space-y-3 border-t border-white/10 bg-transparent rounded-b-md">
+                    <div className="space-y-1">
+                        <Label className="text-xs font-semibold">Envolvente (Convex/Concave Hull)</Label>
+                        <div className="space-y-2 p-2 border border-white/10 rounded-md">
+                            <div>
+                                <Label htmlFor="hull-input-layer" className="text-xs">Capa de Entrada</Label>
+                                <Select value={hullInputLayerId} onValueChange={setHullInputLayerId}>
+                                    <SelectTrigger id="hull-input-layer" className="h-8 text-xs bg-black/20"><SelectValue placeholder="Seleccionar capa..." /></SelectTrigger>
+                                    <SelectContent className="bg-gray-700 text-white border-gray-600">
+                                        {vectorLayers.map(l => <SelectItem key={l.id} value={l.id} className="text-xs">{l.name}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
+                                <p className="text-xs text-gray-400 mt-1">Se usará la selección o la capa completa.</p>
+                            </div>
+                            <div>
+                                <Label htmlFor="hull-output-name" className="text-xs">Nombre de la Capa de Salida</Label>
+                                <Input id="hull-output-name" value={hullOutputName} onChange={(e) => setHullOutputName(e.target.value)} placeholder="Ej: Envolvente_CapaX" className="h-8 text-xs bg-black/20"/>
+                            </div>
+                            <div className="space-y-2 pt-2 border-t border-white/20">
+                                <Label htmlFor="concavity-slider" className="text-xs">Concavidad (km)</Label>
+                                <div className="flex items-center gap-2">
+                                  <Slider
+                                      id="concavity-slider"
+                                      min={1} max={50} step={0.5}
+                                      value={[concavity]}
+                                      onValueChange={(val) => setConcavity(val[0])}
+                                  />
+                                  <span className="text-xs font-mono w-12 text-center">{concavity} km</span>
+                                </div>
+                                <p className="text-xs text-gray-400">Distancia máxima entre puntos en el borde. Afecta solo a la envolvente cóncava.</p>
+                            </div>
+                            <div className="flex items-center gap-2 pt-2">
+                                <Button onClick={() => handleRunHull('convex')} size="sm" className="w-full h-8 text-xs" disabled={!hullInputLayerId}>
+                                    <BoxSelect className="mr-2 h-3.5 w-3.5" />
+                                    Convexa
+                                </Button>
+                                <Button onClick={() => handleRunHull('concave')} size="sm" className="w-full h-8 text-xs" disabled={!hullInputLayerId}>
+                                    <Droplet className="mr-2 h-3.5 w-3.5" />
+                                    Cóncava
+                                </Button>
+                            </div>
+                        </div>
                     </div>
                 </AccordionContent>
             </AccordionItem>
