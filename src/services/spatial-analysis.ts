@@ -2,7 +2,7 @@
 "use client";
 
 import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as TurfMultiPolygon, FeatureCollection as TurfFeatureCollection, Geometry as TurfGeometry } from 'geojson';
-import { area as turfArea, intersect, featureCollection, buffer as turfBuffer, union } from '@turf/turf';
+import { area as turfArea, intersect, featureCollection, buffer as turfBuffer, union, difference } from '@turf/turf';
 import { multiPolygon } from '@turf/helpers';
 import type Feature from 'ol/Feature';
 import GeoJSON from 'ol/format/GeoJSON';
@@ -25,7 +25,7 @@ export async function calculateSpatialStats({
     analysisFeaturesGeoJSON,
     drawingPolygonGeoJSON,
     field
-}: IntersectionParams): Promise<{ weightedAverage: number; proportionalSum: number; }> {
+}: IntersectionParams): Promise<{ weightedAverage: number; proportionalSum: number; count: number; totalArea: number; }> {
     
     if (!analysisFeaturesGeoJSON || !drawingPolygonGeoJSON || !field) {
         throw new Error("Parámetros inválidos para el cálculo.");
@@ -40,6 +40,7 @@ export async function calculateSpatialStats({
     let totalWeightedSum = 0;
     let totalIntersectionArea = 0;
     let totalProportionalSum = 0;
+    let intersectingFeatureCount = 0;
 
     for (const featureGeoJSON of analysisFeaturesGeoJSON.features) {
         const featureValue = featureGeoJSON.properties?.[field];
@@ -57,7 +58,8 @@ export async function calculateSpatialStats({
                     const intersectionArea = turfArea(intersectionResult);
                     const originalArea = turfArea(featureGeoJSON);
                     
-                    if (intersectionArea > 0) {
+                    if (intersectionArea > 0.001) { // Threshold to count as a valid intersection
+                        intersectingFeatureCount++;
                         // For Weighted Average
                         totalWeightedSum += featureValue * intersectionArea;
                         totalIntersectionArea += intersectionArea;
@@ -77,10 +79,13 @@ export async function calculateSpatialStats({
     }
 
     const weightedAverage = totalIntersectionArea > 0 ? totalWeightedSum / totalIntersectionArea : 0;
+    const totalMaskArea = turfArea(unifiedMask);
     
     return {
         weightedAverage,
-        proportionalSum: totalProportionalSum
+        proportionalSum: totalProportionalSum,
+        count: intersectingFeatureCount,
+        totalArea: totalMaskArea,
     };
 }
 
@@ -132,10 +137,16 @@ export async function performBufferAnalysis({
         }
 
         // Union all the buffered features into a single feature
-        let finalGeometry = bufferedFeatures[0];
+        let finalGeometry: TurfFeature<TurfPolygon | TurfMultiPolygon> | null = null;
         if (bufferedFeatures.length > 1) {
             // @ts-ignore - Turf's union typing can be tricky with spread operator
             finalGeometry = union(...bufferedFeatures);
+        } else {
+            finalGeometry = bufferedFeatures[0];
+        }
+
+        if (!finalGeometry) {
+            throw new Error("Union of buffered features resulted in null geometry.");
         }
         
         const olFeatures = formatForMap.readFeatures({

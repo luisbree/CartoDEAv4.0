@@ -47,6 +47,8 @@ interface StatResults {
   max?: number;
   weightedAverage?: number;
   proportionalSum?: number;
+  spatialCount?: number;
+  totalArea?: number;
 }
 
 const analysisLayerStyle = new Style({
@@ -294,13 +296,13 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
     const analysisFeaturesGeoJSON = format.writeFeaturesObject(analysisSource.getFeatures());
     
     try {
-        const { weightedAverage, proportionalSum } = await calculateSpatialStats({
+        const { weightedAverage, proportionalSum, count, totalArea } = await calculateSpatialStats({
             analysisFeaturesGeoJSON,
             drawingPolygonGeoJSON: maskGeometry,
             field: selectedField
         });
         
-        setResults({ weightedAverage, proportionalSum });
+        setResults({ weightedAverage, proportionalSum, spatialCount: count, totalArea });
         
         toast({ description: "Análisis espacial completado." });
     } catch (error: any) {
@@ -423,6 +425,18 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
                             {results.max !== undefined && <TableRow><TableCell className="text-xs text-gray-300 p-1.5">Máximo</TableCell><TableCell className="text-xs text-white p-1.5 text-right font-mono">{results.max.toLocaleString(undefined, { maximumFractionDigits: 2 })}</TableCell></TableRow>}
                             {results.count !== undefined && <TableRow><TableCell className="text-xs text-gray-300 p-1.5">Cantidad</TableCell><TableCell className="text-xs text-white p-1.5 text-right font-mono">{results.count.toLocaleString()}</TableCell></TableRow>}
                             
+                            {results.spatialCount !== undefined && (
+                                <TableRow className="bg-primary/20">
+                                    <TableCell className="text-xs text-primary-foreground p-1.5 font-semibold">Cantidad de Entidades</TableCell>
+                                    <TableCell className="text-xs text-primary-foreground p-1.5 text-right font-mono font-semibold">{results.spatialCount.toLocaleString()}</TableCell>
+                                </TableRow>
+                            )}
+                             {results.totalArea !== undefined && (
+                                <TableRow className="bg-primary/20">
+                                    <TableCell className="text-xs text-primary-foreground p-1.5 font-semibold">Área de Análisis (km²)</TableCell>
+                                    <TableCell className="text-xs text-primary-foreground p-1.5 text-right font-mono font-semibold">{(results.totalArea / 1000000).toLocaleString(undefined, { maximumFractionDigits: 2 })}</TableCell>
+                                </TableRow>
+                            )}
                             {results.proportionalSum !== undefined && (
                                 <TableRow className="bg-primary/20">
                                     <TableCell className="text-xs text-primary-foreground p-1.5 font-semibold">Suma Proporcional</TableCell>
@@ -445,3 +459,4 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({
 };
 
 export default StatisticsPanel;
+
