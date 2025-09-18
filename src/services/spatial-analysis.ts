@@ -178,23 +178,7 @@ export async function performDifferenceAnalysis({
         const inputGeoJSON = format.writeFeaturesObject(inputFeatures);
         const eraseGeoJSON = format.writeFeaturesObject(eraseFeatures);
 
-        // 1. Union all input features into one.
-        let unionedInput: TurfFeature<TurfPolygon | TurfMultiPolygon> | null = null;
-        for (const feature of inputGeoJSON.features) {
-            if (feature.geometry && (feature.geometry.type === 'Polygon' || feature.geometry.type === 'MultiPolygon')) {
-                if (!unionedInput) {
-                    unionedInput = feature as TurfFeature<TurfPolygon | TurfMultiPolygon>;
-                } else {
-                    // @ts-ignore Turf union can handle mixed geometry types
-                    unionedInput = union(unionedInput, feature);
-                }
-            }
-        }
-        if (!unionedInput) {
-            throw new Error("La capa de entrada no contiene geometrías de polígono válidas.");
-        }
-
-        // 2. Union all erase features into one mask.
+        // 1. Union all erase features into one single mask feature.
         let eraseMask: TurfFeature<TurfPolygon | TurfMultiPolygon> | null = null;
         for (const feature of eraseGeoJSON.features) {
              if (feature.geometry && (feature.geometry.type === 'Polygon' || feature.geometry.type === 'MultiPolygon')) {
@@ -209,17 +193,29 @@ export async function performDifferenceAnalysis({
         if (!eraseMask) {
             throw new Error("La capa de borrado no contiene geometrías de polígono válidas.");
         }
-        
-        // 3. Perform a single difference operation using a FeatureCollection
-        const diffResult = difference(featureCollection([unionedInput, eraseMask]));
 
-        if (!diffResult) {
+        // 2. Iterate through each input feature and subtract the unified mask from it.
+        const resultFeatures: TurfFeature<TurfGeometry>[] = [];
+        for (const inputFeature of inputGeoJSON.features) {
+            if (inputFeature.geometry && (inputFeature.geometry.type === 'Polygon' || inputFeature.geometry.type === 'MultiPolygon')) {
+                // The correct way: difference(polygon, polygonToSubtract)
+                const diffResult = difference(inputFeature as TurfFeature<TurfPolygon | TurfMultiPolygon>, eraseMask);
+                if (diffResult) {
+                    resultFeatures.push(diffResult);
+                }
+            } else {
+                // If the input is not a polygon, it cannot be erased, so keep it.
+                resultFeatures.push(inputFeature);
+            }
+        }
+
+        if (resultFeatures.length === 0) {
             return []; // Return empty array if difference results in nothing
         }
         
         const olFeatures = formatForMap.readFeatures({
             type: 'FeatureCollection',
-            features: [diffResult]
+            features: resultFeatures
         });
         
         return olFeatures;
