@@ -45,6 +45,7 @@ import BaseLayerControls from '@/components/layer-manager/BaseLayerControls';
 import { StreetViewIcon } from '@/components/icons/StreetViewIcon';
 import TrelloCardNotification from '@/components/trello-integration/TrelloCardNotification';
 import { DphLogoIcon } from '@/components/icons/DphLogoIcon';
+import Notepad from '@/components/notepad/Notepad';
 
 
 import { useOpenLayersMap } from '@/hooks/map-core/useOpenLayersMap';
@@ -523,6 +524,7 @@ export default function GeoMapperClient() {
                     lineStyle: styleRequest.lineStyle,
                     lineWidth: styleRequest.lineWidth,
                     pointSize: 5, // Default point size
+                    iconName: undefined, // AI doesn't support icons yet
                 });
             } else {
                 toast({description: `Drax intentó aplicar un estilo a una capa no encontrada: ${styleRequest.layerName}`});
@@ -899,6 +901,8 @@ export default function GeoMapperClient() {
         </div>
 
         <WfsLoadingIndicator isVisible={layerManagerHook.isWfsLoading || wfsLibraryHook.isLoading} />
+        
+        <Notepad />
 
         {isMounted && panels.tools && !panels.tools.isMinimized && (
           <ToolsPanel
