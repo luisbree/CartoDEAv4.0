@@ -178,31 +178,27 @@ export async function performDifferenceAnalysis({
         const inputGeoJSON = format.writeFeaturesObject(inputFeatures);
         const eraseGeoJSON = format.writeFeaturesObject(eraseFeatures);
 
-        // 1. Union all input features into one single feature. This will be polygon1.
-        let unionedInputFeature: TurfFeature<TurfPolygon | TurfMultiPolygon> | null = null;
-        for (const feature of inputGeoJSON.features) {
-             if (feature.geometry && (feature.geometry.type === 'Polygon' || feature.geometry.type === 'MultiPolygon')) {
-                if (!unionedInputFeature) {
-                    unionedInputFeature = feature as TurfFeature<TurfPolygon | TurfMultiPolygon>;
-                } else {
-                    // @ts-ignore Turf union can handle mixed geometry types
-                    unionedInputFeature = union(unionedInputFeature, feature);
-                }
-            }
-        }
+        const validPolygonOrMultiPolygon = (feature: TurfFeature): feature is TurfFeature<TurfPolygon | TurfMultiPolygon> => 
+            feature.geometry !== null && (feature.geometry.type === 'Polygon' || feature.geometry.type === 'MultiPolygon');
 
-        // 2. Union all erase features into one single mask feature. This will be polygon2.
-        let eraseMaskFeature: TurfFeature<TurfPolygon | TurfMultiPolygon> | null = null;
-        for (const feature of eraseGeoJSON.features) {
-             if (feature.geometry && (feature.geometry.type === 'Polygon' || feature.geometry.type === 'MultiPolygon')) {
-                if (!eraseMaskFeature) {
-                    eraseMaskFeature = feature as TurfFeature<TurfPolygon | TurfMultiPolygon>;
-                } else {
-                    // @ts-ignore Turf union can handle mixed geometry types
-                    eraseMaskFeature = union(eraseMaskFeature, feature);
-                }
-            }
-        }
+        // 1. Union all valid input features into one single feature.
+        const unionedInputFeature = inputGeoJSON.features
+            .filter(validPolygonOrMultiPolygon)
+            .reduce<TurfFeature<TurfPolygon | TurfMultiPolygon> | null>((acc, feature) => {
+                if (!acc) return feature;
+                // @ts-ignore
+                return union(acc, feature);
+            }, null);
+
+        // 2. Union all valid erase features into one single mask feature.
+        const eraseMaskFeature = eraseGeoJSON.features
+            .filter(validPolygonOrMultiPolygon)
+            .reduce<TurfFeature<TurfPolygon | TurfMultiPolygon> | null>((acc, feature) => {
+                if (!acc) return feature;
+                // @ts-ignore
+                return union(acc, feature);
+            }, null);
+
 
         if (!unionedInputFeature || !eraseMaskFeature) {
             throw new Error("Una de las capas no contiene geometrías de polígono válidas para la operación.");
