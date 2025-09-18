@@ -102,9 +102,15 @@ export const useDrawingInteractions = ({
 
     try {
       const features = drawingSourceRef.current.getFeatures();
-      const clonedFeatures = features.map(f => {
+      const clonedFeatures = features.map((f, index) => {
         const clone = f.clone();
-        clone.setId(nanoid()); // Assign a new unique ID
+        // Assign a unique OL ID for internal management
+        clone.setId(nanoid());
+        // Set user-visible attributes for the attribute table and exports
+        clone.setProperties({
+          'id': index + 1,
+          'etiqueta': `Dibujo ${index + 1}`
+        });
         return clone;
       });
       
