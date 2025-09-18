@@ -178,7 +178,23 @@ export async function performDifferenceAnalysis({
         const inputGeoJSON = format.writeFeaturesObject(inputFeatures);
         const eraseGeoJSON = format.writeFeaturesObject(eraseFeatures);
 
-        // Union all erase features into one for a single difference operation
+        // 1. Union all input features into one.
+        let unionedInput: TurfFeature<TurfPolygon | TurfMultiPolygon> | null = null;
+        for (const feature of inputGeoJSON.features) {
+            if (feature.geometry && (feature.geometry.type === 'Polygon' || feature.geometry.type === 'MultiPolygon')) {
+                if (!unionedInput) {
+                    unionedInput = feature as TurfFeature<TurfPolygon | TurfMultiPolygon>;
+                } else {
+                    // @ts-ignore Turf union can handle mixed geometry types
+                    unionedInput = union(unionedInput, feature);
+                }
+            }
+        }
+        if (!unionedInput) {
+            throw new Error("La capa de entrada no contiene geometrías de polígono válidas.");
+        }
+
+        // 2. Union all erase features into one mask.
         let eraseMask: TurfFeature<TurfPolygon | TurfMultiPolygon> | null = null;
         for (const feature of eraseGeoJSON.features) {
              if (feature.geometry && (feature.geometry.type === 'Polygon' || feature.geometry.type === 'MultiPolygon')) {
@@ -190,27 +206,21 @@ export async function performDifferenceAnalysis({
                 }
             }
         }
-        
         if (!eraseMask) {
             throw new Error("La capa de borrado no contiene geometrías de polígono válidas.");
         }
+        
+        // 3. Perform a single difference operation.
+        // @ts-ignore
+        const diffResult = difference(unionedInput, eraseMask);
 
-        const resultFeatures: TurfFeature<TurfGeometry>[] = [];
-        for (const inputFeature of inputGeoJSON.features) {
-            try {
-                // @ts-ignore
-                const diffResult = difference(inputFeature, eraseMask);
-                if (diffResult) {
-                    resultFeatures.push(diffResult);
-                }
-            } catch (individualError) {
-                 console.warn("Error calculando la diferencia para una entidad, saltando.", individualError);
-            }
+        if (!diffResult) {
+            return []; // Return empty array if difference results in nothing
         }
         
         const olFeatures = formatForMap.readFeatures({
             type: 'FeatureCollection',
-            features: resultFeatures
+            features: [diffResult]
         });
         
         return olFeatures;
