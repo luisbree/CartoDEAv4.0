@@ -189,13 +189,19 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         toast({ description: "Una de las capas seleccionadas no tiene entidades.", variant: "destructive" });
         return;
     }
+    
+    const safeSelectedFeatures = selectedFeatures || [];
+    const relevantSelectedFeatures = safeSelectedFeatures.filter(feature => 
+        inputSource.getFeatureById(feature.getId() as string | number) !== null
+    );
 
+    const featuresToErase = relevantSelectedFeatures.length > 0 ? relevantSelectedFeatures : inputSource.getFeatures();
     const outputName = eraseOutputName.trim() || `Diferencia de ${inputLayer.name}`;
-    toast({ description: `Calculando diferencia para ${inputLayer.name}...` });
+    toast({ description: `Calculando diferencia para ${featuresToErase.length} entidad(es)...` });
 
     try {
         const erasedFeatures = await performDifferenceAnalysis({
-            inputFeatures: inputSource.getFeatures(),
+            inputFeatures: featuresToErase,
             eraseFeatures: maskSource.getFeatures(),
         });
 
@@ -365,6 +371,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                   {vectorLayers.map(l => <SelectItem key={l.id} value={l.id} className="text-xs">{l.name}</SelectItem>)}
                                 </SelectContent>
                               </Select>
+                              <p className="text-xs text-gray-400 mt-1">Si hay entidades seleccionadas, se usará la selección.</p>
                           </div>
                           <div>
                               <Label htmlFor="erase-mask-layer" className="text-xs">Capa de Borrado (molde)</Label>
@@ -441,3 +448,5 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
+    
