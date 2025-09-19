@@ -21,7 +21,6 @@ import { multiPolygon } from '@turf/helpers';
 import type Feature from 'ol/Feature';
 import type { Geometry } from 'ol/geom';
 import { performBufferAnalysis, performConvexHull, performConcaveHull, calculateOptimalConcavity } from '@/services/spatial-analysis';
-import { Slider } from '../ui/slider';
 import { ScrollArea } from '../ui/scroll-area';
 import { Checkbox } from '../ui/checkbox';
 
@@ -80,7 +79,8 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   const [hullOutputName, setHullOutputName] = useState('');
   const [concavity, setConcavity] = useState<number>(2);
   const [isCalculatingConcavity, setIsCalculatingConcavity] = useState(false);
-  const [suggestedConcavity, setSuggestedConcavity] = useState<number>(0);
+  const [concavityStats, setConcavityStats] = useState<{ mean: number, stdDev: number } | null>(null);
+
 
   // State for Union tool
   const [unionLayerIds, setUnionLayerIds] = useState<string[]>([]);
@@ -239,26 +239,14 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     for (const olFeature of featuresToProcess) {
         try {
             const inputFeatureGeoJSON = format.writeFeatureObject(olFeature) as TurfFeature;
-            // Turf.js difference can be sensitive, this structure is more robust
-            const differenceResult = difference(featureCollection([inputFeatureGeoJSON]), featureCollection([eraseMask]));
+            const differenceResult = difference(inputFeatureGeoJSON, eraseMask);
+
             if (differenceResult) {
-                // The result from turf/difference on a FeatureCollection is another FeatureCollection
-                const resultFeatures = (differenceResult as TurfFeatureCollection).features;
-                if (resultFeatures.length > 0 && resultFeatures[0].geometry) {
-                    // Restore properties from the original feature
-                    resultFeatures[0].properties = inputFeatureGeoJSON.properties;
-                    erasedFeaturesGeoJSON.push(resultFeatures[0]);
-                } else {
-                    // No difference, so the original feature remains untouched
-                    erasedFeaturesGeoJSON.push(inputFeatureGeoJSON);
-                }
-            } else {
-                 // If difference is null, it means nothing was erased, keep original.
-                 erasedFeaturesGeoJSON.push(inputFeatureGeoJSON);
+                differenceResult.properties = inputFeatureGeoJSON.properties;
+                erasedFeaturesGeoJSON.push(differenceResult);
             }
         } catch (e) {
-            console.warn("Error performing difference on a feature, including original feature.", e);
-            erasedFeaturesGeoJSON.push(format.writeFeatureObject(olFeature) as TurfFeature);
+            console.warn("Error performing difference on a feature, skipping it.", e);
         }
     }
 
@@ -432,10 +420,10 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     const featuresToProcess = relevantSelectedFeatures.length > 0 ? relevantSelectedFeatures : inputSource.getFeatures();
 
     try {
-        const optimalValue = await calculateOptimalConcavity({ features: featuresToProcess });
-        setConcavity(optimalValue);
-        setSuggestedConcavity(optimalValue);
-        toast({ description: `Valor de concavidad sugerido: ${optimalValue.toFixed(2)} km` });
+        const { suggestedConcavity, meanDistance, stdDev } = await calculateOptimalConcavity({ features: featuresToProcess });
+        setConcavity(suggestedConcavity);
+        setConcavityStats({ mean: meanDistance, stdDev });
+        toast({ description: `Valor de concavidad sugerido: ${suggestedConcavity.toFixed(2)} km` });
     } catch (error: any) {
         console.error("Error calculating optimal concavity:", error);
         toast({ title: "Error de Cálculo", description: error.message, variant: "destructive" });
@@ -495,10 +483,10 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   };
   
   const handleConcavityStep = (direction: 'increment' | 'decrement') => {
-    const step = suggestedConcavity > 0 ? suggestedConcavity * 0.01 : 0.1;
+    const step = concavityStats ? concavityStats.stdDev / 4 : 0.1;
     setConcavity(prev => {
         const newValue = direction === 'increment' ? prev + step : prev - step;
-        return Math.max(0.01, parseFloat(newValue.toFixed(2))); // Ensure it doesn't go below a small threshold
+        return Math.max(0.01, parseFloat(newValue.toFixed(2)));
     });
   };
 
@@ -710,18 +698,24 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                   </Button>
                                 </div>
                                 <div className="flex items-center gap-1">
-                                    <Button onClick={() => handleConcavityStep('decrement')} variant="outline" size="icon" className="h-8 w-8 flex-shrink-0"><Minus className="h-4 w-4"/></Button>
+                                    <Button onClick={() => handleConcavityStep('decrement')} variant="outline" size="icon" className="h-8 w-8 flex-shrink-0 bg-black/20 hover:bg-black/40 border-white/30 text-white/90"><Minus className="h-4 w-4"/></Button>
                                     <Input
                                         id="concavity-input"
                                         type="number"
                                         value={concavity}
                                         onChange={(e) => setConcavity(Number(e.target.value))}
-                                        step={suggestedConcavity > 0 ? suggestedConcavity * 0.01 : 0.1}
+                                        step={concavityStats ? concavityStats.stdDev / 4 : 0.1}
                                         min="0.01"
                                         className="h-8 text-xs bg-black/20 text-center"
                                     />
-                                    <Button onClick={() => handleConcavityStep('increment')} variant="outline" size="icon" className="h-8 w-8 flex-shrink-0"><Plus className="h-4 w-4"/></Button>
+                                    <Button onClick={() => handleConcavityStep('increment')} variant="outline" size="icon" className="h-8 w-8 flex-shrink-0 bg-black/20 hover:bg-black/40 border-white/30 text-white/90"><Plus className="h-4 w-4"/></Button>
                                 </div>
+                                {concavityStats && (
+                                    <div className="text-xs text-gray-400 space-y-0.5 pt-1">
+                                        <p>Promedio: {concavityStats.mean.toFixed(2)} km</p>
+                                        <p>Desvío Est.: {concavityStats.stdDev.toFixed(2)} km</p>
+                                    </div>
+                                )}
                                 <p className="text-xs text-gray-400">Controla el detalle del polígono cóncavo (distancia máxima de los lados). Un valor más bajo genera una forma más ajustada.</p>
                             </div>
                             <div className="flex items-center gap-2 pt-2">
@@ -744,4 +738,3 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
-

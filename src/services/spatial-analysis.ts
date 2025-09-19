@@ -239,11 +239,11 @@ export async function performConcaveHull({ features, concavity = 2 }: HullParams
 
 
 /**
- * Calculates a suggested concavity value for a set of features.
+ * Calculates a suggested concavity value, mean, and std dev for a set of features.
  * @param params - The features to analyze.
- * @returns A promise that resolves to the suggested concavity value in kilometers.
+ * @returns A promise that resolves to an object with statistical values.
  */
-export async function calculateOptimalConcavity({ features }: HullParams): Promise<number> {
+export async function calculateOptimalConcavity({ features }: HullParams): Promise<{ suggestedConcavity: number, meanDistance: number, stdDev: number }> {
     if (!features || features.length < 2) {
         throw new Error("Se requieren al menos 2 puntos para calcular la concavidad.");
     }
@@ -258,29 +258,38 @@ export async function calculateOptimalConcavity({ features }: HullParams): Promi
             throw new Error("La capa no contiene suficientes puntos.");
         }
         
-        let totalNearestDistance = 0;
-        
-        // This can be slow for a very large number of points. Consider sampling for > 5000 points.
+        const distances: number[] = [];
         const pointsToProcess = points.length > 5000 ? points.slice(0, 5000) : points;
 
         for (let i = 0; i < pointsToProcess.length; i++) {
             const currentPoint = pointsToProcess[i];
-            // Create a collection of all OTHER points
             const otherPoints = featureCollection(pointsToProcess.filter((_, index) => i !== index));
             
-            const nearest = nearestPoint(currentPoint, otherPoints);
-            // distance is in kilometers by default in nearestPoint
-            totalNearestDistance += nearest.properties.distanceToPoint;
+            if (otherPoints.features.length > 0) {
+                const nearest = nearestPoint(currentPoint, otherPoints);
+                distances.push(nearest.properties.distanceToPoint);
+            }
         }
 
-        const averageDistance = totalNearestDistance / pointsToProcess.length;
-        
-        // Suggest a value slightly larger than the average nearest distance
-        // This factor (e.g., 1.5) can be tuned.
-        const suggestedConcavity = averageDistance * 1.5;
+        if (distances.length === 0) {
+            throw new Error("No se pudieron calcular las distancias entre puntos.");
+        }
 
-        // Return a rounded, sensible value.
-        return Math.round(suggestedConcavity * 100) / 100;
+        // Calculate mean
+        const sum = distances.reduce((a, b) => a + b, 0);
+        const meanDistance = sum / distances.length;
+
+        // Calculate standard deviation
+        const variance = distances.reduce((sq, n) => sq + Math.pow(n - meanDistance, 2), 0) / distances.length;
+        const stdDev = Math.sqrt(variance);
+        
+        const suggestedConcavity = meanDistance + (2 * stdDev);
+
+        return {
+            suggestedConcavity: Math.round(suggestedConcavity * 100) / 100,
+            meanDistance: Math.round(meanDistance * 100) / 100,
+            stdDev: Math.round(stdDev * 100) / 100,
+        };
 
     } catch (error: any) {
         console.error("Error calculating optimal concavity:", error);
