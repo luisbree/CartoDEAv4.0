@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DraftingCompass, Scissors, Layers, CircleDotDashed, MinusSquare, BoxSelect, Droplet, Sparkles, Loader2, Combine, Minus, Plus } from 'lucide-react';
+import { DraftingCompass, Scissors, Layers, CircleDotDashed, MinusSquare, BoxSelect, Droplet, Sparkles, Loader2, Combine, Minus, Plus, TrendingUp } from 'lucide-react';
 import type { MapLayer, VectorMapLayer } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { nanoid } from 'nanoid';
@@ -20,9 +20,10 @@ import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as Tu
 import { multiPolygon } from '@turf/helpers';
 import type Feature from 'ol/Feature';
 import type { Geometry } from 'ol/geom';
-import { performBufferAnalysis, performConvexHull, performConcaveHull, calculateOptimalConcavity } from '@/services/spatial-analysis';
+import { performBufferAnalysis, performConvexHull, performConcaveHull, calculateOptimalConcavity, projectPopulationGeometric } from '@/services/spatial-analysis';
 import { ScrollArea } from '../ui/scroll-area';
 import { Checkbox } from '../ui/checkbox';
+import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 
 
 interface AnalysisPanelProps {
@@ -85,6 +86,13 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   // State for Union tool
   const [unionLayerIds, setUnionLayerIds] = useState<string[]>([]);
   const [unionOutputName, setUnionOutputName] = useState('');
+
+  // State for Population Projection
+  const [pop2001, setPop2001] = useState<string>('');
+  const [pop2010, setPop2010] = useState<string>('');
+  const [pop2022, setPop2022] = useState<string>('');
+  const [projectionYear, setProjectionYear] = useState<string>(String(new Date().getFullYear()));
+  const [projectionResult, setProjectionResult] = useState<{ projectedPopulation: number; averageAnnualRate: number } | null>(null);
 
   const { toast } = useToast();
 
@@ -490,6 +498,27 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     });
   };
 
+  const handleRunProjection = () => {
+      const p1 = parseInt(pop2001, 10);
+      const p2 = parseInt(pop2010, 10);
+      const p3 = parseInt(pop2022, 10);
+      const year = parseInt(projectionYear, 10);
+
+      if (isNaN(p1) || isNaN(p2) || isNaN(p3) || isNaN(year)) {
+          toast({ title: "Entrada Inválida", description: "Por favor, ingrese valores numéricos para todos los campos de población y para el año.", variant: "destructive" });
+          return;
+      }
+      
+      try {
+          const result = projectPopulationGeometric({ p2001: p1, p2010: p2, p2022: p3, targetYear: year });
+          setProjectionResult(result);
+          toast({ description: "Cálculo de proyección completado." });
+      } catch (error: any) {
+          setProjectionResult(null);
+          toast({ title: "Error de Cálculo", description: error.message, variant: "destructive" });
+      }
+  };
+
 
   return (
     <DraggablePanel
@@ -704,7 +733,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                         type="number"
                                         value={concavity}
                                         onChange={(e) => setConcavity(Number(e.target.value))}
-                                        step={concavityStats ? concavityStats.stdDev / 4 : 0.1}
+                                        step={concavityStats ? concavityStats.stdDev / 10 : 0.1}
                                         min="0.01"
                                         className="h-8 text-xs bg-black/20 text-center"
                                     />
@@ -732,11 +761,61 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                     </div>
                 </AccordionContent>
             </AccordionItem>
+            
+            <AccordionItem value="demographic-projection" className="border-b-0 bg-white/5 rounded-md">
+                <AccordionTrigger className="p-3 hover:no-underline hover:bg-white/10 rounded-t-md data-[state=open]:rounded-b-none">
+                    <SectionHeader icon={TrendingUp} title="Proyección Demográfica" />
+                </AccordionTrigger>
+                <AccordionContent className="p-3 pt-2 space-y-3 border-t border-white/10 bg-transparent rounded-b-md">
+                    <div className="space-y-1">
+                      <Label className="text-xs font-semibold">Proyección de Población</Label>
+                      <div className="space-y-2 p-2 border border-white/10 rounded-md">
+                          <p className="text-xs text-gray-400">Ingrese la población total para una entidad o área seleccionada para los años censales.</p>
+                          <div className="grid grid-cols-3 gap-2">
+                              <div>
+                                <Label htmlFor="pop2001" className="text-xs">Población 2001</Label>
+                                <Input id="pop2001" type="number" value={pop2001} onChange={(e) => setPop2001(e.target.value)} className="h-8 text-xs bg-black/20" />
+                              </div>
+                              <div>
+                                <Label htmlFor="pop2010" className="text-xs">Población 2010</Label>
+                                <Input id="pop2010" type="number" value={pop2010} onChange={(e) => setPop2010(e.target.value)} className="h-8 text-xs bg-black/20" />
+                              </div>
+                              <div>
+                                <Label htmlFor="pop2022" className="text-xs">Población 2022</Label>
+                                <Input id="pop2022" type="number" value={pop2022} onChange={(e) => setPop2022(e.target.value)} className="h-8 text-xs bg-black/20" />
+                              </div>
+                          </div>
+                          <div>
+                            <Label htmlFor="projection-year" className="text-xs">Año a Proyectar</Label>
+                            <Input id="projection-year" type="number" value={projectionYear} onChange={(e) => setProjectionYear(e.target.value)} className="h-8 text-xs bg-black/20" />
+                          </div>
+                          <Button onClick={handleRunProjection} size="sm" className="w-full h-8 text-xs">
+                              <TrendingUp className="mr-2 h-3.5 w-3.5" />
+                              Calcular Proyección
+                          </Button>
+                          {projectionResult && (
+                            <div className="pt-2 border-t border-white/10">
+                                <Table>
+                                  <TableBody>
+                                      <TableRow>
+                                        <TableCell className="text-xs text-gray-300 p-1.5 font-semibold">Población Proyectada ({projectionYear})</TableCell>
+                                        <TableCell className="text-xs text-white p-1.5 text-right font-mono">{Math.round(projectionResult.projectedPopulation).toLocaleString()}</TableCell>
+                                      </TableRow>
+                                       <TableRow>
+                                        <TableCell className="text-xs text-gray-300 p-1.5 font-semibold">Tasa de Crecimiento Anual</TableCell>
+                                        <TableCell className="text-xs text-white p-1.5 text-right font-mono">{(projectionResult.averageAnnualRate * 100).toFixed(4)}%</TableCell>
+                                      </TableRow>
+                                  </TableBody>
+                                </Table>
+                            </div>
+                          )}
+                      </div>
+                    </div>
+                </AccordionContent>
+            </AccordionItem>
         </Accordion>
     </DraggablePanel>
   );
 };
 
 export default AnalysisPanel;
-
-    

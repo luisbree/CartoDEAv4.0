@@ -296,3 +296,49 @@ export async function calculateOptimalConcavity({ features }: HullParams): Promi
         throw new Error(`Cálculo de concavidad falló: ${error.message}`);
     }
 }
+
+
+/**
+ * Projects population using the geometric growth rate method based on three census points.
+ * @param params - The population data and target year.
+ * @returns An object with the projected population and the average annual growth rate.
+ */
+export function projectPopulationGeometric({
+    p2001,
+    p2010,
+    p2022,
+    targetYear
+}: {
+    p2001: number;
+    p2010: number;
+    p2022: number;
+    targetYear: number;
+}): { projectedPopulation: number; averageAnnualRate: number } {
+
+    if (p2001 <= 0 || p2010 <= 0 || p2022 <= 0) {
+        throw new Error("Los valores de población deben ser positivos.");
+    }
+    if (targetYear < 2022) {
+        throw new Error("El año de proyección debe ser posterior al último censo (2022).");
+    }
+
+    // Calculate annual geometric growth rate for the first period (2001-2010)
+    const years1 = 2010 - 2001;
+    const rate1 = Math.pow(p2010 / p2001, 1 / years1) - 1;
+
+    // Calculate annual geometric growth rate for the second period (2010-2022)
+    const years2 = 2022 - 2010;
+    const rate2 = Math.pow(p2022 / p2010, 1 / years2) - 1;
+
+    // Calculate the average annual growth rate
+    const averageAnnualRate = (rate1 + rate2) / 2;
+
+    // Project the population to the target year from the last census
+    const yearsToProject = targetYear - 2022;
+    const projectedPopulation = p2022 * Math.pow(1 + averageAnnualRate, yearsToProject);
+
+    return {
+        projectedPopulation: Math.round(projectedPopulation),
+        averageAnnualRate,
+    };
+}
