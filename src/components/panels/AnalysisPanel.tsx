@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DraftingCompass, Scissors, Layers, CircleDotDashed, MinusSquare, BoxSelect, Droplet, Sparkles, Loader2, Combine } from 'lucide-react';
+import { DraftingCompass, Scissors, Layers, CircleDotDashed, MinusSquare, BoxSelect, Droplet, Sparkles, Loader2, Combine, Minus, Plus } from 'lucide-react';
 import type { MapLayer, VectorMapLayer } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { nanoid } from 'nanoid';
@@ -80,6 +80,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   const [hullOutputName, setHullOutputName] = useState('');
   const [concavity, setConcavity] = useState<number>(2);
   const [isCalculatingConcavity, setIsCalculatingConcavity] = useState(false);
+  const [suggestedConcavity, setSuggestedConcavity] = useState<number>(0);
 
   // State for Union tool
   const [unionLayerIds, setUnionLayerIds] = useState<string[]>([]);
@@ -237,7 +238,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 
     for (const olFeature of featuresToProcess) {
         try {
-            const inputFeatureGeoJSON = format.writeFeatureObject(olFeature);
+            const inputFeatureGeoJSON = format.writeFeatureObject(olFeature) as TurfFeature;
             // Turf.js difference can be sensitive, this structure is more robust
             const differenceResult = difference(featureCollection([inputFeatureGeoJSON]), featureCollection([eraseMask]));
             if (differenceResult) {
@@ -257,7 +258,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
             }
         } catch (e) {
             console.warn("Error performing difference on a feature, including original feature.", e);
-            erasedFeaturesGeoJSON.push(format.writeFeatureObject(olFeature));
+            erasedFeaturesGeoJSON.push(format.writeFeatureObject(olFeature) as TurfFeature);
         }
     }
 
@@ -433,6 +434,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     try {
         const optimalValue = await calculateOptimalConcavity({ features: featuresToProcess });
         setConcavity(optimalValue);
+        setSuggestedConcavity(optimalValue);
         toast({ description: `Valor de concavidad sugerido: ${optimalValue.toFixed(2)} km` });
     } catch (error: any) {
         console.error("Error calculating optimal concavity:", error);
@@ -490,6 +492,14 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     toast({ description: `Se creó la capa de unión "${outputName}" con ${allFeatures.length} entidades.` });
     setUnionLayerIds([]);
     setUnionOutputName('');
+  };
+  
+  const handleConcavityStep = (direction: 'increment' | 'decrement') => {
+    const step = suggestedConcavity > 0 ? suggestedConcavity * 0.01 : 0.1;
+    setConcavity(prev => {
+        const newValue = direction === 'increment' ? prev + step : prev - step;
+        return Math.max(0.01, parseFloat(newValue.toFixed(2))); // Ensure it doesn't go below a small threshold
+    });
   };
 
 
@@ -693,20 +703,24 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                             </div>
                             <div className="space-y-2 pt-2 border-t border-white/20">
                                 <div className="flex items-center justify-between">
-                                  <Label htmlFor="concavity-slider" className="text-xs">Concavidad (km)</Label>
+                                  <Label htmlFor="concavity-input" className="text-xs">Concavidad (km)</Label>
                                   <Button onClick={handleSuggestConcavity} size="sm" variant="ghost" className="h-6 text-xs" disabled={!hullInputLayerId || isCalculatingConcavity}>
                                     {isCalculatingConcavity ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1.5 h-3.5 w-3.5" />}
                                     Sugerir
                                   </Button>
                                 </div>
-                                <div className="flex items-center gap-2">
-                                  <Slider
-                                      id="concavity-slider"
-                                      min={1} max={50} step={0.5}
-                                      value={[concavity]}
-                                      onValueChange={(val) => setConcavity(val[0])}
-                                  />
-                                  <span className="text-xs font-mono w-12 text-center">{concavity} km</span>
+                                <div className="flex items-center gap-1">
+                                    <Button onClick={() => handleConcavityStep('decrement')} variant="outline" size="icon" className="h-8 w-8 flex-shrink-0"><Minus className="h-4 w-4"/></Button>
+                                    <Input
+                                        id="concavity-input"
+                                        type="number"
+                                        value={concavity}
+                                        onChange={(e) => setConcavity(Number(e.target.value))}
+                                        step={suggestedConcavity > 0 ? suggestedConcavity * 0.01 : 0.1}
+                                        min="0.01"
+                                        className="h-8 text-xs bg-black/20 text-center"
+                                    />
+                                    <Button onClick={() => handleConcavityStep('increment')} variant="outline" size="icon" className="h-8 w-8 flex-shrink-0"><Plus className="h-4 w-4"/></Button>
                                 </div>
                                 <p className="text-xs text-gray-400">Controla el detalle del polígono cóncavo (distancia máxima de los lados). Un valor más bajo genera una forma más ajustada.</p>
                             </div>
@@ -730,3 +744,4 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
