@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DraftingCompass, Scissors, Layers, CircleDotDashed, MinusSquare, BoxSelect, Droplet, Sparkles, Loader2 } from 'lucide-react';
+import { DraftingCompass, Scissors, Layers, CircleDotDashed, MinusSquare, BoxSelect, Droplet, Sparkles, Loader2, Combine } from 'lucide-react';
 import type { MapLayer, VectorMapLayer } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { nanoid } from 'nanoid';
@@ -22,6 +22,8 @@ import type Feature from 'ol/Feature';
 import type { Geometry } from 'ol/geom';
 import { performBufferAnalysis, performConvexHull, performConcaveHull, calculateOptimalConcavity } from '@/services/spatial-analysis';
 import { Slider } from '../ui/slider';
+import { ScrollArea } from '../ui/scroll-area';
+import { Checkbox } from '../ui/checkbox';
 
 
 interface AnalysisPanelProps {
@@ -79,23 +81,15 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   const [concavity, setConcavity] = useState<number>(2);
   const [isCalculatingConcavity, setIsCalculatingConcavity] = useState(false);
 
+  // State for Union tool
+  const [unionLayerIds, setUnionLayerIds] = useState<string[]>([]);
+  const [unionOutputName, setUnionOutputName] = useState('');
+
   const { toast } = useToast();
 
   const vectorLayers = useMemo(() => {
     return allLayers.filter((l): l is VectorMapLayer => l.type !== 'wms' && l.type !== 'gee' && l.type !== 'geotiff');
   }, [allLayers]);
-  
-  const pointLayers = useMemo(() => {
-    return vectorLayers.filter(l => {
-        const source = l.olLayer.getSource();
-        const features = source?.getFeatures();
-        if (features && features.length > 0) {
-            const geomType = features[0].getGeometry()?.getType();
-            return geomType === 'Point' || geomType === 'MultiPoint';
-        }
-        return false;
-    });
-  }, [vectorLayers]);
   
   const polygonLayers = useMemo(() => {
     return vectorLayers.filter(l => {
@@ -241,20 +235,29 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 
     const erasedFeaturesGeoJSON: TurfFeature<TurfGeometry>[] = [];
 
-    for (const inputFeature of featuresToProcess) {
+    for (const olFeature of featuresToProcess) {
         try {
-            const inputFeatureGeoJSON = format.writeFeatureObject(inputFeature);
-            const differenceResult = difference(inputFeatureGeoJSON, eraseMask);
-
-            if (differenceResult && differenceResult.geometry && differenceResult.geometry.coordinates.length > 0) {
-                differenceResult.properties = inputFeatureGeoJSON.properties;
-                erasedFeaturesGeoJSON.push(differenceResult);
+            const inputFeatureGeoJSON = format.writeFeatureObject(olFeature);
+            // Turf.js difference can be sensitive, this structure is more robust
+            const differenceResult = difference(featureCollection([inputFeatureGeoJSON]), featureCollection([eraseMask]));
+            if (differenceResult) {
+                // The result from turf/difference on a FeatureCollection is another FeatureCollection
+                const resultFeatures = (differenceResult as TurfFeatureCollection).features;
+                if (resultFeatures.length > 0 && resultFeatures[0].geometry) {
+                    // Restore properties from the original feature
+                    resultFeatures[0].properties = inputFeatureGeoJSON.properties;
+                    erasedFeaturesGeoJSON.push(resultFeatures[0]);
+                } else {
+                    // No difference, so the original feature remains untouched
+                    erasedFeaturesGeoJSON.push(inputFeatureGeoJSON);
+                }
             } else {
+                 // If difference is null, it means nothing was erased, keep original.
                  erasedFeaturesGeoJSON.push(inputFeatureGeoJSON);
             }
         } catch (e) {
             console.warn("Error performing difference on a feature, including original feature.", e);
-            erasedFeaturesGeoJSON.push(format.writeFeatureObject(inputFeature));
+            erasedFeaturesGeoJSON.push(format.writeFeatureObject(olFeature));
         }
     }
 
@@ -439,6 +442,56 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     }
   };
 
+ const handleRunUnion = () => {
+    if (unionLayerIds.length < 2) {
+      toast({ description: "Por favor, seleccione al menos dos capas para unir.", variant: "destructive" });
+      return;
+    }
+
+    const layersToUnion = vectorLayers.filter(l => unionLayerIds.includes(l.id));
+    const allFeatures: Feature<Geometry>[] = [];
+    
+    layersToUnion.forEach(layer => {
+        const source = layer.olLayer.getSource();
+        if (source) {
+            // Clone features to avoid modifying original layers
+            const features = source.getFeatures().map(f => f.clone());
+            allFeatures.push(...features);
+        }
+    });
+    
+    if (allFeatures.length === 0) {
+        toast({ description: "Las capas seleccionadas no contienen entidades para unir.", variant: "destructive" });
+        return;
+    }
+
+    const outputName = unionOutputName.trim() || `Unión de ${layersToUnion.length} capas`;
+    
+    allFeatures.forEach(f => f.setId(nanoid()));
+
+    const newLayerId = `union-result-${nanoid()}`;
+    const newSource = new VectorSource({ features: allFeatures });
+    const newOlLayer = new VectorLayer({
+        source: newSource,
+        properties: { id: newLayerId, name: outputName, type: 'analysis' },
+        // Use the style of the first selected layer as a default
+        style: layersToUnion[0].olLayer.getStyle(), 
+    });
+
+    onAddLayer({
+        id: newLayerId,
+        name: outputName,
+        olLayer: newOlLayer,
+        visible: true,
+        opacity: 1,
+        type: 'analysis',
+    }, true);
+
+    toast({ description: `Se creó la capa de unión "${outputName}" con ${allFeatures.length} entidades.` });
+    setUnionLayerIds([]);
+    setUnionOutputName('');
+  };
+
 
   return (
     <DraggablePanel
@@ -528,6 +581,40 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                            <Button onClick={handleRunErase} size="sm" className="w-full h-8 text-xs" disabled={!eraseInputLayerId || !eraseMaskLayerId}>
                               <MinusSquare className="mr-2 h-3.5 w-3.5" />
                               Ejecutar Diferencia
+                          </Button>
+                      </div>
+                  </div>
+                   <div className="space-y-1">
+                      <Label className="text-xs font-semibold">Unión de Capas</Label>
+                      <div className="space-y-2 p-2 border border-white/10 rounded-md">
+                          <div>
+                              <Label className="text-xs">Capas a unir (seleccione 2 o más)</Label>
+                              <ScrollArea className="h-24 border border-white/10 p-2 rounded-md bg-black/10 mt-1">
+                                  <div className="space-y-1">
+                                      {vectorLayers.map(layer => (
+                                          <div key={layer.id} className="flex items-center space-x-2">
+                                              <Checkbox
+                                                  id={`union-layer-${layer.id}`}
+                                                  checked={unionLayerIds.includes(layer.id)}
+                                                  onCheckedChange={(checked) => {
+                                                      setUnionLayerIds(prev =>
+                                                          checked ? [...prev, layer.id] : prev.filter(id => id !== layer.id)
+                                                      );
+                                                  }}
+                                              />
+                                              <Label htmlFor={`union-layer-${layer.id}`} className="text-xs font-normal">{layer.name}</Label>
+                                          </div>
+                                      ))}
+                                  </div>
+                              </ScrollArea>
+                          </div>
+                          <div>
+                              <Label htmlFor="union-output-name" className="text-xs">Nombre de la Capa de Salida</Label>
+                              <Input id="union-output-name" value={unionOutputName} onChange={(e) => setUnionOutputName(e.target.value)} placeholder="Ej: Capas_Unidas" className="h-8 text-xs bg-black/20"/>
+                          </div>
+                          <Button onClick={handleRunUnion} size="sm" className="w-full h-8 text-xs" disabled={unionLayerIds.length < 2}>
+                              <Combine className="mr-2 h-3.5 w-3.5" />
+                              Ejecutar Unión
                           </Button>
                       </div>
                   </div>
