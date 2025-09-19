@@ -190,7 +190,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     }
   };
   
-  const handleRunErase = () => {
+ const handleRunErase = () => {
     const inputLayer = vectorLayers.find(l => l.id === eraseInputLayerId);
     const maskLayer = polygonLayers.find(l => l.id === eraseMaskLayerId);
 
@@ -483,7 +483,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   };
   
   const handleConcavityStep = (direction: 'increment' | 'decrement') => {
-    const step = concavityStats ? concavityStats.stdDev / 4 : 0.1;
+    const step = concavityStats ? concavityStats.stdDev * 0.1 : 0.1;
     setConcavity(prev => {
         const newValue = direction === 'increment' ? prev + step : prev - step;
         return Math.max(0.01, parseFloat(newValue.toFixed(2)));
@@ -738,3 +738,5 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
+    
