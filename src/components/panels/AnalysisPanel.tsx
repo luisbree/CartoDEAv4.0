@@ -56,7 +56,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   onAddLayer,
   style,
 }) => {
-  const [activeAccordionItem, setActiveAccordionItem] = useState<string | undefined>('proximity-tools');
+  const [activeAccordionItem, setActiveAccordionItem] = useState<string | undefined>(undefined);
   
   // State for Clip tool
   const [clipInputLayerId, setClipInputLayerId] = useState<string>('');
