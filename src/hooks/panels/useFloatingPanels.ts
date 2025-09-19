@@ -193,9 +193,12 @@ export const useFloatingPanels = ({
                 .filter(id => id !== panelId && !prev[id].isMinimized)
                 .length;
             
+            // The cascade starts from 1 * offset, so it doesn't overlap the legend panel
+            const cascadeStep = openCascadePanelsCount + 1;
+
             newPosition = {
-                x: panelPadding + (openCascadePanelsCount * CASCADE_OFFSET),
-                y: panelPadding + (openCascadePanelsCount * CASCADE_OFFSET),
+                x: panelPadding + (cascadeStep * CASCADE_OFFSET),
+                y: panelPadding + (cascadeStep * CASCADE_OFFSET),
             };
         }
         
