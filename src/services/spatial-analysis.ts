@@ -9,12 +9,6 @@ import GeoJSON from 'ol/format/GeoJSON';
 import type { Geometry } from 'ol/geom';
 
 
-interface IntersectionParams {
-    analysisFeaturesGeoJSON: TurfFeatureCollection;
-    drawingPolygonGeoJSON: TurfPolygon | TurfMultiPolygon;
-    field: string;
-}
-
 /**
  * Calculates both a surface-weighted average and a proportional sum of a numeric field 
  * based on the intersection with a drawing polygon using Turf.js.
@@ -25,7 +19,11 @@ export async function calculateSpatialStats({
     analysisFeaturesGeoJSON,
     drawingPolygonGeoJSON,
     field
-}: IntersectionParams): Promise<{ weightedAverage: number; proportionalSum: number; count: number; totalArea: number; }> {
+}: {
+    analysisFeaturesGeoJSON: TurfFeatureCollection;
+    drawingPolygonGeoJSON: TurfPolygon | TurfMultiPolygon;
+    field: string;
+}): Promise<{ weightedAverage: number; proportionalSum: number; count: number; totalArea: number; }> {
     
     if (!analysisFeaturesGeoJSON || !drawingPolygonGeoJSON || !field) {
         throw new Error("Parámetros inválidos para el cálculo.");
@@ -260,14 +258,17 @@ export async function calculateOptimalConcavity({ features }: HullParams): Promi
             throw new Error("La capa no contiene suficientes puntos.");
         }
         
-        const pointCollection = featureCollection(points);
         let totalNearestDistance = 0;
         
         // This can be slow for a very large number of points. Consider sampling for > 5000 points.
         const pointsToProcess = points.length > 5000 ? points.slice(0, 5000) : points;
 
-        for (const point of pointsToProcess) {
-            const nearest = nearestPoint(point, pointCollection);
+        for (let i = 0; i < pointsToProcess.length; i++) {
+            const currentPoint = pointsToProcess[i];
+            // Create a collection of all OTHER points
+            const otherPoints = featureCollection(pointsToProcess.filter((_, index) => i !== index));
+            
+            const nearest = nearestPoint(currentPoint, otherPoints);
             // distance is in kilometers by default in nearestPoint
             totalNearestDistance += nearest.properties.distanceToPoint;
         }
