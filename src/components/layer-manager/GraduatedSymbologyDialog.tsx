@@ -557,7 +557,7 @@ const GraduatedSymbologyDialog: React.FC<GraduatedSymbologyDialogProps> = ({
                           type="number"
                           min="0"
                           max="20"
-                          step="0.5"
+                          step="0.1"
                           value={strokeWidth}
                           onChange={(e) => setStrokeWidth(Number(e.target.value))}
                           className="h-8 text-xs bg-black/20 w-16"

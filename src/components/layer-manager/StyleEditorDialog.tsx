@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -306,6 +307,7 @@ const StyleEditorDialog: React.FC<StyleEditorDialogProps> = ({
                   type="number"
                   min="0"
                   max="20"
+                  step="0.1"
                   value={styleOptions.lineWidth}
                   onChange={(e) => setStyleOptions(prev => ({ ...prev, lineWidth: Number(e.target.value) }))}
                   className="h-8 text-xs bg-black/20 w-20"

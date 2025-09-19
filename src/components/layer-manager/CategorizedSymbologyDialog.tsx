@@ -310,7 +310,7 @@ const CategorizedSymbologyDialog: React.FC<CategorizedSymbologyDialogProps> = ({
             <Button onClick={handleGenerateClassification} disabled={!field} className="h-8 text-xs w-full">Clasificar</Button>
           </div>
           <div className="p-2 border border-white/10 rounded-md">
-            <div className="flex items-center justify-between gap-3 w-full"><h4 className="text-xs font-semibold">Contorno</h4><div className="flex items-center gap-2"><div className="flex flex-col items-center gap-1"><Label htmlFor="stroke-color" className="text-xs">Color</Label><ColorPicker value={strokeColor} onChange={setStrokeColor}/></div><div className="flex flex-col items-center gap-1"><Label htmlFor="stroke-width" className="text-xs">Grosor</Label><Input id="stroke-width" type="number" min="0" max="20" step="0.5" value={strokeWidth} onChange={(e) => setStrokeWidth(Number(e.target.value))} className="h-8 text-xs bg-black/20 w-16"/></div></div></div>
+            <div className="flex items-center justify-between gap-3 w-full"><h4 className="text-xs font-semibold">Contorno</h4><div className="flex items-center gap-2"><div className="flex flex-col items-center gap-1"><Label htmlFor="stroke-color" className="text-xs">Color</Label><ColorPicker value={strokeColor} onChange={setStrokeColor}/></div><div className="flex flex-col items-center gap-1"><Label htmlFor="stroke-width" className="text-xs">Grosor</Label><Input id="stroke-width" type="number" min="0" max="20" step="0.1" value={strokeWidth} onChange={(e) => setStrokeWidth(Number(e.target.value))} className="h-8 text-xs bg-black/20 w-16"/></div></div></div>
           </div>
           {categories && (
             <div className="space-y-1"><ScrollArea className="h-32">
