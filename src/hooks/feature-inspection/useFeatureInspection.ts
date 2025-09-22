@@ -9,11 +9,11 @@ import TileWMS from 'ol/source/TileWMS';
 import Feature from 'ol/Feature';
 import { Circle as CircleStyle, Fill, Stroke, Style, RegularShape } from 'ol/style';
 import { useToast } from "@/hooks/use-toast";
-import { Geometry, Point } from 'ol/geom';
+import { Geometry, Point, LineString, Polygon } from 'ol/geom';
 import Select, { type SelectEvent } from 'ol/interaction/Select';
 import Modify from 'ol/interaction/Modify';
 import DragBox from 'ol/interaction/DragBox';
-import { singleClick, never, altKeyOnly } from 'ol/events/condition';
+import { singleClick, never, altKeyOnly, primaryAction, shiftKeyOnly, platformModifierKeyOnly } from 'ol/events/condition';
 import type { PlainFeatureData, InteractionToolId } from '@/lib/types';
 import { getGeeValueAtPoint } from '@/ai/flows/gee-flow';
 import { transform } from 'ol/proj';
@@ -48,6 +48,18 @@ const highlightStyle = new Style({
   zIndex: Infinity,
 });
 
+// New style for modification vertices (red cross)
+const modifyVertexStyle = new Style({
+    image: new RegularShape({
+        fill: new Fill({ color: 'rgba(255, 0, 0, 0.7)' }),
+        stroke: new Stroke({ color: 'rgba(255, 0, 0, 0.7)', width: 1.5 }),
+        points: 4,
+        radius: 6,
+        radius2: 0,
+        angle: Math.PI / 4,
+    }),
+});
+
 const crossStyle = new Style({
     image: new RegularShape({
         fill: new Fill({ color: 'rgba(255, 0, 0, 0.7)' }),
@@ -77,6 +89,7 @@ export const useFeatureInspection = ({
   const selectInteractionRef = useRef<Select | null>(null);
   const modifyInteractionRef = useRef<Modify | null>(null);
   const dragBoxInteractionRef = useRef<DragBox | null>(null);
+  const deleteVertexBoxRef = useRef<DragBox | null>(null);
   
   const onNewSelectionRef = useRef(onNewSelection);
   useEffect(() => {
@@ -160,9 +173,11 @@ export const useFeatureInspection = ({
     if (selectInteractionRef.current) map.removeInteraction(selectInteractionRef.current);
     if (modifyInteractionRef.current) map.removeInteraction(modifyInteractionRef.current);
     if (dragBoxInteractionRef.current) map.removeInteraction(dragBoxInteractionRef.current);
+    if (deleteVertexBoxRef.current) map.removeInteraction(deleteVertexBoxRef.current);
     selectInteractionRef.current = null;
     modifyInteractionRef.current = null;
     dragBoxInteractionRef.current = null;
+    deleteVertexBoxRef.current = null;
     if (mapElementRef.current) mapElementRef.current.style.cursor = 'default';
 
     // --- Handle tool deactivation ---
@@ -174,7 +189,7 @@ export const useFeatureInspection = ({
     // --- Set cursor style based on active tool ---
     if (mapElementRef.current) {
         if (activeTool === 'queryRaster') mapElementRef.current.style.cursor = 'help';
-        else if (activeTool === 'modify') mapElementRef.current.style.cursor = 'default'; // Modify handles its own cursor
+        else if (activeTool === 'modify') mapElementRef.current.style.cursor = 'default';
         else mapElementRef.current.style.cursor = 'crosshair';
     }
     
@@ -351,21 +366,95 @@ export const useFeatureInspection = ({
 
     // --- Vector Modification Logic ---
     if (activeTool === 'modify') {
-        // This interaction lets the user click on a feature to select it for modification
-        const modifySelect = new Select({
-            multi: false, // Only modify one feature at a time
-        });
-
         const modify = new Modify({
-            features: modifySelect.getFeatures(), // Key part: modifies the feature selected by this interaction
-            deleteCondition: altKeyOnly, // Use Alt/Cmd + Click to delete a vertex
+            source: undefined, // Will be set dynamically on feature click
+            style: modifyVertexStyle,
+            deleteCondition: altKeyOnly,
         });
         modifyInteractionRef.current = modify;
-        selectInteractionRef.current = modifySelect; // Store the select part for cleanup
-        
-        map.addInteraction(modifySelect);
         map.addInteraction(modify);
+
+        const deleteVertexBox = new DragBox({ condition: shiftKeyOnly });
+        deleteVertexBoxRef.current = deleteVertexBox;
+        map.addInteraction(deleteVertexBox);
+
+        const selectAndModify = (e: MapBrowserEvent<any>) => {
+            if (platformModifierKeyOnly(e)) { // Ctrl/Cmd click to delete feature
+                map.forEachFeatureAtPixel(e.pixel, (feature, layer) => {
+                    if (layer instanceof VectorLayer) {
+                        const source = layer.getSource();
+                        if (source && feature) {
+                            source.removeFeature(feature);
+                            toast({ description: `Entidad eliminada.` });
+                            return true; // stop searching
+                        }
+                    }
+                    return false;
+                });
+                return;
+            }
+
+            const featuresAtPixel = map.getFeaturesAtPixel(e.pixel, {
+                layerFilter: (l) => l instanceof VectorLayer,
+                hitTolerance: 5,
+            });
+
+            const featureToModify = featuresAtPixel[0] as Feature<Geometry> | undefined;
+            
+            // Clear previous modification source
+            modify.setSource(undefined);
+
+            if (featureToModify) {
+                const layer = map.getLayer(e.pixel) as VectorLayer<any>;
+                if (layer && layer.getSource()) {
+                    modify.setSource(layer.getSource());
+                }
+            }
+        };
+
+        deleteVertexBox.on('boxend', () => {
+            const deleteExtent = deleteVertexBox.getGeometry().getExtent();
+            const source = modify.getSource();
+            if (!source) return;
+
+            source.forEachFeature((feature) => {
+                const geometry = feature.getGeometry();
+                if (!geometry) return;
+
+                let coordinatesChanged = false;
+
+                const processCoordinates = (coords: any[]): any[] => {
+                    return coords.filter(coord => {
+                        if (Array.isArray(coord[0])) { // For polygons/multipolygons
+                            return processCoordinates(coord);
+                        }
+                        return !(coord[0] >= deleteExtent[0] && coord[0] <= deleteExtent[2] &&
+                                 coord[1] >= deleteExtent[1] && coord[1] <= deleteExtent[3]);
+                    });
+                };
+
+                if (geometry instanceof Polygon || geometry instanceof MultiPolygon) {
+                    let newCoords = processCoordinates(geometry.getCoordinates());
+                    newCoords = newCoords.map(ring => ring.length < (geometry instanceof Polygon ? 4 : 5) ? [] : ring).filter(ring => ring.length > 0);
+                    if (newCoords.length > 0) {
+                        geometry.setCoordinates(newCoords);
+                        coordinatesChanged = true;
+                    }
+                } else if (geometry instanceof LineString || geometry instanceof MultiLineString) {
+                    let newCoords = processCoordinates(geometry.getCoordinates());
+                     if (newCoords.length >= 2) {
+                        geometry.setCoordinates(newCoords);
+                        coordinatesChanged = true;
+                    }
+                }
+                if (coordinatesChanged) {
+                    toast({description: `Vértices eliminados.`});
+                }
+            });
+        });
         
+        map.on('singleclick', selectAndModify);
+
         modify.on('modifystart', () => {
             if (mapElementRef.current) mapElementRef.current.style.cursor = 'grabbing';
         });
@@ -373,6 +462,12 @@ export const useFeatureInspection = ({
             if (mapElementRef.current) mapElementRef.current.style.cursor = 'default';
             toast({ description: "Geometría modificada." });
         });
+
+        return () => { // Cleanup for modify tool
+            map.un('singleclick', selectAndModify);
+            if (modifyInteractionRef.current) map.removeInteraction(modifyInteractionRef.current);
+            if (deleteVertexBoxRef.current) map.removeInteraction(deleteVertexBoxRef.current);
+        };
     }
 
     return () => {
@@ -380,6 +475,7 @@ export const useFeatureInspection = ({
             if (selectInteractionRef.current) map.removeInteraction(selectInteractionRef.current);
             if (modifyInteractionRef.current) map.removeInteraction(modifyInteractionRef.current);
             if (dragBoxInteractionRef.current) map.removeInteraction(dragBoxInteractionRef.current);
+            if (deleteVertexBoxRef.current) map.removeInteraction(deleteVertexBoxRef.current);
             if (mapElementRef.current) mapElementRef.current.style.cursor = 'default';
         }
     };

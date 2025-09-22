@@ -238,8 +238,14 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
                       <Edit className="h-4 w-4" />
                     </Button>
                 </TooltipTrigger>
-                <TooltipContent side="bottom" className="bg-gray-700 text-white border-gray-600">
-                  <p className="text-xs">Modificar Geometría</p>
+                <TooltipContent side="bottom" className="bg-gray-700 text-white border-gray-600 max-w-xs" align="start">
+                  <div className="text-xs space-y-1">
+                      <p className="font-semibold">Modificar Geometría</p>
+                      <p><span className="font-semibold">Arrastrar:</span> Mover vértice.</p>
+                      <p><span className="font-semibold">Alt+Click:</span> Eliminar vértice.</p>
+                      <p><span className="font-semibold">Shift+Arrastrar:</span> Eliminar vértices en área.</p>
+                      <p><span className="font-semibold">Ctrl+Click:</span> Eliminar entidad completa.</p>
+                  </div>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
