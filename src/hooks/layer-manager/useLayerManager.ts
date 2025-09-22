@@ -832,12 +832,17 @@ export const useLayerManager = ({
         const geojson = geojsonFormat.writeFeaturesObject(clonedFeatures);
 
         // Use the imported write function from the default export
-        const shpBuffer = await (shp.default as any).write(geojson.features, 'GEOMETRY', {});
-        const zip = new JSZip();
-        zip.file(`${layerName}.zip`, shpBuffer);
-        const content = await zip.generateAsync({ type: "blob" });
+        const shpBuffer = await (shp.default as any).write(geojson, {
+            folder: layerName,
+            types: {
+                point: 'mypoints',
+                polygon: 'mypolygons',
+                line: 'mylines'
+            }
+        });
+        
         const link = document.createElement("a");
-        link.href = URL.createObjectURL(content);
+        link.href = URL.createObjectURL(new Blob([shpBuffer], {type: 'application/zip'}));
         link.download = `${layerName}_shp.zip`;
         link.click();
         URL.revokeObjectURL(link.href);

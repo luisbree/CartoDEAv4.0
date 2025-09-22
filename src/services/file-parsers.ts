@@ -4,14 +4,13 @@ import VectorLayer from 'ol/layer/Vector';
 import GeoJSON from 'ol/format/GeoJSON';
 import KML from 'ol/format/KML';
 import * as JSZip from 'jszip';
-import shp from 'shpjs';
-import { nanoid } from 'nanoid';
 import type { MapLayer } from '@/lib/types';
 import type { useToast } from '@/hooks/use-toast';
 import type Feature from 'ol/Feature';
 import WebGLTileLayer from 'ol/layer/WebGLTile';
 import GeoTIFF from 'ol/source/GeoTIFF';
 import { Circle as CircleStyle, Fill, Stroke, Style } from 'ol/style';
+import { nanoid } from 'nanoid';
 
 
 interface FileUploadParams {
@@ -158,7 +157,8 @@ export const handleFileUpload = async ({
                 case 'kmz': {
                     let geojsonData: any;
                     try {
-                        geojsonData = await shp(content as ArrayBuffer);
+                        const shp = await import('shpjs');
+                        geojsonData = await (shp.default as any)(content as ArrayBuffer);
                     } catch (shpError) {
                         // Fallback for KMZ files that are not shapefile zips
                         if (fileExtension === 'kmz') {
