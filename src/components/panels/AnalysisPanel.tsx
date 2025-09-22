@@ -253,7 +253,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
             const inputFeatureGeoJSON = format.writeFeatureObject(olFeature) as TurfFeature;
             const cleanedInput = cleanCoords(inputFeatureGeoJSON);
 
-            const differenceResult = difference(cleanedInput, eraseMask);
+            const differenceResult = difference(featureCollection([cleanedInput, eraseMask]));
 
             if (differenceResult) {
                 differenceResult.properties = inputFeatureGeoJSON.properties;
