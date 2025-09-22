@@ -390,16 +390,21 @@ export const useFeatureInspection = ({
     if (activeTool === 'modify') {
         const selectForModify = new Select({ 
           style: (feature) => {
-            // This function ensures the original style and the vertex style are both applied.
             const layer = selectForModify.getLayer(feature);
+            if (!layer) return [modifyVertexStyle]; // Default if layer not found
+            
             const layerStyle = layer.getStyle();
-            let styles = [];
+            let baseStyles: Style | Style[];
+
             if (typeof layerStyle === 'function') {
-                const styleResult = layerStyle(feature, map.getView().getResolution() || 1);
-                styles = Array.isArray(styleResult) ? styleResult : [styleResult];
-            } else if (layerStyle instanceof Style) {
-                styles = [layerStyle];
+                baseStyles = layerStyle(feature, map.getView().getResolution() || 1);
+            } else {
+                baseStyles = layerStyle || new Style(); // Fallback to an empty style
             }
+            
+            const styles = Array.isArray(baseStyles) ? baseStyles : [baseStyles];
+            
+            // Return both the original style and the vertex style
             return [...styles, modifyVertexStyle];
           }
         });
@@ -410,67 +415,51 @@ export const useFeatureInspection = ({
 
         const modify = new Modify({
             features: selectedFeaturesCollection,
-            // The style for the temporary sketch features (e.g., when adding a vertex)
-            style: modifyVertexStyle,
+            style: undefined, // Let the select style handle vertices
             deleteCondition: altKeyOnly,
             insertVertexCondition: never, 
         });
         modifyInteractionRef.current = modify;
         map.addInteraction(modify);
         
-        modify.on('modifyend', (event) => {
-            const feature = (event as any).features.getArray()[0] as Feature<Geometry> | undefined;
-            if (!feature) return;
-
-            const geom = feature.getGeometry();
-            if (!geom) return;
-            
-            const source = selectForModify.getLayer(feature)?.getSource();
-            if (!source || !(source instanceof VectorSource)) return;
-            
-            let minVertices = 0;
-            if (geom instanceof Polygon) minVertices = 3;
-            if (geom instanceof LineString) minVertices = 2;
-
-            if (minVertices > 0) {
-                 const currentVertices = (geom as any).getCoordinates()[0].length;
-                 if (currentVertices <= minVertices) {
-                    source.removeFeature(feature);
-                    toast({ description: "Entidad eliminada al quedarse sin vértices suficientes." });
-                    selectedFeaturesCollection.clear();
-                 }
-            }
-        });
-
         const deleteVertexBox = new DragBox({ condition: shiftKeyOnly });
         deleteVertexBoxRef.current = deleteVertexBox;
         map.addInteraction(deleteVertexBox);
 
         const selectAndModify = (e: MapBrowserEvent<any>) => {
+            // Handle feature removal (Ctrl+Click)
             if (platformModifierKeyOnly(e)) { 
                 map.forEachFeatureAtPixel(e.pixel, (feature, layer) => {
                     if (layer instanceof VectorLayer && layer.getSource()) {
-                        const source = layer.getSource();
+                        const source = layer.getSource() as VectorSource<Feature<Geometry>>;
                         const geometry = (feature as Feature<Geometry>).getGeometry();
                         const geomType = geometry?.getType();
 
                         if (geomType === 'MultiPolygon' || geomType === 'MultiLineString') {
                             const clickCoord = e.coordinate;
                             const multiGeom = geometry as MultiPolygon | MultiLineString;
-                            const subGeometries = geomType === 'MultiPolygon' 
-                                ? multiGeom.getPolygons() 
-                                : multiGeom.getLineStrings();
+                            const coords = multiGeom.getCoordinates();
                             
                             let clickedSubGeomIndex = -1;
-                             for (let i = subGeometries.length - 1; i >= 0; i--) {
-                                if (subGeometries[i].intersectsCoordinate(clickCoord)) {
-                                    clickedSubGeomIndex = i;
-                                    break;
+                            if (geomType === 'MultiPolygon') {
+                                for (let i = coords.length - 1; i >= 0; i--) {
+                                    const poly = new Polygon(coords[i]);
+                                    if (poly.intersectsCoordinate(clickCoord)) {
+                                        clickedSubGeomIndex = i;
+                                        break;
+                                    }
+                                }
+                            } else { // MultiLineString
+                                for (let i = coords.length - 1; i >= 0; i--) {
+                                    const line = new LineString(coords[i]);
+                                    if (line.intersectsCoordinate(clickCoord)) {
+                                        clickedSubGeomIndex = i;
+                                        break;
+                                    }
                                 }
                             }
                             
                             if (clickedSubGeomIndex !== -1) {
-                                const coords = multiGeom.getCoordinates();
                                 if (coords.length > 1) {
                                     coords.splice(clickedSubGeomIndex, 1);
                                     if (coords.length === 1) {
@@ -500,7 +489,8 @@ export const useFeatureInspection = ({
                 return;
             }
 
-             map.forEachFeatureAtPixel(e.pixel, (feature, layer) => {
+            // Handle feature selection for modification
+            map.forEachFeatureAtPixel(e.pixel, (feature, layer) => {
                 if (layer instanceof VectorLayer && !layer.get('isDrawingLayer')) {
                     selectedFeaturesCollection.clear();
                     selectedFeaturesCollection.push(feature);
@@ -509,43 +499,52 @@ export const useFeatureInspection = ({
                 return false;
             });
         };
-
+        
+        // Handle vertex removal by drawing a box (Shift+Drag)
         deleteVertexBox.on('boxend', () => {
             const deleteExtent = deleteVertexBox.getGeometry().getExtent();
             const featureToModify = selectedFeaturesCollection.getArray()[0];
             if (!featureToModify) return;
-
+        
             const geometry = featureToModify.getGeometry();
-            if (!geometry) return;
-            
+            const source = selectForModify.getLayer(featureToModify)?.getSource() as VectorSource<Feature<Geometry>>;
+            if (!geometry || !source) return;
+        
             let coordinatesChanged = false;
-
-            const processCoordinates = (coords: any[]): any[] => {
-                if (!Array.isArray(coords)) return [];
-                
+        
+            const processCoordinates = (coords: any[], isRing: boolean, minPoints: number): any[] | null => {
+                if (!Array.isArray(coords)) return coords;
+        
                 if (Array.isArray(coords[0]) && typeof coords[0][0] === 'number') {
-                     const newCoords = coords.filter(coord =>
+                    const newCoords = coords.filter(coord =>
                         !(coord[0] >= deleteExtent[0] && coord[0] <= deleteExtent[2] &&
                           coord[1] >= deleteExtent[1] && coord[1] <= deleteExtent[3])
                     );
                     if (newCoords.length !== coords.length) coordinatesChanged = true;
-                    return newCoords;
-                } else if (Array.isArray(coords[0]) && Array.isArray(coords[0][0])) {
-                    const newRings = coords.map(ring => processCoordinates(ring));
-                    if (geometry instanceof Polygon || geometry instanceof MultiPolygon) {
-                        return newRings.filter(ring => ring.length >= 4);
-                    } else {
-                        return newRings.filter(ring => ring.length >= 2);
+                    if (isRing && newCoords.length > 0 && newCoords.length < minPoints) return null;
+                    if (isRing && newCoords.length > 0) { // Close the ring if it's still valid
+                        if (newCoords[0][0] !== newCoords[newCoords.length - 1][0] || newCoords[0][1] !== newCoords[newCoords.length - 1][1]) {
+                           newCoords.push(newCoords[0]);
+                        }
                     }
+                    return newCoords.length < minPoints ? null : newCoords;
+                } else if (Array.isArray(coords[0]) && Array.isArray(coords[0][0])) {
+                    const newParts = coords.map(part => processCoordinates(part, true, minPoints)).filter(p => p !== null);
+                    return newParts.length > 0 ? newParts : null;
                 }
                 return coords;
             };
-
-            const newGeometryCoords = processCoordinates(geometry.getCoordinates());
-            geometry.setCoordinates(newGeometryCoords, (geometry as any).getLayout());
             
-            if (coordinatesChanged) {
-                toast({description: `Vértices eliminados.`});
+            const geomType = geometry.getType();
+            const minPoints = geomType.includes('Polygon') ? 4 : 2;
+            const newGeometryCoords = processCoordinates(geometry.getCoordinates(), geomType.includes('Polygon'), minPoints);
+
+            if (newGeometryCoords === null || newGeometryCoords.length === 0) {
+                source.removeFeature(featureToModify);
+                toast({ description: "Entidad eliminada por falta de vértices." });
+            } else if (coordinatesChanged) {
+                geometry.setCoordinates(newGeometryCoords, (geometry as any).getLayout());
+                toast({ description: `${coordinatesChanged ? 'Vértices eliminados.' : 'Ningún vértice seleccionado.'}` });
             }
         });
         
@@ -554,16 +553,13 @@ export const useFeatureInspection = ({
         modify.on('modifystart', () => {
             if (mapElementRef.current) mapElementRef.current.style.cursor = 'grabbing';
         });
-        modify.on('modifyend', () => {
+        modify.on('modifyend', (event) => {
             if (mapElementRef.current) mapElementRef.current.style.cursor = 'default';
             toast({ description: "Geometría modificada." });
         });
 
-        return () => { // Cleanup for modify tool
+        return () => {
             map.un('singleclick', selectAndModify);
-            if (selectInteractionRef.current) map.removeInteraction(selectInteractionRef.current);
-            if (modifyInteractionRef.current) map.removeInteraction(modifyInteractionRef.current);
-            if (deleteVertexBoxRef.current) map.removeInteraction(deleteVertexBoxRef.current);
         };
     }
 
