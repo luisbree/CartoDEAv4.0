@@ -1047,3 +1047,5 @@ export const useLayerManager = ({
     isWfsLoading,
   };
 };
+
+    
