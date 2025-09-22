@@ -201,7 +201,7 @@ export const handleFileUpload = async ({
         }
     }
 
-    // Now, segregate all files into their respective shapefile groups or as "other" files
+    // Now, segregate all files into their respective shapefile group or as "other" files
     for (const file of files) {
         const basename = getBaseName(file.name);
         const fileExtension = getFileExtension(file.name);
@@ -271,5 +271,3 @@ export const handleFileUpload = async ({
         }
     }
 };
-
-    

@@ -20,6 +20,7 @@ import type { StyleLike } from 'ol/style/Style';
 import { transformExtent } from 'ol/proj';
 import GeoJSON from 'ol/format/GeoJSON';
 import KML from 'ol/format/KML';
+import JSZip from 'jszip';
 import { bbox as bboxStrategy } from 'ol/loadingstrategy';
 import type { GeeValueQueryInput } from '@/ai/flows/gee-types';
 
@@ -823,7 +824,7 @@ export const useLayerManager = ({
     try {
       if (format === 'shp') {
         // Dynamically import shp-write
-        const shpwrite = await import('shp-write');
+        const shpwrite = (await import('shp-write')).default;
 
         const geojsonFormat = new GeoJSON();
         const clonedFeatures = features.map(f => f.clone());
@@ -1030,5 +1031,3 @@ export const useLayerManager = ({
     isWfsLoading,
   };
 };
-
-    
