@@ -158,6 +158,7 @@ export const handleFileUpload = async ({
                     let geojsonData: any;
                     try {
                         const shp = await import('shpjs');
+                        // Correct invocation for reading a zip buffer
                         geojsonData = await (shp.default as any)(content as ArrayBuffer);
                     } catch (shpError) {
                         // Fallback for KMZ files that are not shapefile zips

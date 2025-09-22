@@ -823,26 +823,34 @@ export const useLayerManager = ({
 
     try {
       if (format === 'shp') {
-        // Dynamically import shpjs
         const shp = await import('shpjs');
 
         const geojsonFormat = new GeoJSON();
         const clonedFeatures = features.map(f => f.clone());
         clonedFeatures.forEach(f => f.getGeometry()?.transform('EPSG:3857', 'EPSG:4326'));
         const geojson = geojsonFormat.writeFeaturesObject(clonedFeatures);
-
-        // Use the imported write function from the default export
-        const shpBuffer = await (shp.default as any).write(geojson, {
-            folder: layerName,
-            types: {
+        
+        // This is the corrected syntax for shpjs
+        const files = await (shp.default as any).write(
+            geojson,
+            { // Geometry type mapping
                 point: 'mypoints',
                 polygon: 'mypolygons',
                 line: 'mylines'
             }
-        });
-        
+        );
+
+        const zip = new JSZip();
+        zip.file(`${layerName}.shp`, files.shp.buffer);
+        zip.file(`${layerName}.shx`, files.shx.buffer);
+        zip.file(`${layerName}.dbf`, files.dbf.buffer);
+        if (files.prj) {
+            zip.file(`${layerName}.prj`, files.prj);
+        }
+
+        const content = await zip.generateAsync({ type: "blob" });
         const link = document.createElement("a");
-        link.href = URL.createObjectURL(new Blob([shpBuffer], {type: 'application/zip'}));
+        link.href = URL.createObjectURL(content);
         link.download = `${layerName}_shp.zip`;
         link.click();
         URL.revokeObjectURL(link.href);
