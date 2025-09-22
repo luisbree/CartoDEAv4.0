@@ -20,7 +20,6 @@ import type { StyleLike } from 'ol/style/Style';
 import { transformExtent } from 'ol/proj';
 import GeoJSON from 'ol/format/GeoJSON';
 import KML from 'ol/format/KML';
-import JSZip from 'jszip';
 import { bbox as bboxStrategy } from 'ol/loadingstrategy';
 import type { GeeValueQueryInput } from '@/ai/flows/gee-types';
 
@@ -823,39 +822,23 @@ export const useLayerManager = ({
 
     try {
       if (format === 'shp') {
-        // Dynamically import shpjs
-        const shp = await import('shpjs');
+        // Dynamically import shp-write
+        const shpwrite = await import('shp-write');
 
         const geojsonFormat = new GeoJSON();
         const clonedFeatures = features.map(f => f.clone());
         clonedFeatures.forEach(f => f.getGeometry()?.transform('EPSG:3857', 'EPSG:4326'));
         const geojson = geojsonFormat.writeFeaturesObject(clonedFeatures);
         
-        // This is the corrected syntax for shpjs
-        const files = await (shp.default as any).write(
-            geojson,
-            { // Geometry type mapping
+        // Use the imported download function
+        shpwrite.download(geojson, {
+            folder: layerName,
+            types: {
                 point: 'mypoints',
                 polygon: 'mypolygons',
                 line: 'mylines'
             }
-        );
-
-        const zip = new JSZip();
-        zip.file(`${layerName}.shp`, files.shp.buffer);
-        zip.file(`${layerName}.shx`, files.shx.buffer);
-        zip.file(`${layerName}.dbf`, files.dbf.buffer);
-        if (files.prj) {
-            zip.file(`${layerName}.prj`, files.prj);
-        }
-
-        const content = await zip.generateAsync({ type: "blob" });
-        const link = document.createElement("a");
-        link.href = URL.createObjectURL(content);
-        link.download = `${layerName}_shp.zip`;
-        link.click();
-        URL.revokeObjectURL(link.href);
-        link.remove();
+        });
 
       } else {
         let textData: string;

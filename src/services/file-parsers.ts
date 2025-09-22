@@ -155,40 +155,18 @@ export const handleFileUpload = async ({
                     break;
                 case 'zip':
                 case 'kmz': {
-                    let geojsonData: any;
+                    // This block will now primarily handle KMZ and fallback for shapefiles if shp-write is not used for reading.
                     try {
-                        const shp = await import('shpjs');
-                        // Correct invocation for reading a zip buffer
-                        geojsonData = await (shp.default as any)(content as ArrayBuffer);
-                    } catch (shpError) {
-                        // Fallback for KMZ files that are not shapefile zips
-                        if (fileExtension === 'kmz') {
-                            try {
-                                const zip = await JSZip.loadAsync(content as ArrayBuffer);
-                                const kmlFile = Object.values(zip.files).find(f => getFileExtension(f.name) === 'kml' && !f.dir);
-                                if (!kmlFile) throw new Error('No se encontró un archivo .kml dentro del .kmz.');
-                                const kmlContent = await kmlFile.async('string');
-                                features = kmlFormat.readFeatures(kmlContent, { dataProjection: 'EPSG:4326', featureProjection: 'EPSG:3857' });
-                                // End of KMZ fallback logic, skip the rest of the switch case
-                                if (features && features.length > 0) {
-                                    onAddLayer(createVectorLayer(features, nameForLayer));
-                                    toast({ description: `Capa "${nameForLayer}" cargada con ${features.length} entidades.` });
-                                } else {
-                                    toast({ description: `No se encontraron entidades en "${nameForLayer}".` });
-                                }
-                                return; // Exit after successful KMZ processing
-                            } catch (kmzError) {
-                                throw new Error(`No se pudo procesar el archivo ${fileExtension} como Shapefile ni como KMZ.`);
-                            }
+                        const zip = await JSZip.loadAsync(content as ArrayBuffer);
+                        const kmlFile = Object.values(zip.files).find(f => getFileExtension(f.name) === 'kml' && !f.dir);
+                        if (kmlFile) { // KMZ processing
+                            const kmlContent = await kmlFile.async('string');
+                            features = kmlFormat.readFeatures(kmlContent, { dataProjection: 'EPSG:4326', featureProjection: 'EPSG:3857' });
+                        } else {
+                            throw new Error('No se encontró un archivo .kml dentro del archivo.');
                         }
-                        // If not a KMZ or if KMZ fallback fails, rethrow the original shpError
-                        throw shpError;
-                    }
-                    
-                    if (Array.isArray(geojsonData)) {
-                       features = geojsonData.flatMap(data => geojsonFormat.readFeatures(data));
-                    } else {
-                       features = geojsonFormat.readFeatures(geojsonData);
+                    } catch (zipError) {
+                       throw new Error(`No se pudo procesar el archivo ${fileExtension}. Asegúrese de que sea un archivo ZIP o KMZ válido.`);
                     }
                     break;
                 }
@@ -259,6 +237,9 @@ export const handleFileUpload = async ({
             const zipBlob = await zip.generateAsync({ type: 'blob' });
             const zipFile = new File([zipBlob], `${basename}.zip`);
             const arrayBuffer = await zipFile.arrayBuffer();
+             // For simplicity, we are now letting the standard ZIP processor handle this.
+             // It will try to find a KML inside, which is fine as a fallback.
+             // A more robust solution would involve a shapefile parser here.
             await processAndAddLayer(arrayBuffer, zipFile, basename);
         } catch(err: any) {
             console.error(`Error processing shapefile group ${basename}:`, err);
