@@ -20,7 +20,6 @@ import type { StyleLike } from 'ol/style/Style';
 import { transformExtent } from 'ol/proj';
 import GeoJSON from 'ol/format/GeoJSON';
 import KML from 'ol/format/KML';
-import { write as shpwrite } from 'shpjs';
 import JSZip from 'jszip';
 import { bbox as bboxStrategy } from 'ol/loadingstrategy';
 import type { GeeValueQueryInput } from '@/ai/flows/gee-types';
@@ -824,13 +823,16 @@ export const useLayerManager = ({
 
     try {
       if (format === 'shp') {
-        // shpjs library expects features to be in a GeoJSON FeatureCollection format and in EPSG:4326
+        // Dynamically import shpjs
+        const shp = await import('shpjs');
+
         const geojsonFormat = new GeoJSON();
         const clonedFeatures = features.map(f => f.clone());
         clonedFeatures.forEach(f => f.getGeometry()?.transform('EPSG:3857', 'EPSG:4326'));
         const geojson = geojsonFormat.writeFeaturesObject(clonedFeatures);
 
-        const shpBuffer = await shpwrite(geojson.features, 'GEOMETRY', {});
+        // Use the imported write function
+        const shpBuffer = await shp.write(geojson.features, 'GEOMETRY', {});
         const zip = new JSZip();
         zip.file(`${layerName}.zip`, shpBuffer);
         const content = await zip.generateAsync({ type: "blob" });
