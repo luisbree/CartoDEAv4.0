@@ -823,6 +823,7 @@ export const useLayerManager = ({
 
     try {
       if (format === 'shp') {
+        // Dynamically import shpjs
         const shp = await import('shpjs');
 
         const geojsonFormat = new GeoJSON();
