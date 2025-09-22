@@ -367,16 +367,19 @@ export const useFeatureInspection = ({
     // --- Vector Modification Logic ---
     if (activeTool === 'modify') {
         // Use an internal, invisible Select interaction to hold the feature being modified.
-        const selectForModify = new Select({ style: new Style() });
-        selectInteractionRef.current = selectForModify; // Store it for cleanup
+        // Important: A null style will make the feature disappear. Pass undefined or nothing to keep original style.
+        const selectForModify = new Select({ style: undefined });
+        selectInteractionRef.current = selectForModify;
         map.addInteraction(selectForModify);
 
         const selectedFeaturesCollection = selectForModify.getFeatures();
 
         const modify = new Modify({
-            features: selectedFeaturesCollection, // Correctly initialize with a feature collection
+            features: selectedFeaturesCollection,
             style: modifyVertexStyle,
             deleteCondition: altKeyOnly,
+            // New option to make vertices always visible
+            insertVertexCondition: never, 
         });
         modifyInteractionRef.current = modify;
         map.addInteraction(modify);
