@@ -13,7 +13,7 @@ import { Geometry, Point } from 'ol/geom';
 import Select, { type SelectEvent } from 'ol/interaction/Select';
 import Modify from 'ol/interaction/Modify';
 import DragBox from 'ol/interaction/DragBox';
-import { singleClick, never } from 'ol/events/condition';
+import { singleClick, never, altKeyOnly } from 'ol/events/condition';
 import type { PlainFeatureData, InteractionToolId } from '@/lib/types';
 import { getGeeValueAtPoint } from '@/ai/flows/gee-flow';
 import { transform } from 'ol/proj';
@@ -171,9 +171,11 @@ export const useFeatureInspection = ({
       return;
     }
 
-    // --- Set cursor style ---
+    // --- Set cursor style based on active tool ---
     if (mapElementRef.current) {
-        mapElementRef.current.style.cursor = 'crosshair';
+        if (activeTool === 'queryRaster') mapElementRef.current.style.cursor = 'help';
+        else if (activeTool === 'modify') mapElementRef.current.style.cursor = 'default'; // Modify handles its own cursor
+        else mapElementRef.current.style.cursor = 'crosshair';
     }
     
     // --- Raster Query Logic ---
@@ -285,37 +287,31 @@ export const useFeatureInspection = ({
         };
     }
 
-    // --- Vector Inspection, Selection, and Modification Logic ---
+    // --- Vector Inspection and Selection Logic ---
+    if (activeTool === 'inspect' || activeTool === 'selectBox') {
+        const select = new Select({
+            style: highlightStyle,
+            multi: true,
+            condition: singleClick, // Selection happens on single click
+        });
+        selectInteractionRef.current = select;
+        map.addInteraction(select);
 
-    // 1. Select Interaction (common for all vector tools)
-    const select = new Select({
-        style: highlightStyle,
-        multi: true,
-        condition: singleClick,
-        filter: (feature, layer) => layer && !layer.get('isBaseLayer') && !layer.get('isDrawingLayer'),
-        useInteractingStyle: false,
-    });
-    selectInteractionRef.current = select;
-    map.addInteraction(select);
+        select.on('select', (e: SelectEvent) => {
+            const currentSelectedFeatures = e.target.getFeatures().getArray();
+            setSelectedFeatures(currentSelectedFeatures);
 
-    select.on('select', (e: SelectEvent) => {
-        const currentSelectedFeatures = e.target.getFeatures().getArray();
-        setSelectedFeatures(currentSelectedFeatures);
-
-        if (activeTool === 'inspect') {
-            const plainData: PlainFeatureData[] = currentSelectedFeatures.map(f => ({
-                id: f.getId() as string,
-                attributes: f.getProperties()
-            }));
-            processAndDisplayFeatures(plainData, 'Inspección');
-        } else if (activeTool === 'selectBox' && (e.selected.length > 0 || e.deselected.length > 0)) {
-            toast({ description: `${currentSelectedFeatures.length} entidad(es) seleccionada(s).` });
-        }
-        // For 'modify', the selection itself is enough, the Modify interaction will handle the rest.
-    });
-    
-    // 2. DragBox for selection
-    if (activeTool === 'selectBox' || activeTool === 'inspect') {
+            if (activeTool === 'inspect') {
+                const plainData: PlainFeatureData[] = currentSelectedFeatures.map(f => ({
+                    id: f.getId() as string,
+                    attributes: f.getProperties()
+                }));
+                processAndDisplayFeatures(plainData, 'Inspección');
+            } else if (activeTool === 'selectBox') {
+                toast({ description: `${currentSelectedFeatures.length} entidad(es) seleccionada(s).` });
+            }
+        });
+        
         const dragBox = new DragBox({});
         dragBoxInteractionRef.current = dragBox;
         map.addInteraction(dragBox);
@@ -353,23 +349,31 @@ export const useFeatureInspection = ({
         });
     }
 
-    // 3. Modify Interaction
+    // --- Vector Modification Logic ---
     if (activeTool === 'modify') {
+        // This interaction lets the user click on a feature to select it for modification
+        const modifySelect = new Select({
+            multi: false, // Only modify one feature at a time
+        });
+
         const modify = new Modify({
-            features: select.getFeatures(), // Key part: it modifies the selected features!
+            features: modifySelect.getFeatures(), // Key part: modifies the feature selected by this interaction
+            deleteCondition: altKeyOnly, // Use Alt/Cmd + Click to delete a vertex
         });
         modifyInteractionRef.current = modify;
+        selectInteractionRef.current = modifySelect; // Store the select part for cleanup
+        
+        map.addInteraction(modifySelect);
         map.addInteraction(modify);
         
         modify.on('modifystart', () => {
             if (mapElementRef.current) mapElementRef.current.style.cursor = 'grabbing';
         });
         modify.on('modifyend', () => {
-            if (mapElementRef.current) mapElementRef.current.style.cursor = 'crosshair';
+            if (mapElementRef.current) mapElementRef.current.style.cursor = 'default';
             toast({ description: "Geometría modificada." });
         });
     }
-
 
     return () => {
         if (map) {
