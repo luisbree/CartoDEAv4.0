@@ -9,7 +9,7 @@ import TileWMS from 'ol/source/TileWMS';
 import Feature from 'ol/Feature';
 import { Circle as CircleStyle, Fill, Stroke, Style, RegularShape } from 'ol/style';
 import { useToast } from "@/hooks/use-toast";
-import { Geometry, Point, LineString, Polygon } from 'ol/geom';
+import { Geometry, Point, LineString, Polygon, MultiPolygon, MultiLineString } from 'ol/geom';
 import Select, { type SelectEvent } from 'ol/interaction/Select';
 import Modify from 'ol/interaction/Modify';
 import DragBox from 'ol/interaction/DragBox';
@@ -366,8 +366,15 @@ export const useFeatureInspection = ({
 
     // --- Vector Modification Logic ---
     if (activeTool === 'modify') {
+        // Use an internal, invisible Select interaction to hold the feature being modified.
+        const selectForModify = new Select({ style: new Style() });
+        selectInteractionRef.current = selectForModify; // Store it for cleanup
+        map.addInteraction(selectForModify);
+
+        const selectedFeaturesCollection = selectForModify.getFeatures();
+
         const modify = new Modify({
-            source: undefined, // Will be set dynamically on feature click
+            features: selectedFeaturesCollection, // Correctly initialize with a feature collection
             style: modifyVertexStyle,
             deleteCondition: altKeyOnly,
         });
@@ -384,9 +391,14 @@ export const useFeatureInspection = ({
                     if (layer instanceof VectorLayer) {
                         const source = layer.getSource();
                         if (source && feature) {
-                            source.removeFeature(feature);
-                            toast({ description: `Entidad eliminada.` });
-                            return true; // stop searching
+                            try {
+                                source.removeFeature(feature);
+                                toast({ description: `Entidad eliminada.` });
+                                return true; // stop searching
+                            } catch (error) {
+                                // This can happen if the feature was already removed
+                                console.warn("Feature already removed or could not be removed.");
+                            }
                         }
                     }
                     return false;
@@ -394,63 +406,59 @@ export const useFeatureInspection = ({
                 return;
             }
 
-            const featuresAtPixel = map.getFeaturesAtPixel(e.pixel, {
-                layerFilter: (l) => l instanceof VectorLayer,
-                hitTolerance: 5,
-            });
-
-            const featureToModify = featuresAtPixel[0] as Feature<Geometry> | undefined;
-            
-            // Clear previous modification source
-            modify.setSource(undefined);
-
-            if (featureToModify) {
-                const layer = map.getLayer(e.pixel) as VectorLayer<any>;
-                if (layer && layer.getSource()) {
-                    modify.setSource(layer.getSource());
+            // Find feature to modify
+             map.forEachFeatureAtPixel(e.pixel, (feature, layer) => {
+                if (layer instanceof VectorLayer && !layer.get('isDrawingLayer')) {
+                    selectedFeaturesCollection.clear();
+                    selectedFeaturesCollection.push(feature);
+                    return true;
                 }
-            }
+                return false;
+            });
         };
 
         deleteVertexBox.on('boxend', () => {
             const deleteExtent = deleteVertexBox.getGeometry().getExtent();
-            const source = modify.getSource();
-            if (!source) return;
+            // The Modify interaction source is now the feature collection of the Select interaction
+            const featureToModify = selectedFeaturesCollection.getArray()[0];
+            if (!featureToModify) return;
 
-            source.forEachFeature((feature) => {
-                const geometry = feature.getGeometry();
-                if (!geometry) return;
+            const geometry = featureToModify.getGeometry();
+            if (!geometry) return;
+            
+            let coordinatesChanged = false;
 
-                let coordinatesChanged = false;
-
-                const processCoordinates = (coords: any[]): any[] => {
-                    return coords.filter(coord => {
-                        if (Array.isArray(coord[0])) { // For polygons/multipolygons
-                            return processCoordinates(coord);
-                        }
-                        return !(coord[0] >= deleteExtent[0] && coord[0] <= deleteExtent[2] &&
-                                 coord[1] >= deleteExtent[1] && coord[1] <= deleteExtent[3]);
-                    });
-                };
-
-                if (geometry instanceof Polygon || geometry instanceof MultiPolygon) {
-                    let newCoords = processCoordinates(geometry.getCoordinates());
-                    newCoords = newCoords.map(ring => ring.length < (geometry instanceof Polygon ? 4 : 5) ? [] : ring).filter(ring => ring.length > 0);
-                    if (newCoords.length > 0) {
-                        geometry.setCoordinates(newCoords);
-                        coordinatesChanged = true;
-                    }
-                } else if (geometry instanceof LineString || geometry instanceof MultiLineString) {
-                    let newCoords = processCoordinates(geometry.getCoordinates());
-                     if (newCoords.length >= 2) {
-                        geometry.setCoordinates(newCoords);
-                        coordinatesChanged = true;
+            const processCoordinates = (coords: any[]): any[] => {
+                if (!Array.isArray(coords)) return [];
+                
+                // Check if it's a list of coordinates or a list of rings/paths
+                if (Array.isArray(coords[0]) && typeof coords[0][0] === 'number') {
+                     // It's a single ring or path
+                     const newCoords = coords.filter(coord =>
+                        !(coord[0] >= deleteExtent[0] && coord[0] <= deleteExtent[2] &&
+                          coord[1] >= deleteExtent[1] && coord[1] <= deleteExtent[3])
+                    );
+                    if (newCoords.length !== coords.length) coordinatesChanged = true;
+                    return newCoords;
+                } else if (Array.isArray(coords[0]) && Array.isArray(coords[0][0])) {
+                    // It's a list of rings (Polygon) or paths (MultiLineString)
+                    const newRings = coords.map(ring => processCoordinates(ring));
+                     // A Polygon ring needs at least 4 points (first=last), a LineString needs at least 2
+                    if (geometry instanceof Polygon || geometry instanceof MultiPolygon) {
+                        return newRings.filter(ring => ring.length >= 4);
+                    } else {
+                        return newRings.filter(ring => ring.length >= 2);
                     }
                 }
-                if (coordinatesChanged) {
-                    toast({description: `Vértices eliminados.`});
-                }
-            });
+                return coords;
+            };
+
+            const newGeometryCoords = processCoordinates(geometry.getCoordinates());
+            geometry.setCoordinates(newGeometryCoords, (geometry as any).getLayout());
+            
+            if (coordinatesChanged) {
+                toast({description: `Vértices eliminados.`});
+            }
         });
         
         map.on('singleclick', selectAndModify);
@@ -465,6 +473,7 @@ export const useFeatureInspection = ({
 
         return () => { // Cleanup for modify tool
             map.un('singleclick', selectAndModify);
+            if (selectInteractionRef.current) map.removeInteraction(selectInteractionRef.current);
             if (modifyInteractionRef.current) map.removeInteraction(modifyInteractionRef.current);
             if (deleteVertexBoxRef.current) map.removeInteraction(deleteVertexBoxRef.current);
         };
