@@ -417,7 +417,6 @@ export const useFeatureInspection = ({
             features: selectedFeaturesCollection,
             style: undefined, // Let the select style handle vertices
             deleteCondition: altKeyOnly,
-            insertVertexCondition: never, 
         });
         modifyInteractionRef.current = modify;
         map.addInteraction(modify);
