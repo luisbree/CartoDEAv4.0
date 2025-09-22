@@ -244,7 +244,7 @@ export const useFeatureInspection = ({
                         {'INFO_FORMAT': 'application/json', 'FEATURE_COUNT': '1'}
                     );
                     if (url) {
-                        const proxyUrl = `/api/geoserver-proxy?url=${encodeURIComponent(url)}`;
+                        const proxyUrl = `/api/geoserver-proxy?url=${encodeURIComponent(url)}&cacheBust=${Date.now()}`;
                         try {
                             const response = await fetch(proxyUrl);
                             if (response.ok) {
@@ -366,8 +366,6 @@ export const useFeatureInspection = ({
 
     // --- Vector Modification Logic ---
     if (activeTool === 'modify') {
-        // Use an internal, invisible Select interaction to hold the feature being modified.
-        // Important: A null style will make the feature disappear. Pass undefined or nothing to keep original style.
         const selectForModify = new Select({ style: undefined });
         selectInteractionRef.current = selectForModify;
         map.addInteraction(selectForModify);
@@ -378,7 +376,6 @@ export const useFeatureInspection = ({
             features: selectedFeaturesCollection,
             style: modifyVertexStyle,
             deleteCondition: altKeyOnly,
-            // New option to make vertices always visible
             insertVertexCondition: never, 
         });
         modifyInteractionRef.current = modify;
@@ -389,19 +386,54 @@ export const useFeatureInspection = ({
         map.addInteraction(deleteVertexBox);
 
         const selectAndModify = (e: MapBrowserEvent<any>) => {
-            if (platformModifierKeyOnly(e)) { // Ctrl/Cmd click to delete feature
+            if (platformModifierKeyOnly(e)) { // Ctrl/Cmd click to delete
                 map.forEachFeatureAtPixel(e.pixel, (feature, layer) => {
-                    if (layer instanceof VectorLayer) {
+                    if (layer instanceof VectorLayer && layer.getSource()) {
                         const source = layer.getSource();
-                        if (source && feature) {
-                            try {
-                                source.removeFeature(feature);
-                                toast({ description: `Entidad eliminada.` });
-                                return true; // stop searching
-                            } catch (error) {
-                                // This can happen if the feature was already removed
-                                console.warn("Feature already removed or could not be removed.");
+                        const geometry = (feature as Feature<Geometry>).getGeometry();
+                        const geomType = geometry?.getType();
+
+                        if (geomType === 'MultiPolygon' || geomType === 'MultiLineString') {
+                            const clickCoord = e.coordinate;
+                            const multiGeom = geometry as MultiPolygon | MultiLineString;
+                            const subGeometries = geomType === 'MultiPolygon' 
+                                ? multiGeom.getPolygons() 
+                                : multiGeom.getLineStrings();
+                            
+                            let clickedSubGeomIndex = -1;
+                            for (let i = 0; i < subGeometries.length; i++) {
+                                if (subGeometries[i].intersectsCoordinate(clickCoord)) {
+                                    clickedSubGeomIndex = i;
+                                    break;
+                                }
                             }
+                            
+                            if (clickedSubGeomIndex !== -1) {
+                                if (subGeometries.length > 1) {
+                                    const coords = multiGeom.getCoordinates();
+                                    coords.splice(clickedSubGeomIndex, 1);
+                                    
+                                    if (coords.length === 1) {
+                                        // Downgrade to simple geometry
+                                        const newGeom = geomType === 'MultiPolygon' 
+                                            ? new Polygon(coords[0]) 
+                                            : new LineString(coords[0]);
+                                        (feature as Feature<Geometry>).setGeometry(newGeom);
+                                    } else {
+                                        multiGeom.setCoordinates(coords);
+                                    }
+                                    toast({ description: `Parte de la entidad eliminada.` });
+                                    selectedFeaturesCollection.clear(); // Deselect to see changes
+                                } else {
+                                    source.removeFeature(feature as Feature<Geometry>);
+                                    toast({ description: `Entidad eliminada.` });
+                                }
+                                return true; // Stop searching
+                            }
+                        } else {
+                            source.removeFeature(feature as Feature<Geometry>);
+                            toast({ description: `Entidad eliminada.` });
+                            return true; // Stop searching
                         }
                     }
                     return false;
@@ -409,7 +441,6 @@ export const useFeatureInspection = ({
                 return;
             }
 
-            // Find feature to modify
              map.forEachFeatureAtPixel(e.pixel, (feature, layer) => {
                 if (layer instanceof VectorLayer && !layer.get('isDrawingLayer')) {
                     selectedFeaturesCollection.clear();
@@ -422,7 +453,6 @@ export const useFeatureInspection = ({
 
         deleteVertexBox.on('boxend', () => {
             const deleteExtent = deleteVertexBox.getGeometry().getExtent();
-            // The Modify interaction source is now the feature collection of the Select interaction
             const featureToModify = selectedFeaturesCollection.getArray()[0];
             if (!featureToModify) return;
 
@@ -434,9 +464,7 @@ export const useFeatureInspection = ({
             const processCoordinates = (coords: any[]): any[] => {
                 if (!Array.isArray(coords)) return [];
                 
-                // Check if it's a list of coordinates or a list of rings/paths
                 if (Array.isArray(coords[0]) && typeof coords[0][0] === 'number') {
-                     // It's a single ring or path
                      const newCoords = coords.filter(coord =>
                         !(coord[0] >= deleteExtent[0] && coord[0] <= deleteExtent[2] &&
                           coord[1] >= deleteExtent[1] && coord[1] <= deleteExtent[3])
@@ -444,9 +472,7 @@ export const useFeatureInspection = ({
                     if (newCoords.length !== coords.length) coordinatesChanged = true;
                     return newCoords;
                 } else if (Array.isArray(coords[0]) && Array.isArray(coords[0][0])) {
-                    // It's a list of rings (Polygon) or paths (MultiLineString)
                     const newRings = coords.map(ring => processCoordinates(ring));
-                     // A Polygon ring needs at least 4 points (first=last), a LineString needs at least 2
                     if (geometry instanceof Polygon || geometry instanceof MultiPolygon) {
                         return newRings.filter(ring => ring.length >= 4);
                     } else {
