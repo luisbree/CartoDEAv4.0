@@ -366,7 +366,7 @@ export const useFeatureInspection = ({
 
     // --- Vector Modification Logic ---
     if (activeTool === 'modify') {
-        const selectForModify = new Select({ style: undefined });
+        const selectForModify = new Select({ style: undefined }); // No style, so original feature remains visible
         selectInteractionRef.current = selectForModify;
         map.addInteraction(selectForModify);
 
@@ -380,6 +380,32 @@ export const useFeatureInspection = ({
         });
         modifyInteractionRef.current = modify;
         map.addInteraction(modify);
+        
+        // Listen for vertex removal
+        modify.on('change', (event) => {
+            const feature = (event as any).features.getArray()[0] as Feature<Geometry> | undefined;
+            if (!feature) return;
+
+            const geom = feature.getGeometry();
+            if (!geom) return;
+
+            const coords = (geom as any).getCoordinates();
+            let minVertices = 0;
+            if (geom instanceof Polygon) minVertices = 3;
+            if (geom instanceof LineString) minVertices = 2;
+
+            if (minVertices > 0) {
+                 const currentVertices = (coords[0] || []).length;
+                 if (currentVertices < minVertices) {
+                    const source = selectForModify.getLayer(feature)?.getSource();
+                    if (source instanceof VectorSource) {
+                        source.removeFeature(feature);
+                        toast({ description: "Entidad eliminada al quedarse sin vértices suficientes." });
+                        selectedFeaturesCollection.clear();
+                    }
+                 }
+            }
+        });
 
         const deleteVertexBox = new DragBox({ condition: shiftKeyOnly });
         deleteVertexBoxRef.current = deleteVertexBox;
