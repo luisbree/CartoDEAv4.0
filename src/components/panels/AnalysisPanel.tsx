@@ -15,7 +15,7 @@ import { nanoid } from 'nanoid';
 import GeoJSON from 'ol/format/GeoJSON';
 import VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
-import { intersect, featureCollection, difference } from '@turf/turf';
+import { intersect, featureCollection, difference, cleanCoords } from '@turf/turf';
 import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as TurfMultiPolygon, FeatureCollection as TurfFeatureCollection, Geometry as TurfGeometry } from 'geojson';
 import { multiPolygon } from '@turf/helpers';
 import type Feature from 'ol/Feature';
@@ -233,9 +233,13 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     const maskFeatures = maskSource.getFeatures();
     const maskGeoJSON = format.writeFeaturesObject(maskFeatures) as TurfFeatureCollection<TurfPolygon | TurfMultiPolygon>;
     
-    const maskPolygons = maskGeoJSON.features.flatMap(f => 
-        f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.coordinates
-    );
+    const maskPolygons = maskGeoJSON.features.flatMap(f => {
+        const cleanedFeature = cleanCoords(f);
+        return cleanedFeature.geometry.type === 'Polygon' 
+            ? [cleanedFeature.geometry.coordinates] 
+            : cleanedFeature.geometry.coordinates;
+    });
+    
     if (maskPolygons.length === 0) {
         toast({ description: "La capa de borrado no contiene polígonos válidos.", variant: "destructive" });
         return;
@@ -247,7 +251,9 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     for (const olFeature of featuresToProcess) {
         try {
             const inputFeatureGeoJSON = format.writeFeatureObject(olFeature) as TurfFeature;
-            const differenceResult = difference(inputFeatureGeoJSON, eraseMask);
+            const cleanedInput = cleanCoords(inputFeatureGeoJSON);
+
+            const differenceResult = difference(cleanedInput, eraseMask);
 
             if (differenceResult) {
                 differenceResult.properties = inputFeatureGeoJSON.properties;
