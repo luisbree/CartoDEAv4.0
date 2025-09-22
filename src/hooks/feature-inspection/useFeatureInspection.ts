@@ -11,6 +11,7 @@ import { Circle as CircleStyle, Fill, Stroke, Style, RegularShape } from 'ol/sty
 import { useToast } from "@/hooks/use-toast";
 import { Geometry, Point } from 'ol/geom';
 import Select, { type SelectEvent } from 'ol/interaction/Select';
+import Modify from 'ol/interaction/Modify';
 import DragBox from 'ol/interaction/DragBox';
 import { singleClick, never } from 'ol/events/condition';
 import type { PlainFeatureData, InteractionToolId } from '@/lib/types';
@@ -74,6 +75,7 @@ export const useFeatureInspection = ({
   const rasterQueryOverlaysRef = useRef<Overlay[]>([]);
   const rasterQueryMarkersLayerRef = useRef<VectorLayer<VectorSource<Feature<Point>>> | null>(null);
   const selectInteractionRef = useRef<Select | null>(null);
+  const modifyInteractionRef = useRef<Modify | null>(null);
   const dragBoxInteractionRef = useRef<DragBox | null>(null);
   
   const onNewSelectionRef = useRef(onNewSelection);
@@ -156,8 +158,10 @@ export const useFeatureInspection = ({
 
     // --- Cleanup previous interactions ---
     if (selectInteractionRef.current) map.removeInteraction(selectInteractionRef.current);
+    if (modifyInteractionRef.current) map.removeInteraction(modifyInteractionRef.current);
     if (dragBoxInteractionRef.current) map.removeInteraction(dragBoxInteractionRef.current);
     selectInteractionRef.current = null;
+    modifyInteractionRef.current = null;
     dragBoxInteractionRef.current = null;
     if (mapElementRef.current) mapElementRef.current.style.cursor = 'default';
 
@@ -281,8 +285,9 @@ export const useFeatureInspection = ({
         };
     }
 
+    // --- Vector Inspection, Selection, and Modification Logic ---
 
-    // --- Vector Inspection and Selection Logic ---
+    // 1. Select Interaction (common for all vector tools)
     const select = new Select({
         style: highlightStyle,
         multi: true,
@@ -306,48 +311,70 @@ export const useFeatureInspection = ({
         } else if (activeTool === 'selectBox' && (e.selected.length > 0 || e.deselected.length > 0)) {
             toast({ description: `${currentSelectedFeatures.length} entidad(es) seleccionada(s).` });
         }
+        // For 'modify', the selection itself is enough, the Modify interaction will handle the rest.
     });
     
-    const dragBox = new DragBox({});
-    dragBoxInteractionRef.current = dragBox;
-    map.addInteraction(dragBox);
-
-    dragBox.on('boxend', () => {
-        const extent = dragBox.getGeometry().getExtent();
-        const featuresInBox: Feature<Geometry>[] = [];
-        
-        map.getLayers().forEach(layer => {
-          if (layer instanceof VectorLayer && layer.getVisible() && !layer.get('isBaseLayer') && !layer.get('isDrawingLayer')) {
-            const source = layer.getSource();
-            if (source) {
-              source.forEachFeatureIntersectingExtent(extent, (feature) => {
-                featuresInBox.push(feature as Feature<Geometry>);
-              });
+    // 2. DragBox for selection
+    if (activeTool === 'selectBox' || activeTool === 'inspect') {
+        const dragBox = new DragBox({});
+        dragBoxInteractionRef.current = dragBox;
+        map.addInteraction(dragBox);
+    
+        dragBox.on('boxend', () => {
+            const extent = dragBox.getGeometry().getExtent();
+            const featuresInBox: Feature<Geometry>[] = [];
+            
+            map.getLayers().forEach(layer => {
+              if (layer instanceof VectorLayer && layer.getVisible() && !layer.get('isBaseLayer') && !layer.get('isDrawingLayer')) {
+                const source = layer.getSource();
+                if (source) {
+                  source.forEachFeatureIntersectingExtent(extent, (feature) => {
+                    featuresInBox.push(feature as Feature<Geometry>);
+                  });
+                }
+              }
+            });
+          
+            const currentSelectedInSelect = select.getFeatures();
+            currentSelectedInSelect.clear();
+            currentSelectedInSelect.extend(featuresInBox);
+          
+            setSelectedFeatures(featuresInBox);
+            
+            if (activeTool === 'inspect') {
+              const plainData: PlainFeatureData[] = featuresInBox.map(f => ({
+                id: f.getId() as string,
+                attributes: f.getProperties()
+              }));
+              processAndDisplayFeatures(plainData, 'Inspección por área');
+            } else {
+              toast({ description: `${featuresInBox.length} entidad(es) seleccionada(s).` });
             }
-          }
         });
-      
-        const currentSelectedInSelect = select.getFeatures();
-        currentSelectedInSelect.clear();
-        currentSelectedInSelect.extend(featuresInBox);
-      
-        setSelectedFeatures(featuresInBox);
+    }
+
+    // 3. Modify Interaction
+    if (activeTool === 'modify') {
+        const modify = new Modify({
+            features: select.getFeatures(), // Key part: it modifies the selected features!
+        });
+        modifyInteractionRef.current = modify;
+        map.addInteraction(modify);
         
-        if (activeTool === 'inspect') {
-          const plainData: PlainFeatureData[] = featuresInBox.map(f => ({
-            id: f.getId() as string,
-            attributes: f.getProperties()
-          }));
-          processAndDisplayFeatures(plainData, 'Inspección por área');
-        } else {
-          toast({ description: `${featuresInBox.length} entidad(es) seleccionada(s).` });
-        }
-    });
+        modify.on('modifystart', () => {
+            if (mapElementRef.current) mapElementRef.current.style.cursor = 'grabbing';
+        });
+        modify.on('modifyend', () => {
+            if (mapElementRef.current) mapElementRef.current.style.cursor = 'crosshair';
+            toast({ description: "Geometría modificada." });
+        });
+    }
 
 
     return () => {
         if (map) {
             if (selectInteractionRef.current) map.removeInteraction(selectInteractionRef.current);
+            if (modifyInteractionRef.current) map.removeInteraction(modifyInteractionRef.current);
             if (dragBoxInteractionRef.current) map.removeInteraction(dragBoxInteractionRef.current);
             if (mapElementRef.current) mapElementRef.current.style.cursor = 'default';
         }

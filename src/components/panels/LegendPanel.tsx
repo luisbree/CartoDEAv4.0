@@ -8,7 +8,7 @@ import FileUploadControl from '@/components/layer-manager/FileUploadControl';
 import FeatureInteractionToolbar from '@/components/feature-inspection/FeatureInteractionToolbar';
 import { Separator } from '@/components/ui/separator';
 import type { MapLayer, GeoServerDiscoveredLayer, LabelOptions, GraduatedSymbology, CategorizedSymbology } from '@/lib/types';
-import { ListTree, Trash2, Database, Search, X as ClearIcon, RefreshCw, Loader2 } from 'lucide-react'; 
+import { ListTree, Trash2, Database, Search, X as ClearIcon, RefreshCw, Loader2, Edit } from 'lucide-react'; 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -27,6 +27,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Label } from '@/components/ui/label';
 import type { StyleOptions } from '../layer-manager/StyleEditorDialog';
 import type { InteractionToolId } from '@/lib/types';
+import { cn } from '@/lib/utils';
 
 interface LegendPanelProps {
   panelRef: React.RefObject<HTMLDivElement>;
@@ -167,6 +168,10 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
     setLastClickedIndex(null);
   };
 
+  const handleToggleTool = (tool: InteractionToolId) => {
+    onSetActiveTool(activeTool === tool ? null : tool);
+  };
+
 
   return (
     <DraggablePanel
@@ -215,6 +220,29 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
               onSetActiveTool={onSetActiveTool}
               onClearSelection={onClearSelection}
             />
+            <TooltipProvider delayDuration={300}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                   <Button 
+                      onClick={() => handleToggleTool('modify')}
+                      size="icon"
+                      variant="outline"
+                      className={cn(
+                        "h-8 w-8",
+                        activeTool === 'modify' 
+                          ? 'bg-primary hover:bg-primary/90 text-primary-foreground' 
+                          : 'border-white/30 bg-black/20 text-white/90'
+                      )}
+                      aria-label={activeTool === 'modify' ? "Desactivar Edición" : "Activar Edición Geométrica"}
+                    >
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="bg-gray-700 text-white border-gray-600">
+                  <p className="text-xs">Modificar Geometría</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </div>
         </div>
 
@@ -231,7 +259,7 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
                             onShowLayerTable={onShowLayerTable}
                             onShowStatistics={onShowStatistics}
                             onRemoveLayer={onRemoveLayer}
-                            onExtractByPolygon={(layerId) => onExtractByPolygon(layerId, clearLayerSelection)}
+                            onExtractByPolygon={onExtractByPolygon}
                             onExtractBySelection={() => onExtractBySelection(clearLayerSelection)}
                             onExportLayer={onExportLayer}
                             onRenameLayer={onRenameLayer}
