@@ -831,8 +831,8 @@ export const useLayerManager = ({
         clonedFeatures.forEach(f => f.getGeometry()?.transform('EPSG:3857', 'EPSG:4326'));
         const geojson = geojsonFormat.writeFeaturesObject(clonedFeatures);
 
-        // Use the imported write function
-        const shpBuffer = await shp.write(geojson.features, 'GEOMETRY', {});
+        // Use the imported write function from the default export
+        const shpBuffer = await (shp.default as any).write(geojson.features, 'GEOMETRY', {});
         const zip = new JSZip();
         zip.file(`${layerName}.zip`, shpBuffer);
         const content = await zip.generateAsync({ type: "blob" });
