@@ -3,7 +3,7 @@
 
 import React, { useRef, useState } from 'react';
 import LayerItem from './LayerItem';
-import type { CategorizedSymbology, GraduatedSymbology, LabelOptions, MapLayer } from '@/lib/types';
+import type { CategorizedSymbology, GraduatedSymbology, InteractionToolId, LabelOptions, MapLayer } from '@/lib/types';
 import { Layers } from 'lucide-react';
 import type { StyleOptions } from './StyleEditorDialog';
 
@@ -30,6 +30,10 @@ interface LayerListProps {
   // Selection props
   selectedLayerIds: string[];
   onLayerClick: (index: number, event: React.MouseEvent<HTMLLIElement>) => void;
+
+  // Editing props
+  activeTool: InteractionToolId | null;
+  onToggleEditing: (tool: InteractionToolId) => void;
 }
 
 const LayerList: React.FC<LayerListProps> = ({
@@ -53,6 +57,8 @@ const LayerList: React.FC<LayerListProps> = ({
   onApplyCategorizedSymbology,
   selectedLayerIds,
   onLayerClick,
+  activeTool,
+  onToggleEditing,
 }) => {
   const dragItemIndex = useRef<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
@@ -143,6 +149,8 @@ const LayerList: React.FC<LayerListProps> = ({
           isDragOver={dragOverIndex === index}
           isSelected={selectedLayerIds.includes(layer.id)}
           onClick={(e) => onLayerClick(index, e)}
+          activeTool={activeTool}
+          onToggleEditing={onToggleEditing}
         />
       ))}
     </ul>

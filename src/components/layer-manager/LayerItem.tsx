@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Slider } from "@/components/ui/slider"; 
 import { Eye, EyeOff, Settings2, ZoomIn, Table2, Trash2, Scissors, Percent, GripVertical, CopyPlus, Download, Edit, Palette, Tags, Waypoints, AppWindow, BarChartHorizontal } from 'lucide-react';
-import type { CategorizedSymbology, GraduatedSymbology, LabelOptions, MapLayer } from '@/lib/types';
+import type { CategorizedSymbology, GraduatedSymbology, InteractionToolId, LabelOptions, MapLayer } from '@/lib/types';
 import VectorLayer from 'ol/layer/Vector'; 
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
@@ -60,6 +60,10 @@ interface LayerItemProps {
   // Selection props
   isSelected?: boolean;
   onClick?: (event: React.MouseEvent<HTMLLIElement>) => void;
+
+  // Editing props
+  activeTool: InteractionToolId | null;
+  onToggleEditing: (tool: InteractionToolId) => void;
 }
 
 const LayerItem: React.FC<LayerItemProps> = ({
@@ -91,6 +95,8 @@ const LayerItem: React.FC<LayerItemProps> = ({
   isDragOver,
   isSelected,
   onClick,
+  activeTool,
+  onToggleEditing,
 }) => {
   const isVectorLayer = layer.olLayer instanceof VectorLayer;
   const currentOpacityPercentage = Math.round(layer.opacity * 100);
@@ -253,6 +259,19 @@ const LayerItem: React.FC<LayerItemProps> = ({
                 <ZoomIn className="mr-2 h-3.5 w-3.5" />
                 Ir a la extensión
               </DropdownMenuItem>
+
+              {isVectorLayer && (
+                 <DropdownMenuItem
+                    className={cn(
+                        "text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer",
+                        activeTool === 'modify' && "bg-primary/30"
+                    )}
+                    onSelect={() => onToggleEditing('modify')}
+                  >
+                    <Edit className="mr-2 h-3.5 w-3.5" />
+                    {activeTool === 'modify' ? 'Dejar de Editar Geometría' : 'Editar Geometría'}
+                  </DropdownMenuItem>
+              )}
 
               {isVectorLayer && (
                 <DropdownMenuSub>
