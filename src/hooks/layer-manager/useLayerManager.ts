@@ -23,6 +23,7 @@ import KML from 'ol/format/KML';
 import JSZip from 'jszip';
 import { bbox as bboxStrategy } from 'ol/loadingstrategy';
 import type { GeeValueQueryInput } from '@/ai/flows/gee-types';
+import { write as shpWrite } from 'shapefile';
 
 
 interface UseLayerManagerProps {
@@ -823,23 +824,32 @@ export const useLayerManager = ({
 
     try {
       if (format === 'shp') {
-        // Dynamically import shp-write
-        const shpwrite = (await import('shp-write')).default;
-
+        setTimeout(() => toast({ description: `Generando Shapefile... Esto puede tardar unos segundos.` }), 0);
         const geojsonFormat = new GeoJSON();
         const clonedFeatures = features.map(f => f.clone());
         clonedFeatures.forEach(f => f.getGeometry()?.transform('EPSG:3857', 'EPSG:4326'));
         const geojson = geojsonFormat.writeFeaturesObject(clonedFeatures);
         
-        // Use the imported download function
-        shpwrite.download(geojson, {
-            folder: layerName,
-            types: {
-                point: 'mypoints',
-                polygon: 'mypolygons',
-                line: 'mylines'
-            }
+        const zip = new JSZip();
+        
+        await shpWrite(geojson, undefined, (err: any, files: { shp: any; shx: any; dbf: any; }) => {
+            if (err) throw err;
+            zip.file(`${layerName}.shp`, files.shp);
+            zip.file(`${layerName}.shx`, files.shx);
+            zip.file(`${layerName}.dbf`, files.dbf);
         });
+
+        const prj = 'GEOGCS["GCS_WGS_1984",DATUM["D_WGS_1984",SPHEROID["WGS_1984",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["Degree",0.017453292519943295]]';
+        zip.file(`${layerName}.prj`, prj);
+        
+        const content = await zip.generateAsync({ type: 'blob' });
+        
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(content);
+        link.download = `${layerName}_shp.zip`;
+        link.click();
+        URL.revokeObjectURL(link.href);
+        link.remove();
 
       } else {
         let textData: string;
