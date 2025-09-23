@@ -63,7 +63,6 @@
     "react-hook-form": "^7.54.2",
     "recharts": "^2.15.1",
     "shapefile": "^0.6.6",
-    "shp-write": "^0.3.2",
     "tailwind-merge": "^3.0.1",
     "tailwindcss-animate": "^1.0.7",
     "zod": "^3.24.2"
@@ -78,5 +77,3 @@
     "typescript": "^5"
   }
 }
-
-    

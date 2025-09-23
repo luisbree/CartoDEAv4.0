@@ -23,7 +23,7 @@ interface UseOSMDataProps {
   drawingSourceRef: React.RefObject<VectorSource>;
   addLayer: (layer: MapLayer) => void;
   osmCategoryConfigs: Omit<OSMCategoryConfig, 'matcher'>[];
-  onExportLayers: (layers: VectorLayer<any>[], layerName: string, format: 'geojson' | 'kml' | 'shp') => Promise<void>;
+  onExportLayers: (layers: VectorLayer<any>[], layerName: string, format: 'geojson' | 'kml') => Promise<void>;
 }
 
 export const useOSMData = ({ mapRef, drawingSourceRef, addLayer, osmCategoryConfigs, onExportLayers }: UseOSMDataProps) => {
@@ -128,7 +128,7 @@ export const useOSMData = ({ mapRef, drawingSourceRef, addLayer, osmCategoryConf
     }
   }, [selectedOSMCategoryIds, drawingSourceRef, mapRef, addLayer, osmCategoryConfigs, toast]);
 
- const handleDownloadOSMLayers = useCallback(async (format: 'geojson' | 'kml' | 'shp') => {
+ const handleDownloadOSMLayers = useCallback(async (format: 'geojson' | 'kml') => {
       setIsDownloading(true);
       try {
           const osmLayers = mapRef.current?.getLayers().getArray()

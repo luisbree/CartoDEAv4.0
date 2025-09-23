@@ -146,7 +146,7 @@ const createStyleFunction = (
 
     const textStyle = new TextStyle({
         text: labelText,
-        font: `${'${labelOptions.fontSize}'}px ${'${labelOptions.fontFamily}'}`,
+        font: `${labelOptions.fontSize}px ${labelOptions.fontFamily}`,
         fill: new Fill({ color: textColor }),
         stroke: new Stroke({ color: outlineColor, width: 2.5 }),
         textAlign: geometryType === 'Point' ? 'left' : 'center',
@@ -248,17 +248,17 @@ export const useLayerManager = ({
       try {
           // 1. Add WMS layer for visualization (this is always fast)
           const wmsSource = new TileWMS({
-              url: `${'${serverUrl}'}/wms`,
+              url: `${serverUrl}/wms`,
               params: { 'LAYERS': layerName, 'TILED': true },
               serverType: 'geoserver',
               transition: 0,
               crossOrigin: 'anonymous',
           });
 
-          const wmsLayerId = `wms-visual-${'${layerName}'}-${'${nanoid()}'}`;
+          const wmsLayerId = `wms-visual-${layerName}-${nanoid()}`;
           const wmsLayer = new TileLayer({
               source: wmsSource,
-              properties: { id: wmsLayerId, name: `${'${layerTitle}'} (Visual)`, type: 'wms', gsLayerName: layerName, isVisualOnly: true, bbox: bbox },
+              properties: { id: wmsLayerId, name: `${layerTitle} (Visual)`, type: 'wms', gsLayerName: layerName, isVisualOnly: true, bbox: bbox },
           });
           map.addLayer(wmsLayer);
 
@@ -269,13 +269,13 @@ export const useLayerManager = ({
               loader: function (extent, resolution, projection) {
                   setIsWfsLoading(true);
                   const proj = projection.getCode();
-                  const wfsUrl = `${'${serverUrl}'}/wfs?service=WFS&version=1.1.0&request=GetFeature&typename=${'${layerName}'}&outputFormat=application/json&srsname=${'${proj}'}&bbox=${'${extent.join(\',\')}'},${'${proj}'}`;
-                  const proxyUrl = `/api/geoserver-proxy?url=${'${encodeURIComponent(wfsUrl)}'}&cacheBust=${'${Date.now()}'}`;
+                  const wfsUrl = `${serverUrl}/wfs?service=WFS&version=1.1.0&request=GetFeature&typename=${layerName}&outputFormat=application/json&srsname=${proj}&bbox=${extent.join(',')},${proj}`;
+                  const proxyUrl = `/api/geoserver-proxy?url=${encodeURIComponent(wfsUrl)}&cacheBust=${Date.now()}`;
                   
                   fetch(proxyUrl)
                     .then(response => {
                       if (!response.ok) {
-                        throw new Error(`Fallo en la solicitud WFS para ${'${layerName}'}`);
+                        throw new Error(`Fallo en la solicitud WFS para ${layerName}`);
                       }
                       return response.json();
                     })
@@ -290,8 +290,8 @@ export const useLayerManager = ({
                       vectorSource.addFeatures(features);
                     })
                     .catch(error => {
-                      console.error(`Error al cargar entidades WFS para ${'${layerName}'}:`, error);
-                      toast({ description: `No se pudieron cargar las entidades para ${'${layerTitle}'}.`, variant: "destructive" });
+                      console.error(`Error al cargar entidades WFS para ${layerName}:`, error);
+                      toast({ description: `No se pudieron cargar las entidades para ${layerTitle}.`, variant: "destructive" });
                       vectorSource.removeLoadedExtent(extent); // Important: tell the source the load failed
                     })
                     .finally(() => {
@@ -301,7 +301,7 @@ export const useLayerManager = ({
           });
 
           // 3. Create the invisible VectorLayer for interaction
-          const wfsLayerId = `wfs-data-${'${layerName}'}-${'${nanoid()}'}`;
+          const wfsLayerId = `wfs-data-${layerName}-${nanoid()}`;
           const vectorLayer = new VectorLayer({
               source: vectorSource,
               style: transparentStyle, // Make it invisible
@@ -328,11 +328,11 @@ export const useLayerManager = ({
           
           updateGeoServerDiscoveredLayerState(layerName, true, 'wfs');
           updateGeoServerDiscoveredLayerState(layerName, true, 'wms');
-          setTimeout(() => toast({ description: `Capa "${'${layerTitle}'}" añadida.` }), 0);
+          setTimeout(() => toast({ description: `Capa "${layerTitle}" añadida.` }), 0);
 
       } catch (error: any) {
           console.error("Error adding hybrid WMS/WFS layer:", error);
-          setTimeout(() => toast({ description: `Error al añadir capa: ${'${error.message}'}`, variant: 'destructive' }), 0);
+          setTimeout(() => toast({ description: `Error al añadir capa: ${error.message}`, variant: 'destructive' }), 0);
           setIsWfsLoading(false); // Ensure loading is stopped on initial setup error
       }
   }, [isMapReady, mapRef, addLayer, updateGeoServerDiscoveredLayerState, toast]);
@@ -340,7 +340,7 @@ export const useLayerManager = ({
   const addGeeLayerToMap = useCallback((tileUrl: string, layerName: string, geeParams: Omit<GeeValueQueryInput, 'lon' | 'lat'>) => {
     if (!mapRef.current) return;
 
-    const layerId = `gee-${'${nanoid()}'}`;
+    const layerId = `gee-${nanoid()}`;
     
     const geeSource = new XYZ({
       url: tileUrl,
@@ -366,7 +366,7 @@ export const useLayerManager = ({
       type: 'gee'
     });
     
-    setTimeout(() => toast({ description: `Capa de Google Earth Engine "${'${layerName}'}" añadida.` }), 0);
+    setTimeout(() => toast({ description: `Capa de Google Earth Engine "${layerName}" añadida.` }), 0);
 
   }, [mapRef, addLayer, toast]);
 
@@ -396,9 +396,9 @@ export const useLayerManager = ({
         });
     
         if (layersToRemove.length === 1) {
-          setTimeout(() => toast({ description: `Capa "${'${layersToRemove[0].name}'}" eliminada.` }), 0);
+          setTimeout(() => toast({ description: `Capa "${layersToRemove[0].name}" eliminada.` }), 0);
         } else {
-          setTimeout(() => toast({ description: `${'${layersToRemove.length}'} capa(s) eliminada(s).` }), 0);
+          setTimeout(() => toast({ description: `${layersToRemove.length} capa(s) eliminada(s).` }), 0);
         }
         
         return prevLayers.filter(l => !layerIds.includes(l.id));
@@ -427,7 +427,7 @@ export const useLayerManager = ({
         
         if (layersToMove.length > 0) {
             setTimeout(() => {
-                toast({ description: `${'${layersToMove.length}'} capa(s) reordenada(s).` });
+                toast({ description: `${layersToMove.length} capa(s) reordenada(s).` });
             }, 0);
         }
 
@@ -542,7 +542,7 @@ export const useLayerManager = ({
     olLayer.setStyle(finalStyle);
 
     setLayers(prev => prev.map(l => l.id === layerId ? { ...l, graduatedSymbology: undefined, categorizedSymbology: undefined } : l));
-    setTimeout(() => toast({ description: `Estilo de la capa "${'${layer.name}'}" actualizado.` }), 0);
+    setTimeout(() => toast({ description: `Estilo de la capa "${layer.name}" actualizado.` }), 0);
 
   }, [layers, toast, mapRef]);
 
@@ -565,7 +565,7 @@ export const useLayerManager = ({
     olLayer.setStyle(finalStyle);
     
     olLayer.getSource()?.changed(); // Force redraw
-    toast({ description: `Etiquetas ${'${labelOptions.enabled ? \'activadas\' : \'desactivadas\'}'} para "${'${layer.name}'}".` });
+    toast({ description: `Etiquetas ${labelOptions.enabled ? 'activadas' : 'desactivadas'} para "${layer.name}".` });
   }, [layers, toast]);
 
   const applyGraduatedSymbology = useCallback((layerId: string, symbology: GraduatedSymbology) => {
@@ -593,7 +593,7 @@ export const useLayerManager = ({
     olLayer.set('originalStyle', olLayer.getStyle()); // Store the new function as the base
 
     setLayers(prev => prev.map(l => l.id === layerId ? { ...l, graduatedSymbology: symbology, categorizedSymbology: undefined } : l));
-    setTimeout(() => toast({ description: `Simbología graduada aplicada a "${'${layer.name}'}".` }), 0);
+    setTimeout(() => toast({ description: `Simbología graduada aplicada a "${layer.name}".` }), 0);
   }, [layers, toast, mapRef]);
   
   const applyCategorizedSymbology = useCallback((layerId: string, symbology: CategorizedSymbology) => {
@@ -619,7 +619,7 @@ export const useLayerManager = ({
       olLayer.set('originalStyle', olLayer.getStyle());
   
       setLayers(prev => prev.map(l => l.id === layerId ? { ...l, categorizedSymbology: symbology, graduatedSymbology: undefined } : l));
-      setTimeout(() => toast({ description: `Simbología por categorías aplicada a "${'${layer.name}'}".` }), 0);
+      setTimeout(() => toast({ description: `Simbología por categorías aplicada a "${layer.name}".` }), 0);
   }, [layers, toast, mapRef]);
 
   const zoomToLayerExtent = useCallback((layerId: string) => {
@@ -670,7 +670,7 @@ export const useLayerManager = ({
                 }));
                 onShowTableRequest(plainData, layer.name);
             } else {
-                setTimeout(() => toast({ description: `La capa "${'${layer.name}'}" no tiene entidades para mostrar en la tabla.` }), 0);
+                setTimeout(() => toast({ description: `La capa "${layer.name}" no tiene entidades para mostrar en la tabla.` }), 0);
             }
         }
     } else {
@@ -688,7 +688,7 @@ export const useLayerManager = ({
       })
     );
     setTimeout(() => {
-      toast({ description: `Capa renombrada a "${'${newName}'}"` });
+      toast({ description: `Capa renombrada a "${newName}"` });
     }, 0);
   }, [toast]);
   
@@ -718,9 +718,9 @@ export const useLayerManager = ({
             return prevLayers;
         }
         
-        const newSourceName = `Extracción de ${'${targetLayer.name}'}`;
+        const newSourceName = `Extracción de ${targetLayer.name}`;
         const newSource = new VectorSource({ features: intersectingFeatures.map(f => f.clone()) });
-        const newLayerId = `extract-${'${targetLayer.id}'}-${'${nanoid()}'}`;
+        const newLayerId = `extract-${targetLayer.id}-${nanoid()}`;
         const newOlLayer = new VectorLayer({
             source: newSource,
             properties: {
@@ -741,7 +741,7 @@ export const useLayerManager = ({
         };
 
         mapRef.current?.addLayer(newOlLayer);
-        setTimeout(() => toast({ description: `${'${intersectingFeatures.length}'} entidades extraídas a una nueva capa.` }), 0);
+        setTimeout(() => toast({ description: `${intersectingFeatures.length} entidades extraídas a una nueva capa.` }), 0);
         onSuccess?.();
         
         return [newMapLayer, ...prevLayers];
@@ -779,8 +779,8 @@ export const useLayerManager = ({
           }
         }
     
-        const newSourceName = `Extraidas_${'${originalLayerName}'}`;
-        const newLayerId = `extract-sel-${'${nanoid()}'}`;
+        const newSourceName = `Extraidas_${originalLayerName}`;
+        const newLayerId = `extract-sel-${nanoid()}`;
         const newSource = new VectorSource({ features: clonedFeatures });
         const newOlLayer = new VectorLayer({
             source: newSource,
@@ -798,7 +798,7 @@ export const useLayerManager = ({
         };
     
         mapRef.current?.addLayer(newOlLayer);
-        setTimeout(() => toast({ description: `${'${clonedFeatures.length}'} entidades extraídas a la capa "${'${newSourceName}'}".` }), 0);
+        setTimeout(() => toast({ description: `${clonedFeatures.length} entidades extraídas a la capa "${newSourceName}".` }), 0);
         
         clearSelectionAfterExtraction();
         onSuccess?.();
@@ -807,7 +807,7 @@ export const useLayerManager = ({
     });
   }, [mapRef, toast, clearSelectionAfterExtraction]);
   
-  const handleExportLayer = useCallback(async (layerId: string, format: 'geojson' | 'kml' | 'shp') => {
+  const handleExportLayer = useCallback(async (layerId: string, format: 'geojson' | 'kml') => {
     const layer = layers.find(l => l.id === layerId) as VectorMapLayer | undefined;
     if (!layer || !(layer.olLayer instanceof VectorLayer)) {
       setTimeout(() => toast({ description: "Solo se pueden exportar capas vectoriales." }), 0);
@@ -822,27 +822,6 @@ export const useLayerManager = ({
     const layerName = layer.name.replace(/ /g, '_').replace(/[^a-zA-Z0-9_]/g, '');
 
     try {
-      if (format === 'shp') {
-        setTimeout(() => toast({ description: `Generando Shapefile... Esto puede tardar unos segundos.` }), 0);
-        // Dynamically import shp-write
-        const shpwrite = (await import('shp-write')).default;
-
-        const geojsonFormat = new GeoJSON();
-        const clonedFeatures = features.map(f => f.clone());
-        clonedFeatures.forEach(f => f.getGeometry()?.transform('EPSG:3857', 'EPSG:4326'));
-        const geojson = geojsonFormat.writeFeaturesObject(clonedFeatures);
-        
-        // Use shp-write to generate and trigger download
-        shpwrite.download(geojson, {
-            folder: layerName,
-            types: {
-                point: layerName,
-                polygon: layerName,
-                line: layerName,
-            }
-        });
-
-      } else {
         let textData: string;
         let mimeType: string;
         let extension: string;
@@ -866,16 +845,15 @@ export const useLayerManager = ({
         const blob = new Blob([textData], { type: mimeType });
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
-        link.download = `${'${layerName}'}.${'${extension}'}`;
+        link.download = `${layerName}.${extension}`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
         URL.revokeObjectURL(link.href);
-      }
-      setTimeout(() => toast({ description: `Capa "${'${layer.name}'}" exportada como ${'${format.toUpperCase()}'}.` }), 0);
+      setTimeout(() => toast({ description: `Capa "${layer.name}" exportada como ${format.toUpperCase()}.` }), 0);
     } catch (error) {
-      console.error(`Error exporting as ${'${format}'}:`, error);
-      setTimeout(() => toast({ description: `Error al exportar la capa como ${'${format.toUpperCase()}'}.`, variant: "destructive" }), 0);
+      console.error(`Error exporting as ${format}:`, error);
+      setTimeout(() => toast({ description: `Error al exportar la capa como ${format.toUpperCase()}.`, variant: "destructive" }), 0);
     }
   }, [layers, toast]);
 
@@ -897,7 +875,7 @@ export const useLayerManager = ({
             if (existingLayer) {
                 existingLayer.olLayer.getSource()?.clear();
                 existingLayer.olLayer.getSource()?.addFeatures(features);
-                setTimeout(() => toast({ description: `Capa de Sentinel-2 actualizada con ${'${features.length}'} footprints.` }), 0);
+                setTimeout(() => toast({ description: `Capa de Sentinel-2 actualizada con ${features.length} footprints.` }), 0);
                 return [...prevLayers]; // Return a new array to trigger re-render
             } else {
                 const sentinelSource = new VectorSource({ features });
@@ -919,13 +897,13 @@ export const useLayerManager = ({
                     type: 'sentinel'
                 };
                 mapRef.current?.addLayer(sentinelLayer);
-                setTimeout(() => toast({ description: `${'${features.length}'} footprints de Sentinel-2 añadidos al mapa.` }), 0);
+                setTimeout(() => toast({ description: `${features.length} footprints de Sentinel-2 añadidos al mapa.` }), 0);
                 return [newMapLayer, ...prevLayers];
             }
         });
     } catch (error: any) {
         console.error("Error finding Sentinel-2 footprints:", error);
-        setTimeout(() => toast({ description: `Error al buscar escenas: ${'${error.message}'}` }), 0);
+        setTimeout(() => toast({ description: `Error al buscar escenas: ${error.message}` }), 0);
     } finally {
         setIsFindingSentinelFootprints(false);
     }
@@ -958,7 +936,7 @@ export const useLayerManager = ({
             if (existingLayer) {
                 existingLayer.olLayer.getSource()?.clear();
                 existingLayer.olLayer.getSource()?.addFeatures(features);
-                setTimeout(() => toast({ description: `Capa de Landsat actualizada con ${'${features.length}'} footprints.` }), 0);
+                setTimeout(() => toast({ description: `Capa de Landsat actualizada con ${features.length} footprints.` }), 0);
                 return [...prevLayers];
             } else {
                 const landsatSource = new VectorSource({ features });
@@ -980,13 +958,13 @@ export const useLayerManager = ({
                     type: 'landsat'
                 };
                 mapRef.current?.addLayer(landsatLayer);
-                setTimeout(() => toast({ description: `${'${features.length}'} footprints de Landsat añadidos al mapa.` }), 0);
+                setTimeout(() => toast({ description: `${features.length} footprints de Landsat añadidos al mapa.` }), 0);
                 return [newMapLayer, ...prevLayers];
             }
         });
     } catch (error: any) {
         console.error("Error finding Landsat footprints:", error);
-        setTimeout(() => toast({ description: `Error al buscar escenas de Landsat: ${'${error.message}'}` }), 0);
+        setTimeout(() => toast({ description: `Error al buscar escenas de Landsat: ${error.message}` }), 0);
     } finally {
         setIsFindingLandsatFootprints(false);
     }
@@ -1032,5 +1010,3 @@ export const useLayerManager = ({
     isWfsLoading,
   };
 };
-
-    

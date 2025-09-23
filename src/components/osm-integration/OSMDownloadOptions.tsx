@@ -22,7 +22,7 @@ interface OSMDownloadOptionsProps {
   isFetchingOSM: boolean;
   onFetchOSMDataTrigger: () => void;
   isDownloading: boolean;
-  onDownloadOSMLayers: (format: 'geojson' | 'kml' | 'shp') => Promise<void>;
+  onDownloadOSMLayers: (format: 'geojson' | 'kml') => Promise<void>;
   isQueryToolActive: boolean;
   onToggleQueryTool: () => void;
 }
@@ -35,7 +35,7 @@ const OSMDownloadOptions: React.FC<OSMDownloadOptionsProps> = ({
   isQueryToolActive,
   onToggleQueryTool,
 }) => {
-  const handleDownload = async (format: 'geojson' | 'kml' | 'shp') => {
+  const handleDownload = async (format: 'geojson' | 'kml') => {
     await onDownloadOSMLayers(format);
   };
 
@@ -88,7 +88,6 @@ const OSMDownloadOptions: React.FC<OSMDownloadOptionsProps> = ({
           <DropdownMenuContent className="bg-gray-700 text-white border-gray-600 w-[180px]">
             <DropdownMenuItem className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer" onSelect={() => handleDownload('geojson')}>Como GeoJSON</DropdownMenuItem>
             <DropdownMenuItem className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer" onSelect={() => handleDownload('kml')}>Como KML</DropdownMenuItem>
-            <DropdownMenuItem className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer" onSelect={() => handleDownload('shp')}>Como Shapefile (ZIP)</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
         
