@@ -108,7 +108,7 @@ const getImageForProcessing = (input: GeeTileLayerInput) => {
         finalImage = ee.Image('NASA/NASADEM_HGT/001').select('elevation');
         visParams = { min: minElevation ?? 0, max: maxElevation ?? 4000, palette: ELEVATION_PALETTE };
     } else if (bandCombination === 'ALOS_DSM') {
-        finalImage = ee.Image('JAXA/ALOS/AW3D30/V4_1').select('DSM');
+        finalImage = ee.ImageCollection('JAXA/ALOS/AW3D30/V3_2').select('DSM').mosaic();
         visParams = { min: minElevation ?? 0, max: maxElevation ?? 4000, palette: ELEVATION_PALETTE };
     } else if (bandCombination === 'OPENLANDMAP_SOC') {
         finalImage = ee.Image("OpenLandMap/SOL/SOL_ORGANIC-CARBON_USDA-6A1C_M/v02").select('b0');
