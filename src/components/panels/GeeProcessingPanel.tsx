@@ -10,9 +10,9 @@ import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { BrainCircuit, Loader2, Image as ImageIcon, CheckCircle, AlertTriangle, Calendar as CalendarIcon, Shapes } from 'lucide-react';
+import { BrainCircuit, Loader2, Image as ImageIcon, CheckCircle, AlertTriangle, Calendar as CalendarIcon, Shapes, Download } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
-import { getGeeTileLayer, getGeeVectorDownloadUrl } from '@/ai/flows/gee-flow';
+import { getGeeTileLayer, getGeeVectorDownloadUrl, getGeeGeoTiffDownloadUrl } from '@/ai/flows/gee-flow';
 import type { Map } from 'ol';
 import { transformExtent } from 'ol/proj';
 import type { GeeTileLayerInput, GeeVectorizationInput } from '@/ai/flows/gee-types';
@@ -69,6 +69,7 @@ const GeeProcessingPanel: React.FC<GeeProcessingPanelProps> = ({
 }) => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [isVectorizing, setIsVectorizing] = useState(false);
+  const [isDownloadingTiff, setIsDownloadingTiff] = useState(false);
   const [selectedCombination, setSelectedCombination] = useState<BandCombination>('URBAN_FALSE_COLOR');
   const [date, setDate] = useState<DateRange | undefined>({
     from: addDays(new Date(), -365),
@@ -165,6 +166,41 @@ const GeeProcessingPanel: React.FC<GeeProcessingPanelProps> = ({
     }
   };
   
+  const handleDownloadGeoTiff = async () => {
+    if (!mapRef.current || !isAuthenticated) {
+        toast({ description: "Asegúrese de estar autenticado.", variant: "destructive" });
+        return;
+    }
+    setIsDownloadingTiff(true);
+    toast({ description: "Iniciando exportación de GeoTIFF en GEE. Esto puede tardar..." });
+
+    const view = mapRef.current.getView();
+    const extent = view.calculateExtent(mapRef.current.getSize()!);
+    const extent4326 = transformExtent(extent, view.getProjection(), 'EPSG:4326');
+
+    try {
+        const result = await getGeeGeoTiffDownloadUrl({
+            aoi: { minLon: extent4326[0], minLat: extent4326[1], maxLon: extent4326[2], maxLat: extent4326[3] },
+            bandCombination: selectedCombination,
+            startDate: date?.from ? format(date.from, 'yyyy-MM-dd') : undefined,
+            endDate: date?.to ? format(date.to, 'yyyy-MM-dd') : undefined,
+            minElevation: (selectedCombination === 'NASADEM_ELEVATION' || selectedCombination === 'ALOS_DSM') ? elevationRange[0] : undefined,
+            maxElevation: (selectedCombination === 'NASADEM_ELEVATION' || selectedCombination === 'ALOS_DSM') ? elevationRange[1] : undefined,
+        });
+        
+        if (result && result.downloadUrl) {
+            toast({ description: "Exportación completada. Iniciando descarga..." });
+            window.open(result.downloadUrl, '_blank');
+        } else {
+            throw new Error("No se recibió una URL de descarga del servidor.");
+        }
+    } catch (error: any) {
+        console.error("Error downloading GEE GeoTIFF:", error);
+        toast({ title: "Error de Descarga", description: error.message || "No se pudo generar el GeoTIFF.", variant: "destructive" });
+    } finally {
+        setIsDownloadingTiff(false);
+    }
+  };
 
   const getAuthStatusContent = () => {
     if (isAuthenticating) {
@@ -195,6 +231,7 @@ const GeeProcessingPanel: React.FC<GeeProcessingPanelProps> = ({
   const showElevationControls = selectedCombination === 'NASADEM_ELEVATION' || selectedCombination === 'ALOS_DSM';
   const showDynamicWorldLegend = selectedCombination === 'DYNAMIC_WORLD';
   const showVectorizeButton = selectedCombination === 'DYNAMIC_WORLD';
+  const isSingleBandProduct = ['BSI', 'NDVI', 'JRC_WATER_OCCURRENCE', 'OPENLANDMAP_SOC', 'DYNAMIC_WORLD', 'NASADEM_ELEVATION', 'ALOS_DSM'].includes(selectedCombination);
 
   return (
     <DraggablePanel
@@ -350,10 +387,10 @@ const GeeProcessingPanel: React.FC<GeeProcessingPanelProps> = ({
           </Popover>
         </div>
         
-        <div className="flex items-center gap-2 pt-2 border-t border-white/10">
+        <div className="flex flex-col gap-2 pt-2 border-t border-white/10">
           <Button 
              onClick={handleGenerateLayer} 
-             disabled={isProcessing || isVectorizing || isAuthenticating || !isAuthenticated || (isDateSelectionDisabled ? false : (!date?.from || !date?.to))} 
+             disabled={isProcessing || isVectorizing || isAuthenticating || !isAuthenticated || isDownloadingTiff || (isDateSelectionDisabled ? false : (!date?.from || !date?.to))} 
              className="w-full"
            >
             {isProcessing ? (
@@ -363,13 +400,29 @@ const GeeProcessingPanel: React.FC<GeeProcessingPanelProps> = ({
             )}
             Añadir como Capa
           </Button>
+
+          {isSingleBandProduct && (
+            <Button
+              onClick={handleDownloadGeoTiff}
+              disabled={isDownloadingTiff || isProcessing || isAuthenticating || !isAuthenticated || (isDateSelectionDisabled ? false : (!date?.from || !date?.to))}
+              className="w-full"
+              variant="secondary"
+            >
+              {isDownloadingTiff ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="mr-2 h-4 w-4" />
+              )}
+              Descargar Vista (GeoTIFF)
+            </Button>
+          )}
         </div>
         
         {showVectorizeButton && (
           <div className="flex items-center gap-2 pt-2 border-t border-white/10">
             <Button 
                onClick={handleVectorizeAndDownload} 
-               disabled={isProcessing || isVectorizing || isAuthenticating || !isAuthenticated || !date?.from || !date?.to} 
+               disabled={isProcessing || isVectorizing || isAuthenticating || !isAuthenticated || isDownloadingTiff || !date?.from || !date?.to} 
                className="w-full"
                variant="secondary"
              >

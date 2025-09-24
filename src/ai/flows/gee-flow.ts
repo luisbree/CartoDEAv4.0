@@ -10,8 +10,8 @@
 import { ai } from '@/ai/genkit';
 import ee from '@google/earthengine';
 import { promisify } from 'util';
-import type { GeeTileLayerInput, GeeTileLayerOutput, GeeVectorizationInput, GeeValueQueryInput } from './gee-types';
-import { GeeTileLayerInputSchema, GeeTileLayerOutputSchema, GeeVectorizationInputSchema, GeeValueQueryInputSchema } from './gee-types';
+import type { GeeTileLayerInput, GeeTileLayerOutput, GeeVectorizationInput, GeeValueQueryInput, GeeGeoTiffDownloadInput } from './gee-types';
+import { GeeTileLayerInputSchema, GeeTileLayerOutputSchema, GeeVectorizationInputSchema, GeeValueQueryInputSchema, GeeGeoTiffDownloadInputSchema } from './gee-types';
 import { z } from 'zod';
 
 // Main exported function for the frontend to call
@@ -29,6 +29,11 @@ export async function getGeeValueAtPoint(input: GeeValueQueryInput): Promise<{ v
     return geeGetValueAtPointFlow(input);
 }
 
+// New exported function for GeoTIFF download
+export async function getGeeGeoTiffDownloadUrl(input: GeeGeoTiffDownloadInput): Promise<{ downloadUrl: string }> {
+    return geeGeoTiffDownloadFlow(input);
+}
+
 
 // New exported function for authentication
 export async function authenticateWithGee(): Promise<{ success: boolean; message: string; }> {
@@ -44,7 +49,7 @@ export async function authenticateWithGee(): Promise<{ success: boolean; message
 }
 
 
-const getImageForProcessing = (input: GeeTileLayerInput) => {
+const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInput) => {
     const { aoi, bandCombination, startDate, endDate, minElevation, maxElevation } = input;
     const geometry = aoi ? ee.Geometry.Rectangle([aoi.minLon, aoi.minLat, aoi.maxLon, aoi.maxLat]) : ee.Geometry.Point([0,0]);
       
@@ -259,6 +264,49 @@ const geeGetValueAtPointFlow = ai.defineFlow(
                 }
                 
                 resolve({ value });
+            });
+        });
+    }
+);
+
+// Define the Genkit flow for GeoTIFF download
+const geeGeoTiffDownloadFlow = ai.defineFlow(
+    {
+        name: 'geeGeoTiffDownloadFlow',
+        inputSchema: GeeGeoTiffDownloadInputSchema,
+        outputSchema: z.object({ downloadUrl: z.string() }),
+    },
+    async (input) => {
+        await initializeEe();
+
+        const { finalImage, geometry } = getImageForProcessing(input);
+
+        // Clip the image to the specified Area of Interest (AOI)
+        const clippedImage = finalImage.clip(geometry);
+
+        return new Promise((resolve, reject) => {
+            const filename = `gee_export_${input.bandCombination.toLowerCase()}`;
+            
+            clippedImage.getDownloadURL({
+                name: filename,
+                format: 'GEO_TIFF',
+                region: geometry,
+                // Scale is important for performance and resolution. 
+                // Using a reasonable default of 30 meters.
+                scale: 30, 
+                callback: (url, error) => {
+                    if (error) {
+                        console.error("Earth Engine getDownloadURL Error for GeoTIFF:", error);
+                        if (error.includes && error.includes('computation timed out')) {
+                            return reject(new Error('La exportación a GeoTIFF tardó demasiado. Intente con un área más pequeña.'));
+                        }
+                        return reject(new Error(`Ocurrió un error durante la exportación en GEE: ${error}`));
+                    }
+                    if (!url) {
+                        return reject(new Error('GEE no devolvió una URL de descarga para el GeoTIFF.'));
+                    }
+                    resolve({ downloadUrl: url });
+                }
             });
         });
     }

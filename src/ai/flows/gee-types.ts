@@ -53,3 +53,15 @@ export const GeeValueQueryInputSchema = z.object({
   maxElevation: GeeTileLayerInputSchema.shape.maxElevation,
 });
 export type GeeValueQueryInput = z.infer<typeof GeeValueQueryInputSchema>;
+
+// New schema for GeoTIFF download input
+export const GeeGeoTiffDownloadInputSchema = z.object({
+  aoi: GeeAoiSchema.describe("The Area of Interest as a bounding box for the GeoTIFF export."),
+  // Re-use fields from the tile layer input to reconstruct the image for download
+  bandCombination: GeeTileLayerInputSchema.shape.bandCombination,
+  startDate: GeeTileLayerInputSchema.shape.startDate,
+  endDate: GeeTileLayerInputSchema.shape.endDate,
+  minElevation: GeeTileLayerInputSchema.shape.minElevation,
+  maxElevation: GeeTileLayerInputSchema.shape.maxElevation,
+});
+export type GeeGeoTiffDownloadInput = z.infer<typeof GeeGeoTiffDownloadInputSchema>;
