@@ -55,8 +55,11 @@ const getImageForProcessing = (input: GeeTileLayerInput) => {
         '#419BDF', '#397D49', '#88B053', '#7A87C6', '#E49635', 
         '#DFC35A', '#C4281B', '#A59B8F', '#B39FE1',
     ];
+    
+    const ELEVATION_PALETTE = ['006633', 'E5FFCC', '662A00', 'D8D8D8', 'FFFFFF'];
 
-    if (bandCombination !== 'JRC_WATER_OCCURRENCE' && bandCombination !== 'OPENLANDMAP_SOC' && bandCombination !== 'DYNAMIC_WORLD' && bandCombination !== 'NASADEM_ELEVATION') {
+
+    if (bandCombination !== 'JRC_WATER_OCCURRENCE' && bandCombination !== 'OPENLANDMAP_SOC' && bandCombination !== 'DYNAMIC_WORLD' && bandCombination !== 'NASADEM_ELEVATION' && bandCombination !== 'ALOS_DSM') {
         let s2ImageCollection = ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
           .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 20));
         
@@ -103,7 +106,10 @@ const getImageForProcessing = (input: GeeTileLayerInput) => {
         visParams = { min: 0, max: 8, palette: DYNAMIC_WORLD_PALETTE };
     } else if (bandCombination === 'NASADEM_ELEVATION') {
         finalImage = ee.Image('NASA/NASADEM_HGT/001').select('elevation');
-        visParams = { min: minElevation ?? 0, max: maxElevation ?? 4000, palette: ['006633', 'E5FFCC', '662A00', 'D8D8D8', 'FFFFFF'] };
+        visParams = { min: minElevation ?? 0, max: maxElevation ?? 4000, palette: ELEVATION_PALETTE };
+    } else if (bandCombination === 'ALOS_DSM') {
+        finalImage = ee.Image('JAXA/ALOS/AW3D30/V4_1').select('DSM');
+        visParams = { min: minElevation ?? 0, max: maxElevation ?? 4000, palette: ELEVATION_PALETTE };
     } else if (bandCombination === 'OPENLANDMAP_SOC') {
         finalImage = ee.Image("OpenLandMap/SOL/SOL_ORGANIC-CARBON_USDA-6A1C_M/v02").select('b0');
         visParams = { min: 0, max: 100, palette: ['#FFFFE5', '#FFF7BC', '#FEE391', '#FEC44F', '#FE9929', '#EC7014', '#CC4C02', '#8C2D04'] };
