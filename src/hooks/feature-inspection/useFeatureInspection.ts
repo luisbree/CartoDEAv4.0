@@ -129,6 +129,24 @@ export const useFeatureInspection = ({
     
   }, [toast]);
   
+  const updateInspectedFeatureData = useCallback((featureId: string, key: string, value: any) => {
+    setInspectedFeatureData(prevData => {
+        if (!prevData) return null;
+        return prevData.map(feature => {
+            if (feature.id === featureId) {
+                return {
+                    ...feature,
+                    attributes: {
+                        ...feature.attributes,
+                        [key]: value,
+                    },
+                };
+            }
+            return feature;
+        });
+    });
+  }, []);
+
   const clearRasterQueryVisuals = useCallback(() => {
     if (mapRef.current) {
         rasterQueryOverlaysRef.current.forEach(overlay => mapRef.current!.removeOverlay(overlay));
@@ -583,5 +601,6 @@ export const useFeatureInspection = ({
     clearSelection,
     processAndDisplayFeatures,
     selectFeaturesById,
+    updateInspectedFeatureData,
   };
 };

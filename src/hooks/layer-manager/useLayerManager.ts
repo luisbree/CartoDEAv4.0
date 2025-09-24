@@ -33,6 +33,7 @@ interface UseLayerManagerProps {
   onShowTableRequest: (plainData: PlainFeatureData[], layerName: string) => void;
   updateGeoServerDiscoveredLayerState: (layerName: string, added: boolean, type: 'wms' | 'wfs') => void;
   clearSelectionAfterExtraction: () => void;
+  updateInspectedFeatureData: (featureId: string, key: string, value: any) => void;
 }
 
 const LAYER_START_Z_INDEX = 10;
@@ -171,6 +172,7 @@ export const useLayerManager = ({
   onShowTableRequest,
   updateGeoServerDiscoveredLayerState,
   clearSelectionAfterExtraction,
+  updateInspectedFeatureData,
 }: UseLayerManagerProps) => {
   const [layers, setLayers] = useState<MapLayer[]>([]);
   const { toast } = useToast();
@@ -647,14 +649,14 @@ export const useLayerManager = ({
         }
     }
 
-    if (extent) {
+    if (extent && extent.every(isFinite) && extent[2] > extent[0] && extent[3] > extent[1]) {
          mapRef.current.getView().fit(extent, {
             padding: [50, 50, 50, 50],
             duration: 1000,
             maxZoom: 16,
         });
     } else {
-        setTimeout(() => toast({ description: "No se puede determinar la extensión de esta capa." }), 0);
+        setTimeout(() => toast({ description: "No se puede determinar una extensión válida para esta capa." }), 0);
     }
   }, [mapRef, layers, toast]);
 
@@ -808,7 +810,7 @@ export const useLayerManager = ({
     });
   }, [mapRef, toast, clearSelectionAfterExtraction]);
   
-  const handleExportLayer = useCallback(async (layerId: string, format: 'geojson' | 'kml' | 'shp') => {
+  const handleExportLayer = useCallback(async (layerId: string, format: 'geojson' | 'kml') => {
     const layer = layers.find(l => l.id === layerId) as VectorMapLayer | undefined;
     if (!layer || !(layer.olLayer instanceof VectorLayer)) {
       setTimeout(() => toast({ description: "Solo se pueden exportar capas vectoriales." }), 0);
@@ -823,54 +825,35 @@ export const useLayerManager = ({
     const layerName = layer.name.replace(/ /g, '_').replace(/[^a-zA-Z0-9_]/g, '');
 
     try {
-      if (format === 'shp') {
-        // shpjs library expects features to be in a GeoJSON FeatureCollection format and in EPSG:4326
-        const geojsonFormat = new GeoJSON();
-        const clonedFeatures = features.map(f => f.clone());
-        clonedFeatures.forEach(f => f.getGeometry()?.transform('EPSG:3857', 'EPSG:4326'));
-        const geojson = geojsonFormat.writeFeaturesObject(clonedFeatures);
+      let textData: string;
+      let mimeType: string;
+      let extension: string;
 
-        const shpBuffer = await shp.write(geojson.features, 'GEOMETRY', {});
-        const zip = new JSZip();
-        zip.file(`${layerName}.zip`, shpBuffer);
-        const content = await zip.generateAsync({ type: "blob" });
-        const link = document.createElement("a");
-        link.href = URL.createObjectURL(content);
-        link.download = `${layerName}_shp.zip`;
-        link.click();
-        URL.revokeObjectURL(link.href);
-        link.remove();
+      const writeOptions = {
+          dataProjection: 'EPSG:4326',
+          featureProjection: 'EPSG:3857',
+          decimals: 7,
+      };
 
-      } else {
-        let textData: string;
-        let mimeType: string;
-        let extension: string;
-
-        const writeOptions = {
-            dataProjection: 'EPSG:4326',
-            featureProjection: 'EPSG:3857',
-            decimals: 7,
-        };
-
-        if (format === 'geojson') {
-          textData = new GeoJSON().writeFeatures(features, writeOptions);
-          mimeType = 'application/geo+json';
-          extension = 'geojson';
-        } else { // kml
-          textData = new KML({ extractStyles: true, showPointNames: true }).writeFeatures(features, writeOptions);
-          mimeType = 'application/vnd.google-earth.kml+xml';
-          extension = 'kml';
-        }
-
-        const blob = new Blob([textData], { type: mimeType });
-        const link = document.createElement('a');
-        link.href = URL.createObjectURL(blob);
-        link.download = `${layerName}.${extension}`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(link.href);
+      if (format === 'geojson') {
+        textData = new GeoJSON().writeFeatures(features, writeOptions);
+        mimeType = 'application/geo+json';
+        extension = 'geojson';
+      } else { // kml
+        textData = new KML({ extractStyles: true, showPointNames: true }).writeFeatures(features, writeOptions);
+        mimeType = 'application/vnd.google-earth.kml+xml';
+        extension = 'kml';
       }
+
+      const blob = new Blob([textData], { type: mimeType });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `${layerName}.${extension}`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(link.href);
+
       setTimeout(() => toast({ description: `Capa "${layer.name}" exportada como ${format.toUpperCase()}.` }), 0);
     } catch (error) {
       console.error(`Error exporting as ${format}:`, error);
@@ -999,6 +982,34 @@ export const useLayerManager = ({
         setTimeout(() => toast({ description: "No hay capa de footprints de Landsat para limpiar." }), 0);
     }
   }, [layers, removeLayer, toast]);
+  
+  const updateFeatureAttribute = useCallback((featureId: string, key: string, value: any) => {
+      const layer = layers.find(l => 
+          l.olLayer instanceof VectorLayer && l.olLayer.getSource()?.getFeatureById(featureId)
+      ) as VectorMapLayer | undefined;
+  
+      if (layer) {
+          const feature = layer.olLayer.getSource()?.getFeatureById(featureId);
+          if (feature) {
+              feature.set(key, value);
+              updateInspectedFeatureData(featureId, key, value);
+              toast({ description: `Atributo "${key}" actualizado.` });
+          }
+      }
+  }, [layers, toast, updateInspectedFeatureData]);
+  
+  const addFieldToLayer = useCallback((layerId: string, fieldName: string, defaultValue: any) => {
+    const layer = layers.find(l => l.id === layerId) as VectorMapLayer | undefined;
+    if (layer) {
+        const source = layer.olLayer.getSource();
+        source?.getFeatures().forEach(feature => {
+            feature.set(fieldName, defaultValue);
+        });
+        // This is a bit of a trick to force the attributes panel to re-render with the new column
+        handleShowLayerTable(layerId);
+        toast({ description: `Campo "${fieldName}" añadido a la capa "${layer.name}".` });
+    }
+  }, [layers, toast, handleShowLayerTable]);
 
 
   return {
@@ -1029,5 +1040,13 @@ export const useLayerManager = ({
     isFindingLandsatFootprints,
     clearLandsatFootprintsLayer,
     isWfsLoading,
+    updateFeatureAttribute,
+    addFieldToLayer: (fieldName: string, defaultValue: any) => {
+        const currentLayerName = onShowTableRequest.name;
+        const layer = layers.find(l => l.name === currentLayerName);
+        if(layer) {
+            addFieldToLayer(layer.id, fieldName, defaultValue);
+        }
+    },
   };
 };

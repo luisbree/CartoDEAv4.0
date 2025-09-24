@@ -257,6 +257,7 @@ export default function GeoMapperClient() {
     onShowTableRequest: featureInspectionHook.processAndDisplayFeatures,
     updateGeoServerDiscoveredLayerState: updateDiscoveredLayerState,
     clearSelectionAfterExtraction: featureInspectionHook.clearSelection,
+    updateInspectedFeatureData: featureInspectionHook.updateInspectedFeatureData,
   });
   
   const {
@@ -986,6 +987,8 @@ export default function GeoMapperClient() {
             style={{ top: `${panels.attributes.position.y}px`, left: `${panels.attributes.position.x}px`, zIndex: panels.attributes.zIndex }}
             selectedFeatureIds={featureInspectionHook.selectedFeatures.map(f => f.getId() as string)}
             onFeatureSelect={handleAttributeTableFeatureSelect}
+            onAttributeChange={layerManagerHook.updateFeatureAttribute}
+            onAddField={layerManagerHook.addFieldToLayer}
           />
         )}
         

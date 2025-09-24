@@ -1,11 +1,25 @@
 
 "use client";
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import DraggablePanel from './panels/DraggablePanel'; 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, ChevronRight, ListChecks, Link as LinkIcon, ExternalLink, ArrowUp, ArrowDown } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+  AlertDialogPortal,
+} from "@/components/ui/alert-dialog";
+import { ChevronLeft, ChevronRight, ListChecks, Link as LinkIcon, ExternalLink, ArrowUp, ArrowDown, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { PlainFeatureData } from '@/lib/types';
 
@@ -24,9 +38,14 @@ interface AttributesPanelComponentProps {
   // Selection props
   selectedFeatureIds: string[];
   onFeatureSelect: (featureId: string, isCtrlOrMeta: boolean) => void;
+
+  // Editing props
+  onAttributeChange: (featureId: string, key: string, value: any) => void;
+  onAddField: (fieldName: string, defaultValue: any) => void;
 }
 
 const ITEMS_PER_PAGE = 50;
+const READ_ONLY_FIELDS = ['id', 'fid', 'gmlgeometry', 'geometry', 'preview_url', 'browser_url', 'description'];
 
 const AttributesPanelComponent: React.FC<AttributesPanelComponentProps> = ({
   plainFeatureData,
@@ -39,18 +58,32 @@ const AttributesPanelComponent: React.FC<AttributesPanelComponentProps> = ({
   style,
   selectedFeatureIds,
   onFeatureSelect,
+  onAttributeChange,
+  onAddField,
 }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'ascending' | 'descending' } | null>(null);
+  const [editingCell, setEditingCell] = useState<{ featureId: string; key: string } | null>(null);
+  const [editingValue, setEditingValue] = useState<any>('');
+  const [newFieldName, setNewFieldName] = useState('');
+  const [newFieldDefaultValue, setNewFieldDefaultValue] = useState('');
+  const [isAddFieldDialogOpen, setIsAddFieldDialogOpen] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const featureData = useMemo(() => plainFeatureData || [], [plainFeatureData]);
 
   useEffect(() => {
     if (featureData.length > 0) {
       setCurrentPage(1);
-      setSortConfig(null); // Reset sort on new data
+      setSortConfig(null);
     }
   }, [featureData]);
+
+  useEffect(() => {
+    if (editingCell) {
+      inputRef.current?.focus();
+    }
+  }, [editingCell]);
 
 
   const sortedFeatures = useMemo(() => {
@@ -91,6 +124,36 @@ const AttributesPanelComponent: React.FC<AttributesPanelComponentProps> = ({
       onFeatureSelect(featureId, event.ctrlKey || event.metaKey);
   }, [onFeatureSelect]);
 
+  const handleCellDoubleClick = (featureId: string, key: string, value: any) => {
+    if (READ_ONLY_FIELDS.includes(key.toLowerCase())) return;
+    setEditingCell({ featureId, key });
+    setEditingValue(value);
+  };
+  
+  const handleSaveEdit = () => {
+    if (editingCell) {
+      onAttributeChange(editingCell.featureId, editingCell.key, editingValue);
+      setEditingCell(null);
+    }
+  };
+
+  const handleEditKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      handleSaveEdit();
+    } else if (e.key === 'Escape') {
+      setEditingCell(null);
+    }
+  };
+
+  const handleAddFieldSubmit = () => {
+    if (newFieldName.trim()) {
+        onAddField(newFieldName.trim(), newFieldDefaultValue);
+        setIsAddFieldDialogOpen(false);
+        setNewFieldName('');
+        setNewFieldDefaultValue('');
+    }
+  };
+
   const isValidUrl = (urlString: string): boolean => {
     try {
       new URL(urlString);
@@ -109,7 +172,7 @@ const AttributesPanelComponent: React.FC<AttributesPanelComponentProps> = ({
   const allKeys = useMemo(() => Array.from(
     new Set(currentVisibleFeatures.flatMap(item => (item.attributes ? Object.keys(item.attributes) : [])))
   )
-  .filter(key => key !== 'description' && key !== 'gmlgeometry' && key !== 'geometry')
+  .filter(key => key !== 'gmlgeometry' && key !== 'geometry')
   .sort((a, b) => {
     const order = ['preview_url', 'browser_url']; 
     const aIsSpecial = order.includes(a);
@@ -186,15 +249,26 @@ const AttributesPanelComponent: React.FC<AttributesPanelComponentProps> = ({
                               <TableCell
                                 key={`${featureId}-${key}`}
                                 className="px-3 py-1.5 text-xs text-slate-200 dark:text-slate-200 border-b border-gray-700/50 whitespace-normal break-words"
+                                onDoubleClick={() => handleCellDoubleClick(featureId, key, attrs[key])}
                               >
-                                {key === 'preview_url' && attrs[key] && isValidUrl(String(attrs[key])) ? (
+                                {editingCell?.featureId === featureId && editingCell?.key === key ? (
+                                    <Input
+                                        ref={inputRef}
+                                        type="text"
+                                        value={editingValue}
+                                        onChange={(e) => setEditingValue(e.target.value)}
+                                        onBlur={handleSaveEdit}
+                                        onKeyDown={handleEditKeyDown}
+                                        className="h-6 text-xs bg-black/50"
+                                    />
+                                ) : key === 'preview_url' && attrs[key] && isValidUrl(String(attrs[key])) ? (
                                   <a
                                     href={String(attrs[key])}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="text-blue-400 hover:text-blue-300 underline flex items-center"
                                     title={`Abrir vista previa`}
-                                    onClick={(e) => e.stopPropagation()} // Prevent row click from firing
+                                    onClick={(e) => e.stopPropagation()}
                                   >
                                     <LinkIcon className="h-3 w-3 mr-1" />
                                     Abrir Vista
@@ -206,7 +280,7 @@ const AttributesPanelComponent: React.FC<AttributesPanelComponentProps> = ({
                                     rel="noopener noreferrer"
                                     className="text-green-400 hover:text-green-300 underline flex items-center"
                                     title={`Ver escena en el navegador de Copernicus`}
-                                    onClick={(e) => e.stopPropagation()} // Prevent row click from firing
+                                    onClick={(e) => e.stopPropagation()}
                                   >
                                     <ExternalLink className="h-3 w-3 mr-1" />
                                     Ver en Navegador
@@ -257,6 +331,53 @@ const AttributesPanelComponent: React.FC<AttributesPanelComponentProps> = ({
             </div>
           )}
       </div>
+       {hasFeatures && (
+         <AlertDialog open={isAddFieldDialogOpen} onOpenChange={setIsAddFieldDialogOpen}>
+          <AlertDialogTrigger asChild>
+            <Button variant="ghost" size="icon" className="absolute top-1 right-20 h-6 w-6 text-white hover:bg-gray-600/80">
+                <Plus className="h-4 w-4" />
+                <span className="sr-only">Añadir Campo</span>
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogPortal>
+            <AlertDialogContent onOpenAutoFocus={(e) => e.preventDefault()}>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Añadir Nuevo Campo a "{layerName}"</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        Esto añadirá una nueva columna a todas las entidades de esta capa. Esta acción no se puede deshacer.
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <div className="space-y-4 py-2">
+                    <div className="space-y-2">
+                        <Label htmlFor="new-field-name">Nombre del Campo</Label>
+                        <Input
+                            id="new-field-name"
+                            value={newFieldName}
+                            onChange={(e) => setNewFieldName(e.target.value)}
+                            placeholder="Ej: observacion"
+                            autoFocus
+                        />
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="new-field-default-value">Valor por Defecto (Opcional)</Label>
+                        <Input
+                            id="new-field-default-value"
+                            value={newFieldDefaultValue}
+                            onChange={(e) => setNewFieldDefaultValue(e.target.value)}
+                            placeholder="Ej: sin datos"
+                        />
+                    </div>
+                </div>
+                <AlertDialogFooter>
+                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleAddFieldSubmit} disabled={!newFieldName.trim()}>
+                        Añadir Campo
+                    </AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialogPortal>
+        </AlertDialog>
+      )}
     </DraggablePanel>
   );
 };
