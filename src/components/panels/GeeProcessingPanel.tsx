@@ -17,7 +17,7 @@ import type { Map } from 'ol';
 import { transformExtent } from 'ol/proj';
 import type { GeeTileLayerInput, GeeVectorizationInput } from '@/ai/flows/gee-types';
 import { cn } from '@/lib/utils';
-import { Slider } from '@/components/ui/slider';
+import { Input } from '@/components/ui/input';
 
 
 interface GeeProcessingPanelProps {
@@ -271,27 +271,33 @@ const GeeProcessingPanel: React.FC<GeeProcessingPanelProps> = ({
         {showElevationControls && (
           <div className="pt-2 border-t border-white/10 space-y-3">
               <Label className="text-sm font-semibold text-white">Controles de Elevación</Label>
-              <div>
-                  <Label htmlFor="min-elevation-slider" className="text-xs font-medium text-white/90 mb-1 block">Elevación Mínima: {elevationRange[0]} m</Label>
-                  <Slider
-                      id="min-elevation-slider"
-                      min={-100}
-                      max={5000}
-                      step={1}
-                      value={[elevationRange[0]]}
-                      onValueChange={(value) => setElevationRange(prev => [value[0], Math.max(value[0], prev[1])])}
-                  />
-              </div>
-              <div>
-                  <Label htmlFor="max-elevation-slider" className="text-xs font-medium text-white/90 mb-1 block">Elevación Máxima: {elevationRange[1]} m</Label>
-                  <Slider
-                      id="max-elevation-slider"
-                      min={-100}
-                      max={8000}
-                      step={1}
-                      value={[elevationRange[1]]}
-                      onValueChange={(value) => setElevationRange(prev => [Math.min(value[0], prev[0]), value[0]])}
-                  />
+              <div className="grid grid-cols-2 gap-2">
+                  <div>
+                      <Label htmlFor="min-elevation-input" className="text-xs font-medium text-white/90 mb-1 block">Elev. Mínima (m)</Label>
+                      <Input
+                          id="min-elevation-input"
+                          type="number"
+                          value={elevationRange[0]}
+                          onChange={(e) => {
+                              const newMin = Number(e.target.value);
+                              setElevationRange(prev => [newMin, Math.max(newMin, prev[1])]);
+                          }}
+                          className="h-8 text-xs bg-black/20"
+                      />
+                  </div>
+                  <div>
+                      <Label htmlFor="max-elevation-input" className="text-xs font-medium text-white/90 mb-1 block">Elev. Máxima (m)</Label>
+                      <Input
+                          id="max-elevation-input"
+                          type="number"
+                          value={elevationRange[1]}
+                          onChange={(e) => {
+                              const newMax = Number(e.target.value);
+                              setElevationRange(prev => [Math.min(newMax, prev[0]), newMax]);
+                          }}
+                          className="h-8 text-xs bg-black/20"
+                      />
+                  </div>
               </div>
           </div>
         )}
@@ -383,3 +389,5 @@ const GeeProcessingPanel: React.FC<GeeProcessingPanelProps> = ({
 
 export default GeeProcessingPanel;
  
+
+    
