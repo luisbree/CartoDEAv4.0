@@ -20,8 +20,6 @@ import type { StyleLike } from 'ol/style/Style';
 import { transformExtent } from 'ol/proj';
 import GeoJSON from 'ol/format/GeoJSON';
 import KML from 'ol/format/KML';
-import shp from 'shpjs';
-import JSZip from 'jszip';
 import { bbox as bboxStrategy } from 'ol/loadingstrategy';
 import type { GeeValueQueryInput } from '@/ai/flows/gee-types';
 
@@ -998,18 +996,21 @@ export const useLayerManager = ({
       }
   }, [layers, toast, updateInspectedFeatureData]);
   
-  const addFieldToLayer = useCallback((layerId: string, fieldName: string, defaultValue: any) => {
-    const layer = layers.find(l => l.id === layerId) as VectorMapLayer | undefined;
+  const addFieldToLayer = useCallback((fieldName: string, defaultValue: any) => {
+    const currentLayerName = onShowTableRequest.name; // This is a bit of a hack, assumes the function name holds the state
+    const layer = layers.find(l => l.name === currentLayerName) as VectorMapLayer | undefined;
     if (layer) {
         const source = layer.olLayer.getSource();
         source?.getFeatures().forEach(feature => {
             feature.set(fieldName, defaultValue);
         });
-        // This is a bit of a trick to force the attributes panel to re-render with the new column
-        handleShowLayerTable(layerId);
+        // This forces the attributes panel to re-render with the new column by re-fetching the data
+        handleShowLayerTable(layer.id);
         toast({ description: `Campo "${fieldName}" añadido a la capa "${layer.name}".` });
+    } else {
+        toast({ description: "No se pudo encontrar la capa activa para añadir el campo.", variant: 'destructive' });
     }
-  }, [layers, toast, handleShowLayerTable]);
+  }, [layers, toast, handleShowLayerTable, onShowTableRequest]);
 
 
   return {
@@ -1041,12 +1042,6 @@ export const useLayerManager = ({
     clearLandsatFootprintsLayer,
     isWfsLoading,
     updateFeatureAttribute,
-    addFieldToLayer: (fieldName: string, defaultValue: any) => {
-        const currentLayerName = onShowTableRequest.name;
-        const layer = layers.find(l => l.name === currentLayerName);
-        if(layer) {
-            addFieldToLayer(layer.id, fieldName, defaultValue);
-        }
-    },
+    addFieldToLayer,
   };
 };
