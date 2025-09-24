@@ -20,6 +20,7 @@ import type { StyleLike } from 'ol/style/Style';
 import { transformExtent } from 'ol/proj';
 import GeoJSON from 'ol/format/GeoJSON';
 import KML from 'ol/format/KML';
+import { download as downloadShp } from 'shpjs';
 import { bbox as bboxStrategy } from 'ol/loadingstrategy';
 import type { GeeValueQueryInput } from '@/ai/flows/gee-types';
 
@@ -28,7 +29,7 @@ interface UseLayerManagerProps {
   mapRef: React.RefObject<Map | null>;
   isMapReady: boolean;
   drawingSourceRef: React.RefObject<VectorSource>;
-  onShowTableRequest: (plainData: PlainFeatureData[], layerName: string) => void;
+  onShowTableRequest: (plainData: PlainFeatureData[], layerName: string, layerId: string) => void;
   updateGeoServerDiscoveredLayerState: (layerName: string, added: boolean, type: 'wms' | 'wfs') => void;
   clearSelectionAfterExtraction: () => void;
   updateInspectedFeatureData: (featureId: string, key: string, value: any) => void;
@@ -669,7 +670,7 @@ export const useLayerManager = ({
                     id: feature.getId() as string,
                     attributes: feature.getProperties(),
                 }));
-                onShowTableRequest(plainData, layer.name);
+                onShowTableRequest(plainData, layer.name, layer.id);
             } else {
                 setTimeout(() => toast({ description: `La capa "${layer.name}" no tiene entidades para mostrar en la tabla.` }), 0);
             }
@@ -808,7 +809,7 @@ export const useLayerManager = ({
     });
   }, [mapRef, toast, clearSelectionAfterExtraction]);
   
-  const handleExportLayer = useCallback(async (layerId: string, format: 'geojson' | 'kml') => {
+  const handleExportLayer = useCallback(async (layerId: string, format: 'geojson' | 'kml' | 'shp') => {
     const layer = layers.find(l => l.id === layerId) as VectorMapLayer | undefined;
     if (!layer || !(layer.olLayer instanceof VectorLayer)) {
       setTimeout(() => toast({ description: "Solo se pueden exportar capas vectoriales." }), 0);
@@ -833,25 +834,41 @@ export const useLayerManager = ({
           decimals: 7,
       };
 
-      if (format === 'geojson') {
-        textData = new GeoJSON().writeFeatures(features, writeOptions);
-        mimeType = 'application/geo+json';
-        extension = 'geojson';
-      } else { // kml
-        textData = new KML({ extractStyles: true, showPointNames: true }).writeFeatures(features, writeOptions);
-        mimeType = 'application/vnd.google-earth.kml+xml';
-        extension = 'kml';
+      if (format === 'geojson' || format === 'kml') {
+          if (format === 'geojson') {
+              textData = new GeoJSON().writeFeatures(features, writeOptions);
+              mimeType = 'application/geo+json';
+              extension = 'geojson';
+          } else { // kml
+              textData = new KML({ extractStyles: true, showPointNames: true }).writeFeatures(features, writeOptions);
+              mimeType = 'application/vnd.google-earth.kml+xml';
+              extension = 'kml';
+          }
+
+          const blob = new Blob([textData], { type: mimeType });
+          const link = document.createElement('a');
+          link.href = URL.createObjectURL(blob);
+          link.download = `${layerName}.${extension}`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          URL.revokeObjectURL(link.href);
+
+      } else if (format === 'shp') {
+          const geojson = new GeoJSON().writeFeaturesObject(features, writeOptions);
+          const options = {
+              folder: layerName,
+              types: {
+                  point: layerName + '_puntos',
+                  polygon: layerName + '_poligonos',
+                  line: layerName + '_lineas',
+              }
+          };
+          downloadShp(geojson, options);
+      } else {
+        return;
       }
-
-      const blob = new Blob([textData], { type: mimeType });
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = `${layerName}.${extension}`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(link.href);
-
+      
       setTimeout(() => toast({ description: `Capa "${layer.name}" exportada como ${format.toUpperCase()}.` }), 0);
     } catch (error) {
       console.error(`Error exporting as ${format}:`, error);
@@ -996,9 +1013,8 @@ export const useLayerManager = ({
       }
   }, [layers, toast, updateInspectedFeatureData]);
   
-  const addFieldToLayer = useCallback((fieldName: string, defaultValue: any) => {
-    const currentLayerName = onShowTableRequest.name; // This is a bit of a hack, assumes the function name holds the state
-    const layer = layers.find(l => l.name === currentLayerName) as VectorMapLayer | undefined;
+  const addFieldToLayer = useCallback((layerId: string, fieldName: string, defaultValue: any) => {
+    const layer = layers.find(l => l.id === layerId) as VectorMapLayer | undefined;
     if (layer) {
         const source = layer.olLayer.getSource();
         source?.getFeatures().forEach(feature => {
@@ -1010,7 +1026,7 @@ export const useLayerManager = ({
     } else {
         toast({ description: "No se pudo encontrar la capa activa para añadir el campo.", variant: 'destructive' });
     }
-  }, [layers, toast, handleShowLayerTable, onShowTableRequest]);
+  }, [layers, toast, handleShowLayerTable]);
 
 
   return {

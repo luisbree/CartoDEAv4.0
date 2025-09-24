@@ -105,6 +105,7 @@ export const useFeatureInspection = ({
   const [selectedFeatures, setSelectedFeatures] = useState<Feature<Geometry>[]>([]);
   const [inspectedFeatureData, setInspectedFeatureData] = useState<PlainFeatureData[] | null>([]);
   const [currentInspectedLayerName, setCurrentInspectedLayerName] = useState<string | null>(null);
+  const [currentInspectedLayerId, setCurrentInspectedLayerId] = useState<string | null>(null);
   
   const rasterQueryOverlaysRef = useRef<Overlay[]>([]);
   const rasterQueryMarkersLayerRef = useRef<VectorLayer<VectorSource<Feature<Point>>> | null>(null);
@@ -118,9 +119,10 @@ export const useFeatureInspection = ({
     onNewSelectionRef.current = onNewSelection;
   }, [onNewSelection]);
 
-  const processAndDisplayFeatures = useCallback((plainData: PlainFeatureData[], layerName: string) => {
+  const processAndDisplayFeatures = useCallback((plainData: PlainFeatureData[], layerName: string, layerId: string | null = null) => {
     setInspectedFeatureData(plainData);
     setCurrentInspectedLayerName(layerName);
+    setCurrentInspectedLayerId(layerId);
     
     if (plainData && plainData.length > 0) {
        setTimeout(() => toast({ description: `${plainData.length} entidad(es) de "${layerName}" cargada(s) en la tabla.` }), 0);
@@ -165,6 +167,7 @@ export const useFeatureInspection = ({
     setSelectedFeatures([]);
     setInspectedFeatureData(null);
     setCurrentInspectedLayerName(null);
+    setCurrentInspectedLayerId(null);
     clearRasterQueryVisuals();
   }, [clearRasterQueryVisuals]);
 
@@ -598,6 +601,7 @@ export const useFeatureInspection = ({
     selectedFeatures,
     inspectedFeatureData,
     currentInspectedLayerName,
+    currentInspectedLayerId,
     clearSelection,
     processAndDisplayFeatures,
     selectFeaturesById,

@@ -983,6 +983,7 @@ export default function GeoMapperClient() {
             }}
             onMouseDownHeader={(e) => handlePanelMouseDown(e, 'attributes')}
             plainFeatureData={featureInspectionHook.inspectedFeatureData}
+            layerId={featureInspectionHook.currentInspectedLayerId}
             layerName={featureInspectionHook.currentInspectedLayerName}
             style={{ top: `${panels.attributes.position.y}px`, left: `${panels.attributes.position.x}px`, zIndex: panels.attributes.zIndex }}
             selectedFeatureIds={featureInspectionHook.selectedFeatures.map(f => f.getId() as string)}

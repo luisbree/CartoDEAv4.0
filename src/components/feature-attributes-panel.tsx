@@ -26,6 +26,7 @@ import type { PlainFeatureData } from '@/lib/types';
 
 interface AttributesPanelComponentProps {
   plainFeatureData: PlainFeatureData[] | null;
+  layerId?: string | null; // Added layerId
   layerName?: string | null;
   
   panelRef: React.RefObject<HTMLDivElement>;
@@ -41,7 +42,7 @@ interface AttributesPanelComponentProps {
 
   // Editing props
   onAttributeChange: (featureId: string, key: string, value: any) => void;
-  onAddField: (fieldName: string, defaultValue: any) => void;
+  onAddField: (layerId: string, fieldName: string, defaultValue: any) => void;
 }
 
 const ITEMS_PER_PAGE = 50;
@@ -49,6 +50,7 @@ const READ_ONLY_FIELDS = ['id', 'fid', 'gmlgeometry', 'geometry', 'preview_url',
 
 const AttributesPanelComponent: React.FC<AttributesPanelComponentProps> = ({
   plainFeatureData,
+  layerId,
   layerName,
   panelRef,
   isCollapsed,
@@ -146,8 +148,8 @@ const AttributesPanelComponent: React.FC<AttributesPanelComponentProps> = ({
   };
 
   const handleAddFieldSubmit = () => {
-    if (newFieldName.trim()) {
-        onAddField(newFieldName.trim(), newFieldDefaultValue);
+    if (newFieldName.trim() && layerId) {
+        onAddField(layerId, newFieldName.trim(), newFieldDefaultValue);
         setIsAddFieldDialogOpen(false);
         setNewFieldName('');
         setNewFieldDefaultValue('');
