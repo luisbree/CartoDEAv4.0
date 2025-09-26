@@ -24,7 +24,7 @@ export interface ServerDiscoveredLayer {
 }
 
 interface UseWfsLibraryProps {
-  onAddLayer: (layerName: string, layerTitle: string, serverUrl: string, bbox?: [number, number, number, number]) => void;
+  onAddLayer: (layerName: string, layerTitle: string, serverUrl: string, bbox?: [number, number, number, number], styleName?: string) => void;
 }
 
 // Predefined list of OGC servers.
@@ -140,7 +140,7 @@ export const useWfsLibrary = ({
     }
   }, [toast]);
   
-  const addHybridLayerFromLibrary = useCallback((layerName: string, layerTitle: string, bbox?: [number, number, number, number]) => {
+  const addWmsLayerFromLibrary = useCallback((layerName: string, layerTitle: string, bbox?: [number, number, number, number]) => {
     if (!activeServerUrl) {
         toast({ description: "No hay un servidor activo seleccionado.", variant: "destructive" });
         return;
@@ -153,7 +153,7 @@ export const useWfsLibrary = ({
     isLoading,
     discoveredLayers,
     fetchCapabilities: fetchWmsCapabilities,
-    addLayer: addHybridLayerFromLibrary,
+    addLayer: addWmsLayerFromLibrary,
     PREDEFINED_SERVERS,
   };
 };

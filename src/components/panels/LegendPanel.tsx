@@ -327,9 +327,9 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
                                                           variant="outline" 
                                                           size="icon" 
                                                           className="h-6 w-6 p-0"
-                                                          title={`Añadir capa de datos interactiva`}
+                                                          title={`Añadir capa WMS`}
                                                           onClick={() => onAddDeasLayer(layer)}
-                                                          disabled={layer.wfsAddedToMap}
+                                                          disabled={layer.wmsAddedToMap}
                                                           >
                                                           <Database className="h-3.5 w-3.5" />
                                                         </Button>

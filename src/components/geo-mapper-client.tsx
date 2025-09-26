@@ -268,7 +268,7 @@ export default function GeoMapperClient() {
   });
   
   const wfsLibraryHook = useWfsLibrary({
-    onAddLayer: layerManagerHook.handleAddHybridLayer,
+    onAddLayer: layerManagerHook.handleAddWmsLayer,
   });
 
   const handleOsmQueryResults = (plainData: PlainFeatureData[], layerName: string) => {
@@ -287,7 +287,7 @@ export default function GeoMapperClient() {
     onResults: handleOsmQueryResults,
   });
 
-  const initialGeoServerUrl = 'http://www.minfra.gba.gob.ar/ambientales/geoserver';
+  const initialGeoServerUrl = 'https://www.minfra.gba.gob.ar/ambientales/geoserver';
 
   const loadInitialDeasLayers = useCallback(async () => {
       try {
@@ -469,13 +469,12 @@ export default function GeoMapperClient() {
       }
     }
 
-    // Logic for layersToAdd and layersToAddAsWFS now calls handleAddHybridLayer
-    const layersToAddHybrid = (action.layersToAdd || []).concat(action.layersToAddAsWFS || []);
-    if (layersToAddHybrid.length > 0) {
-        layersToAddHybrid.forEach(layerNameToAdd => {
+    const layersToAdd = (action.layersToAdd || []).concat(action.layersToAddAsWFS || []);
+    if (layersToAdd.length > 0) {
+        layersToAdd.forEach(layerNameToAdd => {
             const layerData = discoveredGeoServerLayers.find(l => l.name === layerNameToAdd);
             if (layerData) {
-                layerManagerHook.handleAddHybridLayer(layerData.name, layerData.title, initialGeoServerUrl, layerData.bbox);
+                layerManagerHook.handleAddWmsLayer(layerData.name, layerData.title, initialGeoServerUrl, layerData.bbox, layerData.styleName);
             } else {
                 toast({
                     title: "Capa no encontrada",
@@ -525,7 +524,6 @@ export default function GeoMapperClient() {
                     lineStyle: styleRequest.lineStyle,
                     lineWidth: styleRequest.lineWidth,
                     pointSize: 5, // Default point size
-                    iconName: undefined, // AI doesn't support icons yet
                 });
             } else {
                 toast({description: `Drax intentó aplicar un estilo a una capa no encontrada: ${styleRequest.layerName}`});
@@ -599,8 +597,8 @@ export default function GeoMapperClient() {
 
   }, [discoveredGeoServerLayers, layerManagerHook, toast, zoomToBoundingBox, handleChangeBaseLayer, osmDataHook, initialGeoServerUrl, panels, togglePanelMinimize]);
 
-  const handleDeasAddWfsLayer = useCallback((layer: GeoServerDiscoveredLayer) => {
-    layerManagerHook.handleAddHybridLayer(layer.name, layer.title, initialGeoServerUrl, layer.bbox);
+  const handleDeasAddWmsLayer = useCallback((layer: GeoServerDiscoveredLayer) => {
+    layerManagerHook.handleAddWmsLayer(layer.name, layer.title, initialGeoServerUrl, layer.bbox, layer.styleName);
   }, [layerManagerHook, initialGeoServerUrl]);
 
   const handleAttributeTableFeatureSelect = useCallback((featureId: string, isCtrlOrMeta: boolean) => {
@@ -966,7 +964,7 @@ export default function GeoMapperClient() {
             onClearSelection={featureInspectionHook.clearSelection}
             style={{ top: `${panels.legend.position.y}px`, left: `${panels.legend.position.x}px`, zIndex: panels.legend.zIndex }}
             discoveredDeasLayers={discoveredGeoServerLayers}
-            onAddDeasLayer={handleDeasAddWfsLayer}
+            onAddDeasLayer={handleDeasAddWmsLayer}
             isFetchingDeasLayers={isFetchingDeasLayers}
             onReloadDeasLayers={handleReloadDeasLayers}
           />
