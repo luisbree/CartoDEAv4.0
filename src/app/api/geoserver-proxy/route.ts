@@ -9,28 +9,28 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'GeoServer URL is required' }, { status: 400 });
   }
 
-  // No special headers or auth needed for public WMS/WFS requests
   try {
     const response = await fetch(geoServerUrl, {
       method: 'GET',
-      cache: 'no-store', // Important for GetCapabilities and dynamic data
+      cache: 'no-store',
     });
+
+    const contentType = response.headers.get('content-type') || '';
 
     if (!response.ok) {
       const errorText = await response.text();
        // If the error response is XML or HTML, pass it through with the correct content type.
        // This is common for GeoServer's service exceptions.
-       if (response.headers.get('content-type')?.includes('xml') || response.headers.get('content-type')?.includes('html')) {
+       if (contentType.includes('xml') || contentType.includes('html')) {
          return new NextResponse(errorText, {
           status: response.status,
-          headers: { 'Content-Type': response.headers.get('content-type') || 'text/plain' },
+          headers: { 'Content-Type': contentType },
         });
       }
       return NextResponse.json({ error: `GeoServer error: ${response.statusText}`, details: errorText }, { status: response.status });
     }
     
-    // For successful image or data responses, stream the data back.
-    const contentType = response.headers.get('content-type') || 'application/octet-stream';
+    // For successful image or data responses (like WMS GetMap), stream the data back as a buffer.
     const data = await response.arrayBuffer();
 
     const responseHeaders = new Headers();
