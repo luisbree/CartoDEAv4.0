@@ -35,8 +35,9 @@ interface UseLayerManagerProps {
   updateInspectedFeatureData: (featureId: string, key: string, value: any) => void;
 }
 
+const WMS_LAYER_Z_INDEX = 5;
+const GEE_LAYER_Z_INDEX = 5;
 const LAYER_START_Z_INDEX = 10;
-const GEE_LAYER_Z_INDEX = 5; // Lower z-index for GEE layers
 
 const colorMap: { [key: string]: string } = {
   rojo: '#e63946',
@@ -200,12 +201,14 @@ export const useLayerManager = ({
   useEffect(() => {
     // This effect ensures z-ordering is correct whenever the layers array changes.
     // UI has top layer at index 0. Map has top layer at highest z-index.
-    const operationalLayers = layers.filter(l => l.type !== 'gee');
+    const operationalLayers = layers.filter(l => l.type !== 'gee' && l.olLayer.get('isVisualOnly') !== true);
     const layer_count = operationalLayers.length;
     
     layers.forEach((layer) => {
       if (layer.type === 'gee') {
         layer.olLayer.setZIndex(GEE_LAYER_Z_INDEX);
+      } else if (layer.olLayer.get('isVisualOnly')) {
+        layer.olLayer.setZIndex(WMS_LAYER_Z_INDEX);
       } else {
         // Find its index among non-GEE layers to determine z-index
         const operationalIndex = operationalLayers.findIndex(opLayer => opLayer.id === layer.id);
@@ -288,6 +291,7 @@ export const useLayerManager = ({
             source: wmsSource,
             properties: { id: wmsId, name: `${layerTitle} (Visual)`, isVisualOnly: true },
             visible: true,
+            zIndex: WMS_LAYER_Z_INDEX,
         });
         map.addLayer(wmsLayer);
 
@@ -371,7 +375,8 @@ export const useLayerManager = ({
         name: layerName,
         type: 'gee',
         geeParams: geeParams, // Store the params for querying later
-      }
+      },
+      zIndex: GEE_LAYER_Z_INDEX,
     });
 
     addLayer({

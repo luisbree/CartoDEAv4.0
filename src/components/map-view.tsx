@@ -44,6 +44,7 @@ export const BASE_LAYER_DEFINITIONS: readonly BaseLayerDefinition[] = [
     createLayer: () => new TileLayer({
       source: new OSM(),
       properties: { baseLayerId: 'osm-standard', isBaseLayer: true, name: 'OSMBaseLayer' },
+      zIndex: 0,
     }),
   },
   {
@@ -57,6 +58,7 @@ export const BASE_LAYER_DEFINITIONS: readonly BaseLayerDefinition[] = [
         crossOrigin: 'Anonymous'
       }),
       properties: { baseLayerId: 'carto-light', isBaseLayer: true, name: 'CartoGrayscaleBaseLayer' },
+      zIndex: 0,
     }),
   },
   {
@@ -70,6 +72,7 @@ export const BASE_LAYER_DEFINITIONS: readonly BaseLayerDefinition[] = [
         crossOrigin: 'Anonymous'
       }),
       properties: { baseLayerId: 'carto-labels', isBaseLayer: true, name: 'CartoLabelsBaseLayer' },
+      zIndex: 0,
     }),
   },
   {
@@ -83,6 +86,7 @@ export const BASE_LAYER_DEFINITIONS: readonly BaseLayerDefinition[] = [
         crossOrigin: 'Anonymous'
       }),
       properties: { baseLayerId: 'esri-satellite', isBaseLayer: true, name: 'ESRISatelliteBaseLayer' },
+      zIndex: 0,
     }),
   },
   {
@@ -320,4 +324,3 @@ const MapView: React.FC<MapViewProps> = ({ setMapInstanceAndElement, onMapClick,
 };
 
 export default MapView;
-
