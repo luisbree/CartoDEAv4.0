@@ -287,26 +287,27 @@ const geeGeoTiffDownloadFlow = ai.defineFlow(
         return new Promise((resolve, reject) => {
             const filename = `gee_export_${input.bandCombination.toLowerCase()}`;
             
-            clippedImage.getDownloadURL({
+            const params = {
                 name: filename,
                 format: 'GEO_TIFF',
                 region: geometry,
                 // Scale is important for performance and resolution. 
                 // Using a reasonable default of 30 meters.
                 scale: 30, 
-                callback: (url, error) => {
-                    if (error) {
-                        console.error("Earth Engine getDownloadURL Error for GeoTIFF:", error);
-                        if (error.includes && error.includes('computation timed out')) {
-                            return reject(new Error('La exportación a GeoTIFF tardó demasiado. Intente con un área más pequeña.'));
-                        }
-                        return reject(new Error(`Ocurrió un error durante la exportación en GEE: ${error}`));
+            };
+
+            clippedImage.getDownloadURL(params, (url, error) => {
+                if (error) {
+                    console.error("Earth Engine getDownloadURL Error for GeoTIFF:", error);
+                    if (error.includes && error.includes('computation timed out')) {
+                        return reject(new Error('La exportación a GeoTIFF tardó demasiado. Intente con un área más pequeña.'));
                     }
-                    if (!url) {
-                        return reject(new Error('GEE no devolvió una URL de descarga para el GeoTIFF.'));
-                    }
-                    resolve({ downloadUrl: url });
+                    return reject(new Error(`Ocurrió un error durante la exportación en GEE: ${error}`));
                 }
+                if (!url) {
+                    return reject(new Error('GEE no devolvió una URL de descarga para el GeoTIFF.'));
+                }
+                resolve({ downloadUrl: url });
             });
         });
     }
