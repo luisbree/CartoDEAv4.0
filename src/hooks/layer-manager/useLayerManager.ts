@@ -256,6 +256,7 @@ export const useLayerManager = ({
             'TILED': true
           };
 
+          // Only add STYLES parameter if a styleName is provided
           if (styleName) {
             wmsParams['STYLES'] = styleName;
           }
@@ -272,7 +273,7 @@ export const useLayerManager = ({
           const wmsLayer = new TileLayer({
               source: wmsSource,
               properties: { id: wmsLayerId, name: `${layerTitle} (Visual)`, type: 'wms', gsLayerName: layerName, isVisualOnly: true, bbox: bbox },
-              visible: true, // Make sure it's visible by default
+              visible: true,
           });
           map.addLayer(wmsLayer);
 
@@ -284,7 +285,6 @@ export const useLayerManager = ({
                   setIsWfsLoading(true);
                   const proj = projection.getCode();
                   
-                  // Logic to handle potential version conflicts
                   const attemptLoad = (version: string, srsParam: string) => {
                     const wfsUrl = `${cleanedServerUrl}/wfs?service=WFS&version=${version}&request=GetFeature&typename=${layerName}&outputFormat=application/json&${srsParam}=${proj}&bbox=${extent.join(',')},${proj}`;
                     const proxyUrl = `/api/geoserver-proxy?url=${encodeURIComponent(wfsUrl)}&cacheBust=${Date.now()}`;
@@ -305,7 +305,6 @@ export const useLayerManager = ({
                         setIsWfsLoading(false);
                     })
                     .catch(error => {
-                        // If the first attempt failed with an XML error, it's likely a version issue. Retry with 1.0.0.
                         if (error.isXml) {
                             console.warn(`WFS 1.1.0 failed for ${layerName}, retrying with 1.0.0.`);
                             toast({ description: `Reintentando carga para ${layerTitle} con protocolo anterior...` });
@@ -471,14 +470,13 @@ export const useLayerManager = ({
     setLayers(prev => prev.map(l => {
         if (l.id === layerId) {
             const newVisibility = !l.visible;
+            l.olLayer.setVisible(newVisibility);
             const linkedWmsId = l.olLayer.get('linkedWmsLayerId');
             if (linkedWmsId && mapRef.current) {
               const wmsLayer = mapRef.current.getLayers().getArray().find(mapLyr => mapLyr.get('id') === linkedWmsId);
               if (wmsLayer) {
                 wmsLayer.setVisible(newVisibility);
               }
-            } else {
-              l.olLayer.setVisible(newVisibility);
             }
             return { ...l, visible: newVisibility };
         }
@@ -489,14 +487,13 @@ export const useLayerManager = ({
   const setLayerOpacity = useCallback((layerId: string, opacity: number) => {
     setLayers(prev => prev.map(l => {
       if (l.id === layerId) {
+        l.olLayer.setOpacity(opacity);
         const linkedWmsId = l.olLayer.get('linkedWmsLayerId');
         if (linkedWmsId && mapRef.current) {
           const wmsLayer = mapRef.current.getLayers().getArray().find(mapLyr => mapLyr.get('id') === linkedWmsId);
           if (wmsLayer) {
             wmsLayer.setOpacity(opacity);
           }
-        } else {
-          l.olLayer.setOpacity(opacity);
         }
         return { ...l, opacity };
       }

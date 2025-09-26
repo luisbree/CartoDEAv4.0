@@ -26,12 +26,15 @@ export const useGeoServerLayers = ({
   const [isFetching, setIsFetching] = useState(false);
   
   const handleFetchGeoServerLayers = useCallback(async (urlOverride: string): Promise<GeoServerDiscoveredLayer[] | null> => {
-    const urlToUse = urlOverride;
+    let urlToUse = urlOverride.trim();
     if (!urlToUse.trim()) {
       toast({ description: 'Por favor, ingrese una URL de GeoServer válida.', variant: 'destructive' });
       return null;
     }
     
+    // Clean up URL to ensure it points to the base GeoServer path
+    urlToUse = urlToUse.replace(/\/wms\/?$/, '').replace(/\/wfs\/?$/, '');
+
     setIsFetching(true);
     const getCapabilitiesUrl = `${urlToUse.trim()}/wms?service=WMS&version=1.3.0&request=GetCapabilities`;
     const proxyUrl = `/api/geoserver-proxy?url=${encodeURIComponent(getCapabilitiesUrl)}&cacheBust=${Date.now()}`;
