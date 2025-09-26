@@ -263,99 +263,70 @@ export const useLayerManager = ({
   }, [mapRef]);
 
   const handleAddHybridLayer = useCallback(async (layerName: string, layerTitle: string, serverUrl: string, bbox?: [number, number, number, number], styleName?: string) => {
-    if (!isMapReady || !mapRef.current) return;
-    const map = mapRef.current;
-
-    try {
-        const cleanedServerUrl = serverUrl.replace(/\/wms\/?$|\/wfs\/?$/i, '');
-        const wmsId = `wms-visual-${layerName}-${nanoid()}`;
-
-        // Create WMS Layer (Visuals)
-        const wmsParams: Record<string, any> = {
-            'LAYERS': layerName,
-            'TILED': true,
-        };
-        if (styleName) {
-            wmsParams['STYLES'] = styleName;
-        }
-
-        const wmsSource = new TileWMS({
-            url: `${cleanedServerUrl}/wms`,
-            params: wmsParams,
-            serverType: 'geoserver',
-            crossOrigin: 'anonymous',
-            transition: 0,
-        });
-
-        const wmsLayer = new TileLayer({
-            source: wmsSource,
-            properties: { id: wmsId, name: `${layerTitle} (Visual)`, isVisualOnly: true },
-            visible: true,
-            zIndex: WMS_LAYER_Z_INDEX,
-        });
-        map.addLayer(wmsLayer);
-
-        // Create WFS Layer (Data & Interaction)
-        const vectorSource = new VectorSource({
-            format: new GeoJSON(),
-            strategy: bboxStrategy,
-            loader: function(extent, resolution, projection) {
-                setIsWfsLoading(true);
-                const proj = projection.getCode();
-                const wfsUrl = `${cleanedServerUrl}/wfs?service=WFS&version=1.1.0&request=GetFeature&typename=${layerName}&outputFormat=application/json&srsName=${proj}&bbox=${extent.join(',')},${proj}`;
-                const proxyUrl = `/api/geoserver-proxy?url=${encodeURIComponent(wfsUrl)}&cacheBust=${Date.now()}`;
-
-                fetch(proxyUrl)
-                    .then(response => {
-                        if (!response.ok) throw new Error('Network response was not ok');
-                        return response.json();
-                    })
-                    .then(data => {
-                        const features = vectorSource.getFormat()!.readFeatures(data);
-                        features.forEach(f => { if (!f.getId()) { f.setId(nanoid()); } });
-                        vectorSource.addFeatures(features);
-                    })
-                    .catch(error => {
-                        console.error(`Error loading WFS features for ${layerName}:`, error);
-                        toast({ description: `Could not load WFS features for ${layerTitle}.`, variant: "destructive" });
-                        vectorSource.removeLoadedExtent(extent);
-                    })
-                    .finally(() => setIsWfsLoading(false));
-            }
-        });
-
-        const wfsLayerId = `wfs-data-${layerName}-${nanoid()}`;
-        const vectorLayer = new VectorLayer({
-            source: vectorSource,
-            style: new Style(), // Invisible style for data layer
-            properties: {
-                id: wfsLayerId,
-                name: layerTitle,
-                type: 'wfs',
-                gsLayerName: layerName,
-                bbox: bbox,
-                linkedWmsLayerId: wmsId, // Link to the visual layer
-            }
-        });
-
-        addLayer({
-            id: wfsLayerId,
-            name: layerTitle,
-            olLayer: vectorLayer,
-            visible: true,
-            opacity: 1,
-            type: 'wfs',
-        });
-        
-        updateGeoServerDiscoveredLayerState(layerName, true, 'wfs');
-        setTimeout(() => toast({ description: `Capa "${layerTitle}" añadida.` }), 0);
-
-    } catch (error: any) {
-        console.error("Error adding hybrid layer:", error);
-        setTimeout(() => toast({ description: `Error al añadir capa: ${error.message}`, variant: 'destructive' }), 0);
-        setIsWfsLoading(false);
-    }
-}, [isMapReady, mapRef, addLayer, updateGeoServerDiscoveredLayerState, toast]);
+      if (!isMapReady || !mapRef.current) return;
+  
+      try {
+          setIsWfsLoading(true);
+          const cleanedServerUrl = serverUrl.replace(/\/wms\/?$|\/wfs\/?$/i, '');
+  
+          const vectorSource = new VectorSource({
+              format: new GeoJSON(),
+              strategy: bboxStrategy,
+              loader: function(extent, resolution, projection) {
+                  const proj = projection.getCode();
+                  const wfsUrl = `${cleanedServerUrl}/wfs?service=WFS&version=1.1.0&request=GetFeature&typename=${layerName}&outputFormat=application/json&srsName=${proj}&bbox=${extent.join(',')},${proj}`;
+                  const proxyUrl = `/api/geoserver-proxy?url=${encodeURIComponent(wfsUrl)}&cacheBust=${Date.now()}`;
+  
+                  fetch(proxyUrl)
+                      .then(response => {
+                          if (!response.ok) throw new Error('Network response was not ok');
+                          return response.json();
+                      })
+                      .then(data => {
+                          const features = vectorSource.getFormat()!.readFeatures(data);
+                          features.forEach(f => { if (!f.getId()) { f.setId(nanoid()); } });
+                          vectorSource.addFeatures(features);
+                      })
+                      .catch(error => {
+                          console.error(`Error loading WFS features for ${layerName}:`, error);
+                          toast({ description: `Could not load WFS features for ${layerTitle}.`, variant: "destructive" });
+                          vectorSource.removeLoadedExtent(extent);
+                      })
+                      .finally(() => setIsWfsLoading(false));
+              }
+          });
+          
+          const wfsLayerId = `wfs-data-${layerName}-${nanoid()}`;
+          const vectorLayer = new VectorLayer({
+              source: vectorSource,
+              style: createDefaultStyle(), // Assign a visible style
+              properties: {
+                  id: wfsLayerId,
+                  name: layerTitle,
+                  type: 'wfs',
+                  gsLayerName: layerName,
+                  bbox: bbox,
+              }
+          });
+  
+          addLayer({
+              id: wfsLayerId,
+              name: layerTitle,
+              olLayer: vectorLayer,
+              visible: true,
+              opacity: 1,
+              type: 'wfs',
+          });
+          
+          updateGeoServerDiscoveredLayerState(layerName, true, 'wfs');
+          setTimeout(() => toast({ description: `Capa "${layerTitle}" añadida.` }), 0);
+  
+      } catch (error: any) {
+          console.error("Error adding WFS layer:", error);
+          setTimeout(() => toast({ description: `Error al añadir capa: ${error.message}`, variant: 'destructive' }), 0);
+          setIsWfsLoading(false);
+      }
+  }, [isMapReady, addLayer, updateGeoServerDiscoveredLayerState, toast]);
 
 
   const addGeeLayerToMap = useCallback((tileUrl: string, layerName: string, geeParams: Omit<GeeValueQueryInput, 'lon' | 'lat'>) => {
