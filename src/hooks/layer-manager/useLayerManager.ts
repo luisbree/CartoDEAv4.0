@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import type { Map } from 'ol';
 import VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
@@ -30,7 +30,7 @@ interface UseLayerManagerProps {
   isMapReady: boolean;
   drawingSourceRef: React.RefObject<VectorSource>;
   onShowTableRequest: (plainData: PlainFeatureData[], layerName: string, layerId: string) => void;
-  updateGeoServerDiscoveredLayerState: (layerName: string, added: boolean, type: 'wms' | 'wfs') => void;
+  updateGeoServerDiscoveredLayerState: (layerName: string, added: boolean, type: 'wfs' | 'wfs') => void;
   clearSelectionAfterExtraction: () => void;
   updateInspectedFeatureData: (featureId: string, key: string, value: any) => void;
 }
@@ -260,28 +260,50 @@ export const useLayerManager = ({
   }, [mapRef]);
 
   const handleAddHybridLayer = useCallback(async (layerName: string, layerTitle: string, serverUrl: string, bbox?: [number, number, number, number], styleName?: string) => {
-      if (!isMapReady || !mapRef.current) return;
-      
-      try {
-          // Clean the base URL to ensure it's just the geoserver root
-          const cleanedServerUrl = serverUrl.replace(/\/wms\/?$|\/wfs\/?$/i, '');
+    if (!isMapReady || !mapRef.current) return;
+    const map = mapRef.current;
 
-          // Setup WFS VectorSource with BBOX loading strategy
-          const vectorSource = new VectorSource({
-              format: new GeoJSON(),
-              strategy: bboxStrategy,
-              loader: function (extent, resolution, projection) {
-                  setIsWfsLoading(true);
-                  const proj = projection.getCode();
-                  
-                  const wfsUrl = `${cleanedServerUrl}/wfs?service=WFS&version=1.1.0&request=GetFeature&typename=${layerName}&outputFormat=application/json&srsName=${proj}&bbox=${extent.join(',')},${proj}`;
-                  const proxyUrl = `/api/geoserver-proxy?url=${encodeURIComponent(wfsUrl)}&cacheBust=${Date.now()}`;
-                  
-                  fetch(proxyUrl)
+    try {
+        const cleanedServerUrl = serverUrl.replace(/\/wms\/?$|\/wfs\/?$/i, '');
+        const wmsId = `wms-visual-${layerName}-${nanoid()}`;
+
+        // Create WMS Layer (Visuals)
+        const wmsParams: Record<string, any> = {
+            'LAYERS': layerName,
+            'TILED': true,
+        };
+        if (styleName) {
+            wmsParams['STYLES'] = styleName;
+        }
+
+        const wmsSource = new TileWMS({
+            url: `${cleanedServerUrl}/wms`,
+            params: wmsParams,
+            serverType: 'geoserver',
+            crossOrigin: 'anonymous',
+            transition: 0,
+        });
+
+        const wmsLayer = new TileLayer({
+            source: wmsSource,
+            properties: { id: wmsId, name: `${layerTitle} (Visual)`, isVisualOnly: true },
+            visible: true,
+        });
+        map.addLayer(wmsLayer);
+
+        // Create WFS Layer (Data & Interaction)
+        const vectorSource = new VectorSource({
+            format: new GeoJSON(),
+            strategy: bboxStrategy,
+            loader: function(extent, resolution, projection) {
+                setIsWfsLoading(true);
+                const proj = projection.getCode();
+                const wfsUrl = `${cleanedServerUrl}/wfs?service=WFS&version=1.1.0&request=GetFeature&typename=${layerName}&outputFormat=application/json&srsName=${proj}&bbox=${extent.join(',')},${proj}`;
+                const proxyUrl = `/api/geoserver-proxy?url=${encodeURIComponent(wfsUrl)}&cacheBust=${Date.now()}`;
+
+                fetch(proxyUrl)
                     .then(response => {
-                        if (!response.ok) {
-                           return response.text().then(text => { throw new Error(text || `Error de red ${response.status}`) });
-                        }
+                        if (!response.ok) throw new Error('Network response was not ok');
                         return response.json();
                     })
                     .then(data => {
@@ -290,47 +312,46 @@ export const useLayerManager = ({
                         vectorSource.addFeatures(features);
                     })
                     .catch(error => {
-                        console.error(`Error al cargar entidades WFS para ${layerName}:`, error);
-                        toast({ description: `No se pudieron cargar las entidades para ${layerTitle}.`, variant: "destructive" });
+                        console.error(`Error loading WFS features for ${layerName}:`, error);
+                        toast({ description: `Could not load WFS features for ${layerTitle}.`, variant: "destructive" });
                         vectorSource.removeLoadedExtent(extent);
                     })
                     .finally(() => setIsWfsLoading(false));
-              }
-          });
+            }
+        });
 
-          const wfsLayerId = `wfs-data-${layerName}-${nanoid()}`;
-          const vectorLayer = new VectorLayer({
-              source: vectorSource,
-              style: createDefaultStyle(), // Apply a visible default style
-              properties: {
-                  id: wfsLayerId,
-                  name: layerTitle || layerName,
-                  type: 'wfs',
-                  gsLayerName: layerName,
-                  isDeas: serverUrl.includes('minfra.gba.gob.ar'),
-                  bbox: bbox,
-              }
-          });
-          
-          addLayer({
-              id: wfsLayerId,
-              name: layerTitle,
-              olLayer: vectorLayer,
-              visible: true,
-              opacity: 1,
-              type: 'wfs',
-              isDeas: serverUrl.includes('minfra.gba.gob.ar'),
-          });
-          
-          updateGeoServerDiscoveredLayerState(layerName, true, 'wfs');
-          setTimeout(() => toast({ description: `Capa "${layerTitle}" añadida.` }), 0);
+        const wfsLayerId = `wfs-data-${layerName}-${nanoid()}`;
+        const vectorLayer = new VectorLayer({
+            source: vectorSource,
+            style: new Style(), // Invisible style for data layer
+            properties: {
+                id: wfsLayerId,
+                name: layerTitle,
+                type: 'wfs',
+                gsLayerName: layerName,
+                bbox: bbox,
+                linkedWmsLayerId: wmsId, // Link to the visual layer
+            }
+        });
 
-      } catch (error: any) {
-          console.error("Error adding WFS layer:", error);
-          setTimeout(() => toast({ description: `Error al añadir capa: ${error.message}`, variant: 'destructive' }), 0);
-          setIsWfsLoading(false);
-      }
-  }, [isMapReady, addLayer, updateGeoServerDiscoveredLayerState, toast]);
+        addLayer({
+            id: wfsLayerId,
+            name: layerTitle,
+            olLayer: vectorLayer,
+            visible: true,
+            opacity: 1,
+            type: 'wfs',
+        });
+        
+        updateGeoServerDiscoveredLayerState(layerName, true, 'wfs');
+        setTimeout(() => toast({ description: `Capa "${layerTitle}" añadida.` }), 0);
+
+    } catch (error: any) {
+        console.error("Error adding hybrid layer:", error);
+        setTimeout(() => toast({ description: `Error al añadir capa: ${error.message}`, variant: 'destructive' }), 0);
+        setIsWfsLoading(false);
+    }
+}, [isMapReady, mapRef, addLayer, updateGeoServerDiscoveredLayerState, toast]);
 
 
   const addGeeLayerToMap = useCallback((tileUrl: string, layerName: string, geeParams: Omit<GeeValueQueryInput, 'lon' | 'lat'>) => {
@@ -369,20 +390,27 @@ export const useLayerManager = ({
   const removeLayers = useCallback((layerIds: string[]) => {
     setLayers(prevLayers => {
         if (!mapRef.current || layerIds.length === 0) return prevLayers;
+        const map = mapRef.current;
 
         const layersToRemove = prevLayers.filter(l => layerIds.includes(l.id));
         if (layersToRemove.length === 0) return prevLayers;
     
         layersToRemove.forEach(layer => {
-          mapRef.current!.removeLayer(layer.olLayer);
-          
-          // If it was a GeoServer layer, update its "added" state
-          const gsLayerName = layer.olLayer.get('gsLayerName');
-          if (gsLayerName) {
-            updateGeoServerDiscoveredLayerState(gsLayerName, false, 'wfs');
-            // We are not using WMS visually anymore, but this won't hurt
-            updateGeoServerDiscoveredLayerState(gsLayerName, false, 'wms');
-          }
+            map.removeLayer(layer.olLayer);
+            
+            // If it's a hybrid WFS layer, also remove its linked WMS layer
+            const linkedWmsId = layer.olLayer.get('linkedWmsLayerId');
+            if (linkedWmsId) {
+                const wmsLayerToRemove = map.getLayers().getArray().find(l => l.get('id') === linkedWmsId);
+                if (wmsLayerToRemove) {
+                    map.removeLayer(wmsLayerToRemove);
+                }
+            }
+            
+            const gsLayerName = layer.olLayer.get('gsLayerName');
+            if (gsLayerName) {
+                updateGeoServerDiscoveredLayerState(gsLayerName, false, 'wfs');
+            }
         });
     
         if (layersToRemove.length === 1) {
@@ -430,21 +458,38 @@ export const useLayerManager = ({
         if (l.id === layerId) {
             const newVisibility = !l.visible;
             l.olLayer.setVisible(newVisibility);
+            
+            // Also toggle the linked WMS layer
+            const linkedWmsId = l.olLayer.get('linkedWmsLayerId');
+            if (linkedWmsId && mapRef.current) {
+                const wmsLayer = mapRef.current.getLayers().getArray().find(mapLayer => mapLayer.get('id') === linkedWmsId);
+                if (wmsLayer) {
+                    wmsLayer.setVisible(newVisibility);
+                }
+            }
             return { ...l, visible: newVisibility };
         }
         return l;
     }));
-  }, []);
+  }, [mapRef]);
 
   const setLayerOpacity = useCallback((layerId: string, opacity: number) => {
     setLayers(prev => prev.map(l => {
       if (l.id === layerId) {
-        l.olLayer.setOpacity(opacity);
+        l.olLayer.setOpacity(opacity); // This WFS layer is invisible, but we keep it for state consistency
+         // Find and update the linked WMS layer's opacity
+        const linkedWmsId = l.olLayer.get('linkedWmsLayerId');
+        if (linkedWmsId && mapRef.current) {
+            const wmsLayer = mapRef.current.getLayers().getArray().find(mapLayer => mapLayer.get('id') === linkedWmsId);
+            if (wmsLayer) {
+                wmsLayer.setOpacity(opacity);
+            }
+        }
         return { ...l, opacity };
       }
       return l;
     }));
-  }, []);
+  }, [mapRef]);
 
   const changeLayerStyle = useCallback((layerId: string, styleOptions: StyleOptions) => {
     const layer = layers.find(l => l.id === layerId) as VectorMapLayer | undefined;
