@@ -242,16 +242,27 @@ export const useLayerManager = ({
 
   }, [mapRef]);
 
-  const handleAddHybridLayer = useCallback(async (layerName: string, layerTitle: string, serverUrl: string, bbox?: [number, number, number, number]) => {
+  const handleAddHybridLayer = useCallback(async (layerName: string, layerTitle: string, serverUrl: string, bbox?: [number, number, number, number], styleName?: string) => {
       if (!isMapReady || !mapRef.current) return;
       
       const map = mapRef.current;
       
       try {
-          // 1. Add WMS layer for visualization (this is always fast)
+          const cleanedServerUrl = serverUrl.replace(/\/wms\/?$/, '').replace(/\/wfs\/?$/, '');
+
+          // 1. Add WMS layer for visualization
+          const wmsParams: { [key: string]: any } = {
+            'LAYERS': layerName,
+            'TILED': true
+          };
+
+          if (styleName) {
+            wmsParams['STYLES'] = styleName;
+          }
+
           const wmsSource = new TileWMS({
-              url: `${serverUrl}/wms`,
-              params: { 'LAYERS': layerName, 'TILED': true },
+              url: `${cleanedServerUrl}/wms`,
+              params: wmsParams,
               serverType: 'geoserver',
               transition: 0,
               crossOrigin: 'anonymous',
@@ -261,6 +272,7 @@ export const useLayerManager = ({
           const wmsLayer = new TileLayer({
               source: wmsSource,
               properties: { id: wmsLayerId, name: `${layerTitle} (Visual)`, type: 'wms', gsLayerName: layerName, isVisualOnly: true, bbox: bbox },
+              visible: true, // Make sure it's visible by default
           });
           map.addLayer(wmsLayer);
 
@@ -271,33 +283,50 @@ export const useLayerManager = ({
               loader: function (extent, resolution, projection) {
                   setIsWfsLoading(true);
                   const proj = projection.getCode();
-                  const wfsUrl = `${serverUrl}/wfs?service=WFS&version=1.1.0&request=GetFeature&typename=${layerName}&outputFormat=application/json&srsname=${proj}&bbox=${extent.join(',')},${proj}`;
-                  const proxyUrl = `/api/geoserver-proxy?url=${encodeURIComponent(wfsUrl)}&cacheBust=${Date.now()}`;
                   
-                  fetch(proxyUrl)
-                    .then(response => {
-                      if (!response.ok) {
-                        throw new Error(`Fallo en la solicitud WFS para ${layerName}`);
-                      }
-                      return response.json();
-                    })
-                    .then(data => {
-                      const features = vectorSource.getFormat()!.readFeatures(data);
-                      // Ensure all features get a unique ID for selection to work
-                      features.forEach(f => {
-                        if (!f.getId()) {
-                          f.setId(nanoid());
+                  // Logic to handle potential version conflicts
+                  const attemptLoad = (version: string, srsParam: string) => {
+                    const wfsUrl = `${cleanedServerUrl}/wfs?service=WFS&version=${version}&request=GetFeature&typename=${layerName}&outputFormat=application/json&${srsParam}=${proj}&bbox=${extent.join(',')},${proj}`;
+                    const proxyUrl = `/api/geoserver-proxy?url=${encodeURIComponent(wfsUrl)}&cacheBust=${Date.now()}`;
+                    
+                    return fetch(proxyUrl).then(response => {
+                        if (!response.ok) {
+                            return response.text().then(text => { throw { status: response.status, text: text, isXml: response.headers.get('content-type')?.includes('xml') }; });
                         }
-                      });
-                      vectorSource.addFeatures(features);
+                        return response.json();
+                    });
+                  };
+
+                  attemptLoad('1.1.0', 'srsName')
+                    .then(data => {
+                        const features = vectorSource.getFormat()!.readFeatures(data);
+                        features.forEach(f => { if (!f.getId()) { f.setId(nanoid()); } });
+                        vectorSource.addFeatures(features);
+                        setIsWfsLoading(false);
                     })
                     .catch(error => {
-                      console.error(`Error al cargar entidades WFS para ${layerName}:`, error);
-                      toast({ description: `No se pudieron cargar las entidades para ${layerTitle}.`, variant: "destructive" });
-                      vectorSource.removeLoadedExtent(extent); // Important: tell the source the load failed
-                    })
-                    .finally(() => {
-                      setIsWfsLoading(false);
+                        // If the first attempt failed with an XML error, it's likely a version issue. Retry with 1.0.0.
+                        if (error.isXml) {
+                            console.warn(`WFS 1.1.0 failed for ${layerName}, retrying with 1.0.0.`);
+                            toast({ description: `Reintentando carga para ${layerTitle} con protocolo anterior...` });
+                            attemptLoad('1.0.0', 'SRSNAME')
+                              .then(data => {
+                                const features = vectorSource.getFormat()!.readFeatures(data);
+                                features.forEach(f => { if (!f.getId()) { f.setId(nanoid()); } });
+                                vectorSource.addFeatures(features);
+                              })
+                              .catch(finalError => {
+                                console.error(`Error al cargar entidades WFS para ${layerName} (reintento fallido):`, finalError);
+                                toast({ description: `No se pudieron cargar las entidades para ${layerTitle}.`, variant: "destructive" });
+                                vectorSource.removeLoadedExtent(extent);
+                              })
+                              .finally(() => setIsWfsLoading(false));
+                        } else {
+                            console.error(`Error al cargar entidades WFS para ${layerName}:`, error);
+                            toast({ description: `No se pudieron cargar las entidades para ${layerTitle}.`, variant: "destructive" });
+                            vectorSource.removeLoadedExtent(extent);
+                            setIsWfsLoading(false);
+                        }
                     });
               }
           });
@@ -312,7 +341,7 @@ export const useLayerManager = ({
                   name: layerTitle || layerName,
                   type: 'wfs',
                   gsLayerName: layerName,
-                  isDeas: serverUrl.includes('minfra.gba.gob.ar'), // Simple check for now
+                  isDeas: serverUrl.includes('minfra.gba.gob.ar'),
                   bbox: bbox,
                   linkedWmsLayerId: wmsLayerId
               }
@@ -326,7 +355,7 @@ export const useLayerManager = ({
               opacity: 1,
               type: 'wfs',
               isDeas: serverUrl.includes('minfra.gba.gob.ar'),
-          }, false);
+          });
           
           updateGeoServerDiscoveredLayerState(layerName, true, 'wfs');
           updateGeoServerDiscoveredLayerState(layerName, true, 'wms');
@@ -335,9 +364,10 @@ export const useLayerManager = ({
       } catch (error: any) {
           console.error("Error adding hybrid WMS/WFS layer:", error);
           setTimeout(() => toast({ description: `Error al añadir capa: ${error.message}`, variant: 'destructive' }), 0);
-          setIsWfsLoading(false); // Ensure loading is stopped on initial setup error
+          setIsWfsLoading(false);
       }
   }, [isMapReady, mapRef, addLayer, updateGeoServerDiscoveredLayerState, toast]);
+
 
   const addGeeLayerToMap = useCallback((tileUrl: string, layerName: string, geeParams: Omit<GeeValueQueryInput, 'lon' | 'lat'>) => {
     if (!mapRef.current) return;
