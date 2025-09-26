@@ -1,2 +1,2 @@
-// This component is no-longer used and can be deleted.
-// Its logic has been integrated into the new unified Layers Panel.
+// Este componente ya no se utiliza y puede ser eliminado.
+// Su lógica ha sido integrada en el nuevo Panel de Capas unificado.

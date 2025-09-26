@@ -55,13 +55,30 @@ const colorMap: { [key: string]: string } = {
 
 const isValidHex = (color: string) => /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/.test(color);
 
+// --- Style rotation for new layers ---
+let styleCounter = 0;
+const RANDOM_STYLES = [
+    { stroke: '#0077b6', fill: 'rgba(0, 119, 182, 0.2)' },   // Blue
+    { stroke: '#e63946', fill: 'rgba(230, 57, 70, 0.2)' },    // Red
+    { stroke: '#2a9d8f', fill: 'rgba(42, 157, 143, 0.2)' },   // Green
+    { stroke: '#f4a261', fill: 'rgba(244, 162, 97, 0.2)' },   // Orange
+    { stroke: '#8338ec', fill: 'rgba(131, 56, 236, 0.2)' },   // Violet
+    { stroke: '#ffbe0b', fill: 'rgba(255, 190, 11, 0.2)' },   // Yellow
+];
 
-// A completely transparent style for the invisible WFS layer
-const transparentStyle = new Style({
-  fill: new Fill({ color: 'rgba(255,255,255,0)' }),
-  stroke: new Stroke({ color: 'rgba(255,255,255,0)', width: 0 }),
-});
-
+const createDefaultStyle = (): Style => {
+    const styleDef = RANDOM_STYLES[styleCounter % RANDOM_STYLES.length];
+    styleCounter++;
+    return new Style({
+        stroke: new Stroke({ color: styleDef.stroke, width: 2 }),
+        fill: new Fill({ color: styleDef.fill }),
+        image: new CircleStyle({
+            radius: 5,
+            fill: new Fill({ color: styleDef.fill }),
+            stroke: new Stroke({ color: styleDef.stroke, width: 1.5 })
+        })
+    });
+};
 
 // Centralized function to create the final style for a layer
 const createStyleFunction = (
@@ -74,7 +91,7 @@ const createStyleFunction = (
 
   // Case 1: No complex styling, just return the simple base style
   if (!isLabelEnabled && !graduatedSymbology && !categorizedSymbology) {
-    return baseStyleOrFn || transparentStyle;
+    return baseStyleOrFn || new Style(); // Return a default empty style if null
   }
 
   // Case 2: We have labels or complex symbology, so we need a style function
@@ -245,39 +262,11 @@ export const useLayerManager = ({
   const handleAddHybridLayer = useCallback(async (layerName: string, layerTitle: string, serverUrl: string, bbox?: [number, number, number, number], styleName?: string) => {
       if (!isMapReady || !mapRef.current) return;
       
-      const map = mapRef.current;
-      
       try {
-          const cleanedServerUrl = serverUrl.replace(/\/wms\/?$/, '').replace(/\/wfs\/?$/, '');
+          // Clean the base URL to ensure it's just the geoserver root
+          const cleanedServerUrl = serverUrl.replace(/\/wms\/?$|\/wfs\/?$/i, '');
 
-          // 1. Add WMS layer for visualization
-          const wmsParams: { [key: string]: any } = {
-            'LAYERS': layerName,
-            'TILED': true
-          };
-
-          // Only add STYLES parameter if a styleName is provided
-          if (styleName) {
-            wmsParams['STYLES'] = styleName;
-          }
-
-          const wmsSource = new TileWMS({
-              url: `${cleanedServerUrl}/wms`,
-              params: wmsParams,
-              serverType: 'geoserver',
-              transition: 0,
-              crossOrigin: 'anonymous',
-          });
-
-          const wmsLayerId = `wms-visual-${layerName}-${nanoid()}`;
-          const wmsLayer = new TileLayer({
-              source: wmsSource,
-              properties: { id: wmsLayerId, name: `${layerTitle} (Visual)`, type: 'wms', gsLayerName: layerName, isVisualOnly: true, bbox: bbox },
-              visible: true,
-          });
-          map.addLayer(wmsLayer);
-
-          // 2. Setup WFS VectorSource with BBOX loading strategy
+          // Setup WFS VectorSource with BBOX loading strategy
           const vectorSource = new VectorSource({
               format: new GeoJSON(),
               strategy: bboxStrategy,
@@ -285,56 +274,34 @@ export const useLayerManager = ({
                   setIsWfsLoading(true);
                   const proj = projection.getCode();
                   
-                  const attemptLoad = (version: string, srsParam: string) => {
-                    const wfsUrl = `${cleanedServerUrl}/wfs?service=WFS&version=${version}&request=GetFeature&typename=${layerName}&outputFormat=application/json&${srsParam}=${proj}&bbox=${extent.join(',')},${proj}`;
-                    const proxyUrl = `/api/geoserver-proxy?url=${encodeURIComponent(wfsUrl)}&cacheBust=${Date.now()}`;
-                    
-                    return fetch(proxyUrl).then(response => {
+                  const wfsUrl = `${cleanedServerUrl}/wfs?service=WFS&version=1.1.0&request=GetFeature&typename=${layerName}&outputFormat=application/json&srsName=${proj}&bbox=${extent.join(',')},${proj}`;
+                  const proxyUrl = `/api/geoserver-proxy?url=${encodeURIComponent(wfsUrl)}&cacheBust=${Date.now()}`;
+                  
+                  fetch(proxyUrl)
+                    .then(response => {
                         if (!response.ok) {
-                            return response.text().then(text => { throw { status: response.status, text: text, isXml: response.headers.get('content-type')?.includes('xml') }; });
+                           return response.text().then(text => { throw new Error(text || `Error de red ${response.status}`) });
                         }
                         return response.json();
-                    });
-                  };
-
-                  attemptLoad('1.1.0', 'srsName')
+                    })
                     .then(data => {
                         const features = vectorSource.getFormat()!.readFeatures(data);
                         features.forEach(f => { if (!f.getId()) { f.setId(nanoid()); } });
                         vectorSource.addFeatures(features);
-                        setIsWfsLoading(false);
                     })
                     .catch(error => {
-                        if (error.isXml) {
-                            console.warn(`WFS 1.1.0 failed for ${layerName}, retrying with 1.0.0.`);
-                            toast({ description: `Reintentando carga para ${layerTitle} con protocolo anterior...` });
-                            attemptLoad('1.0.0', 'SRSNAME')
-                              .then(data => {
-                                const features = vectorSource.getFormat()!.readFeatures(data);
-                                features.forEach(f => { if (!f.getId()) { f.setId(nanoid()); } });
-                                vectorSource.addFeatures(features);
-                              })
-                              .catch(finalError => {
-                                console.error(`Error al cargar entidades WFS para ${layerName} (reintento fallido):`, finalError);
-                                toast({ description: `No se pudieron cargar las entidades para ${layerTitle}.`, variant: "destructive" });
-                                vectorSource.removeLoadedExtent(extent);
-                              })
-                              .finally(() => setIsWfsLoading(false));
-                        } else {
-                            console.error(`Error al cargar entidades WFS para ${layerName}:`, error);
-                            toast({ description: `No se pudieron cargar las entidades para ${layerTitle}.`, variant: "destructive" });
-                            vectorSource.removeLoadedExtent(extent);
-                            setIsWfsLoading(false);
-                        }
-                    });
+                        console.error(`Error al cargar entidades WFS para ${layerName}:`, error);
+                        toast({ description: `No se pudieron cargar las entidades para ${layerTitle}.`, variant: "destructive" });
+                        vectorSource.removeLoadedExtent(extent);
+                    })
+                    .finally(() => setIsWfsLoading(false));
               }
           });
 
-          // 3. Create the invisible VectorLayer for interaction
           const wfsLayerId = `wfs-data-${layerName}-${nanoid()}`;
           const vectorLayer = new VectorLayer({
               source: vectorSource,
-              style: transparentStyle, // Make it invisible
+              style: createDefaultStyle(), // Apply a visible default style
               properties: {
                   id: wfsLayerId,
                   name: layerTitle || layerName,
@@ -342,7 +309,6 @@ export const useLayerManager = ({
                   gsLayerName: layerName,
                   isDeas: serverUrl.includes('minfra.gba.gob.ar'),
                   bbox: bbox,
-                  linkedWmsLayerId: wmsLayerId
               }
           });
           
@@ -357,15 +323,14 @@ export const useLayerManager = ({
           });
           
           updateGeoServerDiscoveredLayerState(layerName, true, 'wfs');
-          updateGeoServerDiscoveredLayerState(layerName, true, 'wms');
           setTimeout(() => toast({ description: `Capa "${layerTitle}" añadida.` }), 0);
 
       } catch (error: any) {
-          console.error("Error adding hybrid WMS/WFS layer:", error);
+          console.error("Error adding WFS layer:", error);
           setTimeout(() => toast({ description: `Error al añadir capa: ${error.message}`, variant: 'destructive' }), 0);
           setIsWfsLoading(false);
       }
-  }, [isMapReady, mapRef, addLayer, updateGeoServerDiscoveredLayerState, toast]);
+  }, [isMapReady, addLayer, updateGeoServerDiscoveredLayerState, toast]);
 
 
   const addGeeLayerToMap = useCallback((tileUrl: string, layerName: string, geeParams: Omit<GeeValueQueryInput, 'lon' | 'lat'>) => {
@@ -411,17 +376,11 @@ export const useLayerManager = ({
         layersToRemove.forEach(layer => {
           mapRef.current!.removeLayer(layer.olLayer);
           
-          const linkedWmsId = layer.olLayer.get('linkedWmsLayerId');
-          if (linkedWmsId) {
-            const wmsLayer = mapRef.current?.getLayers().getArray().find(l => l.get('id') === linkedWmsId);
-            if (wmsLayer) {
-              mapRef.current?.removeLayer(wmsLayer);
-            }
-          }
-    
+          // If it was a GeoServer layer, update its "added" state
           const gsLayerName = layer.olLayer.get('gsLayerName');
           if (gsLayerName) {
             updateGeoServerDiscoveredLayerState(gsLayerName, false, 'wfs');
+            // We are not using WMS visually anymore, but this won't hurt
             updateGeoServerDiscoveredLayerState(gsLayerName, false, 'wms');
           }
         });
@@ -471,49 +430,25 @@ export const useLayerManager = ({
         if (l.id === layerId) {
             const newVisibility = !l.visible;
             l.olLayer.setVisible(newVisibility);
-            const linkedWmsId = l.olLayer.get('linkedWmsLayerId');
-            if (linkedWmsId && mapRef.current) {
-              const wmsLayer = mapRef.current.getLayers().getArray().find(mapLyr => mapLyr.get('id') === linkedWmsId);
-              if (wmsLayer) {
-                wmsLayer.setVisible(newVisibility);
-              }
-            }
             return { ...l, visible: newVisibility };
         }
         return l;
     }));
-  }, [mapRef]);
+  }, []);
 
   const setLayerOpacity = useCallback((layerId: string, opacity: number) => {
     setLayers(prev => prev.map(l => {
       if (l.id === layerId) {
         l.olLayer.setOpacity(opacity);
-        const linkedWmsId = l.olLayer.get('linkedWmsLayerId');
-        if (linkedWmsId && mapRef.current) {
-          const wmsLayer = mapRef.current.getLayers().getArray().find(mapLyr => mapLyr.get('id') === linkedWmsId);
-          if (wmsLayer) {
-            wmsLayer.setOpacity(opacity);
-          }
-        }
         return { ...l, opacity };
       }
       return l;
     }));
-  }, [mapRef]);
+  }, []);
 
   const changeLayerStyle = useCallback((layerId: string, styleOptions: StyleOptions) => {
     const layer = layers.find(l => l.id === layerId) as VectorMapLayer | undefined;
     if (!layer) return;
-
-    // Hide linked WMS to show custom style
-    const linkedWmsId = layer.olLayer.get('linkedWmsLayerId');
-    if (linkedWmsId && mapRef.current) {
-        const wmsLayer = mapRef.current.getLayers().getArray().find(l => l.get('id') === linkedWmsId);
-        if (wmsLayer) {
-            wmsLayer.setVisible(false);
-            setTimeout(() => toast({ description: `Se ocultó la capa WMS para mostrar el nuevo estilo.` }), 0);
-        }
-    }
 
     const olLayer = layer.olLayer;
     const existingStyle = (olLayer.get('originalStyle') || olLayer.getStyle()) as StyleLike | undefined;
@@ -573,7 +508,7 @@ export const useLayerManager = ({
     setLayers(prev => prev.map(l => l.id === layerId ? { ...l, graduatedSymbology: undefined, categorizedSymbology: undefined } : l));
     setTimeout(() => toast({ description: `Estilo de la capa "${layer.name}" actualizado.` }), 0);
 
-  }, [layers, toast, mapRef]);
+  }, [layers, toast]);
 
   const changeLayerLabels = useCallback((layerId: string, labelOptions: LabelOptions) => {
     const layer = layers.find(l => l.id === layerId) as VectorMapLayer | undefined;
@@ -601,16 +536,6 @@ export const useLayerManager = ({
     const layer = layers.find(l => l.id === layerId) as VectorMapLayer | undefined;
     if (!layer) return;
 
-    // Hide linked WMS to show custom style
-    const linkedWmsId = layer.olLayer.get('linkedWmsLayerId');
-    if (linkedWmsId && mapRef.current) {
-        const wmsLayer = mapRef.current.getLayers().getArray().find(l => l.get('id') === linkedWmsId);
-        if (wmsLayer) {
-            wmsLayer.setVisible(false);
-            setTimeout(() => toast({ description: `Se ocultó la capa WMS para mostrar el nuevo estilo.` }), 0);
-        }
-    }
-
     const olLayer = layer.olLayer;
     const labelOptions = olLayer.get('labelOptions');
     olLayer.set('graduatedSymbology', symbology);
@@ -623,20 +548,11 @@ export const useLayerManager = ({
 
     setLayers(prev => prev.map(l => l.id === layerId ? { ...l, graduatedSymbology: symbology, categorizedSymbology: undefined } : l));
     setTimeout(() => toast({ description: `Simbología graduada aplicada a "${layer.name}".` }), 0);
-  }, [layers, toast, mapRef]);
+  }, [layers, toast]);
   
   const applyCategorizedSymbology = useCallback((layerId: string, symbology: CategorizedSymbology) => {
       const layer = layers.find(l => l.id === layerId) as VectorMapLayer | undefined;
       if (!layer) return;
-  
-      const linkedWmsId = layer.olLayer.get('linkedWmsLayerId');
-      if (linkedWmsId && mapRef.current) {
-          const wmsLayer = mapRef.current.getLayers().getArray().find(l => l.get('id') === linkedWmsId);
-          if (wmsLayer) {
-              wmsLayer.setVisible(false);
-              setTimeout(() => toast({ description: `Se ocultó la capa WMS para mostrar el nuevo estilo.` }), 0);
-          }
-      }
   
       const olLayer = layer.olLayer;
       const labelOptions = olLayer.get('labelOptions');
@@ -649,7 +565,7 @@ export const useLayerManager = ({
   
       setLayers(prev => prev.map(l => l.id === layerId ? { ...l, categorizedSymbology: symbology, graduatedSymbology: undefined } : l));
       setTimeout(() => toast({ description: `Simbología por categorías aplicada a "${layer.name}".` }), 0);
-  }, [layers, toast, mapRef]);
+  }, [layers, toast]);
 
   const zoomToLayerExtent = useCallback((layerId: string) => {
     if (!mapRef.current) return;
