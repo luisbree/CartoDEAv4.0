@@ -237,52 +237,80 @@ export const useLayerManager = ({
 
   }, [mapRef]);
 
-  const handleAddWmsLayer = useCallback(async (layerName: string, layerTitle: string, serverUrl: string, bbox?: [number, number, number, number], styleName?: string) => {
+  const handleAddHybridLayer = useCallback(async (layerName: string, layerTitle: string, serverUrl: string, bbox?: [number, number, number, number], styleName?: string) => {
     if (!isMapReady || !mapRef.current) return;
+    const map = mapRef.current;
 
     try {
         const cleanedServerUrl = serverUrl.replace(/\/wms\/?$|\/wfs\/?$/i, '');
+        const wfsId = `wfs-layer-${layerName}-${nanoid()}`;
+        
+        // 1. Create the WFS Vector Layer (for interaction)
+        const wfsSource = new VectorSource({
+            format: new GeoJSON(),
+            url: (extent) => {
+                const wfsUrl = `${cleanedServerUrl}/wfs?service=WFS&version=1.1.0&request=GetFeature&typename=${layerName}&outputFormat=application/json&srsname=EPSG:3857&bbox=${extent.join(',')},EPSG:3857`;
+                return `/api/geoserver-proxy?url=${encodeURIComponent(wfsUrl)}`;
+            },
+            strategy: bboxStrategy,
+        });
+
+        wfsSource.on('featuresloadstart', () => setIsWfsLoading(true));
+        wfsSource.on('featuresloadend', () => setIsWfsLoading(false));
+        wfsSource.on('featuresloaderror', () => setIsWfsLoading(false));
+
+        const wfsLayer = new VectorLayer({
+            source: wfsSource,
+            style: new Style(), // Invisible style
+            properties: { id: wfsId, name: layerTitle, type: 'wfs', gsLayerName: layerName, bbox },
+        });
+
+        // 2. Create the WMS Tile Layer (for visualization)
         const wmsId = `wms-layer-${layerName}-${nanoid()}`;
+        const wmsParams: Record<string, any> = { 'LAYERS': layerName, 'TILED': true };
+        if (styleName) {
+          wmsParams['STYLES'] = styleName;
+        }
 
         const wmsSource = new TileWMS({
             url: `${cleanedServerUrl}/wms`,
-            params: { 'LAYERS': layerName, 'TILED': true, 'STYLES': styleName || '' },
+            params: wmsParams,
             serverType: 'geoserver',
             transition: 0,
             crossOrigin: 'anonymous',
         });
-
+        
         const wmsLayer = new TileLayer({
             source: wmsSource,
-            properties: {
-                id: wmsId,
-                name: layerTitle,
-                type: 'wms',
-                gsLayerName: layerName,
-                bbox: bbox,
-            },
+            properties: { id: wmsId, name: `${layerTitle} (Visual)`, isVisualPartner: true, partnerId: wfsId },
             zIndex: WMS_LAYER_Z_INDEX,
-            visible: true,
         });
 
+        // 3. Add both layers to the map
+        map.addLayer(wmsLayer);
+        map.addLayer(wfsLayer); // Although invisible, it needs to be on the map for interactions
+        
+        // 4. Link the visual layer to the main layer object for control
+        wfsLayer.set('visualLayer', wmsLayer);
+
+        // 5. Add only the main WFS layer to the panel state
         addLayer({
-            id: wmsId,
+            id: wfsId,
             name: layerTitle,
-            olLayer: wmsLayer,
+            olLayer: wfsLayer,
             visible: true,
             opacity: 1,
-            type: 'wms',
-        });
+            type: 'wfs',
+        }, true);
         
-        updateGeoServerDiscoveredLayerState(layerName, true, 'wms');
-        setTimeout(() => toast({ description: `Capa WMS "${layerTitle}" añadida.` }), 0);
+        updateGeoServerDiscoveredLayerState(layerName, true, 'wfs');
+        setTimeout(() => toast({ description: `Capa "${layerTitle}" añadida.` }), 0);
 
     } catch (error: any) {
-        console.error("Error adding WMS layer:", error);
-        setTimeout(() => toast({ description: `Error al añadir capa WMS: ${error.message}`, variant: 'destructive' }), 0);
+        console.error("Error adding hybrid layer:", error);
+        setTimeout(() => toast({ description: `Error al añadir capa: ${error.message}`, variant: 'destructive' }), 0);
     }
-  }, [isMapReady, addLayer, updateGeoServerDiscoveredLayerState, toast]);
-
+}, [isMapReady, mapRef, addLayer, updateGeoServerDiscoveredLayerState, toast]);
 
   const addGeeLayerToMap = useCallback((tileUrl: string, layerName: string, geeParams: Omit<GeeValueQueryInput, 'lon' | 'lat'>) => {
     if (!mapRef.current) return;
@@ -329,11 +357,16 @@ export const useLayerManager = ({
         layersToRemove.forEach(layer => {
             map.removeLayer(layer.olLayer);
             
+            // If it's a hybrid layer, also remove its visual WMS partner
+            const visualLayer = layer.olLayer.get('visualLayer');
+            if (visualLayer) {
+                map.removeLayer(visualLayer);
+            }
+            
             const gsLayerName = layer.olLayer.get('gsLayerName');
             if (gsLayerName) {
-                if (layer.type === 'wms') {
+                if (layer.type === 'wms' || layer.type === 'wfs') {
                     updateGeoServerDiscoveredLayerState(gsLayerName, false, 'wms');
-                } else if (layer.type === 'wfs') {
                     updateGeoServerDiscoveredLayerState(gsLayerName, false, 'wfs');
                 }
             }
@@ -384,6 +417,11 @@ export const useLayerManager = ({
         if (l.id === layerId) {
             const newVisibility = !l.visible;
             l.olLayer.setVisible(newVisibility);
+            // Also toggle the visual partner layer if it exists
+            const visualLayer = l.olLayer.get('visualLayer');
+            if (visualLayer) {
+                visualLayer.setVisible(newVisibility);
+            }
             return { ...l, visible: newVisibility };
         }
         return l;
@@ -394,6 +432,11 @@ export const useLayerManager = ({
     setLayers(prev => prev.map(l => {
       if (l.id === layerId) {
         l.olLayer.setOpacity(opacity);
+         // Also set opacity for the visual partner layer if it exists
+         const visualLayer = l.olLayer.get('visualLayer');
+         if (visualLayer) {
+             visualLayer.setOpacity(opacity);
+         }
         return { ...l, opacity };
       }
       return l;
@@ -930,7 +973,7 @@ export const useLayerManager = ({
     layers,
     addLayer,
     addGeeLayerToMap,
-    handleAddWmsLayer,
+    handleAddHybridLayer,
     removeLayer,
     removeLayers,
     reorderLayers,

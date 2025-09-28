@@ -268,7 +268,7 @@ export default function GeoMapperClient() {
   });
   
   const wfsLibraryHook = useWfsLibrary({
-    onAddLayer: layerManagerHook.handleAddWmsLayer,
+    onAddLayer: layerManagerHook.handleAddHybridLayer,
   });
 
   const handleOsmQueryResults = (plainData: PlainFeatureData[], layerName: string) => {
@@ -474,7 +474,7 @@ export default function GeoMapperClient() {
         layersToAdd.forEach(layerNameToAdd => {
             const layerData = discoveredGeoServerLayers.find(l => l.name === layerNameToAdd);
             if (layerData) {
-                layerManagerHook.handleAddWmsLayer(layerData.name, layerData.title, initialGeoServerUrl, layerData.bbox, layerData.styleName);
+                layerManagerHook.handleAddHybridLayer(layerData.name, layerData.title, initialGeoServerUrl, layerData.bbox, layerData.styleName);
             } else {
                 toast({
                     title: "Capa no encontrada",
@@ -597,8 +597,8 @@ export default function GeoMapperClient() {
 
   }, [discoveredGeoServerLayers, layerManagerHook, toast, zoomToBoundingBox, handleChangeBaseLayer, osmDataHook, initialGeoServerUrl, panels, togglePanelMinimize]);
 
-  const handleDeasAddWmsLayer = useCallback((layer: GeoServerDiscoveredLayer) => {
-    layerManagerHook.handleAddWmsLayer(layer.name, layer.title, initialGeoServerUrl, layer.bbox, layer.styleName);
+  const handleDeasAddLayer = useCallback((layer: GeoServerDiscoveredLayer) => {
+    layerManagerHook.handleAddHybridLayer(layer.name, layer.title, initialGeoServerUrl, layer.bbox, layer.styleName);
   }, [layerManagerHook, initialGeoServerUrl]);
 
   const handleAttributeTableFeatureSelect = useCallback((featureId: string, isCtrlOrMeta: boolean) => {
@@ -964,7 +964,7 @@ export default function GeoMapperClient() {
             onClearSelection={featureInspectionHook.clearSelection}
             style={{ top: `${panels.legend.position.y}px`, left: `${panels.legend.position.x}px`, zIndex: panels.legend.zIndex }}
             discoveredDeasLayers={discoveredGeoServerLayers}
-            onAddDeasLayer={handleDeasAddWmsLayer}
+            onAddDeasLayer={handleDeasAddLayer}
             isFetchingDeasLayers={isFetchingDeasLayers}
             onReloadDeasLayers={handleReloadDeasLayers}
           />

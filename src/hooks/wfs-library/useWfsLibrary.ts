@@ -20,6 +20,7 @@ export interface ServerDiscoveredLayer {
   name: string;
   title: string;
   bbox?: [number, number, number, number]; // Optional bounding box
+  styleName?: string;
   added: boolean;
 }
 
@@ -108,6 +109,7 @@ export const useWfsLibrary = ({
       const layers: ServerDiscoveredLayer[] = layerNodes.map(node => {
           const name = node.querySelector('Name')?.textContent ?? '';
           const title = node.querySelector('Title')?.textContent ?? name;
+          const styleName = node.querySelector('Style > Name')?.textContent ?? undefined;
           
           let bboxNode = node.querySelector('BoundingBox[CRS="CRS:84"]');
           let bbox: [number, number, number, number] | undefined = undefined;
@@ -122,7 +124,7 @@ export const useWfsLibrary = ({
               }
           }
           
-          return { name, title, bbox, added: false };
+          return { name, title, bbox, styleName, added: false };
       }).filter(l => l.name);
 
       if (layers.length > 0) {
@@ -140,12 +142,12 @@ export const useWfsLibrary = ({
     }
   }, [toast]);
   
-  const addWmsLayerFromLibrary = useCallback((layerName: string, layerTitle: string, bbox?: [number, number, number, number]) => {
+  const addLayerFromLibrary = useCallback((layerName: string, layerTitle: string, bbox?: [number, number, number, number], styleName?: string) => {
     if (!activeServerUrl) {
         toast({ description: "No hay un servidor activo seleccionado.", variant: "destructive" });
         return;
     }
-    onAddLayer(layerName, layerTitle, activeServerUrl, bbox);
+    onAddLayer(layerName, layerTitle, activeServerUrl, bbox, styleName);
     setDiscoveredLayers(prev => prev.map(l => l.name === layerName ? { ...l, added: true } : l));
   }, [activeServerUrl, onAddLayer, toast]);
 
@@ -153,7 +155,7 @@ export const useWfsLibrary = ({
     isLoading,
     discoveredLayers,
     fetchCapabilities: fetchWmsCapabilities,
-    addLayer: addWmsLayerFromLibrary,
+    addLayer: addLayerFromLibrary,
     PREDEFINED_SERVERS,
   };
 };
