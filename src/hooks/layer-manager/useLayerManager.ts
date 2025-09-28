@@ -286,14 +286,13 @@ export const useLayerManager = ({
             zIndex: WMS_LAYER_Z_INDEX,
         });
 
-        // 3. Add both layers to the map
+        // 3. Add WMS layer to the map
         map.addLayer(wmsLayer);
-        map.addLayer(wfsLayer); // Although invisible, it needs to be on the map for interactions
         
         // 4. Link the visual layer to the main layer object for control
         wfsLayer.set('visualLayer', wmsLayer);
 
-        // 5. Add only the main WFS layer to the panel state
+        // 5. Add only the main WFS layer to the panel state and the map
         addLayer({
             id: wfsId,
             name: layerTitle,
