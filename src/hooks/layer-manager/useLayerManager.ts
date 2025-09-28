@@ -262,8 +262,13 @@ export const useLayerManager = ({
         const wfsLayer = new VectorLayer({
             source: wfsSource,
             style: new Style(), // Invisible style
-            properties: { id: wfsId, name: layerTitle, type: 'wfs', gsLayerName: layerName, bbox },
+            properties: { id: wfsId, name: layerTitle, type: 'wfs', gsLayerName: layerName },
         });
+
+        // NEW: Store the authoritative bbox from GetCapabilities on the OL layer object
+        if (bbox) {
+            wfsLayer.set('bbox', bbox);
+        }
 
         // 2. Create the WMS Tile Layer (for visualization)
         const wmsId = `wms-layer-${layerName}-${nanoid()}`;
@@ -569,32 +574,33 @@ export const useLayerManager = ({
     if (!layer) return;
 
     let extent: number[] | undefined;
-
-    if (layer.olLayer instanceof VectorLayer) {
-        const source = layer.olLayer.getSource();
-        if (source && source.getFeatures().length > 0) {
-            extent = source.getExtent();
-        } else {
-            setTimeout(() => toast({ description: "La capa no tiene entidades para hacer zoom." }), 0);
-            return;
-        }
-    } else {
-        const bbox4326 = layer.olLayer.get('bbox');
-        if (bbox4326) {
-            try {
-                extent = transformExtent(bbox4326, 'EPSG:4326', 'EPSG:3857');
-            } catch (e) { console.error(e); }
+    
+    // PRIORITIZE the bbox from GetCapabilities if it exists (more reliable)
+    const bbox4326 = layer.olLayer.get('bbox');
+    if (bbox4326) {
+        try {
+            extent = transformExtent(bbox4326, 'EPSG:4326', 'EPSG:3857');
+        } catch (e) {
+            console.error("Error transforming authoritative BBOX:", e);
         }
     }
 
-    if (extent && extent.every(isFinite) && extent[2] > extent[0] && extent[3] > extent[1]) {
+    // FALLBACK to calculating from loaded features if no bbox is available
+    if (!extent && layer.olLayer instanceof VectorLayer) {
+        const source = layer.olLayer.getSource();
+        if (source && source.getFeatures().length > 0) {
+            extent = source.getExtent();
+        }
+    }
+
+    if (extent && extent.every(isFinite) && (extent[2] - extent[0] > 0.000001) && (extent[3] - extent[1] > 0.000001)) {
          mapRef.current.getView().fit(extent, {
             padding: [50, 50, 50, 50],
             duration: 1000,
             maxZoom: 16,
         });
     } else {
-        setTimeout(() => toast({ description: "No se puede determinar una extensión válida para esta capa." }), 0);
+        setTimeout(() => toast({ description: "La capa no tiene entidades cargadas en la vista actual para hacer zoom." }), 0);
     }
   }, [mapRef, layers, toast]);
 
