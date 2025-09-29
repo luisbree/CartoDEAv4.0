@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DraftingCompass, Scissors, Layers, CircleDotDashed, MinusSquare, BoxSelect, Droplet, Sparkles, Loader2, Combine, Minus, Plus, TrendingUp } from 'lucide-react';
+import { DraftingCompass, Scissors, Layers, CircleDotDashed, MinusSquare, BoxSelect, Droplet, Sparkles, Loader2, Combine, Minus, Plus, TrendingUp, Waypoints as CrosshairIcon } from 'lucide-react';
 import type { MapLayer, VectorMapLayer } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { nanoid } from 'nanoid';
@@ -20,7 +20,7 @@ import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as Tu
 import { multiPolygon } from '@turf/helpers';
 import type Feature from 'ol/Feature';
 import type { Geometry } from 'ol/geom';
-import { performBufferAnalysis, performConvexHull, performConcaveHull, calculateOptimalConcavity, projectPopulationGeometric } from '@/services/spatial-analysis';
+import { performBufferAnalysis, performConvexHull, performConcaveHull, calculateOptimalConcavity, projectPopulationGeometric, generateCrossSections } from '@/services/spatial-analysis';
 import { ScrollArea } from '../ui/scroll-area';
 import { Checkbox } from '../ui/checkbox';
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
@@ -94,6 +94,14 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   const [projectionYear, setProjectionYear] = useState<string>(String(new Date().getFullYear()));
   const [projectionResult, setProjectionResult] = useState<{ projectedPopulation: number; averageAnnualRate: number } | null>(null);
 
+  // State for Cross-sections tool
+  const [crossSectionInputLayerId, setCrossSectionInputLayerId] = useState<string>('');
+  const [crossSectionDistance, setCrossSectionDistance] = useState<number>(100);
+  const [crossSectionLength, setCrossSectionLength] = useState<number>(50);
+  const [crossSectionUnits, setCrossSectionUnits] = useState<'meters' | 'kilometers'>('meters');
+  const [crossSectionOutputName, setCrossSectionOutputName] = useState('');
+  const [isGeneratingCrossSections, setIsGeneratingCrossSections] = useState(false);
+
   const { toast } = useToast();
 
   const vectorLayers = useMemo(() => {
@@ -109,6 +117,17 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         return geomType === 'Polygon' || geomType === 'MultiPolygon';
       }
       return false;
+    });
+  }, [vectorLayers]);
+
+  const lineLayers = useMemo(() => {
+    return vectorLayers.filter(l => {
+        const source = l.olLayer.getSource();
+        if (!source) return false;
+        const features = source.getFeatures();
+        if (features.length === 0) return false;
+        const geomType = features[0].getGeometry()?.getType();
+        return geomType === 'LineString' || geomType === 'MultiLineString';
     });
   }, [vectorLayers]);
 
@@ -542,6 +561,64 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
       }
   };
 
+  const handleRunCrossSections = async () => {
+    const inputLayer = lineLayers.find(l => l.id === crossSectionInputLayerId);
+    if (!inputLayer) {
+        toast({ description: "Por favor, seleccione una capa de línea.", variant: "destructive" });
+        return;
+    }
+    const inputSource = inputLayer.olLayer.getSource();
+    if (!inputSource || inputSource.getFeatures().length === 0) {
+        toast({ description: "La capa de entrada no tiene entidades.", variant: "destructive" });
+        return;
+    }
+
+    setIsGeneratingCrossSections(true);
+    const outputName = crossSectionOutputName.trim() || `Perfiles de ${inputLayer.name}`;
+    toast({ description: `Generando perfiles transversales...` });
+
+    try {
+        const crossSectionFeatures = await generateCrossSections({
+            lineFeatures: inputSource.getFeatures(),
+            distance: crossSectionDistance,
+            length: crossSectionLength,
+            units: crossSectionUnits,
+        });
+
+        if (crossSectionFeatures.length === 0) {
+            throw new Error("No se pudieron generar los perfiles.");
+        }
+
+        crossSectionFeatures.forEach(f => f.setId(nanoid()));
+        const newLayerId = `cross-sections-${nanoid()}`;
+        const newSource = new VectorSource({ features: crossSectionFeatures });
+        const newOlLayer = new VectorLayer({
+            source: newSource,
+            properties: { id: newLayerId, name: outputName, type: 'analysis' },
+        });
+
+        onAddLayer({
+            id: newLayerId,
+            name: outputName,
+            olLayer: newOlLayer,
+            visible: true,
+            opacity: 1,
+            type: 'analysis',
+        }, true);
+
+        toast({ description: `Se creó la capa "${outputName}" con ${crossSectionFeatures.length} perfiles.` });
+
+        setCrossSectionInputLayerId('');
+        setCrossSectionOutputName('');
+
+    } catch (error: any) {
+        console.error("Cross-section generation failed:", error);
+        toast({ title: "Error al Generar Perfiles", description: error.message, variant: "destructive" });
+    } finally {
+        setIsGeneratingCrossSections(false);
+    }
+  };
+
 
   return (
     <DraggablePanel
@@ -716,6 +793,48 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                           </Button>
                       </div>
                     </div>
+                     <div className="space-y-1">
+                        <Label className="text-xs font-semibold">Generar Perfiles Transversales</Label>
+                        <div className="space-y-2 p-2 border border-white/10 rounded-md">
+                            <div>
+                                <Label htmlFor="cs-input-layer" className="text-xs">Capa de Eje (Línea)</Label>
+                                <Select value={crossSectionInputLayerId} onValueChange={setCrossSectionInputLayerId}>
+                                    <SelectTrigger id="cs-input-layer" className="h-8 text-xs bg-black/20"><SelectValue placeholder="Seleccionar capa de línea..." /></SelectTrigger>
+                                    <SelectContent className="bg-gray-700 text-white border-gray-600">
+                                        {lineLayers.map(l => <SelectItem key={l.id} value={l.id} className="text-xs">{l.name}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="flex items-end gap-2">
+                                <div className="flex-grow">
+                                    <Label htmlFor="cs-distance" className="text-xs">Distancia entre perfiles</Label>
+                                    <Input id="cs-distance" type="number" value={crossSectionDistance} onChange={(e) => setCrossSectionDistance(Number(e.target.value))} min="1" className="h-8 text-xs bg-black/20"/>
+                                </div>
+                                <div className="flex-grow">
+                                    <Label htmlFor="cs-length" className="text-xs">Longitud del perfil</Label>
+                                    <Input id="cs-length" type="number" value={crossSectionLength} onChange={(e) => setCrossSectionLength(Number(e.target.value))} min="1" className="h-8 text-xs bg-black/20"/>
+                                </div>
+                            </div>
+                             <div>
+                                <Label htmlFor="cs-units" className="text-xs">Unidades (Distancia y Longitud)</Label>
+                                <Select value={crossSectionUnits} onValueChange={(v) => setCrossSectionUnits(v as any)}>
+                                    <SelectTrigger id="cs-units" className="h-8 text-xs bg-black/20 w-full"><SelectValue /></SelectTrigger>
+                                    <SelectContent className="bg-gray-700 text-white border-gray-600">
+                                        <SelectItem value="meters" className="text-xs">Metros</SelectItem>
+                                        <SelectItem value="kilometers" className="text-xs">Kilómetros</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div>
+                                <Label htmlFor="cs-output-name" className="text-xs">Nombre de la Capa de Salida</Label>
+                                <Input id="cs-output-name" value={crossSectionOutputName} onChange={(e) => setCrossSectionOutputName(e.target.value)} placeholder="Ej: Perfiles_del_RioX" className="h-8 text-xs bg-black/20"/>
+                            </div>
+                            <Button onClick={handleRunCrossSections} size="sm" className="w-full h-8 text-xs" disabled={!crossSectionInputLayerId || isGeneratingCrossSections}>
+                                {isGeneratingCrossSections ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <CrosshairIcon className="mr-2 h-3.5 w-3.5" />}
+                                Ejecutar Generación
+                            </Button>
+                        </div>
+                    </div>
                 </AccordionContent>
             </AccordionItem>
 
@@ -842,3 +961,4 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
