@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from 'react';
@@ -283,7 +284,7 @@ export const useLayerManager = ({
 
         // 2. Create the WMS Tile Layer (for visualization)
         const wmsId = `wms-layer-${layerName}-${nanoid()}`;
-        const wmsParams: Record<string, any> = { 'LAYERS': layerName, 'TILED': true };
+        const wmsParams: Record<string, any> = { 'LAYERS': layerName, 'TILED': true, 'VERSION': '1.1.1' };
         
         if (styleName && styleName.trim() !== '') {
           wmsParams['STYLES'] = styleName;
@@ -295,11 +296,7 @@ export const useLayerManager = ({
             serverType: 'geoserver',
             transition: 0,
             crossOrigin: 'anonymous',
-            // Force WMS version 1.1.1 for better compatibility
-            hidpi: false,
-            projection: 'EPSG:3857',
         });
-        wmsSource.updateParams({...wmsSource.getParams(), 'VERSION': '1.1.1'});
         
         const wmsLayer = new TileLayer({
             source: wmsSource,
@@ -721,6 +718,10 @@ export const useLayerManager = ({
         const clonedFeatures = selectedFeaturesForExtraction.map(f => {
             const clone = f.clone();
             clone.setStyle(undefined); // Crucial: Remove the highlight style from the clone
+            // Ensure the clone gets the ID
+            if (f.getId()) {
+                clone.setId(f.getId());
+            }
             return clone;
         });
         
