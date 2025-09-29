@@ -273,7 +273,7 @@ export const useLayerManager = ({
             source: wfsSource,
             style: new Style(), // Invisible style
             properties: { id: wfsId, name: layerTitle, type: 'wfs', gsLayerName: layerName },
-            zIndex: -1, // **CRITICAL FIX**: Render WFS data layer below everything else
+            zIndex: -1, // Render WFS data layer below everything else
         });
 
         // Store the authoritative bbox from GetCapabilities on the OL layer object
@@ -285,7 +285,6 @@ export const useLayerManager = ({
         const wmsId = `wms-layer-${layerName}-${nanoid()}`;
         const wmsParams: Record<string, any> = { 'LAYERS': layerName, 'TILED': true };
         
-        // Only add the STYLES parameter if styleName is a non-empty string.
         if (styleName && styleName.trim() !== '') {
           wmsParams['STYLES'] = styleName;
         }
@@ -296,7 +295,11 @@ export const useLayerManager = ({
             serverType: 'geoserver',
             transition: 0,
             crossOrigin: 'anonymous',
+            // Force WMS version 1.1.1 for better compatibility
+            hidpi: false,
+            projection: 'EPSG:3857',
         });
+        wmsSource.updateParams({...wmsSource.getParams(), 'VERSION': '1.1.1'});
         
         const wmsLayer = new TileLayer({
             source: wmsSource,
