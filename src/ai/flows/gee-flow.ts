@@ -159,6 +159,16 @@ const geeTileLayerFlow = ai.defineFlow(
   }
 );
 
+// Class names corresponding to the Dynamic World 'label' band values.
+const DW_CLASS_NAMES = [
+    'Agua', 'Árboles', 'Césped', 'Vegetación Inundada', 'Cultivos',
+    'Arbustos', 'Área Construida', 'Suelo Desnudo', 'Nieve y Hielo'
+];
+// Define properties to add to the vectorized features.
+const DW_PROPS = {
+    'landcover_class': DW_CLASS_NAMES,
+};
+
 
 // Define the Genkit flow for vectorization
 const geeVectorizationFlow = ai.defineFlow(
@@ -185,13 +195,21 @@ const geeVectorizationFlow = ai.defineFlow(
             scale: 10, // Dynamic World native resolution
             geometryType: 'polygon',
             eightConnected: false,
-            labelProperty: 'landcover_class',
-            maxPixels: 1e10, // Increase pixel limit
-            bestEffort: true, // Auto-adjust scale if needed
+            // Use 'label' to get the numeric class value from the raster.
+            labelProperty: 'label', 
+            maxPixels: 1e10,
+            bestEffort: true,
+        });
+        
+        // Add the human-readable class name as a new property.
+        const vectorsWithClassName = vectors.map((feature) => {
+            const num = feature.get('label');
+            const className = ee.String(ee.List(DW_PROPS.landcover_class).get(num));
+            return feature.set('landcover_name', className);
         });
         
         return new Promise((resolve, reject) => {
-            vectors.getDownloadURL({
+            vectorsWithClassName.getDownloadURL({
                 format: 'geojson',
                 filename: 'cobertura_suelo_dynamic_world',
                 callback: (url, error) => {
