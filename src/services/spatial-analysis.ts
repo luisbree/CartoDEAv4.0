@@ -188,6 +188,14 @@ export async function performConvexHull({ features }: HullParams): Promise<Featu
         if (!hullPolygon) {
             throw new Error("La operación Convex Hull no produjo resultados.");
         }
+        
+        // Add attributes to the resulting feature
+        const areaKm2 = turfArea(hullPolygon) / 1000000;
+        hullPolygon.properties = {
+            ...hullPolygon.properties,
+            analysis_type: 'convex_hull',
+            area_km2: parseFloat(areaKm2.toFixed(2))
+        };
 
         return formatForMap.readFeatures({
             type: 'FeatureCollection',
@@ -226,6 +234,16 @@ export async function performConcaveHull({ features, concavity = 2 }: HullParams
         if (!hullPolygon) {
             return null;
         }
+        
+        // Add attributes to the resulting feature
+        const areaKm2 = turfArea(hullPolygon) / 1000000;
+        hullPolygon.properties = {
+            ...hullPolygon.properties,
+            analysis_type: 'concave_hull',
+            concavity_km: concavity,
+            area_km2: parseFloat(areaKm2.toFixed(2))
+        };
+
 
         return formatForMap.readFeatures({
             type: 'FeatureCollection',
