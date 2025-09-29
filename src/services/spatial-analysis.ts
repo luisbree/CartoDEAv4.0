@@ -434,3 +434,54 @@ export async function generateCrossSections({
 
     return olFeatures;
 }
+
+/**
+ * Dissolves all features in a layer into a single feature.
+ * @param params - The features to dissolve.
+ * @returns A promise that resolves to an array containing a single dissolved OpenLayers Feature.
+ */
+export async function dissolveFeatures({
+    features
+}: {
+    features: Feature<Geometry>[];
+}): Promise<Feature<Geometry>[]> {
+    if (!features || features.length === 0) {
+        throw new Error("No features provided to dissolve.");
+    }
+
+    const format = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
+    const formatForMap = new GeoJSON({ dataProjection: 'EPSG:4326', featureProjection: 'EPSG:3857' });
+
+    try {
+        const featuresGeoJSON = format.writeFeaturesObject(features);
+        
+        let unionedGeometry: TurfFeature<any> | null = null;
+        if (featuresGeoJSON.features.length > 1) {
+            // @ts-ignore - Turf's union typing can be tricky
+            unionedGeometry = union(...featuresGeoJSON.features);
+        } else {
+            unionedGeometry = featuresGeoJSON.features[0];
+        }
+
+        if (!unionedGeometry) {
+            throw new Error("Dissolve operation resulted in null geometry.");
+        }
+
+        // We are creating a new geometry, so we just add a simple property.
+        unionedGeometry.properties = {
+            operation: 'dissolve',
+            source_features: features.length,
+        };
+        
+        const olFeatures = formatForMap.readFeatures({
+            type: 'FeatureCollection',
+            features: [unionedGeometry]
+        });
+
+        return olFeatures;
+
+    } catch (error: any) {
+        console.error("Error during dissolve analysis:", error);
+        throw new Error(`Turf.js dissolve failed: ${error.message}`);
+    }
+}

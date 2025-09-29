@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DraftingCompass, Scissors, Layers, CircleDotDashed, MinusSquare, BoxSelect, Droplet, Sparkles, Loader2, Combine, Minus, Plus, TrendingUp, Waypoints as CrosshairIcon } from 'lucide-react';
+import { DraftingCompass, Scissors, Layers, CircleDotDashed, MinusSquare, BoxSelect, Droplet, Sparkles, Loader2, Combine, Minus, Plus, TrendingUp, Waypoints as CrosshairIcon, Merge } from 'lucide-react';
 import type { MapLayer, VectorMapLayer } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { nanoid } from 'nanoid';
@@ -20,7 +20,7 @@ import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as Tu
 import { multiPolygon } from '@turf/helpers';
 import type Feature from 'ol/Feature';
 import type { Geometry } from 'ol/geom';
-import { performBufferAnalysis, performConvexHull, performConcaveHull, calculateOptimalConcavity, projectPopulationGeometric, generateCrossSections } from '@/services/spatial-analysis';
+import { performBufferAnalysis, performConvexHull, performConcaveHull, calculateOptimalConcavity, projectPopulationGeometric, generateCrossSections, dissolveFeatures } from '@/services/spatial-analysis';
 import { ScrollArea } from '../ui/scroll-area';
 import { Checkbox } from '../ui/checkbox';
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
@@ -86,6 +86,10 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   // State for Union tool
   const [unionLayerIds, setUnionLayerIds] = useState<string[]>([]);
   const [unionOutputName, setUnionOutputName] = useState('');
+
+  // State for Dissolve tool
+  const [dissolveInputLayerId, setDissolveInputLayerId] = useState<string>('');
+  const [dissolveOutputName, setDissolveOutputName] = useState('');
 
   // State for Population Projection
   const [pop2001, setPop2001] = useState<string>('');
@@ -531,6 +535,57 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     setUnionLayerIds([]);
     setUnionOutputName('');
   };
+
+  const handleRunDissolve = async () => {
+    const inputLayer = vectorLayers.find(l => l.id === dissolveInputLayerId);
+    if (!inputLayer) {
+        toast({ description: "Por favor, seleccione una capa de entrada para disolver.", variant: "destructive" });
+        return;
+    }
+    const inputSource = inputLayer.olLayer.getSource();
+    if (!inputSource || inputSource.getFeatures().length === 0) {
+        toast({ description: "La capa de entrada no tiene entidades.", variant: "destructive" });
+        return;
+    }
+
+    const outputName = dissolveOutputName.trim() || `Disuelta_${inputLayer.name}`;
+    toast({ description: "Ejecutando operación de disolución..." });
+
+    try {
+        const dissolvedFeatures = await dissolveFeatures({ features: inputSource.getFeatures() });
+        
+        if (dissolvedFeatures.length === 0) {
+            throw new Error("La operación de disolución no produjo resultados.");
+        }
+
+        dissolvedFeatures.forEach(f => f.setId(nanoid()));
+
+        const newLayerId = `dissolve-result-${nanoid()}`;
+        const newSource = new VectorSource({ features: dissolvedFeatures });
+        const newOlLayer = new VectorLayer({
+            source: newSource,
+            properties: { id: newLayerId, name: outputName, type: 'analysis' },
+            style: inputLayer.olLayer.getStyle(),
+        });
+
+        onAddLayer({
+            id: newLayerId,
+            name: outputName,
+            olLayer: newOlLayer,
+            visible: true,
+            opacity: 1,
+            type: 'analysis',
+        }, true);
+
+        toast({ description: `Se creó la capa disuelta "${outputName}".` });
+        setDissolveInputLayerId('');
+        setDissolveOutputName('');
+
+    } catch (error: any) {
+        console.error("Dissolve operation failed:", error);
+        toast({ title: "Error de Disolución", description: error.message, variant: "destructive" });
+    }
+  };
   
   const handleConcavityStep = (direction: 'increment' | 'decrement') => {
     const step = concavityStats ? concavityStats.stdDev * 0.1 : 0.1;
@@ -711,40 +766,6 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                           </Button>
                       </div>
                   </div>
-                   <div className="space-y-1">
-                      <Label className="text-xs font-semibold">Unión de Capas</Label>
-                      <div className="space-y-2 p-2 border border-white/10 rounded-md">
-                          <div>
-                              <Label className="text-xs">Capas a unir (seleccione 2 o más)</Label>
-                              <ScrollArea className="h-24 border border-white/10 p-2 rounded-md bg-black/10 mt-1">
-                                  <div className="space-y-1">
-                                      {vectorLayers.map(layer => (
-                                          <div key={layer.id} className="flex items-center space-x-2">
-                                              <Checkbox
-                                                  id={`union-layer-${layer.id}`}
-                                                  checked={unionLayerIds.includes(layer.id)}
-                                                  onCheckedChange={(checked) => {
-                                                      setUnionLayerIds(prev =>
-                                                          checked ? [...prev, layer.id] : prev.filter(id => id !== layer.id)
-                                                      );
-                                                  }}
-                                              />
-                                              <Label htmlFor={`union-layer-${layer.id}`} className="text-xs font-normal">{layer.name}</Label>
-                                          </div>
-                                      ))}
-                                  </div>
-                              </ScrollArea>
-                          </div>
-                          <div>
-                              <Label htmlFor="union-output-name" className="text-xs">Nombre de la Capa de Salida</Label>
-                              <Input id="union-output-name" value={unionOutputName} onChange={(e) => setUnionOutputName(e.target.value)} placeholder="Ej: Capas_Unidas" className="h-8 text-xs bg-black/20"/>
-                          </div>
-                          <Button onClick={handleRunUnion} size="sm" className="w-full h-8 text-xs" disabled={unionLayerIds.length < 2}>
-                              <Combine className="mr-2 h-3.5 w-3.5" />
-                              Ejecutar Unión
-                          </Button>
-                      </div>
-                  </div>
               </AccordionContent>
             </AccordionItem>
             
@@ -904,6 +925,70 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                 </AccordionContent>
             </AccordionItem>
             
+            <AccordionItem value="aggregation-tools" className="border-b-0 bg-white/5 rounded-md">
+                <AccordionTrigger className="p-3 hover:no-underline hover:bg-white/10 rounded-t-md data-[state=open]:rounded-b-none">
+                    <SectionHeader icon={Combine} title="Herramientas de Agregación" />
+                </AccordionTrigger>
+                <AccordionContent className="p-3 pt-2 space-y-3 border-t border-white/10 bg-transparent rounded-b-md">
+                   <div className="space-y-1">
+                      <Label className="text-xs font-semibold">Unión de Capas</Label>
+                      <div className="space-y-2 p-2 border border-white/10 rounded-md">
+                          <div>
+                              <Label className="text-xs">Capas a unir (seleccione 2 o más)</Label>
+                              <ScrollArea className="h-24 border border-white/10 p-2 rounded-md bg-black/10 mt-1">
+                                  <div className="space-y-1">
+                                      {vectorLayers.map(layer => (
+                                          <div key={layer.id} className="flex items-center space-x-2">
+                                              <Checkbox
+                                                  id={`union-layer-${layer.id}`}
+                                                  checked={unionLayerIds.includes(layer.id)}
+                                                  onCheckedChange={(checked) => {
+                                                      setUnionLayerIds(prev =>
+                                                          checked ? [...prev, layer.id] : prev.filter(id => id !== layer.id)
+                                                      );
+                                                  }}
+                                              />
+                                              <Label htmlFor={`union-layer-${layer.id}`} className="text-xs font-normal">{layer.name}</Label>
+                                          </div>
+                                      ))}
+                                  </div>
+                              </ScrollArea>
+                          </div>
+                          <div>
+                              <Label htmlFor="union-output-name" className="text-xs">Nombre de la Capa de Salida</Label>
+                              <Input id="union-output-name" value={unionOutputName} onChange={(e) => setUnionOutputName(e.target.value)} placeholder="Ej: Capas_Unidas" className="h-8 text-xs bg-black/20"/>
+                          </div>
+                          <Button onClick={handleRunUnion} size="sm" className="w-full h-8 text-xs" disabled={unionLayerIds.length < 2}>
+                              <Combine className="mr-2 h-3.5 w-3.5" />
+                              Ejecutar Unión
+                          </Button>
+                      </div>
+                  </div>
+                  <div className="space-y-1">
+                      <Label className="text-xs font-semibold">Disolver Entidades (Dissolve)</Label>
+                      <div className="space-y-2 p-2 border border-white/10 rounded-md">
+                          <div>
+                              <Label htmlFor="dissolve-input-layer" className="text-xs">Capa de Entrada</Label>
+                              <Select value={dissolveInputLayerId} onValueChange={setDissolveInputLayerId}>
+                                <SelectTrigger id="dissolve-input-layer" className="h-8 text-xs bg-black/20"><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
+                                <SelectContent className="bg-gray-700 text-white border-gray-600">
+                                  {vectorLayers.map(l => <SelectItem key={l.id} value={l.id} className="text-xs">{l.name}</SelectItem>)}
+                                </SelectContent>
+                              </Select>
+                          </div>
+                          <div>
+                              <Label htmlFor="dissolve-output-name" className="text-xs">Nombre de la Capa de Salida</Label>
+                              <Input id="dissolve-output-name" value={dissolveOutputName} onChange={(e) => setDissolveOutputName(e.target.value)} placeholder="Ej: Disuelta_CapaX" className="h-8 text-xs bg-black/20"/>
+                          </div>
+                          <Button onClick={handleRunDissolve} size="sm" className="w-full h-8 text-xs" disabled={!dissolveInputLayerId}>
+                              <Merge className="mr-2 h-3.5 w-3.5" />
+                              Ejecutar Disolución
+                          </Button>
+                      </div>
+                  </div>
+                </AccordionContent>
+            </AccordionItem>
+
             <AccordionItem value="demographic-projection" className="border-b-0 bg-white/5 rounded-md">
                 <AccordionTrigger className="p-3 hover:no-underline hover:bg-white/10 rounded-t-md data-[state=open]:rounded-b-none">
                     <SectionHeader icon={TrendingUp} title="Proyección Demográfica" />
@@ -961,4 +1046,3 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
-
