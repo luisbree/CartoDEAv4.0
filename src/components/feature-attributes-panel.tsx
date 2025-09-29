@@ -242,7 +242,7 @@ const AttributesPanelComponent: React.FC<AttributesPanelComponentProps> = ({
 
                         return (
                           <TableRow 
-                            key={featureId} 
+                            key={featureId}
                             data-state={isSelected ? "selected" : "unselected"}
                             className="cursor-pointer"
                             onClick={(e) => handleRowClick(featureId, e)}
