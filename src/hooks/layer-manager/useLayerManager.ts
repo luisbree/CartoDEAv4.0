@@ -2,7 +2,7 @@
 
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import type { Map } from 'ol';
 import VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
@@ -24,6 +24,7 @@ import KML from 'ol/format/KML';
 import { download as downloadShp } from 'shpjs';
 import { bbox as bboxStrategy } from 'ol/loadingstrategy';
 import type { GeeValueQueryInput } from '@/ai/flows/gee-types';
+import { ToastAction } from '@/components/ui/toast';
 
 
 interface UseLayerManagerProps {
@@ -183,6 +184,7 @@ export const useLayerManager = ({
   const [isFindingLandsatFootprints, setIsFindingLandsatFootprints] = useState(false);
   const [isDrawingSourceEmptyOrNotPolygon, setIsDrawingSourceEmptyOrNotPolygon] = useState(true);
   const [isWfsLoading, setIsWfsLoading] = useState(false);
+  const lastRemovedLayersRef = useRef<MapLayer[]>([]);
 
   useEffect(() => {
     // This effect ensures z-ordering is correct whenever the layers array changes.
@@ -362,14 +364,35 @@ export const useLayerManager = ({
     setTimeout(() => toast({ description: `Capa de Google Earth Engine "${layerName}" añadida.` }), 0);
 
   }, [mapRef, addLayer, toast]);
+  
+  const undoRemoveLayers = useCallback((layersToRestore: MapLayer[]) => {
+      if (!mapRef.current) return;
+      const map = mapRef.current;
+
+      layersToRestore.forEach(layer => {
+          map.addLayer(layer.olLayer);
+          const visualLayer = layer.olLayer.get('visualLayer');
+          if (visualLayer) {
+              map.addLayer(visualLayer);
+          }
+      });
+      
+      setLayers(prev => [...layersToRestore, ...prev]);
+
+      toast({ description: `${layersToRestore.length} capa(s) restaurada(s).` });
+  }, [mapRef, toast]);
+
 
   const removeLayers = useCallback((layerIds: string[]) => {
+    let removedLayers: MapLayer[] = [];
     setLayers(prevLayers => {
         if (!mapRef.current || layerIds.length === 0) return prevLayers;
         const map = mapRef.current;
 
         const layersToRemove = prevLayers.filter(l => layerIds.includes(l.id));
         if (layersToRemove.length === 0) return prevLayers;
+        
+        removedLayers = layersToRemove; // Store for undo
     
         layersToRemove.forEach(layer => {
             map.removeLayer(layer.olLayer);
@@ -388,16 +411,29 @@ export const useLayerManager = ({
                 }
             }
         });
-    
-        if (layersToRemove.length === 1) {
-          setTimeout(() => toast({ description: `Capa "${layersToRemove[0].name}" eliminada.` }), 0);
-        } else {
-          setTimeout(() => toast({ description: `${layersToRemove.length} capa(s) eliminada(s).` }), 0);
-        }
         
         return prevLayers.filter(l => !layerIds.includes(l.id));
     });
-  }, [mapRef, toast, updateGeoServerDiscoveredLayerState]);
+    
+    // This part runs after the state has been updated.
+    setTimeout(() => {
+        if (removedLayers.length > 0) {
+            lastRemovedLayersRef.current = removedLayers; // Save for the undo action
+            const description = removedLayers.length === 1
+                ? `Capa "${removedLayers[0].name}" eliminada.`
+                : `${removedLayers.length} capa(s) eliminada(s).`;
+            
+            toast({
+                description: description,
+                action: React.createElement(ToastAction, {
+                  altText: "Deshacer",
+                  onClick: () => undoRemoveLayers(lastRemovedLayersRef.current)
+                }, "Deshacer"),
+            });
+        }
+    }, 100);
+
+  }, [mapRef, toast, updateGeoServerDiscoveredLayerState, undoRemoveLayers]);
 
   const removeLayer = useCallback((layerId: string) => {
     removeLayers([layerId]);

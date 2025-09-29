@@ -16,7 +16,7 @@ const ToastViewport = React.forwardRef<
   <ToastPrimitives.Viewport
     ref={ref}
     className={cn(
-      "fixed bottom-4 left-16 z-[100] flex max-h-screen w-auto max-w-md flex-col-reverse gap-2",
+      "fixed bottom-4 left-1/2 -translate-x-1/2 z-[100] flex max-h-screen w-auto max-w-md flex-col-reverse gap-2",
       className
     )}
     {...props}
@@ -25,13 +25,12 @@ const ToastViewport = React.forwardRef<
 ToastViewport.displayName = ToastPrimitives.Viewport.displayName
 
 const toastVariants = cva(
-  "group pointer-events-auto relative flex w-full items-center justify-between space-x-4 overflow-hidden rounded-md bg-black/20 px-3 py-2 text-xs shadow-lg transition-all data-[swipe=cancel]:translate-x-0 data-[swipe=end]:translate-x-[var(--radix-toast-swipe-end-x)] data-[swipe=move]:translate-x-[var(--radix-toast-swipe-move-x)] data-[swipe=move]:transition-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[swipe=end]:animate-out data-[state=closed]:fade-out-80 data-[state=open]:slide-in-from-bottom data-[state=closed]:slide-out-to-top-full",
+  "group pointer-events-auto relative flex w-full items-center justify-between space-x-4 overflow-hidden rounded-md border bg-background/80 backdrop-blur-sm px-4 py-2.5 text-sm shadow-lg transition-all data-[swipe=cancel]:translate-x-0 data-[swipe=end]:translate-x-[var(--radix-toast-swipe-end-x)] data-[swipe=move]:translate-x-[var(--radix-toast-swipe-move-x)] data-[swipe=move]:transition-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[swipe=end]:animate-out data-[state=closed]:fade-out-80 data-[state=open]:slide-in-from-bottom-full data-[state=closed]:slide-out-to-bottom-full",
   {
     variants: {
       variant: {
-        default: "text-black",
-        destructive:
-          "destructive group text-red-800",
+        default: "border-border text-foreground",
+        destructive: "destructive group border-destructive/50 text-destructive",
       },
     },
     defaultVariants: {
