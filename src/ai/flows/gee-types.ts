@@ -65,3 +65,15 @@ export const GeeGeoTiffDownloadInputSchema = z.object({
   maxElevation: GeeTileLayerInputSchema.shape.maxElevation,
 });
 export type GeeGeoTiffDownloadInput = z.infer<typeof GeeGeoTiffDownloadInputSchema>;
+
+// New schemas for histogram generation
+export const GeeHistogramInputSchema = z.object({
+    aoi: GeeAoiSchema.describe("The Area of Interest as a bounding box for the histogram calculation."),
+    bandCombination: z.enum(['NASADEM_ELEVATION', 'ALOS_DSM']).describe("The elevation dataset to analyze."),
+});
+export type GeeHistogramInput = z.infer<typeof GeeHistogramInputSchema>;
+
+export const GeeHistogramOutputSchema = z.object({
+    histogram: z.array(z.array(z.number())).describe("The histogram data as an array of [value, count] pairs."),
+});
+export type GeeHistogramOutput = z.infer<typeof GeeHistogramOutputSchema>;

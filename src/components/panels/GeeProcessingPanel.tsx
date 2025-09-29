@@ -10,14 +10,15 @@ import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { BrainCircuit, Loader2, Image as ImageIcon, CheckCircle, AlertTriangle, Calendar as CalendarIcon, Shapes, Download } from 'lucide-react';
+import { BrainCircuit, Loader2, Image as ImageIcon, CheckCircle, AlertTriangle, Calendar as CalendarIcon, Shapes, Download, BarChart2 } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
-import { getGeeTileLayer, getGeeVectorDownloadUrl, getGeeGeoTiffDownloadUrl } from '@/ai/flows/gee-flow';
+import { getGeeTileLayer, getGeeVectorDownloadUrl, getGeeGeoTiffDownloadUrl, getGeeHistogram } from '@/ai/flows/gee-flow';
 import type { Map } from 'ol';
 import { transformExtent } from 'ol/proj';
-import type { GeeTileLayerInput, GeeVectorizationInput } from '@/ai/flows/gee-types';
+import type { GeeTileLayerInput, GeeVectorizationInput, GeeHistogramOutput } from '@/ai/flows/gee-types';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
+import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip } from 'recharts';
 
 
 interface GeeProcessingPanelProps {
@@ -70,6 +71,8 @@ const GeeProcessingPanel: React.FC<GeeProcessingPanelProps> = ({
   const [isProcessing, setIsProcessing] = useState(false);
   const [isVectorizing, setIsVectorizing] = useState(false);
   const [isDownloadingTiff, setIsDownloadingTiff] = useState(false);
+  const [isCalculatingHistogram, setIsCalculatingHistogram] = useState(false);
+  const [histogramData, setHistogramData] = useState<GeeHistogramOutput['histogram'] | null>(null);
   const [selectedCombination, setSelectedCombination] = useState<BandCombination>('URBAN_FALSE_COLOR');
   const [date, setDate] = useState<DateRange | undefined>({
     from: addDays(new Date(), -365),
@@ -89,6 +92,7 @@ const GeeProcessingPanel: React.FC<GeeProcessingPanelProps> = ({
     }
 
     setIsProcessing(true);
+    setHistogramData(null); // Clear histogram when generating a new layer
     
     const view = mapRef.current.getView();
     const extent = view.calculateExtent(mapRef.current.getSize()!);
@@ -206,6 +210,45 @@ const GeeProcessingPanel: React.FC<GeeProcessingPanelProps> = ({
     }
   };
 
+  const handleCalculateHistogram = async () => {
+      if (!mapRef.current || !isAuthenticated) {
+          toast({ description: "Asegúrese de estar autenticado.", variant: "destructive" });
+          return;
+      }
+      if (selectedCombination !== 'NASADEM_ELEVATION' && selectedCombination !== 'ALOS_DSM') return;
+
+      setIsCalculatingHistogram(true);
+      setHistogramData(null);
+      toast({ description: "Calculando histograma de elevación para la vista actual..." });
+
+      const view = mapRef.current.getView();
+      const extent = view.calculateExtent(mapRef.current.getSize()!);
+      const extent4326 = transformExtent(extent, view.getProjection(), 'EPSG:4326');
+
+      try {
+          const result = await getGeeHistogram({
+              aoi: { minLon: extent4326[0], minLat: extent4326[1], maxLon: extent4326[2], maxLat: extent4326[3] },
+              bandCombination: selectedCombination,
+          });
+
+          if (result && result.histogram) {
+              const formattedData = result.histogram.map(([value, count]) => ({
+                  elevation: Math.round(value),
+                  count,
+              }));
+              setHistogramData(formattedData as any); // Cast for chart component
+              toast({ description: "Histograma calculado con éxito." });
+          } else {
+              throw new Error("El servidor no devolvió datos para el histograma.");
+          }
+      } catch (error: any) {
+          console.error("Error calculating GEE histogram:", error);
+          toast({ title: "Error de Histograma", description: error.message || "No se pudo generar el histograma.", variant: "destructive" });
+      } finally {
+          setIsCalculatingHistogram(false);
+      }
+  };
+
   const getAuthStatusContent = () => {
     if (isAuthenticating) {
       return (
@@ -250,7 +293,7 @@ const GeeProcessingPanel: React.FC<GeeProcessingPanelProps> = ({
       showCloseButton={true}
       style={style}
       zIndex={style?.zIndex as number | undefined}
-      initialSize={{ width: 350, height: "auto" }}
+      initialSize={{ width: 380, height: "auto" }}
     >
       <div className="bg-white/5 rounded-md p-3 space-y-3">
         <div className="p-2 rounded-md bg-black/20 text-center">
@@ -258,7 +301,7 @@ const GeeProcessingPanel: React.FC<GeeProcessingPanelProps> = ({
         </div>
         <div>
             <h3 className="text-sm font-semibold text-white mb-2">Composición de Bandas / Índices</h3>
-            <RadioGroup defaultValue={selectedCombination} onValueChange={(value: BandCombination) => setSelectedCombination(value)}>
+            <RadioGroup defaultValue={selectedCombination} onValueChange={(value: BandCombination) => {setSelectedCombination(value); setHistogramData(null);}}>
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="URBAN_FALSE_COLOR" id="urban-combo" />
                 <Label htmlFor="urban-combo" className="text-xs font-normal">Falso Color (Urbano - B8, B4, B3)</Label>
@@ -340,6 +383,39 @@ const GeeProcessingPanel: React.FC<GeeProcessingPanelProps> = ({
                       />
                   </div>
               </div>
+              <Button
+                  onClick={handleCalculateHistogram}
+                  disabled={isCalculatingHistogram || isAuthenticating || !isAuthenticated}
+                  className="w-full h-8 text-xs"
+                  variant="secondary"
+              >
+                  {isCalculatingHistogram ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                      <BarChart2 className="mr-2 h-4 w-4" />
+                  )}
+                  Calcular Histograma de la Vista
+              </Button>
+              {histogramData && histogramData.length > 0 && (
+                  <div className="h-40 w-full mt-2">
+                      <ResponsiveContainer>
+                          <BarChart data={histogramData} margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
+                              <XAxis dataKey="elevation" stroke="#888888" fontSize={10} tickFormatter={(value) => `${value}m`} />
+                              <YAxis stroke="#888888" fontSize={10} tickFormatter={(value) => value > 1000 ? `${(value/1000).toFixed(1)}k` : value}/>
+                              <Tooltip
+                                  contentStyle={{
+                                      backgroundColor: 'rgba(30, 41, 59, 0.9)',
+                                      borderColor: '#4b5563',
+                                      fontSize: '12px'
+                                  }}
+                                  labelFormatter={(label) => `Elevación: ${label} m`}
+                                  formatter={(value: number) => [value.toLocaleString(), 'Píxeles']}
+                              />
+                              <Bar dataKey="count" fill="hsl(var(--primary))" />
+                          </BarChart>
+                      </ResponsiveContainer>
+                  </div>
+              )}
           </div>
         )}
 

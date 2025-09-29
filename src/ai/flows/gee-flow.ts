@@ -1,17 +1,18 @@
 
 'use server';
 /**
- * @fileOverview A flow for generating Google Earth Engine tile layers and vector data.
+ * @fileOverview A flow for generating Google Earth Engine tile layers, vector data, and histograms.
  *
  * - getGeeTileLayer - Generates a tile layer URL for a given Area of Interest.
  * - getGeeVectorDownloadUrl - Generates a download URL for vectorized GEE data.
+ * - getGeeHistogram - Calculates a histogram for a given dataset and AOI.
  */
 
 import { ai } from '@/ai/genkit';
 import ee from '@google/earthengine';
 import { promisify } from 'util';
-import type { GeeTileLayerInput, GeeTileLayerOutput, GeeVectorizationInput, GeeValueQueryInput, GeeGeoTiffDownloadInput } from './gee-types';
-import { GeeTileLayerInputSchema, GeeTileLayerOutputSchema, GeeVectorizationInputSchema, GeeValueQueryInputSchema, GeeGeoTiffDownloadInputSchema } from './gee-types';
+import type { GeeTileLayerInput, GeeTileLayerOutput, GeeVectorizationInput, GeeValueQueryInput, GeeGeoTiffDownloadInput, GeeHistogramInput, GeeHistogramOutput } from './gee-types';
+import { GeeTileLayerInputSchema, GeeTileLayerOutputSchema, GeeVectorizationInputSchema, GeeValueQueryInputSchema, GeeGeoTiffDownloadInputSchema, GeeHistogramInputSchema, GeeHistogramOutputSchema } from './gee-types';
 import { z } from 'zod';
 
 // Main exported function for the frontend to call
@@ -34,6 +35,11 @@ export async function getGeeGeoTiffDownloadUrl(input: GeeGeoTiffDownloadInput): 
     return geeGeoTiffDownloadFlow(input);
 }
 
+// New exported function for histogram
+export async function getGeeHistogram(input: GeeHistogramInput): Promise<GeeHistogramOutput> {
+    return geeHistogramFlow(input);
+}
+
 
 // New exported function for authentication
 export async function authenticateWithGee(): Promise<{ success: boolean; message: string; }> {
@@ -49,12 +55,16 @@ export async function authenticateWithGee(): Promise<{ success: boolean; message
 }
 
 
-const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInput) => {
-    const { aoi, bandCombination, startDate, endDate, minElevation, maxElevation } = input;
+const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInput | GeeHistogramInput) => {
+    const { aoi, bandCombination } = input;
+    // For histogram, min/max are not needed for image retrieval, but might be for tile layers
+    const minElevation = 'minElevation' in input ? input.minElevation : undefined;
+    const maxElevation = 'maxElevation' in input ? input.maxElevation : undefined;
+
     const geometry = aoi ? ee.Geometry.Rectangle([aoi.minLon, aoi.minLat, aoi.maxLon, aoi.maxLat]) : ee.Geometry.Point([0,0]);
       
     let finalImage;
-    let visParams: { bands?: string[]; min: number; max: number; gamma?: number, palette?: string[] };
+    let visParams: { bands?: string[]; min: number; max: number; gamma?: number, palette?: string[] } | null = null;
       
     const DYNAMIC_WORLD_PALETTE = [
         '#419BDF', '#397D49', '#88B053', '#7A87C6', '#E49635', 
@@ -72,6 +82,8 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
             s2ImageCollection = s2ImageCollection.filterBounds(geometry);
         }
 
+        const startDate = 'startDate' in input ? input.startDate : undefined;
+        const endDate = 'endDate' in input ? input.endDate : undefined;
         if (startDate && endDate) {
             s2ImageCollection = s2ImageCollection.filterDate(startDate, endDate);
         } else {
@@ -103,7 +115,9 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
             break;
         }
     } else if (bandCombination === 'DYNAMIC_WORLD') {
-        const dwCollection = ee.ImageCollection('GOOGLE/DYNAMICWORLD/V1').filterDate(startDate, endDate);
+        const startDate = 'startDate' in input ? input.startDate : undefined;
+        const endDate = 'endDate' in input ? input.endDate : undefined;
+        const dwCollection = ee.ImageCollection('GOOGLE/DYNAMICWORLD/V1').filterDate(startDate!, endDate!);
         if (geometry) {
             dwCollection.filterBounds(geometry);
         }
@@ -253,12 +267,9 @@ const geeGetValueAtPointFlow = ai.defineFlow(
         // We pass a dummy AOI because the function expects it.
         const { finalImage } = getImageForProcessing({
             aoi: { minLon: 0, minLat: 0, maxLon: 0, maxLat: 0 }, // Dummy AOI
-            zoom: 15, // Dummy zoom
             bandCombination: input.bandCombination,
             startDate: input.startDate,
             endDate: input.endDate,
-            minElevation: input.minElevation,
-            maxElevation: input.maxElevation,
         });
 
         return new Promise((resolve, reject) => {
@@ -327,6 +338,52 @@ const geeGeoTiffDownloadFlow = ai.defineFlow(
                 }
                 resolve({ downloadUrl: url });
             });
+        });
+    }
+);
+
+// Define the Genkit flow for Histogram
+const geeHistogramFlow = ai.defineFlow(
+    {
+        name: 'geeHistogramFlow',
+        inputSchema: GeeHistogramInputSchema,
+        outputSchema: GeeHistogramOutputSchema,
+    },
+    async (input) => {
+        await initializeEe();
+        
+        const { finalImage, geometry } = getImageForProcessing(input);
+        
+        const options = {
+            reducer: ee.Reducer.histogram({
+              maxBuckets: 256,
+              // minBucketWidth: 10 // Adjust as needed for elevation data
+            }),
+            geometry: geometry,
+            scale: 90, // Use a coarser scale for performance
+            maxPixels: 1e8,
+            bestEffort: true,
+        };
+
+        return new Promise((resolve, reject) => {
+             const bandName = finalImage.bandNames().get(0).getInfo();
+             const dictionary = finalImage.reduceRegion(options);
+
+             dictionary.evaluate((result: any, error: string) => {
+                if (error) {
+                    console.error("GEE Histogram Error:", error);
+                    return reject(new Error(`Error al calcular el histograma en GEE: ${error}`));
+                }
+                if (!result || !result[bandName]) {
+                    return reject(new Error('No se pudo generar el histograma. El área podría no contener datos.'));
+                }
+                
+                const histogramData = result[bandName].bucketMeans
+                    ? result[bandName].bucketMeans.map((mean: number, index: number) => [mean, result[bandName].histogram[index]])
+                    : [];
+
+                resolve({ histogram: histogramData });
+             });
         });
     }
 );
