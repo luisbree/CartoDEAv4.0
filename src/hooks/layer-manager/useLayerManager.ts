@@ -94,6 +94,11 @@ const createStyleFunction = (
         baseStyle = new Style({
             fill: new Fill({ color: fillColor }),
             stroke: new Stroke({ color: strokeColor, width: strokeWidth }),
+            image: new CircleStyle({
+                radius: 5,
+                fill: new Fill({ color: fillColor }),
+                stroke: new Stroke({ color: strokeColor, width: 1 }),
+            }),
         });
     } else if (categorizedSymbology) {
         const value = feature.get(categorizedSymbology.field);
@@ -106,6 +111,11 @@ const createStyleFunction = (
         baseStyle = new Style({
             fill: new Fill({ color: fillColor }),
             stroke: new Stroke({ color: strokeColor, width: strokeWidth }),
+            image: new CircleStyle({
+                radius: 5,
+                fill: new Fill({ color: fillColor }),
+                stroke: new Stroke({ color: strokeColor, width: 1 }),
+            }),
         });
     } else {
         const style = typeof baseStyleOrFn === 'function' ? baseStyleOrFn(feature, resolution) : baseStyleOrFn;
@@ -265,7 +275,7 @@ export const useLayerManager = ({
             properties: { id: wfsId, name: layerTitle, type: 'wfs', gsLayerName: layerName },
         });
 
-        // NEW: Store the authoritative bbox from GetCapabilities on the OL layer object
+        // Store the authoritative bbox from GetCapabilities on the OL layer object
         if (bbox) {
             wfsLayer.set('bbox', bbox);
         }
@@ -273,7 +283,11 @@ export const useLayerManager = ({
         // 2. Create the WMS Tile Layer (for visualization)
         const wmsId = `wms-layer-${layerName}-${nanoid()}`;
         const wmsParams: Record<string, any> = { 'LAYERS': layerName, 'TILED': true };
-        if (styleName) {
+        
+        // *** CRITICAL FIX ***
+        // Only add the STYLES parameter if styleName is a non-empty string.
+        // Sending STYLES='' can cause some GeoServer instances to return transparent tiles.
+        if (styleName && styleName.trim() !== '') {
           wmsParams['STYLES'] = styleName;
         }
 
