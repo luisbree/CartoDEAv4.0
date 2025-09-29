@@ -967,6 +967,8 @@ export default function GeoMapperClient() {
             onAddDeasLayer={handleDeasAddLayer}
             isFetchingDeasLayers={isFetchingDeasLayers}
             onReloadDeasLayers={handleReloadDeasLayers}
+            canUndoRemove={layerManagerHook.lastRemovedLayers.length > 0}
+            onUndoRemove={layerManagerHook.undoRemove}
           />
         )}
 

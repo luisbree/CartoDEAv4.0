@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
@@ -184,7 +183,7 @@ export const useLayerManager = ({
   const [isFindingLandsatFootprints, setIsFindingLandsatFootprints] = useState(false);
   const [isDrawingSourceEmptyOrNotPolygon, setIsDrawingSourceEmptyOrNotPolygon] = useState(true);
   const [isWfsLoading, setIsWfsLoading] = useState(false);
-  const lastRemovedLayersRef = useRef<MapLayer[]>([]);
+  const [lastRemovedLayers, setLastRemovedLayers] = useState<MapLayer[]>([]);
 
   useEffect(() => {
     // This effect ensures z-ordering is correct whenever the layers array changes.
@@ -365,9 +364,10 @@ export const useLayerManager = ({
 
   }, [mapRef, addLayer, toast]);
   
-  const undoRemoveLayers = useCallback((layersToRestore: MapLayer[]) => {
-      if (!mapRef.current) return;
+  const undoRemove = useCallback(() => {
+      if (!mapRef.current || lastRemovedLayers.length === 0) return;
       const map = mapRef.current;
+      const layersToRestore = lastRemovedLayers;
 
       layersToRestore.forEach(layer => {
           map.addLayer(layer.olLayer);
@@ -378,9 +378,10 @@ export const useLayerManager = ({
       });
       
       setLayers(prev => [...layersToRestore, ...prev]);
+      setLastRemovedLayers([]); // Clear the undo buffer
 
       toast({ description: `${layersToRestore.length} capa(s) restaurada(s).` });
-  }, [mapRef, toast]);
+  }, [mapRef, lastRemovedLayers, toast]);
 
 
   const removeLayers = useCallback((layerIds: string[]) => {
@@ -392,12 +393,11 @@ export const useLayerManager = ({
         const layersToRemove = prevLayers.filter(l => layerIds.includes(l.id));
         if (layersToRemove.length === 0) return prevLayers;
         
-        removedLayers = layersToRemove; // Store for undo
+        removedLayers = layersToRemove;
     
         layersToRemove.forEach(layer => {
             map.removeLayer(layer.olLayer);
             
-            // If it's a hybrid layer, also remove its visual WMS partner
             const visualLayer = layer.olLayer.get('visualLayer');
             if (visualLayer) {
                 map.removeLayer(visualLayer);
@@ -415,25 +415,18 @@ export const useLayerManager = ({
         return prevLayers.filter(l => !layerIds.includes(l.id));
     });
     
-    // This part runs after the state has been updated.
     setTimeout(() => {
         if (removedLayers.length > 0) {
-            lastRemovedLayersRef.current = removedLayers; // Save for the undo action
+            setLastRemovedLayers(removedLayers);
             const description = removedLayers.length === 1
                 ? `Capa "${removedLayers[0].name}" eliminada.`
                 : `${removedLayers.length} capa(s) eliminada(s).`;
             
-            toast({
-                description: description,
-                action: React.createElement(ToastAction, {
-                  altText: "Deshacer",
-                  onClick: () => undoRemoveLayers(lastRemovedLayersRef.current)
-                }, "Deshacer"),
-            });
+            toast({ description });
         }
     }, 100);
 
-  }, [mapRef, toast, updateGeoServerDiscoveredLayerState, undoRemoveLayers]);
+  }, [mapRef, toast, updateGeoServerDiscoveredLayerState]);
 
   const removeLayer = useCallback((layerId: string) => {
     removeLayers([layerId]);
@@ -1034,6 +1027,8 @@ export const useLayerManager = ({
     handleAddHybridLayer,
     removeLayer,
     removeLayers,
+    undoRemove,
+    lastRemovedLayers,
     reorderLayers,
     toggleLayerVisibility,
     setLayerOpacity,

@@ -8,7 +8,7 @@ import FileUploadControl from '@/components/layer-manager/FileUploadControl';
 import FeatureInteractionToolbar from '@/components/feature-inspection/FeatureInteractionToolbar';
 import { Separator } from '@/components/ui/separator';
 import type { MapLayer, GeoServerDiscoveredLayer, LabelOptions, GraduatedSymbology, CategorizedSymbology } from '@/lib/types';
-import { ListTree, Trash2, Database, Search, X as ClearIcon, RefreshCw, Loader2 } from 'lucide-react'; 
+import { ListTree, Trash2, Database, Search, X as ClearIcon, RefreshCw, Loader2, Undo2 } from 'lucide-react'; 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -66,6 +66,10 @@ interface LegendPanelProps {
   onAddDeasLayer: (layer: GeoServerDiscoveredLayer) => void;
   isFetchingDeasLayers: boolean;
   onReloadDeasLayers: () => void;
+  
+  // Undo props
+  canUndoRemove: boolean;
+  onUndoRemove: () => void;
 
   style?: React.CSSProperties;
 }
@@ -84,6 +88,7 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
   onAddLayer, 
   activeTool, onSetActiveTool, onClearSelection,
   discoveredDeasLayers, onAddDeasLayer, isFetchingDeasLayers, onReloadDeasLayers,
+  canUndoRemove, onUndoRemove,
   style,
 }) => {
   const [selectedLayerIds, setSelectedLayerIds] = useState<string[]>([]);
@@ -194,6 +199,25 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
           <div className="flex items-center gap-1 p-1 bg-white/5 rounded-md"> 
             <FileUploadControl onAddLayer={onAddLayer} uniqueIdPrefix="legendpanel-upload" />
             <TooltipProvider delayDuration={300}>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div> {/* Wrapper for disabled button */}
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-8 w-8 bg-black/20 hover:bg-white/10 border border-white/30 text-white/90 disabled:opacity-50 disabled:bg-black/20 disabled:text-white/50"
+                          onClick={onUndoRemove}
+                          disabled={!canUndoRemove}
+                          aria-label="Deshacer última eliminación"
+                        >
+                          <Undo2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="bg-gray-700 text-white border-gray-600">
+                      <p className="text-xs">Deshacer Eliminación</p>
+                    </TooltipContent>
+                </Tooltip>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <div> {/* Wrapper for disabled button */}
