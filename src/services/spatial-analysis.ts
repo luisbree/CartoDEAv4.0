@@ -391,44 +391,60 @@ export async function generateCrossSections({
     const formatForMap = new GeoJSON({ dataProjection: 'EPSG:4326', featureProjection: 'EPSG:3857' });
 
     for (const olFeature of lineFeatures) {
-        // Convert OpenLayers feature to Turf feature
-        const turfLine = format.writeFeatureObject(olFeature) as TurfFeature<TurfLineString>;
-        const totalLength = turfLength(turfLine, { units });
-        let sectionId = 1;
+        const featureGeoJSON = format.writeFeatureObject(olFeature) as TurfFeature<TurfLineString | TurfGeometry>;
+        const geomType = featureGeoJSON.geometry.type;
 
-        for (let d = distance; d < totalLength; d += distance) {
-            const point = along(turfLine, d, { units });
-            
-            // To get the bearing, we need a second point slightly ahead
-            const nextPoint = along(turfLine, d + 0.001, { units });
-            const tangentBearing = bearing(point, nextPoint);
-            
-            const perpendicularBearing1 = (tangentBearing + 90) % 360;
-            const perpendicularBearing2 = (tangentBearing - 90 + 360) % 360;
-
-            const halfLength = length / 2;
-            const p1 = destination(point, halfLength, perpendicularBearing1, { units });
-            const p2 = destination(point, halfLength, perpendicularBearing2, { units });
-
-            const crossSectionLine = [p1.geometry.coordinates, p2.geometry.coordinates];
-            const turfLineString: TurfFeature<TurfLineString> = {
-                type: "Feature",
-                geometry: {
-                    type: "LineString",
-                    coordinates: crossSectionLine
-                },
-                properties: {}
-            };
-
-            const olLineString = formatForMap.readFeature(turfLineString) as Feature<OlLineString>;
-            
-            // Add properties/attributes to the new feature
-            olLineString.setProperties({
-                'id_perfil': sectionId++,
-                'dist_eje_m': Math.round(d * (units === 'kilometers' ? 1000 : 1))
+        // Create an array of individual LineStrings to process
+        const linesToProcess: TurfFeature<TurfLineString>[] = [];
+        if (geomType === 'LineString') {
+            linesToProcess.push(featureGeoJSON as TurfFeature<TurfLineString>);
+        } else if (geomType === 'MultiLineString') {
+            (featureGeoJSON.geometry as any).coordinates.forEach((coords: any) => {
+                linesToProcess.push({
+                    type: 'Feature',
+                    geometry: { type: 'LineString', coordinates: coords },
+                    properties: featureGeoJSON.properties
+                });
             });
+        }
 
-            olFeatures.push(olLineString);
+        let sectionId = 1;
+        for (const turfLine of linesToProcess) {
+            const totalLength = turfLength(turfLine, { units });
+
+            for (let d = distance; d < totalLength; d += distance) {
+                const point = along(turfLine, d, { units });
+                
+                // To get the bearing, we need a second point slightly ahead
+                const nextPoint = along(turfLine, d + 0.001, { units });
+                const tangentBearing = bearing(point, nextPoint);
+                
+                const perpendicularBearing1 = (tangentBearing + 90) % 360;
+                const perpendicularBearing2 = (tangentBearing - 90 + 360) % 360;
+
+                const halfLength = length / 2;
+                const p1 = destination(point, halfLength, perpendicularBearing1, { units });
+                const p2 = destination(point, halfLength, perpendicularBearing2, { units });
+
+                const crossSectionLineCoords = [p1.geometry.coordinates, p2.geometry.coordinates];
+                const crossSectionLineFeature: TurfFeature<TurfLineString> = {
+                    type: "Feature",
+                    geometry: {
+                        type: "LineString",
+                        coordinates: crossSectionLineCoords
+                    },
+                    properties: {}
+                };
+
+                const olLineString = formatForMap.readFeature(crossSectionLineFeature) as Feature<OlLineString>;
+                
+                olLineString.setProperties({
+                    'id_perfil': sectionId++,
+                    'dist_eje_m': Math.round(d * (units === 'kilometers' ? 1000 : 1))
+                });
+
+                olFeatures.push(olLineString);
+            }
         }
     }
 
