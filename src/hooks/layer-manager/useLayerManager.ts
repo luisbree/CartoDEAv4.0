@@ -332,7 +332,7 @@ export const useLayerManager = ({
     }
 }, [isMapReady, mapRef, addLayer, updateGeoServerDiscoveredLayerState, toast]);
 
-  const addGeeLayerToMap = useCallback((tileUrl: string, layerName: string, geeParams: Omit<GeeValueQueryInput, 'lon' | 'lat'>) => {
+  const addGeeLayerToMap = useCallback((tileUrl: string, layerName: string, geeParams: Omit<GeeValueQueryInput, 'aoi' | 'zoom'>) => {
     if (!mapRef.current) return;
 
     const layerId = `gee-${nanoid()}`;

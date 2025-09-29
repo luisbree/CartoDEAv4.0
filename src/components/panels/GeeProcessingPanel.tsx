@@ -26,7 +26,7 @@ interface GeeProcessingPanelProps {
   onToggleCollapse: () => void;
   onClosePanel: () => void;
   onMouseDownHeader: (e: React.MouseEvent<HTMLDivElement>) => void;
-  onAddGeeLayer: (tileUrl: string, layerName: string) => void;
+  onAddGeeLayer: (tileUrl: string, layerName: string, geeParams: Omit<GeeTileLayerInput, 'aoi' | 'zoom'>) => void;
   mapRef: React.RefObject<Map | null>;
   isAuthenticating: boolean;
   isAuthenticated: boolean;
@@ -96,14 +96,18 @@ const GeeProcessingPanel: React.FC<GeeProcessingPanelProps> = ({
     const extent4326 = transformExtent(extent, view.getProjection(), 'EPSG:4326');
     
     try {
-        const result = await getGeeTileLayer({
-            aoi: { minLon: extent4326[0], minLat: extent4326[1], maxLon: extent4326[2], maxLat: extent4326[3] },
-            zoom: zoom,
+        const geeParams: Omit<GeeTileLayerInput, 'aoi' | 'zoom'> = {
             bandCombination: selectedCombination,
             startDate: date?.from ? format(date.from, 'yyyy-MM-dd') : undefined,
             endDate: date?.to ? format(date.to, 'yyyy-MM-dd') : undefined,
             minElevation: (selectedCombination === 'NASADEM_ELEVATION' || selectedCombination === 'ALOS_DSM') ? elevationRange[0] : undefined,
             maxElevation: (selectedCombination === 'NASADEM_ELEVATION' || selectedCombination === 'ALOS_DSM') ? elevationRange[1] : undefined,
+        };
+
+        const result = await getGeeTileLayer({
+            aoi: { minLon: extent4326[0], minLat: extent4326[1], maxLon: extent4326[2], maxLat: extent4326[3] },
+            zoom: zoom,
+            ...geeParams,
         });
         
         if (result && result.tileUrl) {
@@ -120,7 +124,7 @@ const GeeProcessingPanel: React.FC<GeeProcessingPanelProps> = ({
                 case 'ALOS_DSM': layerName = `ALOS DSM (${elevationRange[0]}-${elevationRange[1]}m)`; break;
                 default: layerName = 'Capa GEE';
             }
-            onAddGeeLayer(result.tileUrl, layerName);
+            onAddGeeLayer(result.tileUrl, layerName, geeParams);
         } else {
             throw new Error("La respuesta del servidor no contenía una URL de teselas.");
         }
