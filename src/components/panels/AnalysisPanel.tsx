@@ -454,16 +454,24 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 
     const layersToUnion = vectorLayers.filter(l => unionLayerIds.includes(l.id));
     const allFeatures: Feature<Geometry>[] = [];
-    
+    const allAttributeKeys = new Set<string>();
+
+    // First, gather all features and discover all unique attribute keys
     layersToUnion.forEach(layer => {
         const source = layer.olLayer.getSource();
         if (source) {
-            // Clone features to avoid modifying original layers
-            const features = source.getFeatures().map(f => f.clone());
-            allFeatures.push(...features);
+            const features = source.getFeatures();
+            features.forEach(f => {
+                Object.keys(f.getProperties()).forEach(key => {
+                    if (key !== 'geometry') { // Exclude geometry from attribute keys
+                        allAttributeKeys.add(key);
+                    }
+                });
+            });
+            allFeatures.push(...features.map(f => f.clone())); // Clone features
         }
     });
-    
+
     if (allFeatures.length === 0) {
         toast({ description: "Las capas seleccionadas no contienen entidades para unir.", variant: "destructive" });
         return;
@@ -471,15 +479,24 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 
     const outputName = unionOutputName.trim() || `Unión de ${layersToUnion.length} capas`;
     
-    allFeatures.forEach(f => f.setId(nanoid()));
+    // Normalize features to have all attribute keys
+    const normalizedFeatures = allFeatures.map(f => {
+        f.setId(nanoid());
+        const properties = f.getProperties();
+        for (const key of allAttributeKeys) {
+            if (!(key in properties)) {
+                f.set(key, null); // Add missing keys with null value
+            }
+        }
+        return f;
+    });
 
     const newLayerId = `union-result-${nanoid()}`;
-    const newSource = new VectorSource({ features: allFeatures });
+    const newSource = new VectorSource({ features: normalizedFeatures });
     const newOlLayer = new VectorLayer({
         source: newSource,
         properties: { id: newLayerId, name: outputName, type: 'analysis' },
-        // Use the style of the first selected layer as a default
-        style: layersToUnion[0].olLayer.getStyle(), 
+        style: layersToUnion[0].olLayer.getStyle(),
     });
 
     onAddLayer({
