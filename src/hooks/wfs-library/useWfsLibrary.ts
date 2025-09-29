@@ -31,6 +31,10 @@ interface UseWfsLibraryProps {
 // Predefined list of OGC servers.
 export const PREDEFINED_SERVERS: OgcServer[] = [
   {
+    name: 'GeoINFRA',
+    url: 'https://www.geoinfra.minfra.gba.gob.ar/geoserver/Geoinfra/wfs'
+  },
+  {
     name: 'INTA NODO Nacional',
     url: 'https://geo-backend.inta.gob.ar/geoserver/'
   },
@@ -87,7 +91,7 @@ export const useWfsLibrary = ({
     setDiscoveredLayers([]); // Clear previous results
     setActiveServerUrl(urlToUse);
     
-    const baseUrl = urlToUse.replace(/\/$/, ''); // Remove trailing slash if present
+    const baseUrl = urlToUse.replace(/\/wms\/?$|\/wfs\/?$/i, ''); // Clean the end of the URL
     const getCapabilitiesUrl = `${baseUrl}/wms?service=WMS&version=1.3.0&request=GetCapabilities`;
     const proxyUrl = `/api/geoserver-proxy?url=${encodeURIComponent(getCapabilitiesUrl)}&cacheBust=${Date.now()}`;
 
