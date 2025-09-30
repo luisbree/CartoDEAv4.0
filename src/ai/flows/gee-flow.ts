@@ -411,22 +411,19 @@ const geeProfileFlow = ai.defineFlow(
         const { finalImage } = getImageForProcessing(input);
         const bandName = finalImage.bandNames().get(0);
 
-        const samples = finalImage.reduceRegion({
-            reducer: ee.Reducer.toList(),
-            geometry: lineGeometry,
-            scale: 30, // Use a scale appropriate for the data (e.g., 30m for NASADEM)
-        });
+        // Generate points along the line.
+        const length = lineGeometry.length();
+        const distances = ee.List.sequence(0, length, null, numPoints);
+        const points = ee.FeatureCollection(distances.map((d) => {
+            const point = lineGeometry.interpolate(ee.Number(d));
+            return ee.Feature(point).set('distance', d);
+        }));
 
-        const distances = ee.FeatureCollection(
-            ee.List.sequence(0, lineGeometry.length(), null, numPoints).map(d => 
-                ee.Feature(lineGeometry.cutLines([ee.Number(d)]).get(1), {distance: d})
-            )
-        );
-
+        // Sample the image at these points.
         const sampledPoints = finalImage.reduceRegions({
-            collection: distances,
+            collection: points,
             reducer: ee.Reducer.first(),
-            scale: 30
+            scale: 30, // Adjust scale as needed, e.g., 30m for NASADEM
         });
 
         return new Promise((resolve, reject) => {
