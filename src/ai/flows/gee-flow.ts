@@ -409,7 +409,7 @@ const geeProfileFlow = ai.defineFlow(
 
         const { points, distances, bandCombination } = input;
         
-        // Create an ee.FeatureCollection from the points
+        // Create an ee.FeatureCollection from the points, including distance as a property.
         const features = points.coordinates.map((coord, index) => 
             ee.Feature(ee.Geometry.Point(coord), { distance: distances[index] })
         );
@@ -418,10 +418,11 @@ const geeProfileFlow = ai.defineFlow(
         const { finalImage } = getImageForProcessing({ bandCombination });
         const bandName = finalImage.bandNames().get(0);
 
-        // Use reduceRegions for efficient sampling
-        const sampledCollection = finalImage.reduceRegions({
+        // Use sampleRegions to get the pixel value at each point. This is the correct
+        // method for sampling at points, as opposed to aggregating over an area with reduceRegion(s).
+        const sampledCollection = finalImage.sampleRegions({
             collection: featureCollection,
-            reducer: ee.Reducer.first(), // Sample the value at each point
+            properties: ['distance'], // Keep the 'distance' property from the input collection
             scale: 30, // Adjust scale as needed, e.g., 30m for NASADEM
         });
 
@@ -434,7 +435,6 @@ const geeProfileFlow = ai.defineFlow(
                 }
 
                 const profileData = result.features.map((feature: any) => {
-                    // The reducer output is named after the band by default
                     const elevation = feature.properties[bandName.getInfo()];
                     const distance = feature.properties.distance;
                     return {
@@ -499,3 +499,6 @@ function initializeEe(): Promise<void> {
 
     
 
+
+
+    
