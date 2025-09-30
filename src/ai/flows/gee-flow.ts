@@ -425,8 +425,9 @@ const geeProfileFlow = ai.defineFlow(
             scale: 30, // Adjust scale as needed, e.g., 30m for NASADEM
         });
 
+        // Use getInfo() which is a more direct way to fetch results from GEE server-side objects.
         return new Promise((resolve, reject) => {
-            sampledPoints.evaluate((result, error) => {
+            sampledPoints.getInfo((result, error) => {
                 if (error) {
                     console.error("GEE Profile Error:", error);
                     return reject(new Error(`Error al generar el perfil en GEE: ${error}`));
