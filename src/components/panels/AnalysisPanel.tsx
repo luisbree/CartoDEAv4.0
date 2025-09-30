@@ -16,10 +16,11 @@ import GeoJSON from 'ol/format/GeoJSON';
 import VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
 import { intersect, featureCollection, difference, cleanCoords } from '@turf/turf';
-import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as TurfMultiPolygon, FeatureCollection as TurfFeatureCollection, Geometry as TurfGeometry, LineString as TurfLineString } from 'geojson';
+import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as TurfMultiPolygon, FeatureCollection as TurfFeatureCollection, Geometry as TurfGeometry, LineString as TurfLineString, Point as TurfPoint } from 'geojson';
 import { multiPolygon } from '@turf/helpers';
 import type Feature from 'ol/Feature';
 import type { Geometry, LineString as OlLineString } from 'ol/geom';
+import { getLength as olGetLength } from 'ol/sphere';
 import { performBufferAnalysis, performConvexHull, performConcaveHull, calculateOptimalConcavity, projectPopulationGeometric, generateCrossSections, dissolveFeatures } from '@/services/spatial-analysis';
 import { getGeeProfile } from '@/ai/flows/gee-flow';
 import type { GeeProfileOutput } from '@/ai/flows/gee-types';
@@ -83,7 +84,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   const [hullOutputName, setHullOutputName] = useState('');
   const [concavity, setConcavity] = useState<number>(2);
   const [isCalculatingConcavity, setIsCalculatingConcavity] = useState(false);
-  const [concavityStats, setConcavityStats] = useState<{ mean: number, stdDev: number } | null>(null);
+  const [concavityStats, setConcavityStats] = useState<{ mean: number; stdDev: number; } | null>(null);
 
 
   // State for Union tool
@@ -158,7 +159,6 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
       return;
     }
 
-    // Use selected feature if available, otherwise use the first feature of the layer
     const safeSelectedFeatures = selectedFeatures || [];
     let featureToProfile = safeSelectedFeatures.find(f => source.getFeatureById(f.getId() as string | number));
     
@@ -170,9 +170,26 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         }
         featureToProfile = layerFeatures[0];
     }
+    
+    const geometry = featureToProfile.getGeometry() as OlLineString;
+    const numPoints = 200;
+    const length = olGetLength(geometry);
+    const points: TurfPoint[] = [];
+    const distances: number[] = [];
+
+    for (let i = 0; i < numPoints; i++) {
+        const fraction = i / (numPoints - 1);
+        const coordinate = geometry.getCoordinateAt(fraction);
+        distances.push(length * fraction);
+        points.push({ type: 'Point', coordinates: coordinate });
+    }
 
     const format = new GeoJSON({ featureProjection: 'EPSG:3857' });
-    const lineGeoJSON = format.writeFeatureObject(featureToProfile).geometry as TurfLineString;
+    const pointsGeoJSON = {
+        type: 'MultiPoint',
+        coordinates: points.map(p => p.coordinates)
+    };
+
 
     setIsGeneratingProfile(true);
     setProfileData(null);
@@ -180,9 +197,9 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 
     try {
       const result = await getGeeProfile({
-        line: lineGeoJSON,
+        points: pointsGeoJSON,
         bandCombination: profileDemLayer,
-        numPoints: 200, // Request 200 points along the line
+        distances: distances,
       });
 
       if (result && result.profile) {

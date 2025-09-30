@@ -68,7 +68,7 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
     const minElevation = 'minElevation' in input ? input.minElevation : undefined;
     const maxElevation = 'maxElevation' in input ? input.maxElevation : undefined;
 
-    const geometry = aoi ? ee.Geometry.Rectangle([aoi.minLon, aoi.minLat, aoi.maxLon, aoi.maxLat]) : ee.Geometry.Point([0,0]);
+    const geometry = aoi ? ee.Geometry.Rectangle([aoi.minLon, aoi.minLat, aoi.maxLon, aoi.maxLat]) : ('points' in input ? ee.FeatureCollection(ee.Geometry.MultiPoint(input.points.coordinates)) : ee.Geometry.Point([0,0]));
       
     let finalImage;
     let visParams: { bands?: string[]; min: number; max: number; gamma?: number, palette?: string[] } | null = null;
@@ -85,7 +85,7 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
         let s2ImageCollection = ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
           .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 20));
         
-        if (geometry) {
+        if (geometry && !('points' in input)) {
             s2ImageCollection = s2ImageCollection.filterBounds(geometry);
         }
 
@@ -125,7 +125,7 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
         const startDate = 'startDate' in input ? input.startDate : undefined;
         const endDate = 'endDate' in input ? input.endDate : undefined;
         const dwCollection = ee.ImageCollection('GOOGLE/DYNAMICWORLD/V1').filterDate(startDate!, endDate!);
-        if (geometry) {
+        if (geometry && !('points' in input)) {
             dwCollection.filterBounds(geometry);
         }
         finalImage = ee.Image(dwCollection.mode()).select('label');
@@ -405,25 +405,21 @@ const geeProfileFlow = ai.defineFlow(
     async (input) => {
         await initializeEe();
 
-        const { line, numPoints } = input;
-        const lineGeometry = ee.Geometry.LineString(line.coordinates);
+        const { points, distances, bandCombination } = input;
+        
+        // Create an ee.FeatureCollection from the points
+        const features = points.coordinates.map((coord, index) => 
+            ee.Feature(ee.Geometry.Point(coord), { distance: distances[index] })
+        );
+        const featureCollection = ee.FeatureCollection(features);
 
-        const { finalImage } = getImageForProcessing(input);
+        const { finalImage } = getImageForProcessing({ bandCombination });
         const bandName = finalImage.bandNames().get(0);
 
-        // Generate points along the line.
-        const length = lineGeometry.length();
-        const distances = ee.List.sequence(0, length, undefined, numPoints);
-        
-        const points = ee.FeatureCollection(distances.map((d: any) => {
-            const point = lineGeometry.interpolate(ee.Number(d));
-            return ee.Feature(point).set('distance', d);
-        }));
-
         // Sample the image at these points.
-        const sampledPoints = finalImage.reduceRegions({
-            collection: points,
-            reducer: ee.Reducer.first(),
+        const sampledPoints = finalImage.sampleRegions({
+            collection: featureCollection,
+            properties: ['distance'], // Keep the distance property
             scale: 30, // Adjust scale as needed, e.g., 30m for NASADEM
         });
 
@@ -437,11 +433,10 @@ const geeProfileFlow = ai.defineFlow(
                 const profileData = result.features.map((feature: any) => {
                     const elevation = feature.properties[bandName.getInfo()];
                     const distance = feature.properties.distance;
-                    const location = feature.geometry.coordinates; // [lon, lat]
                     return {
                         distance: Math.round(distance),
                         elevation: elevation ? parseFloat(elevation.toFixed(2)) : 0,
-                        location,
+                        location: feature.geometry.coordinates, // [lon, lat]
                     };
                 });
                 

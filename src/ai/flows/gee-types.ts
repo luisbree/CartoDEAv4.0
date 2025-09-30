@@ -1,3 +1,4 @@
+
 /**
  * @fileOverview Types and schemas for the GEE flow.
  *
@@ -80,12 +81,12 @@ export type GeeHistogramOutput = z.infer<typeof GeeHistogramOutputSchema>;
 
 // New schemas for profile generation
 export const GeeProfileInputSchema = z.object({
-  line: z.object({
-    type: z.literal('LineString'),
+  points: z.object({
+    type: z.literal('MultiPoint'),
     coordinates: z.array(z.array(z.number())),
-  }).describe('A GeoJSON LineString object for the profile.'),
+  }).describe('A GeoJSON MultiPoint object for the profile.'),
+  distances: z.array(z.number()).describe('An array of distances corresponding to each point.'),
   bandCombination: z.enum(['NASADEM_ELEVATION', 'ALOS_DSM']).describe('The elevation dataset to sample.'),
-  numPoints: z.number().int().min(2).max(500).default(100).describe('The number of points to sample along the line.'),
 });
 export type GeeProfileInput = z.infer<typeof GeeProfileInputSchema>;
 
