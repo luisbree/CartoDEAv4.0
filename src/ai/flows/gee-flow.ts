@@ -417,8 +417,10 @@ const geeProfileFlow = ai.defineFlow(
         
         const points = ee.FeatureCollection(
             distances.map(d => {
-                const segment = ee.FeatureCollection(lineGeometry.cutLines([ee.Number(d)]).get(0));
-                return ee.Feature(segment.geometry().buffer(1).bounds().centroid(), {distance: d});
+                const multiLine = lineGeometry.cutLines([ee.Number(d)]);
+                const segment = ee.Geometry(multiLine.geometries().get(0));
+                const point = segment.coordinates().get(-1); // Get the last coordinate of the segment
+                return ee.Feature(ee.Geometry.Point(point), {distance: d});
             })
         );
         
