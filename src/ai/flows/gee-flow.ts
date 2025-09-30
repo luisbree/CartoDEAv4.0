@@ -417,13 +417,10 @@ const geeProfileFlow = ai.defineFlow(
         
         const points = ee.FeatureCollection(
             distances.map(d => {
-                const multiLine = lineGeometry.cutLines([ee.Number(d)]);
-                const segment = ee.Geometry(multiLine.geometries().get(0));
-                const point = segment.coordinates().get(-1); // Get the last coordinate of the segment
-                return ee.Feature(ee.Geometry.Point(point), {distance: d});
+                const point = lineGeometry.interpolate(ee.Number(d));
+                return ee.Feature(point).set('distance', d);
             })
         );
-        
 
         // Sample the image at these points.
         const sampledPoints = finalImage.reduceRegions({
