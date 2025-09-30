@@ -414,10 +414,14 @@ const geeProfileFlow = ai.defineFlow(
         // Generate points along the line.
         const length = lineGeometry.length();
         const distances = ee.List.sequence(0, length, null, numPoints);
-        const points = ee.FeatureCollection(distances.map((d) => {
-            const point = lineGeometry.interpolate(ee.Number(d));
-            return ee.Feature(point).set('distance', d);
-        }));
+        
+        const points = ee.FeatureCollection(
+            distances.map(d => {
+                const segment = ee.FeatureCollection(lineGeometry.cutLines([ee.Number(d)]).get(0));
+                return ee.Feature(segment.geometry().buffer(1).bounds().centroid(), {distance: d});
+            })
+        );
+        
 
         // Sample the image at these points.
         const sampledPoints = finalImage.reduceRegions({
