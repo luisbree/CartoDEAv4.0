@@ -84,7 +84,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   const [hullOutputName, setHullOutputName] = useState('');
   const [concavity, setConcavity] = useState<number>(2);
   const [isCalculatingConcavity, setIsCalculatingConcavity] = useState(false);
-  const [concavityStats, setConcavityStats] = useState<{ mean: number; stdDev: number } | null>(null);
+  const [concavityStats, setConcavityStats] = useState<{ mean: number, stdDev: number } | null>(null);
 
 
   // State for Union tool
@@ -172,7 +172,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     }
     
     const geometry = featureToProfile.getGeometry() as OlLineString;
-    const numPoints = 200; // Sample 200 points along the line
+    const numPoints = 200;
     const length = olGetLength(geometry, { projection: 'EPSG:3857' });
     const coordinates: number[][] = [];
     const distances: number[] = [];
@@ -183,6 +183,31 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         distances.push(length * fraction);
     }
     
+    // --- Step 1: Visualize the generated points ---
+    const pointFeatures = coordinates.map((coord, index) => {
+        const pointFeature = new Feature(new Point(coord));
+        pointFeature.set('distance', distances[index]);
+        pointFeature.setId(nanoid());
+        return pointFeature;
+    });
+
+    const samplingLayerId = `sampling-points-${nanoid()}`;
+    const samplingSource = new VectorSource({ features: pointFeatures });
+    const samplingOlLayer = new VectorLayer({
+        source: samplingSource,
+        properties: { id: samplingLayerId, name: 'Puntos de Muestreo del Perfil', type: 'analysis' },
+    });
+    onAddLayer({
+        id: samplingLayerId,
+        name: 'Puntos de Muestreo del Perfil',
+        olLayer: samplingOlLayer,
+        visible: true,
+        opacity: 1,
+        type: 'analysis',
+    }, true);
+    toast({ description: 'Capa de puntos de muestreo creada.' });
+
+    // --- Step 2: Get raw data from GEE and download it ---
     const pointsGeoJSON = {
         type: 'MultiPoint',
         coordinates: coordinates.map(coord => new GeoJSON().writeGeometryObject(new Point(coord), {featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326'}).coordinates),
@@ -200,8 +225,18 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
       });
 
       if (result && result.profile) {
-        setProfileData(result.profile);
-        toast({ description: "Perfil generado con éxito." });
+        // Create a Blob from the JSON data and trigger download
+        const jsonString = JSON.stringify(result.profile, null, 2);
+        const blob = new Blob([jsonString], { type: 'application/json' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = 'profile_data.json';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(link.href);
+        
+        toast({ description: "Perfil generado con éxito. El archivo JSON se está descargando." });
       } else {
         throw new Error("No se recibieron datos del perfil.");
       }
@@ -212,7 +247,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     } finally {
       setIsGeneratingProfile(false);
     }
-  }, [profileInputLayerId, profileDemLayer, lineLayers, toast, selectedFeatures]);
+  }, [profileInputLayerId, profileDemLayer, lineLayers, toast, selectedFeatures, onAddLayer]);
 
   const handleRunClip = () => {
     const inputLayer = vectorLayers.find(l => l.id === clipInputLayerId);
@@ -1099,29 +1134,6 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                               {isGeneratingProfile ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <LineChart className="mr-2 h-3.5 w-3.5" />}
                               Generar Perfil
                           </Button>
-                          {profileData && profileData.length > 0 && (
-                            <div className="h-48 w-full mt-3">
-                                <ResponsiveContainer>
-                                    <AreaChart data={profileData} margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
-                                        <defs>
-                                          <linearGradient id="colorUv" x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.8}/>
-                                            <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0}/>
-                                          </linearGradient>
-                                        </defs>
-                                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border) / 0.5)" />
-                                        <XAxis dataKey="distance" stroke="hsl(var(--muted-foreground))" fontSize={10} tickFormatter={(val) => `${val}m`} />
-                                        <YAxis stroke="hsl(var(--muted-foreground))" fontSize={10} domain={['dataMin - 10', 'dataMax + 10']} />
-                                        <ChartTooltip
-                                            contentStyle={{ backgroundColor: 'hsl(var(--background) / 0.9)', border: '1px solid hsl(var(--border))', fontSize: '12px' }}
-                                            labelFormatter={(label) => `Distancia: ${label} m`}
-                                            formatter={(value: number) => [`${value.toFixed(2)} m`, 'Elevación']}
-                                        />
-                                        <Area type="monotone" dataKey="elevation" stroke="hsl(var(--primary))" fillOpacity={1} fill="url(#colorUv)" />
-                                    </AreaChart>
-                                </ResponsiveContainer>
-                            </div>
-                          )}
                       </div>
                     </div>
                 </AccordionContent>
@@ -1184,3 +1196,6 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
+
+    
