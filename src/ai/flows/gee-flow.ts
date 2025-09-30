@@ -11,8 +11,8 @@
 import { ai } from '@/ai/genkit';
 import ee from '@google/earthengine';
 import { promisify } from 'util';
-import type { GeeTileLayerInput, GeeTileLayerOutput, GeeVectorizationInput, GeeValueQueryInput, GeeGeoTiffDownloadInput, GeeHistogramInput, GeeHistogramOutput } from './gee-types';
-import { GeeTileLayerInputSchema, GeeTileLayerOutputSchema, GeeVectorizationInputSchema, GeeValueQueryInputSchema, GeeGeoTiffDownloadInputSchema, GeeHistogramInputSchema, GeeHistogramOutputSchema } from './gee-types';
+import type { GeeTileLayerInput, GeeTileLayerOutput, GeeVectorizationInput, GeeValueQueryInput, GeeGeoTiffDownloadInput, GeeHistogramInput, GeeHistogramOutput, GeeProfileInput, GeeProfileOutput } from './gee-types';
+import { GeeTileLayerInputSchema, GeeTileLayerOutputSchema, GeeVectorizationInputSchema, GeeValueQueryInputSchema, GeeGeoTiffDownloadInputSchema, GeeHistogramInputSchema, GeeHistogramOutputSchema, GeeProfileInputSchema, GeeProfileOutputSchema } from './gee-types';
 import { z } from 'zod';
 
 // Main exported function for the frontend to call
@@ -40,6 +40,11 @@ export async function getGeeHistogram(input: GeeHistogramInput): Promise<GeeHist
     return geeHistogramFlow(input);
 }
 
+// New exported function for profile generation
+export async function getGeeProfile(input: GeeProfileInput): Promise<GeeProfileOutput> {
+    return geeProfileFlow(input);
+}
+
 
 // New exported function for authentication
 export async function authenticateWithGee(): Promise<{ success: boolean; message: string; }> {
@@ -55,8 +60,10 @@ export async function authenticateWithGee(): Promise<{ success: boolean; message
 }
 
 
-const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInput | GeeHistogramInput) => {
-    const { aoi, bandCombination } = input;
+const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInput | GeeHistogramInput | GeeProfileInput) => {
+    const { bandCombination } = input;
+    const aoi = 'aoi' in input ? input.aoi : undefined;
+
     // For histogram, min/max are not needed for image retrieval, but might be for tile layers
     const minElevation = 'minElevation' in input ? input.minElevation : undefined;
     const maxElevation = 'maxElevation' in input ? input.maxElevation : undefined;
@@ -388,6 +395,63 @@ const geeHistogramFlow = ai.defineFlow(
     }
 );
 
+// Define the Genkit flow for Profile
+const geeProfileFlow = ai.defineFlow(
+    {
+        name: 'geeProfileFlow',
+        inputSchema: GeeProfileInputSchema,
+        outputSchema: GeeProfileOutputSchema,
+    },
+    async (input) => {
+        await initializeEe();
+
+        const { line, numPoints } = input;
+        const lineGeometry = ee.Geometry.LineString(line.coordinates);
+
+        const { finalImage } = getImageForProcessing(input);
+        const bandName = finalImage.bandNames().get(0);
+
+        const samples = finalImage.reduceRegion({
+            reducer: ee.Reducer.toList(),
+            geometry: lineGeometry,
+            scale: 30, // Use a scale appropriate for the data (e.g., 30m for NASADEM)
+        });
+
+        const distances = ee.FeatureCollection(
+            ee.List.sequence(0, lineGeometry.length(), null, numPoints).map(d => 
+                ee.Feature(lineGeometry.cutLines([ee.Number(d)]).get(1), {distance: d})
+            )
+        );
+
+        const sampledPoints = finalImage.reduceRegions({
+            collection: distances,
+            reducer: ee.Reducer.first(),
+            scale: 30
+        });
+
+        return new Promise((resolve, reject) => {
+            sampledPoints.evaluate((result, error) => {
+                if (error) {
+                    console.error("GEE Profile Error:", error);
+                    return reject(new Error(`Error al generar el perfil en GEE: ${error}`));
+                }
+
+                const profileData = result.features.map((feature: any) => {
+                    const elevation = feature.properties[bandName.getInfo()];
+                    const distance = feature.properties.distance;
+                    const location = feature.geometry.coordinates; // [lon, lat]
+                    return {
+                        distance: Math.round(distance),
+                        elevation: elevation ? parseFloat(elevation.toFixed(2)) : 0,
+                        location,
+                    };
+                });
+                
+                resolve({ profile: profileData });
+            });
+        });
+    }
+);
 
 
 // --- Earth Engine Initialization ---

@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DraftingCompass, Scissors, Layers, CircleDotDashed, MinusSquare, BoxSelect, Droplet, Sparkles, Loader2, Combine, Minus, Plus, TrendingUp, Waypoints as CrosshairIcon, Merge } from 'lucide-react';
+import { DraftingCompass, Scissors, Layers, CircleDotDashed, MinusSquare, BoxSelect, Droplet, Sparkles, Loader2, Combine, Minus, Plus, TrendingUp, Waypoints as CrosshairIcon, Merge, LineChart } from 'lucide-react';
 import type { MapLayer, VectorMapLayer } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { nanoid } from 'nanoid';
@@ -105,6 +105,11 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   const [crossSectionUnits, setCrossSectionUnits] = useState<'meters' | 'kilometers'>('meters');
   const [crossSectionOutputName, setCrossSectionOutputName] = useState('');
   const [isGeneratingCrossSections, setIsGeneratingCrossSections] = useState(false);
+  
+  // State for Profile tool
+  const [profileInputLayerId, setProfileInputLayerId] = useState<string>('');
+  const [profileDemLayer, setProfileDemLayer] = useState<'NASADEM_ELEVATION' | 'ALOS_DSM'>('NASADEM_ELEVATION');
+  const [isGeneratingProfile, setIsGeneratingProfile] = useState(false);
 
   const { toast } = useToast();
 
@@ -986,6 +991,42 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                           </Button>
                       </div>
                   </div>
+                </AccordionContent>
+            </AccordionItem>
+            
+            <AccordionItem value="topographic-profile" className="border-b-0 bg-white/5 rounded-md">
+                <AccordionTrigger className="p-3 hover:no-underline hover:bg-white/10 rounded-t-md data-[state=open]:rounded-b-none">
+                    <SectionHeader icon={LineChart} title="Perfil Topográfico" />
+                </AccordionTrigger>
+                <AccordionContent className="p-3 pt-2 space-y-3 border-t border-white/10 bg-transparent rounded-b-md">
+                    <div className="space-y-1">
+                      <Label className="text-xs font-semibold">Perfil Topográfico desde Línea</Label>
+                      <div className="space-y-2 p-2 border border-white/10 rounded-md">
+                          <div>
+                              <Label htmlFor="profile-input-layer" className="text-xs">Capa de Perfil (Línea)</Label>
+                              <Select value={profileInputLayerId} onValueChange={setProfileInputLayerId}>
+                                <SelectTrigger id="profile-input-layer" className="h-8 text-xs bg-black/20"><SelectValue placeholder="Seleccionar capa de línea..." /></SelectTrigger>
+                                <SelectContent className="bg-gray-700 text-white border-gray-600">
+                                  {lineLayers.map(l => <SelectItem key={l.id} value={l.id} className="text-xs">{l.name}</SelectItem>)}
+                                </SelectContent>
+                              </Select>
+                          </div>
+                          <div>
+                              <Label htmlFor="profile-dem-layer" className="text-xs">Modelo de Elevación (DEM)</Label>
+                               <Select value={profileDemLayer} onValueChange={(v) => setProfileDemLayer(v as any)}>
+                                    <SelectTrigger id="profile-dem-layer" className="h-8 text-xs bg-black/20 w-full"><SelectValue /></SelectTrigger>
+                                    <SelectContent className="bg-gray-700 text-white border-gray-600">
+                                      <SelectItem value="NASADEM_ELEVATION" className="text-xs">NASADEM (30m)</SelectItem>
+                                      <SelectItem value="ALOS_DSM" className="text-xs">ALOS DSM (30m)</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                          </div>
+                          <Button size="sm" className="w-full h-8 text-xs" disabled={true}>
+                              <LineChart className="mr-2 h-3.5 w-3.5" />
+                              Generar Perfil
+                          </Button>
+                      </div>
+                    </div>
                 </AccordionContent>
             </AccordionItem>
 

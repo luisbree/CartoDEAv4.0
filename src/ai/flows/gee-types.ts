@@ -77,3 +77,23 @@ export const GeeHistogramOutputSchema = z.object({
     histogram: z.array(z.array(z.number())).describe("The histogram data as an array of [value, count] pairs."),
 });
 export type GeeHistogramOutput = z.infer<typeof GeeHistogramOutputSchema>;
+
+// New schemas for profile generation
+export const GeeProfileInputSchema = z.object({
+  line: z.object({
+    type: z.literal('LineString'),
+    coordinates: z.array(z.array(z.number())),
+  }).describe('A GeoJSON LineString object for the profile.'),
+  bandCombination: z.enum(['NASADEM_ELEVATION', 'ALOS_DSM']).describe('The elevation dataset to sample.'),
+  numPoints: z.number().int().min(2).max(500).default(100).describe('The number of points to sample along the line.'),
+});
+export type GeeProfileInput = z.infer<typeof GeeProfileInputSchema>;
+
+export const GeeProfileOutputSchema = z.object({
+  profile: z.array(z.object({
+    distance: z.number().describe('Distance from the start of the line in meters.'),
+    elevation: z.number().describe('Elevation value at the point.'),
+    location: z.array(z.number()).length(2).describe('The [lon, lat] coordinates of the point.'),
+  })).describe('An array of points representing the profile.'),
+});
+export type GeeProfileOutput = z.infer<typeof GeeProfileOutputSchema>;
