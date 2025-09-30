@@ -418,22 +418,23 @@ const geeProfileFlow = ai.defineFlow(
         const { finalImage } = getImageForProcessing({ bandCombination });
         const bandName = finalImage.bandNames().get(0);
 
-        // Sample the image at these points.
-        const sampledPoints = finalImage.sampleRegions({
+        // Use reduceRegions for efficient sampling
+        const sampledCollection = finalImage.reduceRegions({
             collection: featureCollection,
-            properties: ['distance'], // Keep the distance property
+            reducer: ee.Reducer.first(), // Sample the value at each point
             scale: 30, // Adjust scale as needed, e.g., 30m for NASADEM
         });
 
         // Use getInfo() which is a more direct way to fetch results from GEE server-side objects.
         return new Promise((resolve, reject) => {
-            sampledPoints.getInfo((result, error) => {
+            sampledCollection.getInfo((result, error) => {
                 if (error) {
                     console.error("GEE Profile Error:", error);
                     return reject(new Error(`Error al generar el perfil en GEE: ${error}`));
                 }
 
                 const profileData = result.features.map((feature: any) => {
+                    // The reducer output is named after the band by default
                     const elevation = feature.properties[bandName.getInfo()];
                     const distance = feature.properties.distance;
                     return {
@@ -493,3 +494,5 @@ function initializeEe(): Promise<void> {
   }
   return eeInitialized;
 }
+
+    
