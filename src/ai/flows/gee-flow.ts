@@ -418,8 +418,7 @@ const geeProfileFlow = ai.defineFlow(
         const { finalImage } = getImageForProcessing({ bandCombination });
         const bandName = finalImage.bandNames().get(0);
 
-        // Use sampleRegions to get the pixel value at each point. This is the correct
-        // method for sampling at points, as opposed to aggregating over an area with reduceRegion(s).
+        // Use sampleRegions, which is the correct method for sampling values at point locations.
         const sampledCollection = finalImage.sampleRegions({
             collection: featureCollection,
             properties: ['distance'], // Keep the 'distance' property from the input collection
@@ -500,5 +499,7 @@ function initializeEe(): Promise<void> {
     
 
 
+
+    
 
     
