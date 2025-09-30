@@ -19,7 +19,7 @@ import { intersect, featureCollection, difference, cleanCoords } from '@turf/tur
 import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as TurfMultiPolygon, FeatureCollection as TurfFeatureCollection, Geometry as TurfGeometry, LineString as TurfLineString, Point as TurfPoint } from 'geojson';
 import { multiPolygon } from '@turf/helpers';
 import type Feature from 'ol/Feature';
-import type { Geometry, LineString as OlLineString } from 'ol/geom';
+import { type Geometry, type LineString as OlLineString, Point } from 'ol/geom';
 import { getLength as olGetLength } from 'ol/sphere';
 import { performBufferAnalysis, performConvexHull, performConcaveHull, calculateOptimalConcavity, projectPopulationGeometric, generateCrossSections, dissolveFeatures } from '@/services/spatial-analysis';
 import { getGeeProfile } from '@/ai/flows/gee-flow';
@@ -84,7 +84,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   const [hullOutputName, setHullOutputName] = useState('');
   const [concavity, setConcavity] = useState<number>(2);
   const [isCalculatingConcavity, setIsCalculatingConcavity] = useState(false);
-  const [concavityStats, setConcavityStats] = useState<{ mean: number, stdDev: number } | null>(null);
+  const [concavityStats, setConcavityStats] = useState<{ mean: number; stdDev: number } | null>(null);
 
 
   // State for Union tool
