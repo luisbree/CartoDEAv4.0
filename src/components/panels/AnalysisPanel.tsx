@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import DraggablePanel from './DraggablePanel';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Button } from '@/components/ui/button';
@@ -16,14 +16,17 @@ import GeoJSON from 'ol/format/GeoJSON';
 import VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
 import { intersect, featureCollection, difference, cleanCoords } from '@turf/turf';
-import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as TurfMultiPolygon, FeatureCollection as TurfFeatureCollection, Geometry as TurfGeometry } from 'geojson';
+import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as TurfMultiPolygon, FeatureCollection as TurfFeatureCollection, Geometry as TurfGeometry, LineString as TurfLineString } from 'geojson';
 import { multiPolygon } from '@turf/helpers';
 import type Feature from 'ol/Feature';
-import type { Geometry } from 'ol/geom';
+import type { Geometry, LineString as OlLineString } from 'ol/geom';
 import { performBufferAnalysis, performConvexHull, performConcaveHull, calculateOptimalConcavity, projectPopulationGeometric, generateCrossSections, dissolveFeatures } from '@/services/spatial-analysis';
+import { getGeeProfile } from '@/ai/flows/gee-flow';
+import type { GeeProfileOutput } from '@/ai/flows/gee-types';
 import { ScrollArea } from '../ui/scroll-area';
 import { Checkbox } from '../ui/checkbox';
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
+import { XAxis, YAxis, Tooltip as ChartTooltip, CartesianGrid, Line, ResponsiveContainer, AreaChart, Area } from 'recharts';
 
 
 interface AnalysisPanelProps {
@@ -100,15 +103,16 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 
   // State for Cross-sections tool
   const [crossSectionInputLayerId, setCrossSectionInputLayerId] = useState<string>('');
+  const [crossSectionOutputName, setCrossSectionOutputName] = useState<string>('');
   const [crossSectionDistance, setCrossSectionDistance] = useState<number>(100);
   const [crossSectionLength, setCrossSectionLength] = useState<number>(50);
   const [crossSectionUnits, setCrossSectionUnits] = useState<'meters' | 'kilometers'>('meters');
-  const [crossSectionOutputName, setCrossSectionOutputName] = useState('');
   const [isGeneratingCrossSections, setIsGeneratingCrossSections] = useState(false);
   
   // State for Profile tool
   const [profileInputLayerId, setProfileInputLayerId] = useState<string>('');
   const [profileDemLayer, setProfileDemLayer] = useState<'NASADEM_ELEVATION' | 'ALOS_DSM'>('NASADEM_ELEVATION');
+  const [profileData, setProfileData] = useState<GeeProfileOutput['profile'] | null>(null);
   const [isGeneratingProfile, setIsGeneratingProfile] = useState(false);
 
   const { toast } = useToast();
@@ -139,6 +143,62 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         return geomType === 'LineString' || geomType === 'MultiLineString';
     });
   }, [vectorLayers]);
+  
+  const handleRunProfile = useCallback(async () => {
+    if (!profileInputLayerId) {
+      toast({ description: "Por favor, seleccione una capa de línea para generar el perfil.", variant: "destructive" });
+      return;
+    }
+    const lineLayer = lineLayers.find(l => l.id === profileInputLayerId);
+    if (!lineLayer) return;
+
+    const source = lineLayer.olLayer.getSource();
+    if (!source || source.getFeatures().length === 0) {
+      toast({ description: "La capa de línea seleccionada no tiene entidades.", variant: "destructive" });
+      return;
+    }
+
+    // Use selected feature if available, otherwise use the first feature of the layer
+    const safeSelectedFeatures = selectedFeatures || [];
+    let featureToProfile = safeSelectedFeatures.find(f => source.getFeatureById(f.getId() as string | number));
+    
+    if (!featureToProfile) {
+        const layerFeatures = source.getFeatures();
+        if (layerFeatures.length > 1) {
+            toast({ description: "Múltiples líneas en la capa. Por favor, seleccione una para generar el perfil.", variant: "default" });
+            return;
+        }
+        featureToProfile = layerFeatures[0];
+    }
+
+    const format = new GeoJSON({ featureProjection: 'EPSG:3857' });
+    const lineGeoJSON = format.writeFeatureObject(featureToProfile).geometry as TurfLineString;
+
+    setIsGeneratingProfile(true);
+    setProfileData(null);
+    toast({ description: "Generando perfil topográfico desde GEE..." });
+
+    try {
+      const result = await getGeeProfile({
+        line: lineGeoJSON,
+        bandCombination: profileDemLayer,
+        numPoints: 200, // Request 200 points along the line
+      });
+
+      if (result && result.profile) {
+        setProfileData(result.profile);
+        toast({ description: "Perfil generado con éxito." });
+      } else {
+        throw new Error("No se recibieron datos del perfil.");
+      }
+
+    } catch (error: any) {
+      console.error("Error generating GEE profile:", error);
+      toast({ title: "Error de Perfil GEE", description: error.message, variant: "destructive" });
+    } finally {
+      setIsGeneratingProfile(false);
+    }
+  }, [profileInputLayerId, profileDemLayer, lineLayers, toast, selectedFeatures]);
 
   const handleRunClip = () => {
     const inputLayer = vectorLayers.find(l => l.id === clipInputLayerId);
@@ -314,7 +374,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
             olLayer: newOlLayer,
             visible: true,
             opacity: 1,
-            type: 'analysis',
+        type: 'analysis',
         }, true);
 
         toast({ description: `Se creó la capa de diferencia "${outputName}" con ${finalOLFeatures.length} entidades.` });
@@ -1004,7 +1064,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                       <div className="space-y-2 p-2 border border-white/10 rounded-md">
                           <div>
                               <Label htmlFor="profile-input-layer" className="text-xs">Capa de Perfil (Línea)</Label>
-                              <Select value={profileInputLayerId} onValueChange={setProfileInputLayerId}>
+                              <Select value={profileInputLayerId} onValueChange={(value) => { setProfileInputLayerId(value); setProfileData(null); }}>
                                 <SelectTrigger id="profile-input-layer" className="h-8 text-xs bg-black/20"><SelectValue placeholder="Seleccionar capa de línea..." /></SelectTrigger>
                                 <SelectContent className="bg-gray-700 text-white border-gray-600">
                                   {lineLayers.map(l => <SelectItem key={l.id} value={l.id} className="text-xs">{l.name}</SelectItem>)}
@@ -1021,10 +1081,33 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                     </SelectContent>
                                 </Select>
                           </div>
-                          <Button size="sm" className="w-full h-8 text-xs" disabled={true}>
-                              <LineChart className="mr-2 h-3.5 w-3.5" />
+                          <Button onClick={handleRunProfile} size="sm" className="w-full h-8 text-xs" disabled={!profileInputLayerId || isGeneratingProfile}>
+                              {isGeneratingProfile ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <LineChart className="mr-2 h-3.5 w-3.5" />}
                               Generar Perfil
                           </Button>
+                          {profileData && profileData.length > 0 && (
+                            <div className="h-48 w-full mt-3">
+                                <ResponsiveContainer>
+                                    <AreaChart data={profileData} margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
+                                        <defs>
+                                          <linearGradient id="colorUv" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.8}/>
+                                            <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0}/>
+                                          </linearGradient>
+                                        </defs>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border) / 0.5)" />
+                                        <XAxis dataKey="distance" stroke="hsl(var(--muted-foreground))" fontSize={10} tickFormatter={(val) => `${val}m`} />
+                                        <YAxis stroke="hsl(var(--muted-foreground))" fontSize={10} domain={['dataMin - 10', 'dataMax + 10']} />
+                                        <ChartTooltip
+                                            contentStyle={{ backgroundColor: 'hsl(var(--background) / 0.9)', border: '1px solid hsl(var(--border))', fontSize: '12px' }}
+                                            labelFormatter={(label) => `Distancia: ${label} m`}
+                                            formatter={(value: number) => [`${value.toFixed(2)} m`, 'Elevación']}
+                                        />
+                                        <Area type="monotone" dataKey="elevation" stroke="hsl(var(--primary))" fillOpacity={1} fill="url(#colorUv)" />
+                                    </AreaChart>
+                                </ResponsiveContainer>
+                            </div>
+                          )}
                       </div>
                     </div>
                 </AccordionContent>

@@ -391,7 +391,7 @@ export async function generateCrossSections({
     const formatForMap = new GeoJSON({ dataProjection: 'EPSG:4326', featureProjection: 'EPSG:3857' });
 
     for (const olFeature of lineFeatures) {
-        const featureGeoJSON = format.writeFeatureObject(olFeature) as TurfFeature<TurfLineString | TurfGeometry>;
+        const featureGeoJSON = format.writeFeatureObject(olFeature) as TurfFeature<TurfGeometry>;
         const geomType = featureGeoJSON.geometry.type;
 
         // Create an array of individual LineStrings to process
@@ -501,3 +501,5 @@ export async function dissolveFeatures({
         throw new Error(`Turf.js dissolve failed: ${error.message}`);
     }
 }
+
+    
