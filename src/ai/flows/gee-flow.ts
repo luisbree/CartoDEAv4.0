@@ -413,7 +413,7 @@ const geeProfileFlow = ai.defineFlow(
 
         // Generate points along the line.
         const length = lineGeometry.length();
-        const distances = ee.List.sequence(0, length, null, numPoints);
+        const distances = ee.List.sequence(0, length, undefined, numPoints);
         
         const points = ee.FeatureCollection(
             distances.map(d => {
