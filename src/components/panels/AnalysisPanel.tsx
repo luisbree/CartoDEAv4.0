@@ -84,7 +84,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   const [hullOutputName, setHullOutputName] = useState('');
   const [concavity, setConcavity] = useState<number>(2);
   const [isCalculatingConcavity, setIsCalculatingConcavity] = useState(false);
-  const [concavityStats, setConcavityStats] = useState<{ mean: number; stdDev: number; } | null>(null);
+  const [concavityStats, setConcavityStats] = useState<{ mean: number, stdDev: number } | null>(null);
 
 
   // State for Union tool
@@ -172,24 +172,21 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     }
     
     const geometry = featureToProfile.getGeometry() as OlLineString;
-    const numPoints = 200;
-    const length = olGetLength(geometry);
-    const points: TurfPoint[] = [];
+    const numPoints = 200; // Sample 200 points along the line
+    const length = olGetLength(geometry, { projection: 'EPSG:3857' });
+    const coordinates: number[][] = [];
     const distances: number[] = [];
 
     for (let i = 0; i < numPoints; i++) {
         const fraction = i / (numPoints - 1);
-        const coordinate = geometry.getCoordinateAt(fraction);
+        coordinates.push(geometry.getCoordinateAt(fraction));
         distances.push(length * fraction);
-        points.push({ type: 'Point', coordinates: coordinate });
     }
-
-    const format = new GeoJSON({ featureProjection: 'EPSG:3857' });
+    
     const pointsGeoJSON = {
         type: 'MultiPoint',
-        coordinates: points.map(p => p.coordinates)
+        coordinates: coordinates.map(coord => new GeoJSON().writeGeometryObject(new Point(coord), {featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326'}).coordinates),
     };
-
 
     setIsGeneratingProfile(true);
     setProfileData(null);
@@ -197,7 +194,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 
     try {
       const result = await getGeeProfile({
-        points: pointsGeoJSON,
+        points: pointsGeoJSON as { type: 'MultiPoint'; coordinates: number[][]; },
         bandCombination: profileDemLayer,
         distances: distances,
       });

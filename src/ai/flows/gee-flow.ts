@@ -277,6 +277,8 @@ const geeGetValueAtPointFlow = ai.defineFlow(
             bandCombination: input.bandCombination,
             startDate: input.startDate,
             endDate: input.endDate,
+            minElevation: input.minElevation,
+            maxElevation: input.maxElevation,
         });
 
         return new Promise((resolve, reject) => {
