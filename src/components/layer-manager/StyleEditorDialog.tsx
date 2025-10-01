@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -175,8 +174,8 @@ export const ColorPicker: React.FC<ColorPickerProps> = ({ value, onChange }) => 
                         <Slider value={[customColor.h]} onValueChange={(val) => handleHslChange({ h: val[0] })} max={360} step={1} className="w-full [&>span:first-child]:bg-gradient-to-r from-red-500 via-yellow-500 to-red-500" />
                     </div>
                      <div className="space-y-2">
-                        <Label className="text-xs">Saturación</Label>
-                        <Slider value={[customColor.s]} onValueChange={(val) => handleHslChange({ s: val[0] })} max={100} step={1} className="w-full" />
+                        <Label className="text-xs">Luminosidad</Label>
+                        <Slider value={[customColor.l]} onValueChange={(val) => handleHslChange({ l: val[0] })} max={100} step={1} className="w-full" />
                     </div>
                 </div>
             </PopoverContent>

@@ -25,7 +25,6 @@ import { ColorPicker } from './StyleEditorDialog';
 import { ScrollArea } from '../ui/scroll-area';
 
 // --- Color Interpolation Helpers ---
-
 function hexToRgb(hex: string): [number, number, number] {
     const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
     return result

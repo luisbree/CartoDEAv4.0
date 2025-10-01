@@ -26,7 +26,7 @@ import { ScrollArea } from '../ui/scroll-area';
 import { ColorPicker } from './StyleEditorDialog';
 
 // --- Color Interpolation Helpers (reused) ---
-function hexToRgbForInterpolation(hex: string): [number, number, number] {
+function hexToRgb(hex: string): [number, number, number] {
     const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
     return result
         ? [parseInt(result[1], 16), parseInt(result[2], 16), parseInt(result[3], 16)]
@@ -47,8 +47,8 @@ function interpolateColors(color1: [number, number, number], color2: [number, nu
 
 function generateColorRamp(startHex: string, endHex: string, count: number): string[] {
     if (count <= 1) return [startHex];
-    const startRgb = hexToRgbForInterpolation(startHex);
-    const endRgb = hexToRgbForInterpolation(endHex);
+    const startRgb = hexToRgb(startHex);
+    const endRgb = hexToRgb(endHex);
     const ramp: string[] = [];
     for (let i = 0; i < count; i++) {
         const factor = i / (count - 1);
