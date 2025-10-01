@@ -954,6 +954,7 @@ export default function GeoMapperClient() {
             onChangeLayerLabels={layerManagerHook.changeLayerLabels}
             onApplyGraduatedSymbology={layerManagerHook.applyGraduatedSymbology}
             onApplyCategorizedSymbology={layerManagerHook.applyCategorizedSymbology}
+            onToggleWmsStyle={layerManagerHook.toggleWmsStyle}
             isDrawingSourceEmptyOrNotPolygon={layerManagerHook.isDrawingSourceEmptyOrNotPolygon}
             isSelectionEmpty={featureInspectionHook.selectedFeatures.length === 0}
             onSetLayerOpacity={layerManagerHook.setLayerOpacity}
