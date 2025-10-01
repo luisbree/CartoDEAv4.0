@@ -27,7 +27,7 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { StyleOptions } from '@/lib/types';
 import { Slider } from '../ui/slider';
-import { Minus, Plus } from 'lucide-react';
+import { Minus, Plus, Palette } from 'lucide-react';
 
 
 interface StyleEditorDialogProps {
@@ -54,157 +54,134 @@ const colorOptions = [
 
 const isValidHex = (color: string) => /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/.test(color);
 
-const hexToDecimal = (hex: string) => parseInt(hex.replace(/^#/, ''), 16);
-const decimalToHex = (dec: number) => '#' + dec.toString(16).padStart(6, '0');
+// --- Color Conversion Helpers ---
+function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result ? { r: parseInt(result[1], 16), g: parseInt(result[2], 16), b: parseInt(result[3], 16) } : null;
+}
+
+function rgbToHsl(r: number, g: number, b: number): { h: number; s: number; l: number } {
+    r /= 255; g /= 255; b /= 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    let h = 0, s: number, l = (max + min) / 2;
+    if (max === min) {
+        h = s = 0;
+    } else {
+        const d = max - min;
+        s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+        switch (max) {
+            case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+            case g: h = (b - r) / d + 2; break;
+            case b: h = (r - g) / d + 4; break;
+        }
+        h /= 6;
+    }
+    return { h: h * 360, s: s * 100, l: l * 100 };
+}
+
+function hslToRgb(h: number, s: number, l: number): { r: number; g: number; b: number } {
+    s /= 100; l /= 100;
+    const c = (1 - Math.abs(2 * l - 1)) * s;
+    const x = c * (1 - Math.abs((h / 60) % 2 - 1));
+    const m = l - c / 2;
+    let r = 0, g = 0, b = 0;
+    if (0 <= h && h < 60) { r = c; g = x; b = 0; }
+    else if (60 <= h && h < 120) { r = x; g = c; b = 0; }
+    else if (120 <= h && h < 180) { r = 0; g = c; b = x; }
+    else if (180 <= h && h < 240) { r = 0; g = x; b = c; }
+    else if (240 <= h && h < 300) { r = x; g = 0; b = c; }
+    else if (300 <= h && h < 360) { r = c; g = 0; b = x; }
+    r = Math.round((r + m) * 255); g = Math.round((g + m) * 255); b = Math.round((b + m) * 255);
+    return { r, g, b };
+}
+
+function rgbToHex(r: number, g: number, b: number): string {
+    return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1).padStart(6, '0');
+}
+
 
 interface ColorPickerProps {
   value: string;
   onChange: (value: string) => void;
 }
 
-const ColorPicker: React.FC<ColorPickerProps> = ({ value, onChange }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [customColorInput, setCustomColorInput] = useState('#000000');
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
-  
-  useEffect(() => {
-    if (isOpen) {
-      if (isValidHex(value)) {
-        setCustomColorInput(value);
-      } else {
-        const hexFromName = colorOptions.find(c => c.value === value)?.hex;
-        setCustomColorInput(hexFromName || '#000000');
-      }
-    }
-  }, [isOpen, value]);
+export const ColorPicker: React.FC<ColorPickerProps> = ({ value, onChange }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const [customColor, setCustomColor] = useState({ h: 0, s: 100, l: 50 });
+    const [hexInput, setHexInput] = useState('#000000');
 
-  const selectedColor = colorOptions.find(c => c.value === value) || { hex: isValidHex(value) ? value : '#000000', iconClass: '' };
-  
-  const handleCustomColorApply = () => {
-      if (isValidHex(customColorInput)) {
-          onChange(customColorInput);
-          setIsOpen(false);
-      }
-  };
-  
-  const handleSliderChange = (value: number[]) => {
-      setCustomColorInput(decimalToHex(value[0]));
-  };
-  
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-      const val = e.target.value;
-      if (val.startsWith('#')) {
-          setCustomColorInput(val);
-      } else {
-          setCustomColorInput(`#${val}`);
-      }
-  };
+    useEffect(() => {
+        if (isOpen) {
+            const initialHex = value === 'transparent' ? '#000000' : colorOptions.find(c => c.value === value)?.hex || (isValidHex(value) ? value : '#000000');
+            setHexInput(initialHex);
+            const rgb = hexToRgb(initialHex);
+            if (rgb) {
+                setCustomColor(rgbToHsl(rgb.r, rgb.g, rgb.b));
+            }
+        }
+    }, [isOpen, value]);
 
-  const sliderValue = isValidHex(customColorInput) ? hexToDecimal(customColorInput) : 0;
-  
-  const handleStep = (direction: 'increment' | 'decrement') => {
-      setCustomColorInput(prevColor => {
-          let currentValue = isValidHex(prevColor) ? hexToDecimal(prevColor) : 0;
-          const stepAmount = 1;
-          if (direction === 'increment') {
-              currentValue = Math.min(16777215, currentValue + stepAmount);
-          } else {
-              currentValue = Math.max(0, currentValue - stepAmount);
-          }
-          return decimalToHex(currentValue);
-      });
-  };
-  
-  const stopStepping = () => {
-    if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    if (intervalRef.current) clearInterval(intervalRef.current);
-  };
-  
-  const handleStepMouseDown = (direction: 'increment' | 'decrement') => {
-    handleStep(direction); // Immediate step on click
-    timeoutRef.current = setTimeout(() => {
-      intervalRef.current = setInterval(() => {
-        handleStep(direction);
-      }, 50); // Speed of fast stepping
-    }, 500); // Delay before fast stepping starts
-  };
+    const handleHslChange = (newHsl: Partial<{ h: number; s: number; l: number }>) => {
+        const updatedHsl = { ...customColor, ...newHsl };
+        setCustomColor(updatedHsl);
+        const { r, g, b } = hslToRgb(updatedHsl.h, updatedHsl.s, updatedHsl.l);
+        setHexInput(rgbToHex(r, g, b));
+    };
 
+    const handleHexInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const newHex = e.target.value;
+        setHexInput(newHex);
+        if (isValidHex(newHex)) {
+            const rgb = hexToRgb(newHex);
+            if (rgb) {
+                setCustomColor(rgbToHsl(rgb.r, rgb.g, rgb.b));
+            }
+        }
+    };
+    
+    const handleApply = () => {
+        if (isValidHex(hexInput)) {
+            onChange(hexInput);
+            setIsOpen(false);
+        }
+    };
+    
+    const selectedColor = colorOptions.find(c => c.value === value) || { hex: isValidHex(value) ? value : '#000000', iconClass: '' };
 
-  return (
-    <Popover open={isOpen} onOpenChange={setIsOpen}>
-      <PopoverTrigger asChild>
-        <Button variant="outline" className="h-8 w-8 p-0 border-white/30 bg-black/20">
-            <div className={cn("w-5 h-5 rounded-full border border-white/20", selectedColor.iconClass)} style={{ backgroundColor: selectedColor.hex }} />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent side="right" align="start" className="w-auto p-2 bg-gray-700/90 backdrop-blur-sm border-gray-600">
-        <div className="grid grid-cols-6 gap-2">
-          {colorOptions.map(color => (
-            <Button
-              key={color.value}
-              variant="outline"
-              className={cn(
-                "h-7 w-7 p-0",
-                value === color.value ? "ring-2 ring-offset-2 ring-offset-gray-700 ring-white" : "border-white/30"
-              )}
-              onClick={() => {
-                onChange(color.value);
-                setIsOpen(false);
-              }}
-            >
-              <div className={cn("w-5 h-5 rounded-full border border-white/20", color.iconClass)} style={{ backgroundColor: color.hex }} />
-            </Button>
-          ))}
-        </div>
-        <div className="mt-3 pt-3 border-t border-gray-600 space-y-2">
-            <Label className="text-xs font-medium text-white/90">Color Personalizado</Label>
-            <div className="flex items-center gap-2">
-                 <div className="w-6 h-6 rounded-md border border-white/30" style={{ backgroundColor: isValidHex(customColorInput) ? customColorInput : 'transparent' }} />
-                 <Input 
-                    type="text" 
-                    value={customColorInput}
-                    onChange={handleInputChange}
-                    className="h-8 text-xs bg-black/20 w-24 text-white/90"
-                    placeholder="#RRGGBB"
-                 />
-                 <Button onClick={handleCustomColorApply} size="sm" className="h-8 text-xs" disabled={!isValidHex(customColorInput)}>
-                    Aplicar
-                 </Button>
-            </div>
-            <div className="flex items-center gap-2">
-                <Button 
-                  variant="outline" 
-                  size="icon" 
-                  className="h-6 w-6 flex-shrink-0" 
-                  onMouseDown={() => handleStepMouseDown('decrement')}
-                  onMouseUp={stopStepping}
-                  onMouseLeave={stopStepping}
-                >
-                    <Minus className="h-3 w-3" />
+    return (
+        <Popover open={isOpen} onOpenChange={setIsOpen}>
+            <PopoverTrigger asChild>
+                <Button variant="outline" className="h-8 w-8 p-0 border-white/30 bg-black/20">
+                    <div className={cn("w-5 h-5 rounded-full border border-white/20", selectedColor.iconClass)} style={{ backgroundColor: selectedColor.hex }} />
                 </Button>
-                <Slider
-                    value={[sliderValue]}
-                    onValueChange={handleSliderChange}
-                    max={16777215} // #FFFFFF
-                    step={1}
-                    className="w-full"
-                />
-                <Button 
-                  variant="outline" 
-                  size="icon" 
-                  className="h-6 w-6 flex-shrink-0" 
-                  onMouseDown={() => handleStepMouseDown('increment')}
-                  onMouseUp={stopStepping}
-                  onMouseLeave={stopStepping}
-                >
-                    <Plus className="h-3 w-3" />
-                </Button>
-            </div>
-        </div>
-      </PopoverContent>
-    </Popover>
-  );
+            </PopoverTrigger>
+            <PopoverContent side="right" align="start" className="w-auto p-2 bg-gray-700/90 backdrop-blur-sm border-gray-600">
+                <div className="grid grid-cols-6 gap-2">
+                    {colorOptions.map(color => (
+                        <Button key={color.value} variant="outline" className={cn("h-7 w-7 p-0", value === color.value ? "ring-2 ring-offset-2 ring-offset-gray-700 ring-white" : "border-white/30")} onClick={() => { onChange(color.value); setIsOpen(false); }}>
+                            <div className={cn("w-5 h-5 rounded-full border border-white/20", color.iconClass)} style={{ backgroundColor: color.hex }} />
+                        </Button>
+                    ))}
+                </div>
+                <div className="mt-3 pt-3 border-t border-gray-600 space-y-3">
+                    <Label className="text-xs font-medium text-white/90">Color Personalizado</Label>
+                    <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-md border border-white/30" style={{ backgroundColor: hexInput }} />
+                        <Input type="text" value={hexInput} onChange={handleHexInputChange} className="h-8 text-xs bg-black/20 w-24 text-white/90" placeholder="#RRGGBB" />
+                        <Button onClick={handleApply} size="sm" className="h-8 text-xs" disabled={!isValidHex(hexInput)}>Aplicar</Button>
+                    </div>
+                    <div className="space-y-2">
+                        <Label className="text-xs">Tono</Label>
+                        <Slider value={[customColor.h]} onValueChange={(val) => handleHslChange({ h: val[0] })} max={360} step={1} className="w-full [&>span:first-child]:bg-gradient-to-r from-red-500 via-yellow-500 to-red-500" />
+                    </div>
+                     <div className="space-y-2">
+                        <Label className="text-xs">Saturación</Label>
+                        <Slider value={[customColor.s]} onValueChange={(val) => handleHslChange({ s: val[0] })} max={100} step={1} className="w-full" />
+                    </div>
+                </div>
+            </PopoverContent>
+        </Popover>
+    );
 };
 
 

@@ -9,11 +9,6 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -27,11 +22,11 @@ import { Input } from "@/components/ui/input";
 import type { VectorMapLayer, ColorRampId, CategorizedSymbology } from '@/lib/types';
 import { cn } from "@/lib/utils";
 import { Minus, Plus, GripVertical } from 'lucide-react';
-import { Slider } from '../ui/slider';
 import { ScrollArea } from '../ui/scroll-area';
+import { ColorPicker } from './StyleEditorDialog';
 
 // --- Color Interpolation Helpers (reused) ---
-function hexToRgb(hex: string): [number, number, number] {
+function hexToRgbForInterpolation(hex: string): [number, number, number] {
     const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
     return result
         ? [parseInt(result[1], 16), parseInt(result[2], 16), parseInt(result[3], 16)]
@@ -52,8 +47,8 @@ function interpolateColors(color1: [number, number, number], color2: [number, nu
 
 function generateColorRamp(startHex: string, endHex: string, count: number): string[] {
     if (count <= 1) return [startHex];
-    const startRgb = hexToRgb(startHex);
-    const endRgb = hexToRgb(endHex);
+    const startRgb = hexToRgbForInterpolation(startHex);
+    const endRgb = hexToRgbForInterpolation(endHex);
     const ramp: string[] = [];
     for (let i = 0; i < count; i++) {
         const factor = i / (count - 1);
@@ -71,7 +66,6 @@ const COLOR_RAMP_DEFINITIONS: Record<Exclude<ColorRampId, 'custom'>, { start: st
   pinks: { start: '#ffcce1', end: '#c70063'},
 };
 
-// --- Reusable Color Picker Component (reused) ---
 const colorOptions = [
   { value: 'transparent', label: 'Sin color', hex: 'rgba(0,0,0,0)', iconClass: "bg-transparent border border-dashed border-white/50 bg-[conic-gradient(from_90deg_at_1px_1px,#fff_90deg,rgb(228,228,231)_0)]" },
   { value: 'rojo', label: 'Rojo', hex: '#e63946' },
@@ -87,51 +81,6 @@ const colorOptions = [
   { value: 'magenta', label: 'Magenta', hex: '#ff00ff' },
 ];
 const isValidHex = (color: string) => /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/.test(color);
-const hexToDecimal = (hex: string) => parseInt(hex.replace(/^#/, ''), 16);
-const decimalToHex = (dec: number) => '#' + dec.toString(16).padStart(6, '0');
-
-interface ColorPickerProps {
-  value: string;
-  onChange: (value: string) => void;
-}
-
-const ColorPicker: React.FC<ColorPickerProps> = ({ value, onChange }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [customColorInput, setCustomColorInput] = useState('#000000');
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
-  useEffect(() => {
-    if (isOpen) {
-      if (isValidHex(value)) {
-        setCustomColorInput(value);
-      } else {
-        const hexFromName = colorOptions.find(c => c.value === value)?.hex;
-        setCustomColorInput(hexFromName || '#000000');
-      }
-    }
-  }, [isOpen, value]);
-  const selectedColor = colorOptions.find(c => c.value === value) || { hex: isValidHex(value) ? value : '#000000', iconClass: '' };
-  const handleCustomColorApply = () => { if (isValidHex(customColorInput)) { onChange(customColorInput); setIsOpen(false); } };
-  const handleSliderChange = (value: number[]) => { setCustomColorInput(decimalToHex(value[0])); };
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => { const val = e.target.value; if (val.startsWith('#')) { setCustomColorInput(val); } else { setCustomColorInput(`#${val}`); } };
-  const sliderValue = isValidHex(customColorInput) ? hexToDecimal(customColorInput) : 0;
-  const handleStep = (direction: 'increment' | 'decrement') => { setCustomColorInput(prevColor => { let currentValue = isValidHex(prevColor) ? hexToDecimal(prevColor) : 0; const stepAmount = 1; if (direction === 'increment') { currentValue = Math.min(16777215, currentValue + stepAmount); } else { currentValue = Math.max(0, currentValue - stepAmount); } return decimalToHex(currentValue); }); };
-  const stopStepping = () => { if (timeoutRef.current) clearTimeout(timeoutRef.current); if (intervalRef.current) clearInterval(intervalRef.current); };
-  const handleStepMouseDown = (direction: 'increment' | 'decrement') => { handleStep(direction); timeoutRef.current = setTimeout(() => { intervalRef.current = setInterval(() => { handleStep(direction); }, 50); }, 500); };
-
-  return (
-    <Popover open={isOpen} onOpenChange={setIsOpen}><PopoverTrigger asChild><Button variant="outline" className="h-8 w-8 p-0 border-white/30 bg-black/20"><div className={cn("w-5 h-5 rounded-full border border-white/20", selectedColor.iconClass)} style={{ backgroundColor: selectedColor.hex }} /></Button></PopoverTrigger>
-      <PopoverContent side="right" align="start" className="w-auto p-2 bg-gray-700/90 backdrop-blur-sm border-gray-600">
-        <div className="grid grid-cols-6 gap-2">{colorOptions.map(color => (<Button key={color.value} variant="outline" className={cn("h-7 w-7 p-0", value === color.value ? "ring-2 ring-offset-2 ring-offset-gray-700 ring-white" : "border-white/30")} onClick={() => { onChange(color.value); setIsOpen(false); }}><div className={cn("w-5 h-5 rounded-full border border-white/20", color.iconClass)} style={{ backgroundColor: color.hex }} /></Button>))}</div>
-        <div className="mt-3 pt-3 border-t border-gray-600 space-y-2">
-            <Label className="text-xs font-medium text-white/90">Color Personalizado</Label>
-            <div className="flex items-center gap-2"><div className="w-6 h-6 rounded-md border border-white/30" style={{ backgroundColor: isValidHex(customColorInput) ? customColorInput : 'transparent' }} /><Input type="text" value={customColorInput} onChange={handleInputChange} className="h-8 text-xs bg-black/20 w-24 text-white/90" placeholder="#RRGGBB" /><Button onClick={handleCustomColorApply} size="sm" className="h-8 text-xs" disabled={!isValidHex(customColorInput)}>Aplicar</Button></div>
-            <div className="flex items-center gap-2"><Button variant="outline" size="icon" className="h-6 w-6 flex-shrink-0" onMouseDown={() => handleStepMouseDown('decrement')} onMouseUp={stopStepping} onMouseLeave={stopStepping}><Minus className="h-3 w-3" /></Button><Slider value={[sliderValue]} onValueChange={handleSliderChange} max={16777215} step={1} className="w-full" /><Button variant="outline" size="icon" className="h-6 w-6 flex-shrink-0" onMouseDown={() => handleStepMouseDown('increment')} onMouseUp={stopStepping} onMouseLeave={stopStepping}><Plus className="h-3 w-3" /></Button></div>
-        </div>
-      </PopoverContent>
-    </Popover>
-  );
-};
 
 
 interface CategorizedSymbologyDialogProps {
