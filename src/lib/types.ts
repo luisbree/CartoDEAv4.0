@@ -44,6 +44,7 @@ export interface MapLayer {
   isDeas?: boolean;
   graduatedSymbology?: GraduatedSymbology;
   categorizedSymbology?: CategorizedSymbology;
+  wmsStyleEnabled?: boolean; // For hybrid WFS/WMS layers
 }
 
 export interface VectorMapLayer extends MapLayer {

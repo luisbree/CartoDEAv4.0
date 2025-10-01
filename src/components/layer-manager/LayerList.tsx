@@ -26,6 +26,7 @@ interface LayerListProps {
   onChangeLayerLabels: (layerId: string, labelOptions: LabelOptions) => void;
   onApplyGraduatedSymbology: (layerId: string, symbology: GraduatedSymbology) => void;
   onApplyCategorizedSymbology: (layerId: string, symbology: CategorizedSymbology) => void;
+  onToggleWmsStyle: (layerId: string) => void;
 
   // Selection props
   selectedLayerIds: string[];
@@ -55,6 +56,7 @@ const LayerList: React.FC<LayerListProps> = ({
   onChangeLayerLabels,
   onApplyGraduatedSymbology,
   onApplyCategorizedSymbology,
+  onToggleWmsStyle,
   selectedLayerIds,
   onLayerClick,
   activeTool,
@@ -135,6 +137,7 @@ const LayerList: React.FC<LayerListProps> = ({
           onChangeLayerLabels={onChangeLayerLabels}
           onApplyGraduatedSymbology={onApplyGraduatedSymbology}
           onApplyCategorizedSymbology={onApplyCategorizedSymbology}
+          onToggleWmsStyle={onToggleWmsStyle}
           isDrawingSourceEmptyOrNotPolygon={isDrawingSourceEmptyOrNotPolygon}
           isSelectionEmpty={isSelectionEmpty}
           onSetLayerOpacity={onSetLayerOpacity}

@@ -319,6 +319,7 @@ export const useLayerManager = ({
             visible: true,
             opacity: 1,
             type: 'wfs',
+            wmsStyleEnabled: true, // New property
         }, true);
         
         updateGeoServerDiscoveredLayerState(layerName, true, 'wfs');
@@ -463,12 +464,27 @@ export const useLayerManager = ({
         if (l.id === layerId) {
             const newVisibility = !l.visible;
             l.olLayer.setVisible(newVisibility);
-            // Also toggle the visual partner layer if it exists
+            // Also toggle the visual partner layer if it exists, respecting its own enabled state
             const visualLayer = l.olLayer.get('visualLayer');
             if (visualLayer) {
-                visualLayer.setVisible(newVisibility);
+                visualLayer.setVisible(newVisibility && (l.wmsStyleEnabled ?? false));
             }
             return { ...l, visible: newVisibility };
+        }
+        return l;
+    }));
+  }, []);
+
+  const toggleWmsStyle = useCallback((layerId: string) => {
+    setLayers(prev => prev.map(l => {
+        if (l.id === layerId && l.type === 'wfs') {
+            const newWmsStyleEnabled = !(l.wmsStyleEnabled ?? true);
+            const visualLayer = l.olLayer.get('visualLayer');
+            if (visualLayer) {
+                // The visual layer is only visible if the main layer is also visible
+                visualLayer.setVisible(l.visible && newWmsStyleEnabled);
+            }
+            return { ...l, wmsStyleEnabled: newWmsStyleEnabled };
         }
         return l;
     }));
@@ -1031,6 +1047,7 @@ export const useLayerManager = ({
     lastRemovedLayers,
     reorderLayers,
     toggleLayerVisibility,
+    toggleWmsStyle,
     setLayerOpacity,
     changeLayerStyle,
     changeLayerLabels,

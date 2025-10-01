@@ -13,7 +13,8 @@ import {
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger, 
-  DropdownMenuPortal
+  DropdownMenuPortal,
+  DropdownMenuCheckboxItem,
 } from "@/components/ui/dropdown-menu";
 import { Slider } from "@/components/ui/slider"; 
 import { Eye, EyeOff, Settings2, ZoomIn, Table2, Trash2, Scissors, Percent, GripVertical, CopyPlus, Download, Edit, Palette, Tags, Waypoints, AppWindow, BarChartHorizontal } from 'lucide-react';
@@ -45,6 +46,7 @@ interface LayerItemProps {
   onChangeLayerLabels: (layerId: string, labelOptions: LabelOptions) => void;
   onApplyGraduatedSymbology: (layerId: string, symbology: GraduatedSymbology) => void;
   onApplyCategorizedSymbology: (layerId: string, symbology: CategorizedSymbology) => void;
+  onToggleWmsStyle: (layerId: string) => void;
   
   // Drag and Drop props
   isDraggable: boolean;
@@ -84,6 +86,7 @@ const LayerItem: React.FC<LayerItemProps> = ({
   onChangeLayerLabels,
   onApplyGraduatedSymbology,
   onApplyCategorizedSymbology,
+  onToggleWmsStyle,
   isDraggable,
   onDragStart,
   onDragEnd,
@@ -99,6 +102,7 @@ const LayerItem: React.FC<LayerItemProps> = ({
   onToggleEditing,
 }) => {
   const isVectorLayer = layer.olLayer instanceof VectorLayer;
+  const isWfsLayer = layer.type === 'wfs';
   const currentOpacityPercentage = Math.round(layer.opacity * 100);
 
   const [isEditing, setIsEditing] = useState(false);
@@ -290,6 +294,16 @@ const LayerItem: React.FC<LayerItemProps> = ({
                       <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setIsGraduatedEditorOpen(true); }} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">
                         <Waypoints className="mr-2 h-3.5 w-3.5" /> Graduada
                       </DropdownMenuItem>
+                      <DropdownMenuSeparator className="bg-gray-500/50 my-1" />
+                      <DropdownMenuCheckboxItem
+                        checked={layer.wmsStyleEnabled}
+                        onSelect={(e) => e.preventDefault()}
+                        onClick={() => onToggleWmsStyle(layer.id)}
+                        disabled={!isWfsLayer}
+                        className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                         Usar Estilo del Servidor (WMS)
+                      </DropdownMenuCheckboxItem>
                     </DropdownMenuSubContent>
                   </DropdownMenuPortal>
                 </DropdownMenuSub>

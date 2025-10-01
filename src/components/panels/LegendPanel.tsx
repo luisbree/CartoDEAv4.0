@@ -54,6 +54,7 @@ interface LegendPanelProps {
   onChangeLayerLabels: (layerId: string, labelOptions: LabelOptions) => void;
   onApplyGraduatedSymbology: (layerId: string, symbology: GraduatedSymbology) => void;
   onApplyCategorizedSymbology: (layerId: string, symbology: CategorizedSymbology) => void;
+  onToggleWmsStyle: (layerId: string) => void;
 
   onAddLayer: (layer: MapLayer) => void;
 
@@ -84,7 +85,7 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
   panelRef, isCollapsed, onToggleCollapse, onClosePanel, onMouseDownHeader,
   layers, onToggleLayerVisibility, onRemoveLayer, onRemoveLayers, onZoomToLayerExtent, onShowLayerTable, onShowStatistics,
   onExtractByPolygon, onExtractBySelection, onExportLayer, isDrawingSourceEmptyOrNotPolygon, isSelectionEmpty, onSetLayerOpacity, onReorderLayers, onRenameLayer,
-  onChangeLayerStyle, onChangeLayerLabels, onApplyGraduatedSymbology, onApplyCategorizedSymbology,
+  onChangeLayerStyle, onChangeLayerLabels, onApplyGraduatedSymbology, onApplyCategorizedSymbology, onToggleWmsStyle,
   onAddLayer, 
   activeTool, onSetActiveTool, onClearSelection,
   discoveredDeasLayers, onAddDeasLayer, isFetchingDeasLayers, onReloadDeasLayers,
@@ -267,6 +268,7 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
                             onChangeLayerLabels={onChangeLayerLabels}
                             onApplyGraduatedSymbology={onApplyGraduatedSymbology}
                             onApplyCategorizedSymbology={onApplyCategorizedSymbology}
+                            onToggleWmsStyle={onToggleWmsStyle}
                             isDrawingSourceEmptyOrNotPolygon={isDrawingSourceEmptyOrNotPolygon}
                             isSelectionEmpty={isSelectionEmpty}
                             onSetLayerOpacity={onSetLayerOpacity}
