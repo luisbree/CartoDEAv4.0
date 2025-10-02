@@ -269,7 +269,7 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
                             onShowStatistics={onShowStatistics}
                             onRemoveLayer={onRemoveLayer}
                             onExtractByPolygon={onExtractByPolygon}
-                            onExtractBySelection={() => onExtractBySelection()}
+                            onExtractBySelection={onExtractBySelection}
                             onSelectByLayer={onSelectByLayer}
                             onExportLayer={onExportLayer}
                             onRenameLayer={onRenameLayer}
@@ -400,3 +400,5 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
 };
 
 export default LegendPanel;
+
+    
