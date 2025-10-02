@@ -14,14 +14,17 @@ import Select, { type SelectEvent } from 'ol/interaction/Select';
 import Modify from 'ol/interaction/Modify';
 import DragBox from 'ol/interaction/DragBox';
 import { singleClick, never, altKeyOnly, primaryAction, shiftKeyOnly, platformModifierKeyOnly } from 'ol/events/condition';
-import type { PlainFeatureData, InteractionToolId } from '@/lib/types';
+import type { PlainFeatureData, InteractionToolId, VectorMapLayer } from '@/lib/types';
 import { getGeeValueAtPoint } from '@/ai/flows/gee-flow';
-import { transform } from 'ol/proj';
+import { transform, transformExtent } from 'ol/proj';
 import type { GeeValueQueryInput } from '@/ai/flows/gee-types';
 import Overlay from 'ol/Overlay';
 import { nanoid } from 'nanoid';
 import VectorSource from 'ol/source/Vector';
 import MultiPoint from 'ol/geom/MultiPoint';
+import { intersects } from 'ol/extent';
+import GeoJSON from 'ol/format/GeoJSON';
+import * as turf from '@turf/turf';
 
 
 interface UseFeatureInspectionProps {
@@ -194,6 +197,64 @@ export const useFeatureInspection = ({
     setSelectedFeatures(featuresToSelect);
   }, [mapRef]);
   
+  const selectByLayer = useCallback((targetLayerId: string, selectorLayerId: string) => {
+      if (!mapRef.current || !selectInteractionRef.current) return;
+      const map = mapRef.current;
+      
+      const targetLayer = map.getAllLayers().find(l => l.get('id') === targetLayerId) as VectorLayer<any> | undefined;
+      const selectorLayer = map.getAllLayers().find(l => l.get('id') === selectorLayerId) as VectorLayer<any> | undefined;
+
+      if (!targetLayer || !selectorLayer) {
+        toast({ description: "No se pudieron encontrar las capas de análisis.", variant: "destructive" });
+        return;
+      }
+      
+      const targetSource = targetLayer.getSource();
+      const selectorSource = selectorLayer.getSource();
+      if (!targetSource || !selectorSource) return;
+
+      const selectorFeatures = selectedFeatures.filter(sf => selectorSource.hasFeature(sf));
+      const selectorGeometries = (selectorFeatures.length > 0 ? selectorFeatures : selectorSource.getFeatures()).map(f => f.getGeometry()).filter(g => !!g) as Geometry[];
+      
+      if (selectorGeometries.length === 0) {
+          toast({ description: "La capa selectora no tiene geometrías válidas.", variant: "destructive" });
+          return;
+      }
+
+      toast({ description: `Seleccionando entidades de "${targetLayer.get('name')}"...` });
+      
+      const geojsonFormat = new GeoJSON({ dataProjection: 'EPSG:4326', featureProjection: 'EPSG:3857' });
+      const selectorTurfGeometries = selectorGeometries.map(g => geojsonFormat.writeGeometryObject(g));
+      
+      // Create a unified multi-polygon for intersection testing
+      const unifiedSelector = turf.union(...selectorTurfGeometries as turf.Feature<turf.Polygon | turf.MultiPolygon>[]);
+
+      if (!unifiedSelector) {
+        toast({ description: "No se pudo crear un área de selección válida.", variant: "destructive" });
+        return;
+      }
+      
+      const featuresToSelect: Feature<Geometry>[] = [];
+      const targetFeatures = targetSource.getFeatures();
+
+      targetFeatures.forEach(targetFeature => {
+          const targetGeom = targetFeature.getGeometry();
+          if (targetGeom) {
+              const targetTurfGeom = geojsonFormat.writeGeometryObject(targetGeom);
+              const intersection = turf.intersect(unifiedSelector, targetTurfGeom);
+              if (intersection) {
+                  featuresToSelect.push(targetFeature);
+              }
+          }
+      });
+
+      selectInteractionRef.current.getFeatures().clear();
+      selectInteractionRef.current.getFeatures().extend(featuresToSelect);
+      setSelectedFeatures(featuresToSelect);
+
+      toast({ description: `${featuresToSelect.length} entidades seleccionadas.` });
+
+  }, [mapRef, toast, selectedFeatures]);
   
 
   useEffect(() => {
@@ -606,5 +667,8 @@ export const useFeatureInspection = ({
     processAndDisplayFeatures,
     selectFeaturesById,
     updateInspectedFeatureData,
+    selectByLayer,
   };
 };
+
+    
