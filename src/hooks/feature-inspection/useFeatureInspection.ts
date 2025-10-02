@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from 'react';
@@ -224,10 +225,16 @@ export const useFeatureInspection = ({
       toast({ description: `Seleccionando entidades de "${targetLayer.get('name')}"...` });
       
       const geojsonFormat = new GeoJSON({ dataProjection: 'EPSG:4326', featureProjection: 'EPSG:3857' });
-      const selectorTurfGeometries = selectorGeometries.map(g => geojsonFormat.writeGeometryObject(g));
+      const selectorTurfGeometries = selectorGeometries.map(g => geojsonFormat.writeFeatureObject(g)) as turf.Feature<turf.Polygon | turf.MultiPolygon>[];
       
-      // Create a unified multi-polygon for intersection testing
-      const unifiedSelector = turf.union(...selectorTurfGeometries as turf.Feature<turf.Polygon | turf.MultiPolygon>[]);
+      let unifiedSelector: turf.Feature<turf.Polygon | turf.MultiPolygon> | null;
+
+      if (selectorTurfGeometries.length > 1) {
+          // @ts-ignore - Turf union spread operator issue
+          unifiedSelector = turf.union(...selectorTurfGeometries);
+      } else {
+          unifiedSelector = selectorTurfGeometries[0];
+      }
 
       if (!unifiedSelector) {
         toast({ description: "No se pudo crear un área de selección válida.", variant: "destructive" });
@@ -241,7 +248,7 @@ export const useFeatureInspection = ({
           const targetGeom = targetFeature.getGeometry();
           if (targetGeom) {
               const targetTurfGeom = geojsonFormat.writeGeometryObject(targetGeom);
-              const intersection = turf.intersect(unifiedSelector, targetTurfGeom);
+              const intersection = turf.intersect(unifiedSelector as any, targetTurfGeom as any);
               if (intersection) {
                   featuresToSelect.push(targetFeature);
               }
@@ -670,5 +677,7 @@ export const useFeatureInspection = ({
     selectByLayer,
   };
 };
+
+    
 
     
