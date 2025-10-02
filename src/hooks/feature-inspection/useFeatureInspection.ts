@@ -215,9 +215,9 @@ export const useFeatureInspection = ({
       if (!targetSource || !selectorSource) return;
 
       const relevantSelectedFeatures = selectedFeatures.filter(sf => selectorSource.hasFeature(sf));
-      const selectorFeaturesToProcess = (relevantSelectedFeatures.length > 0 ? relevantSelectedFeatures : selectorSource.getFeatures());
+      const selectorFeatures = (relevantSelectedFeatures.length > 0 ? relevantSelectedFeatures : selectorSource.getFeatures());
       
-      if (selectorFeaturesToProcess.length === 0) {
+      if (selectorFeatures.length === 0) {
           toast({ description: "La capa selectora no tiene entidades válidas.", variant: "destructive" });
           return;
       }
@@ -225,39 +225,31 @@ export const useFeatureInspection = ({
       toast({ description: `Seleccionando entidades de "${targetLayer.get('name')}"...` });
       
       const geojsonFormat = new GeoJSON({ dataProjection: 'EPSG:4326', featureProjection: 'EPSG:3857' });
-      const selectorTurfGeometries = geojsonFormat.writeFeaturesObject(selectorFeaturesToProcess) as turf.FeatureCollection<turf.Polygon | turf.MultiPolygon>;
-      
-      let unifiedSelector: turf.Feature<turf.Polygon | turf.MultiPolygon> | null;
-
-      if (selectorTurfGeometries.features.length > 1) {
-          // @ts-ignore - Turf union spread operator issue
-          unifiedSelector = turf.union(...selectorTurfGeometries.features);
-      } else {
-          unifiedSelector = selectorTurfGeometries.features[0];
-      }
-
-      if (!unifiedSelector) {
-        toast({ description: "No se pudo crear un área de selección válida.", variant: "destructive" });
-        return;
-      }
+      const selectorTurfFeatures = selectorFeatures.map(f => geojsonFormat.writeFeatureObject(f)) as turf.Feature<turf.Polygon | turf.MultiPolygon>[];
       
       const featuresToSelect: Feature<Geometry>[] = [];
       const targetFeatures = targetSource.getFeatures();
 
       targetFeatures.forEach(targetFeature => {
           const targetGeom = targetFeature.getGeometry();
-          if (targetGeom) {
-              try {
-                const targetTurfFeature = geojsonFormat.writeFeatureObject(targetFeature);
-                const isInside = turf.booleanWithin(targetTurfFeature as turf.AllGeoJSON, unifiedSelector as turf.AllGeoJSON);
-                const intersects = turf.booleanIntersects(unifiedSelector as turf.AllGeoJSON, targetTurfFeature as turf.AllGeoJSON);
+          if (!targetGeom) return;
 
-                if (isInside || intersects) {
+          try {
+            const targetTurfFeature = geojsonFormat.writeFeatureObject(targetFeature);
+            
+            // Check if the target feature intersects with ANY of the selector features
+            for (const selectorFeature of selectorTurfFeatures) {
+                // Use a combination of intersects and within to cover all cases
+                const intersects = turf.booleanIntersects(selectorFeature, targetTurfFeature);
+                const isWithin = turf.booleanWithin(targetTurfFeature, selectorFeature);
+
+                if (intersects || isWithin) {
                     featuresToSelect.push(targetFeature);
+                    return; // Move to the next target feature once a match is found
                 }
-              } catch(e) {
-                // Ignore errors during intersection test, likely from invalid geometries
-              }
+            }
+          } catch(e) {
+            console.warn("Error processing a feature during spatial selection:", e);
           }
       });
 
@@ -687,4 +679,5 @@ export const useFeatureInspection = ({
     
 
     
+
 
