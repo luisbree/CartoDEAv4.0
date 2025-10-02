@@ -8,7 +8,7 @@ import FileUploadControl from '@/components/layer-manager/FileUploadControl';
 import FeatureInteractionToolbar from '@/components/feature-inspection/FeatureInteractionToolbar';
 import { Separator } from '@/components/ui/separator';
 import type { MapLayer, GeoServerDiscoveredLayer, LabelOptions, GraduatedSymbology, CategorizedSymbology, VectorMapLayer } from '@/lib/types';
-import { ListTree, Trash2, Database, Search, X as ClearIcon, RefreshCw, Loader2, Undo2 } from 'lucide-react'; 
+import { ListTree, Trash2, Database, Search, X as ClearIcon, RefreshCw, Loader2, Undo2, Target } from 'lucide-react'; 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -46,7 +46,7 @@ interface LegendPanelProps {
   onShowLayerTable: (layerId: string) => void;
   onShowStatistics: (layerId: string) => void;
   onExtractByPolygon: (layerId: string, onSuccess?: () => void) => void;
-  onExtractBySelection: (onSuccess?: () => void) => void;
+  onExtractBySelection: () => void;
   onSelectByLayer: (targetLayerId: string, selectorLayerId: string) => void;
   onExportLayer: (layerId: string, format: 'geojson' | 'kml' | 'shp') => void;
   isDrawingSourceEmptyOrNotPolygon: boolean;
@@ -264,7 +264,7 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
                         <LayerList
                             layers={layers}
                             onToggleVisibility={onToggleLayerVisibility}
-                            onZoomToExtent={onZoomToExtent}
+                            onZoomToExtent={onZoomToLayerExtent}
                             onShowLayerTable={onShowLayerTable}
                             onShowStatistics={onShowStatistics}
                             onRemoveLayer={onRemoveLayer}
