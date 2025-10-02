@@ -68,8 +68,10 @@ const LabelEditorDialog: React.FC<LabelEditorDialogProps> = ({
 
   const [draggedItem, setDraggedItem] = useState<string | null>(null);
 
+  // This useMemo now correctly re-evaluates when the dialog is opened (because `isOpen` is a dependency)
   const attributeFields = useMemo(() => {
-    const source = layer?.olLayer.getSource();
+    if (!isOpen || !layer) return [];
+    const source = layer.olLayer.getSource();
     if (!source) return [];
     const features = source.getFeatures();
     if (features.length === 0) return [];
@@ -83,7 +85,7 @@ const LabelEditorDialog: React.FC<LabelEditorDialogProps> = ({
         });
     });
     return Array.from(keys).sort();
-  }, [layer]);
+  }, [layer, isOpen]);
   
   const layerGeomType = useMemo(() => {
     const source = layer?.olLayer.getSource();
@@ -97,23 +99,29 @@ const LabelEditorDialog: React.FC<LabelEditorDialogProps> = ({
   const isPolygonLayer = layerGeomType === 'Polygon' || layerGeomType === 'MultiPolygon';
 
   useEffect(() => {
-    const defaultOptions: LabelOptions = {
-        enabled: false,
-        labelParts: attributeFields.length > 0 ? [{ id: nanoid(), type: 'field', value: attributeFields[0] }] : [],
-        fontSize: 12,
-        fontFamily: "'Encode Sans'",
-        textColor: 'negro',
-        outlineColor: 'blanco',
-        placement: 'horizontal',
-        offsetY: 0,
-        overflow: false,
-    };
-    
-    const existingOptions = layer?.olLayer.get('labelOptions');
-    if (existingOptions) {
-      setLabelOptions({ ...defaultOptions, ...existingOptions });
-    } else {
-      setLabelOptions(defaultOptions);
+    if (isOpen) {
+        const defaultOptions: LabelOptions = {
+            enabled: false,
+            labelParts: attributeFields.length > 0 ? [{ id: nanoid(), type: 'field', value: attributeFields[0] }] : [],
+            fontSize: 12,
+            fontFamily: "'Encode Sans'",
+            textColor: 'negro',
+            outlineColor: 'blanco',
+            placement: 'horizontal',
+            offsetY: 0,
+            overflow: false,
+        };
+        
+        const existingOptions = layer?.olLayer.get('labelOptions');
+        if (existingOptions) {
+          // If existing options don't have a label part but now there are fields, add one.
+          if (existingOptions.labelParts.length === 0 && attributeFields.length > 0) {
+            existingOptions.labelParts = [{ id: nanoid(), type: 'field', value: attributeFields[0] }];
+          }
+          setLabelOptions({ ...defaultOptions, ...existingOptions });
+        } else {
+          setLabelOptions(defaultOptions);
+        }
     }
   }, [isOpen, layer, attributeFields]);
 
