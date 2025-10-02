@@ -249,8 +249,10 @@ export const useFeatureInspection = ({
           if (targetGeom) {
               try {
                 const targetTurfFeature = geojsonFormat.writeFeatureObject(targetFeature);
-                const intersection = turf.intersect(unifiedSelector as any, targetTurfFeature as any);
-                if (intersection) {
+                const isInside = turf.booleanWithin(targetTurfFeature as turf.AllGeoJSON, unifiedSelector as turf.AllGeoJSON);
+                const intersects = turf.booleanIntersects(unifiedSelector as turf.AllGeoJSON, targetTurfFeature as turf.AllGeoJSON);
+
+                if (isInside || intersects) {
                     featuresToSelect.push(targetFeature);
                 }
               } catch(e) {
@@ -685,3 +687,4 @@ export const useFeatureInspection = ({
     
 
     
+
