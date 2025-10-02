@@ -25,14 +25,14 @@ const ToastViewport = React.forwardRef<
 ToastViewport.displayName = ToastPrimitives.Viewport.displayName
 
 const toastVariants = cva(
-  "group pointer-events-auto relative flex w-full items-center justify-between space-x-4 overflow-hidden px-4 py-2.5 text-sm shadow-lg transition-all data-[swipe=cancel]:translate-x-0 data-[swipe=end]:translate-x-[var(--radix-toast-swipe-end-x)] data-[swipe=move]:translate-x-[var(--radix-toast-swipe-move-x)] data-[swipe=move]:transition-none data-[state=open]:animate-toast-in data-[state=closed]:animate-toast-out data-[swipe=end]:animate-out",
+  "group pointer-events-auto relative flex w-full items-center justify-between space-x-4 overflow-hidden rounded-md px-4 py-2.5 text-sm shadow-lg transition-all data-[swipe=cancel]:translate-x-0 data-[swipe=end]:translate-x-[var(--radix-toast-swipe-end-x)] data-[swipe=move]:translate-x-[var(--radix-toast-swipe-move-x)] data-[swipe=move]:transition-none data-[state=open]:animate-toast-in data-[state=closed]:animate-toast-out data-[swipe=end]:animate-out",
   {
     variants: {
       variant: {
         default:
-          "text-foreground bg-gradient-to-t from-background/80 via-background/80 to-transparent",
+          "border-border/40 bg-background/60 text-foreground backdrop-blur-sm",
         destructive:
-          "destructive group text-destructive bg-gradient-to-t from-transparent via-destructive/80 to-transparent",
+          "destructive group border-destructive/30 bg-destructive/60 text-destructive-foreground backdrop-blur-sm",
       },
     },
     defaultVariants: {
