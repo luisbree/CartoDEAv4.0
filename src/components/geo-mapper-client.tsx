@@ -258,6 +258,7 @@ export default function GeoMapperClient() {
     updateGeoServerDiscoveredLayerState: updateDiscoveredLayerState,
     clearSelectionAfterExtraction: featureInspectionHook.clearSelection,
     updateInspectedFeatureData: featureInspectionHook.updateInspectedFeatureData,
+    onSelectByLayer: featureInspectionHook.selectByLayer,
   });
   
   const {
@@ -948,6 +949,7 @@ export default function GeoMapperClient() {
             onShowStatistics={handleShowStatistics}
             onExtractByPolygon={layerManagerHook.handleExtractByPolygon}
             onExtractBySelection={() => layerManagerHook.handleExtractBySelection(featureInspectionHook.selectedFeatures)}
+            onSelectByLayer={layerManagerHook.handleSelectByLayer}
             onExportLayer={layerManagerHook.handleExportLayer}
             onRenameLayer={layerManagerHook.renameLayer}
             onChangeLayerStyle={layerManagerHook.changeLayerStyle}
@@ -970,6 +972,7 @@ export default function GeoMapperClient() {
             onReloadDeasLayers={handleReloadDeasLayers}
             canUndoRemove={layerManagerHook.lastRemovedLayers.length > 0}
             onUndoRemove={layerManagerHook.undoRemove}
+            selectedFeaturesForSelection={featureInspectionHook.selectedFeatures}
           />
         )}
 

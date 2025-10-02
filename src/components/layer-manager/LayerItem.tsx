@@ -17,8 +17,8 @@ import {
   DropdownMenuCheckboxItem,
 } from "@/components/ui/dropdown-menu";
 import { Slider } from "@/components/ui/slider"; 
-import { Eye, EyeOff, Settings2, ZoomIn, Table2, Trash2, Scissors, Percent, GripVertical, CopyPlus, Download, Edit, Palette, Tags, Waypoints, AppWindow, BarChartHorizontal } from 'lucide-react';
-import type { CategorizedSymbology, GraduatedSymbology, InteractionToolId, LabelOptions, MapLayer } from '@/lib/types';
+import { Eye, EyeOff, Settings2, ZoomIn, Table2, Trash2, Scissors, Percent, GripVertical, CopyPlus, Download, Edit, Palette, Tags, Waypoints, AppWindow, BarChartHorizontal, Target } from 'lucide-react';
+import type { CategorizedSymbology, GraduatedSymbology, InteractionToolId, LabelOptions, MapLayer, VectorMapLayer } from '@/lib/types';
 import VectorLayer from 'ol/layer/Vector'; 
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
@@ -30,6 +30,7 @@ import CategorizedSymbologyDialog from './CategorizedSymbologyDialog';
 
 interface LayerItemProps {
   layer: MapLayer;
+  allLayers: MapLayer[]; // For the "Select by Layer" submenu
   onToggleVisibility: (layerId: string) => void;
   onZoomToExtent: (layerId: string) => void;
   onShowLayerTable: (layerId: string) => void;
@@ -37,6 +38,7 @@ interface LayerItemProps {
   onRemove: (layerId: string) => void;
   onExtractByPolygon: (layerId: string) => void;
   onExtractBySelection: () => void;
+  onSelectByLayer: (targetLayerId: string, selectorLayerId: string) => void;
   isDrawingSourceEmptyOrNotPolygon: boolean;
   isSelectionEmpty: boolean;
   onSetLayerOpacity: (layerId: string, opacity: number) => void;
@@ -70,6 +72,7 @@ interface LayerItemProps {
 
 const LayerItem: React.FC<LayerItemProps> = ({
   layer,
+  allLayers,
   onToggleVisibility,
   onZoomToExtent,
   onShowLayerTable,
@@ -77,6 +80,7 @@ const LayerItem: React.FC<LayerItemProps> = ({
   onRemove,
   onExtractByPolygon,
   onExtractBySelection,
+  onSelectByLayer,
   isDrawingSourceEmptyOrNotPolygon,
   isSelectionEmpty,
   onSetLayerOpacity,
@@ -113,6 +117,16 @@ const LayerItem: React.FC<LayerItemProps> = ({
   const [isCategorizedEditorOpen, setIsCategorizedEditorOpen] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  
+  const polygonLayersForSelection = allLayers.filter(
+    (l): l is VectorMapLayer =>
+      l.id !== layer.id &&
+      l.olLayer instanceof VectorLayer &&
+      l.olLayer.getSource()?.getFeatures().some(f => {
+        const geomType = f.getGeometry()?.getType();
+        return geomType === 'Polygon' || geomType === 'MultiPolygon';
+      })
+  );
 
   useEffect(() => {
     if (isEditing) {
@@ -297,8 +311,10 @@ const LayerItem: React.FC<LayerItemProps> = ({
                       <DropdownMenuSeparator className="bg-gray-500/50 my-1" />
                       <DropdownMenuCheckboxItem
                         checked={layer.wmsStyleEnabled}
-                        onSelect={(e) => e.preventDefault()}
-                        onClick={() => onToggleWmsStyle(layer.id)}
+                        onSelect={(e) => {
+                            e.preventDefault();
+                            onToggleWmsStyle(layer.id);
+                        }}
                         disabled={!isWfsLayer}
                         className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                       >
@@ -337,6 +353,24 @@ const LayerItem: React.FC<LayerItemProps> = ({
                   <BarChartHorizontal className="mr-2 h-3.5 w-3.5" />
                   Estadísticas
                 </DropdownMenuItem>
+              )}
+
+              {isVectorLayer && (
+                <DropdownMenuSub>
+                    <DropdownMenuSubTrigger className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer data-[state=open]:bg-gray-600 disabled:opacity-50" disabled={polygonLayersForSelection.length === 0}>
+                        <Target className="mr-2 h-3.5 w-3.5" />
+                        <span>Seleccionar por Capa</span>
+                    </DropdownMenuSubTrigger>
+                    <DropdownMenuPortal>
+                        <DropdownMenuSubContent className="bg-gray-700 text-white border-gray-600">
+                            {polygonLayersForSelection.map(selectorLayer => (
+                                <DropdownMenuItem key={selectorLayer.id} onSelect={() => onSelectByLayer(layer.id, selectorLayer.id)} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">
+                                    {selectorLayer.name}
+                                </DropdownMenuItem>
+                            ))}
+                        </DropdownMenuSubContent>
+                    </DropdownMenuPortal>
+                </DropdownMenuSub>
               )}
 
               {isVectorLayer && (

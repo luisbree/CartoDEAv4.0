@@ -7,7 +7,7 @@ import LayerList from '@/components/layer-manager/LayerList';
 import FileUploadControl from '@/components/layer-manager/FileUploadControl';
 import FeatureInteractionToolbar from '@/components/feature-inspection/FeatureInteractionToolbar';
 import { Separator } from '@/components/ui/separator';
-import type { MapLayer, GeoServerDiscoveredLayer, LabelOptions, GraduatedSymbology, CategorizedSymbology } from '@/lib/types';
+import type { MapLayer, GeoServerDiscoveredLayer, LabelOptions, GraduatedSymbology, CategorizedSymbology, VectorMapLayer } from '@/lib/types';
 import { ListTree, Trash2, Database, Search, X as ClearIcon, RefreshCw, Loader2, Undo2 } from 'lucide-react'; 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -27,6 +27,9 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Label } from '@/components/ui/label';
 import type { StyleOptions } from '../layer-manager/StyleEditorDialog';
 import type { InteractionToolId } from '@/lib/types';
+import type Feature from 'ol/Feature';
+import type { Geometry } from 'ol/geom';
+
 
 interface LegendPanelProps {
   panelRef: React.RefObject<HTMLDivElement>;
@@ -44,6 +47,7 @@ interface LegendPanelProps {
   onShowStatistics: (layerId: string) => void;
   onExtractByPolygon: (layerId: string, onSuccess?: () => void) => void;
   onExtractBySelection: (onSuccess?: () => void) => void;
+  onSelectByLayer: (targetLayerId: string, selectorLayerId: string) => void;
   onExportLayer: (layerId: string, format: 'geojson' | 'kml' | 'shp') => void;
   isDrawingSourceEmptyOrNotPolygon: boolean;
   isSelectionEmpty: boolean;
@@ -71,6 +75,9 @@ interface LegendPanelProps {
   // Undo props
   canUndoRemove: boolean;
   onUndoRemove: () => void;
+  
+  // Selection props
+  selectedFeaturesForSelection: Feature<Geometry>[];
 
   style?: React.CSSProperties;
 }
@@ -84,12 +91,13 @@ type DeasOrgNode = { [orgName: string]: DeasProjectNode };
 const LegendPanel: React.FC<LegendPanelProps> = ({
   panelRef, isCollapsed, onToggleCollapse, onClosePanel, onMouseDownHeader,
   layers, onToggleLayerVisibility, onRemoveLayer, onRemoveLayers, onZoomToLayerExtent, onShowLayerTable, onShowStatistics,
-  onExtractByPolygon, onExtractBySelection, onExportLayer, isDrawingSourceEmptyOrNotPolygon, isSelectionEmpty, onSetLayerOpacity, onReorderLayers, onRenameLayer,
+  onExtractByPolygon, onExtractBySelection, onSelectByLayer, onExportLayer, isDrawingSourceEmptyOrNotPolygon, isSelectionEmpty, onSetLayerOpacity, onReorderLayers, onRenameLayer,
   onChangeLayerStyle, onChangeLayerLabels, onApplyGraduatedSymbology, onApplyCategorizedSymbology, onToggleWmsStyle,
   onAddLayer, 
   activeTool, onSetActiveTool, onClearSelection,
   discoveredDeasLayers, onAddDeasLayer, isFetchingDeasLayers, onReloadDeasLayers,
   canUndoRemove, onUndoRemove,
+  selectedFeaturesForSelection,
   style,
 }) => {
   const [selectedLayerIds, setSelectedLayerIds] = useState<string[]>([]);
@@ -256,12 +264,13 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
                         <LayerList
                             layers={layers}
                             onToggleVisibility={onToggleLayerVisibility}
-                            onZoomToExtent={onZoomToLayerExtent}
+                            onZoomToExtent={onZoomToExtent}
                             onShowLayerTable={onShowLayerTable}
                             onShowStatistics={onShowStatistics}
                             onRemoveLayer={onRemoveLayer}
                             onExtractByPolygon={onExtractByPolygon}
                             onExtractBySelection={() => onExtractBySelection(clearLayerSelection)}
+                            onSelectByLayer={onSelectByLayer}
                             onExportLayer={onExportLayer}
                             onRenameLayer={onRenameLayer}
                             onChangeLayerStyle={onChangeLayerStyle}
