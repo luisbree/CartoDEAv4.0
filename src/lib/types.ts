@@ -146,3 +146,15 @@ export interface StyleOptions {
   lineStyle: 'solid' | 'dashed' | 'dotted';
   pointSize: number;
 }
+
+
+// --- GEE Profile Types ---
+export interface ProfilePoint {
+    distance: number;
+    elevation: number;
+    location: number[]; // [lon, lat]
+}
+
+export interface GeeProfileOutput {
+    profile: ProfilePoint[];
+}

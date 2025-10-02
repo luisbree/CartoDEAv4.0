@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
@@ -23,11 +24,12 @@ import { type Geometry, type LineString as OlLineString, Point } from 'ol/geom';
 import { getLength as olGetLength } from 'ol/sphere';
 import { performBufferAnalysis, performConvexHull, performConcaveHull, calculateOptimalConcavity, projectPopulationGeometric, generateCrossSections, dissolveFeatures } from '@/services/spatial-analysis';
 import { getGeeProfile } from '@/ai/flows/gee-flow';
-import type { GeeProfileOutput } from '@/ai/flows/gee-types';
+import type { GeeProfileOutput, ProfilePoint } from '@/ai/flows/gee-types';
 import { ScrollArea } from '../ui/scroll-area';
 import { Checkbox } from '../ui/checkbox';
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 import { XAxis, YAxis, Tooltip as ChartTooltip, CartesianGrid, Line, ResponsiveContainer, AreaChart, Area } from 'recharts';
+import { Style, Text as TextStyle, Fill, Stroke } from 'ol/style';
 
 
 interface AnalysisPanelProps {
@@ -113,7 +115,6 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   // State for Profile tool
   const [profileInputLayerId, setProfileInputLayerId] = useState<string>('');
   const [profileDemLayer, setProfileDemLayer] = useState<'NASADEM_ELEVATION' | 'ALOS_DSM'>('NASADEM_ELEVATION');
-  const [profileData, setProfileData] = useState<GeeProfileOutput['profile'] | null>(null);
   const [isGeneratingProfile, setIsGeneratingProfile] = useState(false);
 
   const { toast } = useToast();
@@ -172,50 +173,25 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     }
     
     const geometry = featureToProfile.getGeometry() as OlLineString;
-    const numPoints = 200;
-    const length = olGetLength(geometry, { projection: 'EPSG:3857' });
-    const coordinates: number[][] = [];
-    const distances: number[] = [];
-
-    for (let i = 0; i < numPoints; i++) {
-        const fraction = i / (numPoints - 1);
-        coordinates.push(geometry.getCoordinateAt(fraction));
-        distances.push(length * fraction);
+    const lineCoords = geometry.getCoordinates();
+    if (lineCoords.length < 2) {
+      toast({ description: "La línea seleccionada no tiene suficientes puntos.", variant: "destructive" });
+      return;
     }
+
+    const startPoint = lineCoords[0];
+    const endPoint = lineCoords[lineCoords.length - 1];
+
+    const coordinates = [startPoint, endPoint];
+    const distances = [0, olGetLength(geometry, { projection: 'EPSG:3857' })];
     
-    // --- Step 1: Visualize the generated points ---
-    const pointFeatures = coordinates.map((coord, index) => {
-        const pointFeature = new Feature(new Point(coord));
-        pointFeature.set('distance', distances[index]);
-        pointFeature.setId(nanoid());
-        return pointFeature;
-    });
-
-    const samplingLayerId = `sampling-points-${nanoid()}`;
-    const samplingSource = new VectorSource({ features: pointFeatures });
-    const samplingOlLayer = new VectorLayer({
-        source: samplingSource,
-        properties: { id: samplingLayerId, name: 'Puntos de Muestreo del Perfil', type: 'analysis' },
-    });
-    onAddLayer({
-        id: samplingLayerId,
-        name: 'Puntos de Muestreo del Perfil',
-        olLayer: samplingOlLayer,
-        visible: true,
-        opacity: 1,
-        type: 'analysis',
-    }, true);
-    toast({ description: 'Capa de puntos de muestreo creada.' });
-
-    // --- Step 2: Get raw data from GEE and download it ---
     const pointsGeoJSON = {
         type: 'MultiPoint',
         coordinates: coordinates.map(coord => new GeoJSON().writeGeometryObject(new Point(coord), {featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326'}).coordinates),
     };
 
     setIsGeneratingProfile(true);
-    setProfileData(null);
-    toast({ description: "Generando perfil topográfico desde GEE..." });
+    toast({ description: "Generando perfil para puntos de inicio y fin..." });
 
     try {
       const result = await getGeeProfile({
@@ -224,21 +200,46 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         distances: distances,
       });
 
-      if (result && result.profile) {
-        // Create a Blob from the JSON data and trigger download
-        const jsonString = JSON.stringify(result.profile, null, 2);
-        const blob = new Blob([jsonString], { type: 'application/json' });
-        const link = document.createElement('a');
-        link.href = URL.createObjectURL(blob);
-        link.download = 'profile_data.json';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(link.href);
+      if (result && result.profile.length > 0) {
+          const pointFeatures = result.profile.map(pointData => {
+              const olPoint = new GeoJSON().readFeature({
+                  type: 'Feature',
+                  geometry: { type: 'Point', coordinates: pointData.location },
+                  properties: { elevation: pointData.elevation }
+              }, { featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
+              
+              olPoint.setStyle(new Style({
+                text: new TextStyle({
+                  text: `${Math.round(pointData.elevation)}m`,
+                  font: '12px Calibri,sans-serif',
+                  fill: new Fill({ color: '#000' }),
+                  stroke: new Stroke({ color: '#fff', width: 3 }),
+                  offsetY: -15,
+                })
+              }));
+              
+              return olPoint;
+          });
+
+          const newLayerId = `profile-points-${nanoid()}`;
+          const newSource = new VectorSource({ features: pointFeatures });
+          const newOlLayer = new VectorLayer({
+              source: newSource,
+              properties: { id: newLayerId, name: `Elevación Perfil ${lineLayer.name}`, type: 'analysis' },
+          });
+
+          onAddLayer({
+              id: newLayerId,
+              name: `Elevación Perfil ${lineLayer.name}`,
+              olLayer: newOlLayer,
+              visible: true,
+              opacity: 1,
+              type: 'analysis',
+          }, true);
         
-        toast({ description: "Perfil generado con éxito. El archivo JSON se está descargando." });
+        toast({ description: "Valores de elevación de inicio y fin añadidos al mapa." });
       } else {
-        throw new Error("No se recibieron datos del perfil.");
+        throw new Error("No se recibieron datos de elevación del perfil.");
       }
 
     } catch (error: any) {
@@ -1113,7 +1114,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                       <div className="space-y-2 p-2 border border-white/10 rounded-md">
                           <div>
                               <Label htmlFor="profile-input-layer" className="text-xs">Capa de Perfil (Línea)</Label>
-                              <Select value={profileInputLayerId} onValueChange={(value) => { setProfileInputLayerId(value); setProfileData(null); }}>
+                              <Select value={profileInputLayerId} onValueChange={(value) => { setProfileInputLayerId(value); }}>
                                 <SelectTrigger id="profile-input-layer" className="h-8 text-xs bg-black/20"><SelectValue placeholder="Seleccionar capa de línea..." /></SelectTrigger>
                                 <SelectContent className="bg-gray-700 text-white border-gray-600">
                                   {lineLayers.map(l => <SelectItem key={l.id} value={l.id} className="text-xs">{l.name}</SelectItem>)}

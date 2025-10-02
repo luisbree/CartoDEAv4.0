@@ -1,4 +1,5 @@
 
+
 /**
  * @fileOverview Types and schemas for the GEE flow.
  *
@@ -79,6 +80,7 @@ export const GeeHistogramOutputSchema = z.object({
 });
 export type GeeHistogramOutput = z.infer<typeof GeeHistogramOutputSchema>;
 
+
 // New schemas for profile generation
 export const GeeProfileInputSchema = z.object({
   points: z.object({
@@ -90,11 +92,15 @@ export const GeeProfileInputSchema = z.object({
 });
 export type GeeProfileInput = z.infer<typeof GeeProfileInputSchema>;
 
-export const GeeProfileOutputSchema = z.object({
-  profile: z.array(z.object({
+// Stricter type for a single point in the profile result
+export const ProfilePointSchema = z.object({
     distance: z.number().describe('Distance from the start of the line in meters.'),
     elevation: z.number().describe('Elevation value at the point.'),
     location: z.array(z.number()).length(2).describe('The [lon, lat] coordinates of the point.'),
-  })).describe('An array of points representing the profile.'),
+});
+export type ProfilePoint = z.infer<typeof ProfilePointSchema>;
+
+export const GeeProfileOutputSchema = z.object({
+  profile: z.array(ProfilePointSchema).describe('An array of points representing the profile.'),
 });
 export type GeeProfileOutput = z.infer<typeof GeeProfileOutputSchema>;

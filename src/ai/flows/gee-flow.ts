@@ -1,4 +1,5 @@
 
+
 'use server';
 /**
  * @fileOverview A flow for generating Google Earth Engine tile layers, vector data, and histograms.
@@ -11,7 +12,7 @@
 import { ai } from '@/ai/genkit';
 import ee from '@google/earthengine';
 import { promisify } from 'util';
-import type { GeeTileLayerInput, GeeTileLayerOutput, GeeVectorizationInput, GeeValueQueryInput, GeeGeoTiffDownloadInput, GeeHistogramInput, GeeHistogramOutput, GeeProfileInput, GeeProfileOutput } from './gee-types';
+import type { GeeTileLayerInput, GeeTileLayerOutput, GeeVectorizationInput, GeeValueQueryInput, GeeGeoTiffDownloadInput, GeeHistogramInput, GeeHistogramOutput, GeeProfileInput, GeeProfileOutput, ProfilePoint } from './gee-types';
 import { GeeTileLayerInputSchema, GeeTileLayerOutputSchema, GeeVectorizationInputSchema, GeeValueQueryInputSchema, GeeGeoTiffDownloadInputSchema, GeeHistogramInputSchema, GeeHistogramOutputSchema, GeeProfileInputSchema, GeeProfileOutputSchema } from './gee-types';
 import { z } from 'zod';
 
@@ -52,10 +53,8 @@ export async function authenticateWithGee(): Promise<{ success: boolean; message
         await initializeEe();
         return { success: true, message: 'Autenticación con Google Earth Engine exitosa.' };
     } catch (error: any) {
-        // Re-throw the error so the frontend can catch the specific message and its details.
-        // The previous implementation was catching the error and returning an object,
-        // which breaks the error propagation chain for Next.js Server Actions.
-        throw new Error(`Fallo en la autenticación con GEE: ${error.message}`);
+        console.error("Fallo en la autenticación con GEE:", error.message);
+        return { success: false, message: `Fallo en la autenticación con GEE: ${error.message}` };
     }
 }
 
@@ -425,25 +424,34 @@ const geeProfileFlow = ai.defineFlow(
             scale: 30, // Adjust scale as needed, e.g., 30m for NASADEM
         });
 
-        // Use getInfo() which is a more direct way to fetch results from GEE server-side objects.
-        return new Promise((resolve, reject) => {
-            sampledCollection.getInfo((result, error) => {
+        // Use evaluate() for more robust error handling and async flow
+        return new Promise<GeeProfileOutput>((resolve, reject) => {
+            sampledCollection.evaluate((result, error) => {
                 if (error) {
                     console.error("GEE Profile Error:", error);
                     return reject(new Error(`Error al generar el perfil en GEE: ${error}`));
                 }
 
-                const profileData = result.features.map((feature: any) => {
-                    const elevation = feature.properties[bandName.getInfo()];
-                    const distance = feature.properties.distance;
-                    return {
-                        distance: Math.round(distance),
-                        elevation: elevation ? parseFloat(elevation.toFixed(2)) : 0,
-                        location: feature.geometry.coordinates, // [lon, lat]
-                    };
-                });
-                
-                resolve({ profile: profileData });
+                try {
+                    const profileData: ProfilePoint[] = result.features
+                        .map((feature: any) => {
+                            if (!feature.geometry) return null; // Add safety check
+                            
+                            const elevation = feature.properties[bandName.getInfo()];
+                            const distance = feature.properties.distance;
+                            return {
+                                distance: Math.round(distance),
+                                elevation: elevation ? parseFloat(elevation.toFixed(2)) : 0,
+                                location: feature.geometry.coordinates, // [lon, lat]
+                            };
+                        })
+                        .filter(Boolean); // Filter out any null results
+                    
+                    resolve({ profile: profileData });
+                } catch (processingError: any) {
+                    console.error("Error processing GEE profile results:", processingError);
+                    reject(new Error(`Error al procesar la respuesta del perfil de GEE: ${processingError.message}`));
+                }
             });
         });
     }
