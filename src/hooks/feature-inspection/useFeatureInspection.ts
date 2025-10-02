@@ -214,26 +214,26 @@ export const useFeatureInspection = ({
       const selectorSource = selectorLayer.getSource();
       if (!targetSource || !selectorSource) return;
 
-      const selectorFeatures = selectedFeatures.filter(sf => selectorSource.hasFeature(sf));
-      const selectorGeometries = (selectorFeatures.length > 0 ? selectorFeatures : selectorSource.getFeatures()).map(f => f.getGeometry()).filter(g => !!g) as Geometry[];
+      const relevantSelectedFeatures = selectedFeatures.filter(sf => selectorSource.hasFeature(sf));
+      const selectorFeaturesToProcess = (relevantSelectedFeatures.length > 0 ? relevantSelectedFeatures : selectorSource.getFeatures());
       
-      if (selectorGeometries.length === 0) {
-          toast({ description: "La capa selectora no tiene geometrías válidas.", variant: "destructive" });
+      if (selectorFeaturesToProcess.length === 0) {
+          toast({ description: "La capa selectora no tiene entidades válidas.", variant: "destructive" });
           return;
       }
 
       toast({ description: `Seleccionando entidades de "${targetLayer.get('name')}"...` });
       
       const geojsonFormat = new GeoJSON({ dataProjection: 'EPSG:4326', featureProjection: 'EPSG:3857' });
-      const selectorTurfGeometries = selectorGeometries.map(g => geojsonFormat.writeFeatureObject(g)) as turf.Feature<turf.Polygon | turf.MultiPolygon>[];
+      const selectorTurfGeometries = geojsonFormat.writeFeaturesObject(selectorFeaturesToProcess) as turf.FeatureCollection<turf.Polygon | turf.MultiPolygon>;
       
       let unifiedSelector: turf.Feature<turf.Polygon | turf.MultiPolygon> | null;
 
-      if (selectorTurfGeometries.length > 1) {
+      if (selectorTurfGeometries.features.length > 1) {
           // @ts-ignore - Turf union spread operator issue
-          unifiedSelector = turf.union(...selectorTurfGeometries);
+          unifiedSelector = turf.union(...selectorTurfGeometries.features);
       } else {
-          unifiedSelector = selectorTurfGeometries[0];
+          unifiedSelector = selectorTurfGeometries.features[0];
       }
 
       if (!unifiedSelector) {
@@ -247,10 +247,14 @@ export const useFeatureInspection = ({
       targetFeatures.forEach(targetFeature => {
           const targetGeom = targetFeature.getGeometry();
           if (targetGeom) {
-              const targetTurfGeom = geojsonFormat.writeGeometryObject(targetGeom);
-              const intersection = turf.intersect(unifiedSelector as any, targetTurfGeom as any);
-              if (intersection) {
-                  featuresToSelect.push(targetFeature);
+              try {
+                const targetTurfFeature = geojsonFormat.writeFeatureObject(targetFeature);
+                const intersection = turf.intersect(unifiedSelector as any, targetTurfFeature as any);
+                if (intersection) {
+                    featuresToSelect.push(targetFeature);
+                }
+              } catch(e) {
+                // Ignore errors during intersection test, likely from invalid geometries
               }
           }
       });
