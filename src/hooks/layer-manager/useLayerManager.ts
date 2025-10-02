@@ -273,9 +273,8 @@ export const useLayerManager = ({
 
         const wfsLayer = new VectorLayer({
             source: wfsSource,
-            style: new Style(), // Invisible style
+            style: new Style(), // Invisible style initially, as WMS is visible
             properties: { id: wfsId, name: layerTitle, type: 'wfs', gsLayerName: layerName },
-            zIndex: -1, // Render WFS data layer below everything else
         });
 
         // Store the authoritative bbox from GetCapabilities on the OL layer object
@@ -319,7 +318,7 @@ export const useLayerManager = ({
             visible: true,
             opacity: 1,
             type: 'wfs',
-            wmsStyleEnabled: true, // New property
+            wmsStyleEnabled: true, // Default to showing the WMS style
         }, true);
         
         updateGeoServerDiscoveredLayerState(layerName, true, 'wfs');
@@ -480,10 +479,25 @@ export const useLayerManager = ({
         if (l.id === layerId && l.type === 'wfs') {
             const newWmsStyleEnabled = !(l.wmsStyleEnabled ?? true);
             const visualLayer = l.olLayer.get('visualLayer');
+            const vectorLayer = l.olLayer as VectorLayer<any>;
+            
             if (visualLayer) {
-                // The visual layer is only visible if the main layer is also visible
                 visualLayer.setVisible(l.visible && newWmsStyleEnabled);
             }
+            
+            if (newWmsStyleEnabled) {
+                // If WMS style is ON, hide the vector style
+                vectorLayer.setStyle(new Style());
+            } else {
+                // If WMS style is OFF, restore the custom style
+                const baseStyle = vectorLayer.get('originalStyle');
+                const labelOptions = vectorLayer.get('labelOptions');
+                const graduatedSymbology = l.graduatedSymbology;
+                const categorizedSymbology = l.categorizedSymbology;
+                const restoredStyle = createStyleFunction(baseStyle, labelOptions, graduatedSymbology, categorizedSymbology);
+                vectorLayer.setStyle(restoredStyle);
+            }
+
             return { ...l, wmsStyleEnabled: newWmsStyleEnabled };
         }
         return l;
