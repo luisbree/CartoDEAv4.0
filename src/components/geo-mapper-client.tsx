@@ -258,7 +258,6 @@ export default function GeoMapperClient() {
     updateGeoServerDiscoveredLayerState: updateDiscoveredLayerState,
     clearSelectionAfterExtraction: featureInspectionHook.clearSelection,
     updateInspectedFeatureData: featureInspectionHook.updateInspectedFeatureData,
-    onSelectByLayer: featureInspectionHook.selectByLayer,
   });
   
   const {
