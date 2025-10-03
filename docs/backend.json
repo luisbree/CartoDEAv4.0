@@ -39,8 +39,7 @@
         },
         "createdAt": {
           "type": "string",
-          "format": "date-time",
-          "description": "Timestamp of when the map was shared."
+          "description": "Timestamp of when the map was shared. This will be a server timestamp object."
         }
       },
       "required": ["layers", "view", "baseLayerId", "createdAt"]
