@@ -252,6 +252,7 @@ export const useLayerManager = ({
   const handleAddHybridLayer = useCallback(async (layerName: string, layerTitle: string, serverUrl: string, bbox?: [number, number, number, number], styleName?: string) => {
     if (!isMapReady || !mapRef.current) return;
     const map = mapRef.current;
+    const initialOpacity = 0.7; // The desired initial opacity
 
     try {
         const cleanedServerUrl = serverUrl.replace(/\/wms\/?$|\/wfs\/?$/i, '');
@@ -302,6 +303,7 @@ export const useLayerManager = ({
             source: wmsSource,
             properties: { id: wmsId, name: `${layerTitle} (Visual)`, isVisualPartner: true, partnerId: wfsId },
             zIndex: WMS_LAYER_Z_INDEX,
+            opacity: initialOpacity, // Set initial opacity on the visual layer
         });
 
         // 3. Add WMS layer to the map
@@ -316,7 +318,7 @@ export const useLayerManager = ({
             name: layerTitle,
             olLayer: wfsLayer,
             visible: true,
-            opacity: 1,
+            opacity: initialOpacity, // The state now reflects the correct initial opacity
             type: 'wfs',
             wmsStyleEnabled: true, // Default to showing the WMS style
         }, true);
