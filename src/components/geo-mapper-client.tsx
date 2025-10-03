@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { MapPin, Database, Wrench, ListTree, ListChecks, Sparkles, ClipboardCheck, Library, LifeBuoy, Printer, Server, BrainCircuit, Camera, Loader2, SlidersHorizontal, ZoomIn, Undo2, BarChartHorizontal, DraftingCompass, Target } from 'lucide-react';
+import { MapPin, Database, Wrench, ListTree, ListChecks, Sparkles, ClipboardCheck, Library, LifeBuoy, Printer, Server, BrainCircuit, Camera, Loader2, SlidersHorizontal, ZoomIn, Undo2, BarChartHorizontal, DraftingCompass, Target, Share2 } from 'lucide-react';
 import { Style, Fill, Stroke, Circle as CircleStyle, Text as TextStyle } from 'ol/style';
 import { transform, transformExtent } from 'ol/proj';
 import type { Extent } from 'ol/extent';
@@ -62,8 +62,9 @@ import { useWfsLibrary } from '@/hooks/wfs-library/useWfsLibrary';
 import { useOsmQuery } from '@/hooks/osm-integration/useOsmQuery';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from '@/lib/utils';
+import { saveMapState } from '@/services/sharing-service';
 
-import type { OSMCategoryConfig, GeoServerDiscoveredLayer, BaseLayerOptionForSelect, MapLayer, ChatMessage, BaseLayerSettings, NominatimResult, PlainFeatureData, ActiveTool, TrelloCardInfo, GraduatedSymbology, VectorMapLayer, CategorizedSymbology } from '@/lib/types';
+import type { OSMCategoryConfig, GeoServerDiscoveredLayer, BaseLayerOptionForSelect, MapLayer, ChatMessage, BaseLayerSettings, NominatimResult, PlainFeatureData, ActiveTool, TrelloCardInfo, GraduatedSymbology, VectorMapLayer, CategorizedSymbology, SerializableMapLayer } from '@/lib/types';
 import { chatWithMapAssistant, type MapAssistantOutput } from '@/ai/flows/find-layer-flow';
 import { authenticateWithGee } from '@/ai/flows/gee-flow';
 import { checkTrelloCredentials } from '@/ai/flows/trello-actions';
@@ -326,6 +327,8 @@ export default function GeoMapperClient() {
                     description: result.message,
                 });
                 setIsGeeAuthenticated(true);
+            } else {
+                throw new Error(result.message);
             }
         } catch (error: any) {
             console.error("Error de autenticación automática con GEE:", error);
@@ -696,6 +699,64 @@ export default function GeoMapperClient() {
     map.renderSync();
   }, [mapRef, isCapturing, toast, activeBaseLayerId]);
   
+  const handleShareMap = useCallback(async () => {
+    if (!mapRef.current) return;
+
+    const map = mapRef.current;
+    const view = map.getView();
+    
+    // 1. Gather map state
+    const center = transform(view.getCenter() || [0,0], 'EPSG:3857', 'EPSG:4326');
+    const zoom = view.getZoom() || 1;
+
+    const serializableLayers: SerializableMapLayer[] = layerManagerHook.layers
+      .map(layer => {
+        // Only share layers that can be recreated from a URL
+        if (layer.type === 'wms' || layer.type === 'wfs' || layer.type === 'gee') {
+          return {
+            type: layer.type,
+            name: layer.name,
+            url: layer.olLayer.get('serverUrl'), // Assumes serverUrl is stored on the layer
+            layerName: layer.olLayer.get('gsLayerName'), // Assumes gsLayerName is stored
+            opacity: layer.opacity,
+            visible: layer.visible,
+            wmsStyleEnabled: layer.wmsStyleEnabled,
+            styleName: layer.olLayer.get('styleName'), // WMS style
+            geeParams: layer.olLayer.get('geeParams'), // For GEE layers
+          };
+        }
+        return null;
+      })
+      .filter((l): l is SerializableMapLayer => l !== null);
+
+    const mapState = {
+      layers: serializableLayers,
+      view: { center, zoom },
+      baseLayerId: activeBaseLayerId,
+    };
+
+    try {
+      toast({ description: 'Guardando el estado del mapa...' });
+      const mapId = await saveMapState(mapState);
+      const shareUrl = `${window.location.origin}/share/${mapId}`;
+      
+      await navigator.clipboard.writeText(shareUrl);
+      toast({
+        title: "¡Enlace copiado!",
+        description: "El enlace para compartir el mapa se ha copiado en tu portapapeles.",
+      });
+
+    } catch (error) {
+      console.error("Failed to share map:", error);
+      toast({
+        title: "Error al compartir",
+        description: "No se pudo guardar el estado del mapa para compartir.",
+        variant: "destructive",
+      });
+    }
+
+  }, [mapRef, layerManagerHook.layers, activeBaseLayerId, toast]);
+
   // Effect for right-click tool toggling
   useEffect(() => {
     const mapEl = mapElementRef.current;
@@ -829,6 +890,15 @@ export default function GeoMapperClient() {
                 disabled={isCapturing}
             >
               {isCapturing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
+            </Button>
+            <Button
+                onClick={handleShareMap}
+                variant="outline"
+                size="icon"
+                className="h-8 w-8 flex-shrink-0 bg-black/20 hover:bg-black/40 border border-white/30 text-white/90"
+                title="Compartir mapa"
+            >
+                <Share2 className="h-4 w-4" />
             </Button>
         </div>
 
@@ -1117,5 +1187,3 @@ export default function GeoMapperClient() {
     </div>
   );
 }
-
-    
