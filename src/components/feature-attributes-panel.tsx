@@ -192,6 +192,16 @@ const AttributesPanelComponent: React.FC<AttributesPanelComponentProps> = ({
   const panelTitle = layerName && hasFeatures
     ? `Atributos: ${layerName} (${featureData.length})` 
     : 'Atributos';
+    
+  const addFieldTrigger = hasFeatures ? (
+    <AlertDialogTrigger asChild>
+      <Button variant="ghost" size="icon" className="h-6 w-6 text-white hover:bg-gray-600/80" title="Añadir Campo">
+          <Plus className="h-4 w-4" />
+          <span className="sr-only">Añadir Campo</span>
+      </Button>
+    </AlertDialogTrigger>
+  ) : null;
+
 
   return (
     <DraggablePanel
@@ -210,6 +220,48 @@ const AttributesPanelComponent: React.FC<AttributesPanelComponentProps> = ({
       overflowX="auto"
       overflowY="auto"
       zIndex={style?.zIndex as number | undefined}
+      headerActions={
+        <AlertDialog open={isAddFieldDialogOpen} onOpenChange={setIsAddFieldDialogOpen}>
+          {addFieldTrigger}
+          <AlertDialogPortal>
+            <AlertDialogContent onOpenAutoFocus={(e) => e.preventDefault()}>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Añadir Nuevo Campo a "{layerName}"</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        Esto añadirá una nueva columna a todas las entidades de esta capa. Esta acción no se puede deshacer.
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <div className="space-y-4 py-2">
+                    <div className="space-y-2">
+                        <Label htmlFor="new-field-name">Nombre del Campo</Label>
+                        <Input
+                            id="new-field-name"
+                            value={newFieldName}
+                            onChange={(e) => setNewFieldName(e.target.value)}
+                            placeholder="Ej: observacion"
+                            autoFocus
+                        />
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="new-field-default-value">Valor por Defecto (Opcional)</Label>
+                        <Input
+                            id="new-field-default-value"
+                            value={newFieldDefaultValue}
+                            onChange={(e) => setNewFieldDefaultValue(e.target.value)}
+                            placeholder="Ej: sin datos"
+                        />
+                    </div>
+                </div>
+                <AlertDialogFooter>
+                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleAddFieldSubmit} disabled={!newFieldName.trim()}>
+                        Añadir Campo
+                    </AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialogPortal>
+        </AlertDialog>
+      }
     >
       <div className="flex-grow flex flex-col h-full"> 
           {hasFeatures && allKeys.length > 0 ? (
@@ -333,53 +385,6 @@ const AttributesPanelComponent: React.FC<AttributesPanelComponentProps> = ({
             </div>
           )}
       </div>
-       {hasFeatures && (
-         <AlertDialog open={isAddFieldDialogOpen} onOpenChange={setIsAddFieldDialogOpen}>
-          <AlertDialogTrigger asChild>
-            <Button variant="ghost" size="icon" className="absolute top-1 right-20 h-6 w-6 text-white hover:bg-gray-600/80">
-                <Plus className="h-4 w-4" />
-                <span className="sr-only">Añadir Campo</span>
-            </Button>
-          </AlertDialogTrigger>
-          <AlertDialogPortal>
-            <AlertDialogContent onOpenAutoFocus={(e) => e.preventDefault()}>
-                <AlertDialogHeader>
-                    <AlertDialogTitle>Añadir Nuevo Campo a "{layerName}"</AlertDialogTitle>
-                    <AlertDialogDescription>
-                        Esto añadirá una nueva columna a todas las entidades de esta capa. Esta acción no se puede deshacer.
-                    </AlertDialogDescription>
-                </AlertDialogHeader>
-                <div className="space-y-4 py-2">
-                    <div className="space-y-2">
-                        <Label htmlFor="new-field-name">Nombre del Campo</Label>
-                        <Input
-                            id="new-field-name"
-                            value={newFieldName}
-                            onChange={(e) => setNewFieldName(e.target.value)}
-                            placeholder="Ej: observacion"
-                            autoFocus
-                        />
-                    </div>
-                    <div className="space-y-2">
-                        <Label htmlFor="new-field-default-value">Valor por Defecto (Opcional)</Label>
-                        <Input
-                            id="new-field-default-value"
-                            value={newFieldDefaultValue}
-                            onChange={(e) => setNewFieldDefaultValue(e.target.value)}
-                            placeholder="Ej: sin datos"
-                        />
-                    </div>
-                </div>
-                <AlertDialogFooter>
-                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleAddFieldSubmit} disabled={!newFieldName.trim()}>
-                        Añadir Campo
-                    </AlertDialogAction>
-                </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialogPortal>
-        </AlertDialog>
-      )}
     </DraggablePanel>
   );
 };

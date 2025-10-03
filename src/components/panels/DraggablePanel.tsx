@@ -25,6 +25,7 @@ interface DraggablePanelProps {
   overflowY?: 'auto' | 'hidden' | 'visible';
   icon?: React.ElementType;
   zIndex?: number; // Added for Z-ordering
+  headerActions?: React.ReactNode; // New prop for actions in the header
 }
 
 const DraggablePanel: React.FC<DraggablePanelProps> = ({
@@ -46,6 +47,7 @@ const DraggablePanel: React.FC<DraggablePanelProps> = ({
   overflowY = 'auto',
   icon: IconComponent,
   zIndex, // Destructure zIndex, though it's part of style now
+  headerActions, // Destructure new prop
 }) => {
   const [currentSize, setCurrentSize] = useState({
       width: typeof initialSize.width === 'number' ? `${initialSize.width}px` : initialSize.width,
@@ -94,6 +96,7 @@ const DraggablePanel: React.FC<DraggablePanelProps> = ({
           <CardTitle className="text-sm font-semibold text-white truncate" title={title}>{title}</CardTitle>
         </div>
         <div className="flex items-center">
+          {headerActions}
           <Button variant="ghost" size="icon" onClick={onToggleCollapse} className="h-6 w-6 text-white hover:bg-gray-600/80">
             {isCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
             <span className="sr-only">{isCollapsed ? 'Expandir' : 'Colapsar'}</span>
