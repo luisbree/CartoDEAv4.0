@@ -714,18 +714,24 @@ export default function GeoMapperClient() {
     const serializableLayers: SerializableMapLayer[] = layerManagerHook.layers
       .map(layer => {
         if (layer.type === 'wms' || layer.type === 'wfs' || layer.type === 'gee') {
-          const rawLayerData: Partial<SerializableMapLayer> = {
-            type: layer.type,
-            name: layer.name,
-            url: layer.olLayer.get('serverUrl') || null,
-            layerName: layer.olLayer.get('gsLayerName') || null,
-            opacity: layer.opacity,
-            visible: layer.visible,
-            wmsStyleEnabled: layer.wmsStyleEnabled,
-            styleName: layer.olLayer.get('styleName') || null,
-            geeParams: layer.olLayer.get('geeParams') || null,
-          };
-          return rawLayerData as SerializableMapLayer;
+            const geeParams = layer.olLayer.get('geeParams');
+            const sanitizedGeeParams = geeParams ? {
+                bandCombination: geeParams.bandCombination,
+                tileUrl: geeParams.tileUrl,
+            } : null;
+
+            const rawLayerData: Partial<SerializableMapLayer> = {
+                type: layer.type,
+                name: layer.name,
+                url: layer.olLayer.get('serverUrl') || null,
+                layerName: layer.olLayer.get('gsLayerName') || null,
+                opacity: layer.opacity,
+                visible: layer.visible,
+                wmsStyleEnabled: layer.wmsStyleEnabled,
+                styleName: layer.olLayer.get('styleName') || null,
+                geeParams: sanitizedGeeParams,
+            };
+            return rawLayerData as SerializableMapLayer;
         }
         return null;
       })
@@ -752,7 +758,7 @@ export default function GeoMapperClient() {
       });
 
     } catch (error) {
-      console.error("Error en handleShareMap durante el guardado:", error);
+      console.error("### ERROR EN handleShareMap ###", error);
       toast({
         title: "Error al compartir",
         description: "No se pudo guardar el estado del mapa para compartir. Revisa la consola para más detalles.",
