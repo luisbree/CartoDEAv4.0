@@ -71,32 +71,35 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
             
             const loadedLayers: AppMapLayer[] = [];
 
-            mapState.layers.forEach(layerState => {
-                if ((layerState.type === 'wms' || layerState.type === 'wfs') && layerState.url && layerState.layerName) {
-                    const newLayer = addLayerFnsRef.current.handleAddHybridLayer(
-                        layerState.layerName,
-                        layerState.name,
-                        layerState.url,
-                        undefined,
-                        layerState.styleName || undefined
-                    );
+            const loadAllLayers = async () => {
+                for (const layerState of mapState.layers) {
+                    if ((layerState.type === 'wms' || layerState.type === 'wfs') && layerState.url && layerState.layerName) {
+                        const newLayer = await addLayerFnsRef.current.handleAddHybridLayer(
+                            layerState.layerName,
+                            layerState.name,
+                            layerState.url,
+                            undefined,
+                            layerState.styleName || undefined
+                        );
 
-                    if (newLayer) {
-                        newLayer.olLayer.setVisible(layerState.visible);
-                        newLayer.olLayer.setOpacity(layerState.opacity);
-                        const visualLayer = newLayer.olLayer.get('visualLayer');
-                        if (visualLayer) {
-                            visualLayer.setVisible(layerState.visible && (layerState.wmsStyleEnabled ?? true));
-                            visualLayer.setOpacity(layerState.opacity);
+                        if (newLayer) {
+                            newLayer.olLayer.setVisible(layerState.visible);
+                            newLayer.olLayer.setOpacity(layerState.opacity);
+                            const visualLayer = newLayer.olLayer.get('visualLayer');
+                            if (visualLayer) {
+                                visualLayer.setVisible(layerState.visible && (layerState.wmsStyleEnabled ?? true));
+                                visualLayer.setOpacity(layerState.opacity);
+                            }
+                            loadedLayers.push({ ...newLayer, visible: layerState.visible, opacity: layerState.opacity });
                         }
-                        loadedLayers.push({ ...newLayer, visible: layerState.visible, opacity: layerState.opacity });
+                    } else if (layerState.type === 'gee' && layerState.geeParams?.tileUrl) {
+                        addLayerFnsRef.current.addGeeLayerToMap(layerState.geeParams.tileUrl, layerState.name, layerState.geeParams);
                     }
-                } else if (layerState.type === 'gee' && layerState.geeParams?.tileUrl) {
-                    addLayerFnsRef.current.addGeeLayerToMap(layerState.geeParams.tileUrl, layerState.name, layerState.geeParams);
                 }
-            });
+                setActiveLayers(loadedLayers.reverse());
+            };
             
-            setActiveLayers(loadedLayers.reverse());
+            loadAllLayers();
         }
     }, [isMapReady, mapState, mapRef]);
 

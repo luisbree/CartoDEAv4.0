@@ -249,8 +249,8 @@ export const useLayerManager = ({
 
   }, [mapRef]);
 
-  const handleAddHybridLayer = useCallback(async (layerName: string, layerTitle: string, serverUrl: string, bbox?: [number, number, number, number], styleName?: string) => {
-    if (!isMapReady || !mapRef.current) return;
+  const handleAddHybridLayer = useCallback(async (layerName: string, layerTitle: string, serverUrl: string, bbox?: [number, number, number, number], styleName?: string): Promise<MapLayer | null> => {
+    if (!isMapReady || !mapRef.current) return null;
     const map = mapRef.current;
     const initialOpacity = 0.7; // The desired initial opacity
 
@@ -275,7 +275,7 @@ export const useLayerManager = ({
         const wfsLayer = new VectorLayer({
             source: wfsSource,
             style: new Style(), // Invisible style initially, as WMS is visible
-            properties: { id: wfsId, name: layerTitle, type: 'wfs', gsLayerName: layerName },
+            properties: { id: wfsId, name: layerTitle, type: 'wfs', gsLayerName: layerName, serverUrl: cleanedServerUrl, styleName },
         });
 
         // Store the authoritative bbox from GetCapabilities on the OL layer object
@@ -312,23 +312,28 @@ export const useLayerManager = ({
         // 4. Link the visual layer to the main layer object for control
         wfsLayer.set('visualLayer', wmsLayer);
 
-        // 5. Add only the main WFS layer to the panel state and the map
-        addLayer({
+        const newLayer: MapLayer = {
             id: wfsId,
             name: layerTitle,
             olLayer: wfsLayer,
             visible: true,
-            opacity: initialOpacity, // The state now reflects the correct initial opacity
+            opacity: initialOpacity,
             type: 'wfs',
-            wmsStyleEnabled: true, // Default to showing the WMS style
-        }, true);
+            wmsStyleEnabled: true,
+        };
+
+        // 5. Add only the main WFS layer to the panel state and the map
+        addLayer(newLayer, true);
         
         updateGeoServerDiscoveredLayerState(layerName, true, 'wfs');
         setTimeout(() => toast({ description: `Capa "${layerTitle}" añadida.` }), 0);
 
+        return newLayer;
+
     } catch (error: any) {
         console.error("Error adding hybrid layer:", error);
         setTimeout(() => toast({ description: `Error al añadir capa: ${error.message}`, variant: 'destructive' }), 0);
+        return null;
     }
 }, [isMapReady, mapRef, addLayer, updateGeoServerDiscoveredLayerState, toast]);
 
