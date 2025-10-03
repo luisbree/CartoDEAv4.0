@@ -13,14 +13,12 @@ const firebaseConfig = {
     appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-let app: FirebaseApp;
-if (!getApps().length) {
-    app = initializeApp(firebaseConfig);
-} else {
-    app = getApp();
+function getFirebaseApp(): FirebaseApp {
+    if (!getApps().length) {
+        return initializeApp(firebaseConfig);
+    }
+    return getApp();
 }
-
-const firestoreInstance = getFirestore(app);
 
 /**
  * Gets the initialized Firestore instance.
@@ -28,5 +26,6 @@ const firestoreInstance = getFirestore(app);
  * @returns The Firestore instance.
  */
 export function getFirestoreInstance(): Firestore {
-    return firestoreInstance;
+    const app = getFirebaseApp();
+    return getFirestore(app);
 }

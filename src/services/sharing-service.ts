@@ -1,11 +1,22 @@
 
 'use client';
 
-import { collection, addDoc, getDoc, doc, serverTimestamp } from "firebase/firestore";
+import { collection, addDoc, getDoc, doc, serverTimestamp, Firestore } from "firebase/firestore";
 import { getFirestoreInstance } from '@/firebase/client';
 import type { MapState } from "@/lib/types";
 
 const SHARED_MAPS_COLLECTION = 'sharedMaps';
+
+// A memoized instance of Firestore.
+let firestore: Firestore | null = null;
+
+function getDb() {
+    if (!firestore) {
+        firestore = getFirestoreInstance();
+    }
+    return firestore;
+}
+
 
 /**
  * Saves the given map state to Firestore and returns the generated document ID.
@@ -14,8 +25,8 @@ const SHARED_MAPS_COLLECTION = 'sharedMaps';
  */
 export async function saveMapState(mapState: Omit<MapState, 'createdAt'>): Promise<string> {
     try {
-        const firestore = getFirestoreInstance();
-        const docRef = await addDoc(collection(firestore, SHARED_MAPS_COLLECTION), {
+        const db = getDb();
+        const docRef = await addDoc(collection(db, SHARED_MAPS_COLLECTION), {
             ...mapState,
             createdAt: serverTimestamp(),
         });
@@ -33,8 +44,8 @@ export async function saveMapState(mapState: Omit<MapState, 'createdAt'>): Promi
  */
 export async function getMapState(mapId: string): Promise<MapState | null> {
     try {
-        const firestore = getFirestoreInstance();
-        const docRef = doc(firestore, SHARED_MAPS_COLLECTION, mapId);
+        const db = getDb();
+        const docRef = doc(db, SHARED_MAPS_COLLECTION, mapId);
         const docSnap = await getDoc(docRef);
 
         if (docSnap.exists()) {
