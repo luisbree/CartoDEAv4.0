@@ -715,7 +715,7 @@ export default function GeoMapperClient() {
       .map(layer => {
         // Only share layers that can be recreated from a URL
         if (layer.type === 'wms' || layer.type === 'wfs' || layer.type === 'gee') {
-          return {
+          const rawLayerData = {
             type: layer.type,
             name: layer.name,
             url: layer.olLayer.get('serverUrl'), // Assumes serverUrl is stored on the layer
@@ -726,6 +726,15 @@ export default function GeoMapperClient() {
             styleName: layer.olLayer.get('styleName'), // WMS style
             geeParams: layer.olLayer.get('geeParams'), // For GEE layers
           };
+
+          // Remove undefined properties to avoid Firestore errors
+          Object.keys(rawLayerData).forEach(key => {
+            if ((rawLayerData as any)[key] === undefined) {
+              delete (rawLayerData as any)[key];
+            }
+          });
+
+          return rawLayerData as SerializableMapLayer;
         }
         return null;
       })
@@ -1188,3 +1197,5 @@ export default function GeoMapperClient() {
     </div>
   );
 }
+
+    
