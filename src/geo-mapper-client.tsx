@@ -700,6 +700,7 @@ export default function GeoMapperClient() {
   }, [mapRef, isCapturing, toast, activeBaseLayerId]);
   
   const handleShareMap = useCallback(async () => {
+    console.log("1. 'handleShareMap' iniciado.");
     if (!mapRef.current) return;
 
     toast({ description: 'Guardando el estado del mapa...' });
@@ -707,14 +708,13 @@ export default function GeoMapperClient() {
     const map = mapRef.current;
     const view = map.getView();
     
-    // 1. Gather map state
     const center = transform(view.getCenter() || [0,0], 'EPSG:3857', 'EPSG:4326');
     const zoom = view.getZoom() || 1;
 
     const serializableLayers: SerializableMapLayer[] = layerManagerHook.layers
       .map(layer => {
         if (layer.type === 'wms' || layer.type === 'wfs' || layer.type === 'gee') {
-          const rawLayerData = {
+          const rawLayerData: Partial<SerializableMapLayer> = {
             type: layer.type,
             name: layer.name,
             url: layer.olLayer.get('serverUrl') || null,
@@ -736,9 +736,13 @@ export default function GeoMapperClient() {
       view: { center, zoom },
       baseLayerId: activeBaseLayerId,
     };
+    
+    console.log("2. Objeto 'mapState' a guardar:", mapState);
 
     try {
       const mapId = await saveMapState(mapState);
+      console.log("5. ID de mapa recibido del guardado:", mapId);
+      
       const shareUrl = `${window.location.origin}/share/${mapId}`;
       
       await navigator.clipboard.writeText(shareUrl);
@@ -748,14 +752,13 @@ export default function GeoMapperClient() {
       });
 
     } catch (error) {
-      console.error("Failed to share map:", error);
+      console.error("Error en handleShareMap durante el guardado:", error);
       toast({
         title: "Error al compartir",
-        description: "No se pudo guardar el estado del mapa para compartir.",
+        description: "No se pudo guardar el estado del mapa para compartir. Revisa la consola para más detalles.",
         variant: "destructive",
       });
     }
-
   }, [mapRef, layerManagerHook.layers, activeBaseLayerId, toast]);
 
   // Effect for right-click tool toggling
