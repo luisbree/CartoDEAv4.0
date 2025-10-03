@@ -8,6 +8,7 @@ import type { Style } from 'ol/style';
 import type Feature from 'ol/Feature';
 import type { Geometry } from 'ol/geom';
 import { nanoid } from 'nanoid';
+import type { GeeTileLayerInput } from '@/ai/flows/gee-types';
 
 export type ColorRampId = 'reds' | 'blues' | 'greens' | 'viridis' | 'pinks' | 'custom';
 export type ClassificationMethod = 'quantiles' | 'natural-breaks';
@@ -157,4 +158,28 @@ export interface ProfilePoint {
 
 export interface GeeProfileOutput {
     profile: ProfilePoint[];
+}
+
+
+// --- Map Sharing Types ---
+
+export interface SerializableMapLayer {
+    type: 'wms' | 'wfs' | 'gee';
+    name: string;
+    url?: string; // For WMS/WFS
+    layerName: string; // e.g., 'workspace:layer'
+    opacity: number;
+    visible: boolean;
+    wmsStyleEnabled?: boolean;
+    styleName?: string;
+    geeParams?: Omit<GeeTileLayerInput, 'aoi' | 'zoom'>; // For GEE layers
+}
+
+export interface MapState {
+    layers: SerializableMapLayer[];
+    view: {
+        center: number[]; // [lon, lat]
+        zoom: number;
+    };
+    baseLayerId: string;
 }
