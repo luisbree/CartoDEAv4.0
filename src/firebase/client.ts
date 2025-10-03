@@ -1,5 +1,7 @@
 
-import { initializeApp, getApps, getApp } from 'firebase/app';
+'use client';
+
+import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app';
 import { getFirestore, Firestore } from 'firebase/firestore';
 
 const firebaseConfig = {
@@ -11,10 +13,20 @@ const firebaseConfig = {
     appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-// Initialize Firebase
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
-const firestore = getFirestore(app);
+let app: FirebaseApp;
+if (!getApps().length) {
+    app = initializeApp(firebaseConfig);
+} else {
+    app = getApp();
+}
 
+const firestoreInstance = getFirestore(app);
+
+/**
+ * Gets the initialized Firestore instance.
+ * Ensures that Firebase is initialized before returning the instance.
+ * @returns The Firestore instance.
+ */
 export function getFirestoreInstance(): Firestore {
-    return firestore;
+    return firestoreInstance;
 }

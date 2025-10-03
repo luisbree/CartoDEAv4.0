@@ -2,7 +2,7 @@
 'use client';
 
 import { collection, addDoc, getDoc, doc, serverTimestamp } from "firebase/firestore";
-import { getFirestoreInstance } from '@/firebase/client'; // Use the client-side Firebase instance
+import { getFirestoreInstance } from '@/firebase/client';
 import type { MapState } from "@/lib/types";
 
 const SHARED_MAPS_COLLECTION = 'sharedMaps';
@@ -12,7 +12,7 @@ const SHARED_MAPS_COLLECTION = 'sharedMaps';
  * @param mapState - The state of the map to save.
  * @returns A promise that resolves to the unique ID of the saved map state.
  */
-export async function saveMapState(mapState: MapState): Promise<string> {
+export async function saveMapState(mapState: Omit<MapState, 'createdAt'>): Promise<string> {
     try {
         const firestore = getFirestoreInstance();
         const docRef = await addDoc(collection(firestore, SHARED_MAPS_COLLECTION), {
