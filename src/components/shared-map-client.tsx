@@ -2,7 +2,8 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Loader2, ListTree, Eye, EyeOff } from 'lucide-react';
+import Link from 'next/link';
+import { Loader2, ListTree, Eye, EyeOff, ArrowLeft } from 'lucide-react';
 import { getMapState } from '@/services/sharing-service';
 import type { MapState, MapLayer as AppMapLayer } from '@/lib/types';
 import MapView from '@/components/map-view';
@@ -10,9 +11,7 @@ import { useOpenLayersMap } from '@/hooks/map-core/useOpenLayersMap';
 import { useLayerManager } from '@/hooks/layer-manager/useLayerManager';
 import { useToast } from '@/hooks/use-toast';
 import { transform } from 'ol/proj';
-import type Layer from 'ol/layer/Layer';
-import type VectorLayer from 'ol/layer/Vector';
-import type VectorSource from 'ol/source/Vector';
+import { Button } from '@/components/ui/button';
 
 interface SharedMapClientProps {
     mapId?: string;
@@ -90,7 +89,7 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
                                 visualLayer.setVisible(layerState.visible && (layerState.wmsStyleEnabled ?? true));
                                 visualLayer.setOpacity(layerState.opacity);
                             }
-                            loadedLayers.push({ ...newLayer, visible: layerState.visible, opacity: layerState.opacity });
+                            loadedLayers.push({ ...newLayer, visible: layerState.visible, opacity: layerState.opacity, wmsStyleEnabled: layerState.wmsStyleEnabled });
                         }
                     } else if (layerState.type === 'gee' && layerState.geeParams?.tileUrl) {
                         addLayerFnsRef.current.addGeeLayerToMap(layerState.geeParams.tileUrl, layerState.name, layerState.geeParams);
@@ -101,7 +100,7 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
             
             loadAllLayers();
         }
-    }, [isMapReady, mapState, mapRef]);
+    }, [isMapReady, mapState, mapRef, toast]);
 
     const handleToggleVisibility = useCallback((layerId: string) => {
         setActiveLayers(prev => prev.map(l => {
@@ -149,6 +148,14 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
                 activeBaseLayerId={mapState.baseLayerId}
                 baseLayerSettings={{ opacity: 1, brightness: 100, contrast: 100 }}
             />
+             <div className="absolute top-4 right-4 z-10">
+                <Button asChild variant="secondary" className="shadow-lg">
+                    <Link href="/">
+                        <ArrowLeft className="mr-2 h-4 w-4" />
+                        Volver al Editor Principal
+                    </Link>
+                </Button>
+            </div>
             <div className="absolute top-4 left-4 z-10 bg-gray-800/80 backdrop-blur-sm text-white rounded-lg shadow-lg max-w-sm w-full border border-gray-700">
                 <div className="flex items-center p-3 border-b border-gray-700">
                     <ListTree className="h-5 w-5 mr-3 text-primary" />
