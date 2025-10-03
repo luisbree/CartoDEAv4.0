@@ -15,30 +15,33 @@ import type VectorLayer from 'ol/layer/Vector';
 import type VectorSource from 'ol/source/Vector';
 
 interface SharedMapClientProps {
-    mapId: string;
+    mapId?: string;
+    mapState?: MapState | null;
 }
 
-const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId }) => {
+const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: initialMapState }) => {
     const { mapRef, setMapInstanceAndElement, isMapReady, drawingSourceRef } = useOpenLayersMap();
     const { toast } = useToast();
-    const [mapState, setMapState] = useState<MapState | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
+    const [mapState, setMapState] = useState<MapState | null>(initialMapState || null);
+    const [isLoading, setIsLoading] = useState(!initialMapState);
     const [error, setError] = useState<string | null>(null);
     
     const [activeLayers, setActiveLayers] = useState<AppMapLayer[]>([]);
     
-    // We get a simplified 'addLayer' function from the hook to add layers to the map instance
-    const { addLayer } = useLayerManager({
+    const { handleAddHybridLayer, addGeeLayerToMap } = useLayerManager({
         mapRef, isMapReady, drawingSourceRef,
         onShowTableRequest: () => {}, updateGeoServerDiscoveredLayerState: () => {},
         clearSelectionAfterExtraction: () => {}, updateInspectedFeatureData: () => {},
     });
 
-    // Use a ref to hold the addLayer function to avoid dependency issues in useEffect
-    const addLayerRef = useRef(addLayer);
-    useEffect(() => { addLayerRef.current = addLayer; }, [addLayer]);
+    const addLayerFnsRef = useRef({ handleAddHybridLayer, addGeeLayerToMap });
+    useEffect(() => { 
+      addLayerFnsRef.current = { handleAddHybridLayer, addGeeLayerToMap };
+    }, [handleAddHybridLayer, addGeeLayerToMap]);
 
     useEffect(() => {
+        if (!mapId || initialMapState) return;
+        
         const fetchAndSetState = async () => {
             try {
                 const state = await getMapState(mapId);
@@ -55,7 +58,7 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId }) => {
             }
         };
         fetchAndSetState();
-    }, [mapId]);
+    }, [mapId, initialMapState]);
 
     useEffect(() => {
         if (isMapReady && mapState && mapRef.current) {
@@ -69,50 +72,30 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId }) => {
             const loadedLayers: AppMapLayer[] = [];
 
             mapState.layers.forEach(layerState => {
-                let newLayer: Layer | null = null;
-                // This logic mirrors parts of useLayerManager's addLayer functions
-                 if (layerState.type === 'wms' || layerState.type === 'wfs') {
-                    if (layerState.url && layerState.layerName) {
-                        const { olLayer } = addLayerRef.current.createHybridLayer(
-                            layerState.layerName, 
-                            layerState.name, 
-                            layerState.url, 
-                            undefined, 
-                            layerState.styleName
-                        );
-                        newLayer = olLayer;
-                    }
-                } else if (layerState.type === 'gee' && layerState.geeParams) {
-                    // Logic to re-create GEE layer would go here
-                    // For now, we are skipping full GEE recreation on shared maps
-                }
+                if ((layerState.type === 'wms' || layerState.type === 'wfs') && layerState.url && layerState.layerName) {
+                    const newLayer = addLayerFnsRef.current.handleAddHybridLayer(
+                        layerState.layerName,
+                        layerState.name,
+                        layerState.url,
+                        undefined,
+                        layerState.styleName || undefined
+                    );
 
-                if (newLayer) {
-                    newLayer.setVisible(layerState.visible);
-                    newLayer.setOpacity(layerState.opacity);
-
-                    // If it's a hybrid layer, handle the WMS visual part
-                    const visualLayer = newLayer.get('visualLayer');
-                    if (visualLayer) {
-                        visualLayer.setVisible(layerState.visible && (layerState.wmsStyleEnabled ?? true));
-                        visualLayer.setOpacity(layerState.opacity);
-                        map.addLayer(visualLayer);
+                    if (newLayer) {
+                        newLayer.olLayer.setVisible(layerState.visible);
+                        newLayer.olLayer.setOpacity(layerState.opacity);
+                        const visualLayer = newLayer.olLayer.get('visualLayer');
+                        if (visualLayer) {
+                            visualLayer.setVisible(layerState.visible && (layerState.wmsStyleEnabled ?? true));
+                            visualLayer.setOpacity(layerState.opacity);
+                        }
+                        loadedLayers.push({ ...newLayer, visible: layerState.visible, opacity: layerState.opacity });
                     }
-                    map.addLayer(newLayer);
-                    
-                    loadedLayers.push({
-                        id: newLayer.get('id'),
-                        name: layerState.name,
-                        olLayer: newLayer as VectorLayer<VectorSource>,
-                        visible: layerState.visible,
-                        opacity: layerState.opacity,
-                        type: layerState.type,
-                        wmsStyleEnabled: layerState.wmsStyleEnabled,
-                    });
+                } else if (layerState.type === 'gee' && layerState.geeParams?.tileUrl) {
+                    addLayerFnsRef.current.addGeeLayerToMap(layerState.geeParams.tileUrl, layerState.name, layerState.geeParams);
                 }
             });
             
-            // Set the layers in reverse order to match the original legend
             setActiveLayers(loadedLayers.reverse());
         }
     }, [isMapReady, mapState, mapRef]);
@@ -124,7 +107,7 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId }) => {
                 l.olLayer.setVisible(newVisibility);
                 const visualLayer = l.olLayer.get('visualLayer');
                 if (visualLayer) {
-                    visualLayer.setVisible(newVisibility && (l.wmsStyleEnabled ?? false));
+                    visualLayer.setVisible(newVisibility && (l.wmsStyleEnabled ?? true));
                 }
                 return { ...l, visible: newVisibility };
             }

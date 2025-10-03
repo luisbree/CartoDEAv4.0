@@ -317,39 +317,55 @@ export default function GeoMapperClient() {
 
   // Effect for automatic GEE and Trello authentication on load
   useEffect(() => {
-    const runAuthentications = async () => {
-        // GEE Auth
+    const runGeeAuth = async () => {
         setIsGeeAuthenticating(true);
         try {
-            const geeResult = await authenticateWithGee();
-            if (geeResult.success) {
-                toast({ title: "GEE Conectado", description: geeResult.message });
+            const result = await authenticateWithGee();
+            if (result.success) {
+                toast({
+                    title: "GEE Conectado",
+                    description: result.message,
+                });
                 setIsGeeAuthenticated(true);
             } else {
-                throw new Error(geeResult.message);
+                throw new Error(result.message);
             }
         } catch (error: any) {
             console.error("Error de autenticación automática con GEE:", error);
-            toast({ title: "Error de Autenticación GEE", description: error.message || "No se pudo autenticar con Google Earth Engine.", variant: "destructive" });
+            toast({
+                title: "Error de Autenticación GEE",
+                description: error.message || "No se pudo autenticar con Google Earth Engine.",
+                variant: "destructive",
+            });
             setIsGeeAuthenticated(false);
         } finally {
             setIsGeeAuthenticating(false);
         }
+    };
 
-        // Trello Auth
+    const runTrelloAuth = async () => {
         try {
-            const trelloResult = await checkTrelloCredentials();
-            if (trelloResult.success) {
-                toast({ title: "Trello Conectado", description: trelloResult.message });
+            const result = await checkTrelloCredentials();
+            if (result.success) {
+                toast({
+                    title: "Trello Conectado",
+                    description: result.message,
+                });
             }
             // If not configured, do nothing (no toast).
         } catch (error: any) {
             console.error("Error de verificación automática de Trello:", error);
-            toast({ title: "Error de Conexión con Trello", description: error.message, variant: "destructive" });
+            toast({
+                title: "Error de Conexión con Trello",
+                description: error.message,
+                variant: "destructive",
+            });
         }
     };
+
     if (isMapReady) {
-        runAuthentications();
+        runGeeAuth();
+        runTrelloAuth();
     }
   }, [isMapReady, toast]);
   
@@ -686,6 +702,8 @@ export default function GeoMapperClient() {
   const handleShareMap = useCallback(async () => {
     if (!mapRef.current) return;
 
+    toast({ description: 'Guardando el estado del mapa...' });
+
     const map = mapRef.current;
     const view = map.getView();
     
@@ -695,19 +713,20 @@ export default function GeoMapperClient() {
 
     const serializableLayers: SerializableMapLayer[] = layerManagerHook.layers
       .map(layer => {
-        // Only share layers that can be recreated from a URL
-        if (layer.type === 'wfs' || layer.type === 'wms' || layer.type === 'gee') {
-          return {
+        if (layer.type === 'wms' || layer.type === 'wfs' || layer.type === 'gee') {
+          const rawLayerData: Partial<SerializableMapLayer> = {
             type: layer.type,
             name: layer.name,
-            url: layer.olLayer.get('serverUrl'), // Assumes serverUrl is stored on the layer
-            layerName: layer.olLayer.get('gsLayerName'), // Assumes gsLayerName is stored
+            layerName: layer.olLayer.get('gsLayerName') || null,
             opacity: layer.opacity,
             visible: layer.visible,
-            wmsStyleEnabled: layer.wmsStyleEnabled,
-            styleName: layer.olLayer.get('styleName'), // WMS style
-            geeParams: layer.olLayer.get('geeParams'), // For GEE layers
+            wmsStyleEnabled: layer.wmsStyleEnabled || false,
+            url: layer.olLayer.get('serverUrl') || null,
+            styleName: layer.olLayer.get('styleName') || null,
+            geeParams: layer.olLayer.get('geeParams') || null,
           };
+          // Filter out undefined/null properties before returning
+          return Object.fromEntries(Object.entries(rawLayerData).filter(([_, v]) => v != null)) as SerializableMapLayer;
         }
         return null;
       })
@@ -720,7 +739,6 @@ export default function GeoMapperClient() {
     };
 
     try {
-      toast({ description: 'Guardando el estado del mapa...' });
       const mapId = await saveMapState(mapState);
       const shareUrl = `${window.location.origin}/share/${mapId}`;
       
@@ -1171,5 +1189,3 @@ export default function GeoMapperClient() {
     </div>
   );
 }
-
-    
