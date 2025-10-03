@@ -1,8 +1,8 @@
 
-'use server';
+'use client';
 
-import { collection, addDoc, getDoc, doc, serverTimestamp } from "firebase/firestore"; 
-import { firestore } from '@/firebase/server-config'; // Assuming you have a server-side config
+import { collection, addDoc, getDoc, doc, serverTimestamp } from "firebase/firestore";
+import { getFirestoreInstance } from '@/firebase/client'; // Use the client-side Firebase instance
 import type { MapState } from "@/lib/types";
 
 const SHARED_MAPS_COLLECTION = 'sharedMaps';
@@ -14,6 +14,7 @@ const SHARED_MAPS_COLLECTION = 'sharedMaps';
  */
 export async function saveMapState(mapState: MapState): Promise<string> {
     try {
+        const firestore = getFirestoreInstance();
         const docRef = await addDoc(collection(firestore, SHARED_MAPS_COLLECTION), {
             ...mapState,
             createdAt: serverTimestamp(),
@@ -32,12 +33,11 @@ export async function saveMapState(mapState: MapState): Promise<string> {
  */
 export async function getMapState(mapId: string): Promise<MapState | null> {
     try {
+        const firestore = getFirestoreInstance();
         const docRef = doc(firestore, SHARED_MAPS_COLLECTION, mapId);
         const docSnap = await getDoc(docRef);
 
         if (docSnap.exists()) {
-            // We cast here, assuming the data matches the MapState interface.
-            // For production, you might add validation (e.g., with Zod).
             return docSnap.data() as MapState;
         } else {
             console.log("No such map state document!");
