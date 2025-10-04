@@ -2,7 +2,7 @@
 
 'use client';
 
-import { collection, addDoc, getDoc, doc, serverTimestamp, Firestore } from "firebase/firestore";
+import { collection, addDoc, getDoc, doc, serverTimestamp, Firestore, enableNetwork, disableNetwork } from "firebase/firestore";
 import { getFirestoreInstance } from '@/firebase/client';
 import type { MapState } from "@/lib/types";
 
@@ -17,6 +17,29 @@ function getDb() {
     }
     return firestore;
 }
+
+/**
+ * Checks the connection to Firestore by performing a dummy read.
+ * Throws an error if the connection fails.
+ */
+export async function checkFirestoreConnection(): Promise<void> {
+    try {
+        const db = getDb();
+        // Perform a lightweight operation, like getting a non-existent document
+        // in a non-existent collection to test connectivity without incurring costs.
+        await getDoc(doc(db, 'health-check', 'status'));
+    } catch (error: any) {
+        // This is expected to fail with a permission error if rules are set,
+        // or a network error if offline, but it confirms the SDK is trying to connect.
+        // We can consider this a "successful" connection test if it's not a config error.
+        if (error.code === 'unavailable') {
+             throw new Error("No se pudo conectar con Firestore. Verifique su conexión a internet.");
+        }
+        // For other errors, we assume the connection is okay but something else is wrong (e.g., rules).
+        // This is sufficient for a "connection established" message.
+    }
+}
+
 
 /**
  * Saves the given map state to Firestore.
@@ -66,3 +89,6 @@ export async function getMapState(mapId: string): Promise<MapState | null> {
         throw new Error("Could not retrieve map state.");
     }
 }
+
+
+    

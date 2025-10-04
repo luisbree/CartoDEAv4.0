@@ -62,7 +62,7 @@ import { useWfsLibrary } from '@/hooks/wfs-library/useWfsLibrary';
 import { useOsmQuery } from '@/hooks/osm-integration/useOsmQuery';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from '@/lib/utils';
-import { saveMapState } from '@/services/sharing-service';
+import { saveMapState, checkFirestoreConnection } from '@/services/sharing-service';
 
 import type { OSMCategoryConfig, GeoServerDiscoveredLayer, BaseLayerOptionForSelect, MapLayer, ChatMessage, BaseLayerSettings, NominatimResult, PlainFeatureData, ActiveTool, TrelloCardInfo, GraduatedSymbology, VectorMapLayer, CategorizedSymbology, SerializableMapLayer, RemoteSerializableLayer, LocalSerializableLayer } from '@/lib/types';
 import { chatWithMapAssistant, type MapAssistantOutput } from '@/ai/flows/find-layer-flow';
@@ -322,55 +322,48 @@ export default function GeoMapperClient() {
 
   // Effect for automatic GEE and Trello authentication on load
   useEffect(() => {
-    const runGeeAuth = async () => {
+    const runInitialAuths = async () => {
+        // GEE Auth
         setIsGeeAuthenticating(true);
         try {
-            const result = await authenticateWithGee();
-            if (result.success) {
-                toast({
-                    title: "GEE Conectado",
-                    description: result.message,
-                });
+            const geeResult = await authenticateWithGee();
+            if (geeResult.success) {
+                toast({ title: "GEE Conectado", description: geeResult.message });
                 setIsGeeAuthenticated(true);
             } else {
-                throw new Error(result.message);
+                throw new Error(geeResult.message);
             }
         } catch (error: any) {
             console.error("Error de autenticación automática con GEE:", error);
-            toast({
-                title: "Error de Autenticación GEE",
-                description: error.message || "No se pudo autenticar con Google Earth Engine.",
-                variant: "destructive",
-            });
+            toast({ title: "Error de Autenticación GEE", description: error.message || "No se pudo autenticar con Google Earth Engine.", variant: "destructive" });
             setIsGeeAuthenticated(false);
         } finally {
             setIsGeeAuthenticating(false);
         }
-    };
 
-    const runTrelloAuth = async () => {
+        // Trello Auth
         try {
-            const result = await checkTrelloCredentials();
-            if (result.success) {
-                toast({
-                    title: "Trello Conectado",
-                    description: result.message,
-                });
+            const trelloResult = await checkTrelloCredentials();
+            if (trelloResult.success) {
+                toast({ title: "Trello Conectado", description: trelloResult.message });
             }
-            // If not configured, do nothing (no toast).
         } catch (error: any) {
             console.error("Error de verificación automática de Trello:", error);
-            toast({
-                title: "Error de Conexión con Trello",
-                description: error.message,
-                variant: "destructive",
-            });
+            toast({ title: "Error de Conexión con Trello", description: error.message, variant: "destructive" });
+        }
+
+        // Firestore Connection Check
+        try {
+            await checkFirestoreConnection();
+            toast({ title: "Firestore Conectado", description: "La conexión con la base de datos se ha establecido correctamente." });
+        } catch (error: any) {
+            console.error("Error de conexión con Firestore:", error);
+            toast({ title: "Error de Conexión con Firestore", description: error.message, variant: "destructive" });
         }
     };
-
+    
     if (isMapReady) {
-        runGeeAuth();
-        runTrelloAuth();
+        runInitialAuths();
     }
   }, [isMapReady, toast]);
   
@@ -1203,5 +1196,7 @@ export default function GeoMapperClient() {
     </div>
   );
 }
+
+    
 
     
