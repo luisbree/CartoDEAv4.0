@@ -40,4 +40,3 @@ export function getFirestoreInstance(): Firestore {
     const app = getFirebaseApp();
     return getFirestore(app);
 }
-
