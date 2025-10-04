@@ -65,7 +65,7 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from '@/lib/utils';
 import { saveMapState } from '@/services/sharing-service';
 
-import type { OSMCategoryConfig, GeoServerDiscoveredLayer, BaseLayerOptionForSelect, MapLayer, ChatMessage, BaseLayerSettings, NominatimResult, PlainFeatureData, ActiveTool, TrelloCardInfo, GraduatedSymbology, VectorMapLayer, CategorizedSymbology, SerializableMapLayer, RemoteSerializableLayer } from '@/lib/types';
+import type { OSMCategoryConfig, GeoServerDiscoveredLayer, BaseLayerOptionForSelect, MapLayer, ChatMessage, BaseLayerSettings, NominatimResult, PlainFeatureData, ActiveTool, TrelloCardInfo, GraduatedSymbology, VectorMapLayer, CategorizedSymbology, SerializableMapLayer, RemoteSerializableLayer, LocalSerializableLayer } from '@/lib/types';
 import { chatWithMapAssistant, type MapAssistantOutput } from '@/ai/flows/find-layer-flow';
 import { authenticateWithGee } from '@/ai/flows/gee-flow';
 import { checkTrelloCredentials } from '@/ai/flows/trello-actions';
@@ -719,6 +719,7 @@ export default function GeoMapperClient() {
                 tileUrl: geeParams.tileUrl,
             } : null;
             
+            // Explicitly create a clean object, ensuring no complex OL properties are included
             const remoteLayer: RemoteSerializableLayer = {
                 type: layer.type,
                 name: layer.name,
@@ -734,10 +735,11 @@ export default function GeoMapperClient() {
         }
         
         // Handle local layers
-        return {
+        const localLayer: LocalSerializableLayer = {
             type: 'local',
             name: layer.name,
         };
+        return localLayer;
     });
 
     const mapState = {
