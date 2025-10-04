@@ -1,3 +1,4 @@
+
 {
   "entities": {
     "SharedMap": {
@@ -11,7 +12,7 @@
           "items": {
             "type": "object",
             "properties": {
-              "type": { "type": "string", "description": "Layer type (e.g., 'wfs', 'wms', 'gee')." },
+              "type": { "type": "string", "description": "Layer type (e.g., 'wfs', 'wms', 'gee', 'local')." },
               "name": { "type": "string", "description": "Display name of the layer." },
               "url": { "type": "string", "description": "The base URL of the OGC server." },
               "layerName": { "type": "string", "description": "The machine-readable layer name (e.g., 'workspace:layer')." },
@@ -19,9 +20,16 @@
               "visible": { "type": "boolean", "description": "Layer visibility." },
               "wmsStyleEnabled": { "type": "boolean", "description": "Whether the WMS style is active." },
               "styleName": { "type": "string", "description": "The original WMS style name." },
-              "geeParams": { "type": "object", "description": "Parameters for GEE layers." }
+              "geeParams": {
+                "type": "object",
+                "description": "Parameters for GEE layers.",
+                 "properties": {
+                    "bandCombination": { "type": "string" },
+                    "tileUrl": { "type": "string" }
+                 }
+              }
             },
-            "required": ["type", "name", "layerName", "opacity", "visible"]
+            "required": ["type", "name"]
           }
         },
         "view": {
@@ -49,9 +57,6 @@
     "providers": []
   },
   "firestore": {
-    "/sharedMaps/{mapId}": {
-      "schema": { "$ref": "#/entities/SharedMap" },
-      "description": "Stores the state of shared maps. Anyone can read, but writing is restricted."
-    }
+    "rules": "firestore.rules"
   }
 }

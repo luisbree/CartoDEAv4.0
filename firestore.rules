@@ -1,33 +1,21 @@
-/**
- * @file Firestore Security Rules
- * @description This ruleset allows public read access to shared map states while restricting write access.
- *
- * Core Philosophy:
- * The ruleset provides open read access, but restricts write access to prevent unauthorized modifications.
- *
- * Data Structure:
- * The data consists of shared map states stored in the `/sharedMaps/{mapId}` collection.
- *
- * Key Security Decisions:
- * - Public read access: Any user can read shared map states.
- * - No write access: Create, update, and delete operations are denied to all users.
- */
+
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    /**
-     * @description Allows public read access to shared map states, but restricts write access.
-     * @path /sharedMaps/{mapId}
-     * @allow (get, list) - Any user can read shared maps.
-     * @deny (create, update, delete) - No user can create, update, or delete shared maps.
-     * @principle Allows public read, denies all writes.
-     */
+    // Rules for the sharedMaps collection
     match /sharedMaps/{mapId} {
-      allow get, list: if true;
-      allow create: if false;
-      allow update: if false;
-      allow delete: if false;
+      // Allow anyone to read a shared map document.
+      allow read: if true;
+      // Allow anyone to create a new shared map document.
+      allow create: if true;
+      // Disallow updating or deleting shared maps to keep them permanent.
+      allow update, delete: if false;
+    }
+
+    // Default deny for all other collections
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }
