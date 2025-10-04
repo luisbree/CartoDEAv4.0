@@ -1,17 +1,21 @@
 
+
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
-import { Loader2, ListTree, Eye, EyeOff, ArrowLeft } from 'lucide-react';
+import { Loader2, ListTree, Eye, EyeOff, ArrowLeft, CloudOff } from 'lucide-react';
 import { getMapState } from '@/services/sharing-service';
-import type { MapState, MapLayer as AppMapLayer } from '@/lib/types';
+import type { MapState, MapLayer as AppMapLayer, SerializableMapLayer } from '@/lib/types';
 import MapView from '@/components/map-view';
 import { useOpenLayersMap } from '@/hooks/map-core/useOpenLayersMap';
 import { useLayerManager } from '@/hooks/layer-manager/useLayerManager';
 import { useToast } from '@/hooks/use-toast';
 import { transform } from 'ol/proj';
 import { Button } from '@/components/ui/button';
+import { nanoid } from 'nanoid';
+import VectorLayer from 'ol/layer/Vector';
+import VectorSource from 'ol/source/Vector';
 
 interface SharedMapClientProps {
     mapId?: string;
@@ -25,7 +29,8 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
     const [isLoading, setIsLoading] = useState(!initialMapState);
     const [error, setError] = useState<string | null>(null);
     
-    const [activeLayers, setActiveLayers] = useState<AppMapLayer[]>([]);
+    // This state will now hold a mix of real and placeholder layers
+    const [displayLayers, setDisplayLayers] = useState<Partial<AppMapLayer>[]>([]);
     
     const { handleAddHybridLayer, addGeeLayerToMap } = useLayerManager({
         mapRef, isMapReady, drawingSourceRef,
@@ -68,10 +73,23 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
             view.setCenter(center3857);
             view.setZoom(mapState.view.zoom);
             
-            const loadedLayers: AppMapLayer[] = [];
+            const loadedLayers: Partial<AppMapLayer>[] = [];
 
             const loadAllLayers = async () => {
                 for (const layerState of mapState.layers) {
+                    if (layerState.type === 'local') {
+                        // Create a placeholder for local layers
+                        const placeholderLayer: Partial<AppMapLayer> = {
+                            id: nanoid(),
+                            name: layerState.name,
+                            type: 'local-placeholder',
+                            visible: false, // Not visually toggleable
+                            olLayer: new VectorLayer({ source: new VectorSource() }), // Dummy OL layer
+                        };
+                        loadedLayers.push(placeholderLayer);
+                        continue;
+                    }
+
                     if ((layerState.type === 'wms' || layerState.type === 'wfs') && layerState.url && layerState.layerName) {
                         const newLayer = await addLayerFnsRef.current.handleAddHybridLayer(
                             layerState.layerName,
@@ -92,10 +110,13 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
                             loadedLayers.push({ ...newLayer, visible: layerState.visible, opacity: layerState.opacity, wmsStyleEnabled: layerState.wmsStyleEnabled });
                         }
                     } else if (layerState.type === 'gee' && layerState.geeParams?.tileUrl) {
-                        addLayerFnsRef.current.addGeeLayerToMap(layerState.geeParams.tileUrl, layerState.name, layerState.geeParams);
+                        const newLayer = addLayerFnsRef.current.addGeeLayerToMap(layerState.geeParams.tileUrl, layerState.name, layerState.geeParams);
+                        if (newLayer) {
+                          loadedLayers.push(newLayer);
+                        }
                     }
                 }
-                setActiveLayers(loadedLayers.reverse());
+                setDisplayLayers(loadedLayers.reverse());
             };
             
             loadAllLayers();
@@ -103,8 +124,8 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
     }, [isMapReady, mapState, mapRef, toast]);
 
     const handleToggleVisibility = useCallback((layerId: string) => {
-        setActiveLayers(prev => prev.map(l => {
-            if (l.id === layerId) {
+        setDisplayLayers(prev => prev.map(l => {
+            if (l.id === layerId && l.type !== 'local-placeholder' && l.olLayer) {
                 const newVisibility = !l.visible;
                 l.olLayer.setVisible(newVisibility);
                 const visualLayer = l.olLayer.get('visualLayer');
@@ -162,22 +183,28 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
                     <h2 className="text-base font-semibold">Capas Compartidas</h2>
                 </div>
                 <div className="p-2 max-h-[70vh] overflow-y-auto">
-                    {activeLayers.length > 0 ? (
+                    {displayLayers.length > 0 ? (
                         <ul className="space-y-1">
-                            {activeLayers.map(layer => (
+                            {displayLayers.map(layer => (
                                 <li key={layer.id} className="flex items-center px-1.5 py-1.5 rounded-md hover:bg-gray-700/50">
-                                    <button
-                                      onClick={() => handleToggleVisibility(layer.id)}
-                                      className="h-6 w-6 text-white hover:bg-gray-600/80 p-0 mr-2 flex-shrink-0"
-                                      title={layer.visible ? "Ocultar capa" : "Mostrar capa"}
-                                    >
-                                        {layer.visible ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
-                                    </button>
+                                    {layer.type === 'local-placeholder' ? (
+                                        <div className="h-6 w-6 mr-2 flex-shrink-0 flex items-center justify-center text-gray-500" title="Capa local no disponible">
+                                            <CloudOff className="h-4 w-4" />
+                                        </div>
+                                    ) : (
+                                        <button
+                                          onClick={() => handleToggleVisibility(layer.id!)}
+                                          className="h-6 w-6 text-white hover:bg-gray-600/80 p-0 mr-2 flex-shrink-0"
+                                          title={layer.visible ? "Ocultar capa" : "Mostrar capa"}
+                                        >
+                                            {layer.visible ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                                        </button>
+                                    )}
                                      <span
-                                        className={`flex-1 text-xs font-medium truncate ${layer.visible ? "text-white" : "text-gray-400"}`}
+                                        className={`flex-1 text-xs font-medium truncate ${layer.type === 'local-placeholder' ? 'text-gray-500 italic' : (layer.visible ? "text-white" : "text-gray-400")}`}
                                         title={layer.name}
                                     >
-                                        {layer.name}
+                                        {layer.name} {layer.type === 'local-placeholder' && "(local)"}
                                     </span>
                                 </li>
                             ))}

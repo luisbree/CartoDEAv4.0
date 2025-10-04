@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
@@ -712,30 +713,34 @@ export default function GeoMapperClient() {
     const zoom = view.getZoom() || 1;
 
     const serializableLayers: SerializableMapLayer[] = layerManagerHook.layers
-      .map(layer => {
-        if (layer.type === 'wms' || layer.type === 'wfs' || layer.type === 'gee') {
-            const geeParams = layer.olLayer.get('geeParams');
-            const sanitizedGeeParams = geeParams ? {
-                bandCombination: geeParams.bandCombination,
-                tileUrl: geeParams.tileUrl,
-            } : null;
+        .map(layer => {
+            if (layer.type === 'wms' || layer.type === 'wfs' || layer.type === 'gee') {
+                const geeParams = layer.olLayer.get('geeParams');
+                // Sanitize geeParams to only include necessary serializable info
+                const sanitizedGeeParams = geeParams ? {
+                    bandCombination: geeParams.bandCombination,
+                    tileUrl: geeParams.tileUrl, // Make sure tileUrl is part of geeParams
+                } : null;
 
-            const rawLayerData: Partial<SerializableMapLayer> = {
-                type: layer.type,
+                const remoteLayer: SerializableMapLayer = {
+                    type: layer.type,
+                    name: layer.name,
+                    url: layer.olLayer.get('serverUrl') || null,
+                    layerName: layer.olLayer.get('gsLayerName') || null,
+                    opacity: layer.opacity,
+                    visible: layer.visible,
+                    wmsStyleEnabled: layer.wmsStyleEnabled,
+                    styleName: layer.olLayer.get('styleName') || null,
+                    geeParams: sanitizedGeeParams,
+                };
+                return remoteLayer;
+            }
+            // For local layers, create a placeholder object
+            return {
+                type: 'local',
                 name: layer.name,
-                url: layer.olLayer.get('serverUrl') || null,
-                layerName: layer.olLayer.get('gsLayerName') || null,
-                opacity: layer.opacity,
-                visible: layer.visible,
-                wmsStyleEnabled: layer.wmsStyleEnabled,
-                styleName: layer.olLayer.get('styleName') || null,
-                geeParams: sanitizedGeeParams,
             };
-            return rawLayerData as SerializableMapLayer;
-        }
-        return null;
-      })
-      .filter((l): l is SerializableMapLayer => l !== null);
+        });
 
     const mapState = {
       layers: serializableLayers,
@@ -743,7 +748,7 @@ export default function GeoMapperClient() {
       baseLayerId: activeBaseLayerId,
     };
     
-    console.log("2. Objeto 'mapState' a guardar:", mapState);
+    console.log("2. Objeto 'mapState' a guardar:", JSON.stringify(mapState, null, 2));
 
     try {
       const mapId = await saveMapState(mapState);

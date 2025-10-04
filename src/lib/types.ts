@@ -41,7 +41,7 @@ export interface MapLayer {
   olLayer: Layer<Source, any>;
   visible: boolean;
   opacity: number;
-  type: 'wms' | 'wfs' | 'vector' | 'osm' | 'drawing' | 'sentinel' | 'landsat' | 'gee' | 'geotiff' | 'analysis';
+  type: 'wms' | 'wfs' | 'vector' | 'osm' | 'drawing' | 'sentinel' | 'landsat' | 'gee' | 'geotiff' | 'analysis' | 'local-placeholder';
   isDeas?: boolean;
   graduatedSymbology?: GraduatedSymbology;
   categorizedSymbology?: CategorizedSymbology;
@@ -163,17 +163,30 @@ export interface GeeProfileOutput {
 
 // --- Map Sharing Types ---
 
-export interface SerializableMapLayer {
+// Represents a layer that can be recreated remotely
+interface RemoteSerializableLayer {
     type: 'wms' | 'wfs' | 'gee';
     name: string;
-    url?: string; // For WMS/WFS
-    layerName: string; // e.g., 'workspace:layer'
+    url: string | null;
+    layerName: string | null;
     opacity: number;
     visible: boolean;
     wmsStyleEnabled?: boolean;
-    styleName?: string;
-    geeParams?: Omit<GeeTileLayerInput, 'aoi' | 'zoom'>; // For GEE layers
+    styleName?: string | null;
+    geeParams?: {
+        bandCombination: GeeTileLayerInput['bandCombination'];
+        tileUrl: string;
+    } | null;
 }
+
+// Represents a layer that was local and cannot be recreated
+interface LocalSerializableLayer {
+    type: 'local';
+    name: string;
+}
+
+export type SerializableMapLayer = RemoteSerializableLayer | LocalSerializableLayer;
+
 
 export interface MapState {
     layers: SerializableMapLayer[];
