@@ -1,5 +1,4 @@
-
-'use client';
+"use client";
 
 import React from 'react';
 import SharedMapClient from '@/components/shared-map-client';
@@ -22,6 +21,7 @@ const exampleMapState: MapState = {
             opacity: 0.8,
             wmsStyleEnabled: true,
             styleName: 'deas:rpm001_partidos_style',
+            geeParams: null,
         },
         {
             type: 'wms',
@@ -32,6 +32,7 @@ const exampleMapState: MapState = {
             opacity: 0.9,
             wmsStyleEnabled: true,
             styleName: 'deas:sudestada_cursos_de_agua_style',
+            geeParams: null,
         }
     ],
     // createdAt is not needed for this static example
