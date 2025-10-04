@@ -159,7 +159,7 @@ export default function GeoMapperClient() {
   const trelloPopupRef = useRef<Window | null>(null);
   const [isMounted, setIsMounted] = useState(false);
   
-  const layerManagerHookRef = useRef<any>(null);
+  const layerManagerHookRef = useRef<ReturnType<typeof useLayerManager> | null>(null);
 
 
   useEffect(() => {
@@ -746,7 +746,8 @@ export default function GeoMapperClient() {
     
     try {
         const jsonString = JSON.stringify(mapState);
-        const encodedData = btoa(unescape(encodeURIComponent(jsonString))); // Robust encoding
+        // Use a robust encoding function
+        const encodedData = btoa(unescape(encodeURIComponent(jsonString)));
         const shareUrl = `${window.location.origin}/share/local/${encodedData}`;
         
         await navigator.clipboard.writeText(shareUrl);
@@ -763,7 +764,7 @@ export default function GeoMapperClient() {
         variant: "destructive",
       });
     }
-  }, [mapRef, activeBaseLayerId, toast]);
+  }, [mapRef, activeBaseLayerId, toast, layerManagerHookRef]);
 
   // Effect for right-click tool toggling
   useEffect(() => {
