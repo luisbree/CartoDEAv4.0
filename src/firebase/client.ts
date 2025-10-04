@@ -22,8 +22,7 @@ function getFirebaseApp(): FirebaseApp {
     if (getApps().length === 0) {
         // Ensure all config values are defined before initializing
         if (Object.values(firebaseConfig).some(value => value === undefined)) {
-            console.error("Firebase config is missing one or more required values.");
-            // In a real app, you might want to throw an error or handle this more gracefully
+            console.error("Firebase config is missing one or more required values. Check your .env file and next.config.js");
         }
         return initializeApp(firebaseConfig);
     }
