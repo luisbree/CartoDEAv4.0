@@ -65,7 +65,7 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from '@/lib/utils';
 import { saveMapState } from '@/services/sharing-service';
 
-import type { OSMCategoryConfig, GeoServerDiscoveredLayer, BaseLayerOptionForSelect, MapLayer, ChatMessage, BaseLayerSettings, NominatimResult, PlainFeatureData, ActiveTool, TrelloCardInfo, GraduatedSymbology, VectorMapLayer, CategorizedSymbology, SerializableMapLayer } from '@/lib/types';
+import type { OSMCategoryConfig, GeoServerDiscoveredLayer, BaseLayerOptionForSelect, MapLayer, ChatMessage, BaseLayerSettings, NominatimResult, PlainFeatureData, ActiveTool, TrelloCardInfo, GraduatedSymbology, VectorMapLayer, CategorizedSymbology, SerializableMapLayer, RemoteSerializableLayer } from '@/lib/types';
 import { chatWithMapAssistant, type MapAssistantOutput } from '@/ai/flows/find-layer-flow';
 import { authenticateWithGee } from '@/ai/flows/gee-flow';
 import { checkTrelloCredentials } from '@/ai/flows/trello-actions';
@@ -701,7 +701,6 @@ export default function GeoMapperClient() {
   }, [mapRef, isCapturing, toast, activeBaseLayerId]);
   
   const handleShareMap = useCallback(async () => {
-    console.log("1. 'handleShareMap' iniciado.");
     if (!mapRef.current) return;
 
     toast({ description: 'Guardando el estado del mapa...' });
@@ -712,35 +711,34 @@ export default function GeoMapperClient() {
     const center = transform(view.getCenter() || [0,0], 'EPSG:3857', 'EPSG:4326');
     const zoom = view.getZoom() || 1;
 
-    const serializableLayers: SerializableMapLayer[] = layerManagerHook.layers
-        .map(layer => {
-            if (layer.type === 'wms' || layer.type === 'wfs' || layer.type === 'gee') {
-                const geeParams = layer.olLayer.get('geeParams');
-                // Sanitize geeParams to only include necessary serializable info
-                const sanitizedGeeParams = geeParams ? {
-                    bandCombination: geeParams.bandCombination,
-                    tileUrl: geeParams.tileUrl, // Make sure tileUrl is part of geeParams
-                } : null;
-
-                const remoteLayer: SerializableMapLayer = {
-                    type: layer.type,
-                    name: layer.name,
-                    url: layer.olLayer.get('serverUrl') || null,
-                    layerName: layer.olLayer.get('gsLayerName') || null,
-                    opacity: layer.opacity,
-                    visible: layer.visible,
-                    wmsStyleEnabled: layer.wmsStyleEnabled,
-                    styleName: layer.olLayer.get('styleName') || null,
-                    geeParams: sanitizedGeeParams,
-                };
-                return remoteLayer;
-            }
-            // For local layers, create a placeholder object
-            return {
-                type: 'local',
+    const serializableLayers: SerializableMapLayer[] = layerManagerHook.layers.map(layer => {
+        if (layer.type === 'wms' || layer.type === 'wfs' || layer.type === 'gee') {
+            const geeParams = layer.olLayer.get('geeParams');
+            const sanitizedGeeParams = geeParams ? {
+                bandCombination: geeParams.bandCombination,
+                tileUrl: geeParams.tileUrl,
+            } : null;
+            
+            const remoteLayer: RemoteSerializableLayer = {
+                type: layer.type,
                 name: layer.name,
+                url: layer.olLayer.get('serverUrl') || null,
+                layerName: layer.olLayer.get('gsLayerName') || null,
+                opacity: layer.opacity,
+                visible: layer.visible,
+                wmsStyleEnabled: layer.wmsStyleEnabled || false,
+                styleName: layer.olLayer.get('styleName') || null,
+                geeParams: sanitizedGeeParams,
             };
-        });
+            return remoteLayer;
+        }
+        
+        // Handle local layers
+        return {
+            type: 'local',
+            name: layer.name,
+        };
+    });
 
     const mapState = {
       layers: serializableLayers,
@@ -748,12 +746,8 @@ export default function GeoMapperClient() {
       baseLayerId: activeBaseLayerId,
     };
     
-    console.log("2. Objeto 'mapState' a guardar:", JSON.stringify(mapState, null, 2));
-
     try {
       const mapId = await saveMapState(mapState);
-      console.log("5. ID de mapa recibido del guardado:", mapId);
-      
       const shareUrl = `${window.location.origin}/share/${mapId}`;
       
       await navigator.clipboard.writeText(shareUrl);
@@ -762,11 +756,11 @@ export default function GeoMapperClient() {
         description: "El enlace para compartir el mapa se ha copiado en tu portapapeles.",
       });
 
-    } catch (error) {
+    } catch (error: any) {
       console.error("### ERROR EN handleShareMap ###", error);
       toast({
         title: "Error al compartir",
-        description: "No se pudo guardar el estado del mapa para compartir. Revisa la consola para más detalles.",
+        description: `No se pudo guardar el estado del mapa: ${error.message || 'Error desconocido'}`,
         variant: "destructive",
       });
     }
