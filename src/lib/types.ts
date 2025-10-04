@@ -1,4 +1,3 @@
-
 import type { default as Layer } from 'ol/layer/Layer';
 import type VectorLayer from 'ol/layer/Vector';
 import type VectorSource from 'ol/source/Vector';
@@ -172,10 +171,6 @@ export interface RemoteSerializableLayer {
     visible: boolean;
     wmsStyleEnabled: boolean;
     styleName: string | null;
-    geeParams: {
-        bandCombination: GeeTileLayerInput['bandCombination'];
-        tileUrl: string;
-    } | null;
 }
 
 // Represents a layer that was local and cannot be recreated
