@@ -13,7 +13,7 @@ import { Geometry, LineString, Point, Polygon } from 'ol/geom';
 import { useToast } from "@/hooks/use-toast";
 import { findSentinel2Footprints } from '@/services/sentinel';
 import { findLandsatFootprints } from '@/services/landsat';
-import type { MapLayer, VectorMapLayer, PlainFeatureData, LabelOptions, StyleOptions, GraduatedSymbology, CategorizedSymbology } from '@/lib/types';
+import type { MapLayer, VectorMapLayer, PlainFeatureData, LabelOptions, StyleOptions, GraduatedSymbology, CategorizedSymbology, RemoteSerializableLayer, LocalSerializableLayer } from '@/lib/types';
 import { nanoid } from 'nanoid';
 import { Style, Stroke, Fill, Circle as CircleStyle, Text as TextStyle } from 'ol/style';
 import type { StyleLike } from 'ol/style/Style';
@@ -177,7 +177,7 @@ export const useLayerManager = ({
   clearSelectionAfterExtraction,
   updateInspectedFeatureData,
 }: UseLayerManagerProps) => {
-  const [layers, setLayers] = useState<MapLayer[]>([]);
+  const [layers, setLayersInternal] = useState<MapLayer[]>([]);
   const { toast } = useToast();
   const [isFindingSentinelFootprints, setIsFindingSentinelFootprints] = useState(false);
   const [isFindingLandsatFootprints, setIsFindingLandsatFootprints] = useState(false);
@@ -185,26 +185,28 @@ export const useLayerManager = ({
   const [isWfsLoading, setIsWfsLoading] = useState(false);
   const [lastRemovedLayers, setLastRemovedLayers] = useState<MapLayer[]>([]);
 
-  useEffect(() => {
-    // This effect ensures z-ordering is correct whenever the layers array changes.
-    // UI has top layer at index 0. Map has top layer at highest z-index.
-    const operationalLayers = layers.filter(l => l.type !== 'gee' && l.type !== 'wms');
-    const layer_count = operationalLayers.length;
-    
-    layers.forEach((layer) => {
-      if (layer.type === 'gee') {
-        layer.olLayer.setZIndex(GEE_LAYER_Z_INDEX);
-      } else if (layer.type === 'wms') {
-        layer.olLayer.setZIndex(WMS_LAYER_Z_INDEX);
-      } else {
-        // Find its index among non-GEE/WMS layers to determine z-index
-        const operationalIndex = operationalLayers.findIndex(opLayer => opLayer.id === layer.id);
-        if (operationalIndex !== -1) {
-            layer.olLayer.setZIndex(LAYER_START_Z_INDEX + (layer_count - 1 - operationalIndex));
-        }
-      }
+  const setLayers = useCallback((newLayers: React.SetStateAction<MapLayer[]>) => {
+    setLayersInternal(prevLayers => {
+        const updatedLayers = typeof newLayers === 'function' ? newLayers(prevLayers) : newLayers;
+
+        const operationalLayers = updatedLayers.filter(l => l.type !== 'gee' && l.type !== 'wms');
+        const layer_count = operationalLayers.length;
+
+        updatedLayers.forEach(layer => {
+            if (layer.type === 'gee') {
+                layer.olLayer.setZIndex(GEE_LAYER_Z_INDEX);
+            } else if (layer.type === 'wms') {
+                layer.olLayer.setZIndex(WMS_LAYER_Z_INDEX);
+            } else {
+                const operationalIndex = operationalLayers.findIndex(opLayer => opLayer.id === layer.id);
+                if (operationalIndex !== -1) {
+                    layer.olLayer.setZIndex(LAYER_START_Z_INDEX + (layer_count - 1 - operationalIndex));
+                }
+            }
+        });
+        return updatedLayers;
     });
-  }, [layers]);
+}, []);
 
   // Effect to check the state of the drawing source
   useEffect(() => {
@@ -247,7 +249,7 @@ export const useLayerManager = ({
         }
     });
 
-  }, [mapRef]);
+  }, [mapRef, setLayers]);
 
   const handleAddHybridLayer = useCallback(async (layerName: string, layerTitle: string, serverUrl: string, bbox?: [number, number, number, number], styleName?: string): Promise<MapLayer | null> => {
     if (!isMapReady || !mapRef.current) return null;
@@ -388,7 +390,7 @@ export const useLayerManager = ({
       setLastRemovedLayers([]); // Clear the undo buffer
 
       toast({ description: `${layersToRestore.length} capa(s) restaurada(s).` });
-  }, [mapRef, lastRemovedLayers, toast]);
+  }, [mapRef, lastRemovedLayers, toast, setLayers]);
 
 
   const removeLayers = useCallback((layerIds: string[]) => {
@@ -433,7 +435,7 @@ export const useLayerManager = ({
         }
     }, 100);
 
-  }, [mapRef, toast, updateGeoServerDiscoveredLayerState]);
+  }, [mapRef, toast, updateGeoServerDiscoveredLayerState, setLayers]);
 
   const removeLayer = useCallback((layerId: string) => {
     removeLayers([layerId]);
@@ -463,7 +465,7 @@ export const useLayerManager = ({
 
         return remainingLayers;
     });
-  }, [toast]);
+  }, [toast, setLayers]);
   
   const toggleLayerVisibility = useCallback((layerId: string) => {
     setLayers(prev => prev.map(l => {
@@ -479,7 +481,7 @@ export const useLayerManager = ({
         }
         return l;
     }));
-  }, []);
+  }, [setLayers]);
 
   const toggleWmsStyle = useCallback((layerId: string) => {
     setLayers(prev => prev.map(l => {
@@ -509,7 +511,7 @@ export const useLayerManager = ({
         }
         return l;
     }));
-  }, []);
+  }, [setLayers]);
 
   const setLayerOpacity = useCallback((layerId: string, opacity: number) => {
     setLayers(prev => prev.map(l => {
@@ -524,7 +526,7 @@ export const useLayerManager = ({
       }
       return l;
     }));
-  }, []);
+  }, [setLayers]);
 
   const changeLayerStyle = useCallback((layerId: string, styleOptions: StyleOptions) => {
     const layer = layers.find(l => l.id === layerId) as VectorMapLayer | undefined;
@@ -588,7 +590,7 @@ export const useLayerManager = ({
     setLayers(prev => prev.map(l => l.id === layerId ? { ...l, graduatedSymbology: undefined, categorizedSymbology: undefined } : l));
     setTimeout(() => toast({ description: `Estilo de la capa "${layer.name}" actualizado.` }), 0);
 
-  }, [layers, toast]);
+  }, [layers, toast, setLayers]);
 
   const changeLayerLabels = useCallback((layerId: string, labelOptions: LabelOptions) => {
     const layer = layers.find(l => l.id === layerId) as VectorMapLayer | undefined;
@@ -628,7 +630,7 @@ export const useLayerManager = ({
 
     setLayers(prev => prev.map(l => l.id === layerId ? { ...l, graduatedSymbology: symbology, categorizedSymbology: undefined } : l));
     setTimeout(() => toast({ description: `Simbología graduada aplicada a "${layer.name}".` }), 0);
-  }, [layers, toast]);
+  }, [layers, toast, setLayers]);
   
   const applyCategorizedSymbology = useCallback((layerId: string, symbology: CategorizedSymbology) => {
       const layer = layers.find(l => l.id === layerId) as VectorMapLayer | undefined;
@@ -645,7 +647,7 @@ export const useLayerManager = ({
   
       setLayers(prev => prev.map(l => l.id === layerId ? { ...l, categorizedSymbology: symbology, graduatedSymbology: undefined } : l));
       setTimeout(() => toast({ description: `Simbología por categorías aplicada a "${layer.name}".` }), 0);
-  }, [layers, toast]);
+  }, [layers, toast, setLayers]);
 
   const zoomToLayerExtent = useCallback((layerId: string) => {
     if (!mapRef.current) return;
@@ -716,7 +718,7 @@ export const useLayerManager = ({
     setTimeout(() => {
       toast({ description: `Capa renombrada a "${newName}"` });
     }, 0);
-  }, [toast]);
+  }, [toast, setLayers]);
   
   const handleExtractByPolygon = useCallback((layerIdToExtract: string, onSuccess?: () => void) => {
     setLayers(prevLayers => {
@@ -772,7 +774,7 @@ export const useLayerManager = ({
         
         return [newMapLayer, ...prevLayers];
     });
-  }, [drawingSourceRef, mapRef, toast]);
+  }, [drawingSourceRef, mapRef, toast, setLayers]);
   
   const handleExtractBySelection = useCallback((selectedFeaturesForExtraction: Feature<Geometry>[], onSuccess?: () => void) => {
     setLayers(prevLayers => {
@@ -835,7 +837,7 @@ export const useLayerManager = ({
         
         return [newMapLayer, ...prevLayers];
     });
-  }, [mapRef, toast, clearSelectionAfterExtraction]);
+  }, [mapRef, toast, clearSelectionAfterExtraction, setLayers]);
   
   const handleExportLayer = useCallback(async (layerId: string, format: 'geojson' | 'kml' | 'shp') => {
     const layer = layers.find(l => l.id === layerId) as VectorMapLayer | undefined;
@@ -954,7 +956,7 @@ export const useLayerManager = ({
     } finally {
         setIsFindingSentinelFootprints(false);
     }
-  }, [mapRef, toast]);
+  }, [mapRef, toast, setLayers]);
 
   const clearSentinel2FootprintsLayer = useCallback(() => {
     const sentinelLayer = layers.find(l => l.id === 'sentinel-footprints');
@@ -1015,7 +1017,7 @@ export const useLayerManager = ({
     } finally {
         setIsFindingLandsatFootprints(false);
     }
-  }, [mapRef, toast]);
+  }, [mapRef, toast, setLayers]);
 
   const clearLandsatFootprintsLayer = useCallback(() => {
     const landsatLayer = layers.find(l => l.id === 'landsat-footprints');

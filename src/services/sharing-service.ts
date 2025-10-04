@@ -17,29 +17,42 @@ function getDb() {
     return firestore;
 }
 
-
 /**
- * Saves the given map state to Firestore and returns the generated document ID.
+ * Saves the given map state to Firestore with retry logic.
  * @param mapState - The state of the map to save.
+ * @param maxRetries - The maximum number of times to retry on failure.
  * @returns A promise that resolves to the unique ID of the saved map state.
  */
-export async function saveMapState(mapState: Omit<MapState, 'createdAt'>): Promise<string> {
-    try {
-        const db = getDb();
-        
-        // **DEBUGGING STEP: Log the object before sending to Firestore**
-        console.log("--- Objeto a enviar a Firestore ---");
-        console.log(JSON.stringify(mapState, null, 2));
-        
-        const docRef = await addDoc(collection(db, SHARED_MAPS_COLLECTION), {
-            ...mapState,
-            createdAt: serverTimestamp(),
-        });
-        return docRef.id;
-    } catch (error) {
-        console.error("### ERROR DE FIREBASE AL GUARDAR ###", error);
-        throw new Error("Could not save map state.");
+export async function saveMapState(
+    mapState: Omit<MapState, 'createdAt'>,
+    maxRetries = 3,
+    delay = 1000
+): Promise<string> {
+    const db = getDb();
+    const dataToSend = {
+        ...mapState,
+        createdAt: serverTimestamp(),
+    };
+
+    console.log("--- Objeto a enviar a Firestore ---");
+    console.log(JSON.stringify(dataToSend, null, 2));
+
+    for (let i = 0; i < maxRetries; i++) {
+        try {
+            const docRef = await addDoc(collection(db, SHARED_MAPS_COLLECTION), dataToSend);
+            return docRef.id;
+        } catch (error) {
+            console.warn(`Firestore write failed (attempt ${i + 1}/${maxRetries}):`, error);
+            if (i < maxRetries - 1) {
+                await new Promise(resolve => setTimeout(resolve, delay * (i + 1))); // Incremental backoff
+            } else {
+                console.error("### ERROR DE FIREBASE AL GUARDAR (después de reintentos) ###", error);
+                throw new Error("Could not save map state after multiple attempts.");
+            }
+        }
     }
+    // This line should not be reachable, but is here for type safety.
+    throw new Error("Failed to save map state.");
 }
 
 /**
