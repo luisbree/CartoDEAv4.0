@@ -24,10 +24,8 @@ function getDb() {
  * @returns A promise that resolves to the unique ID of the saved map state.
  */
 export async function saveMapState(mapState: Omit<MapState, 'createdAt'>): Promise<string> {
-    console.log("3. 'saveMapState' iniciado.");
     try {
         const db = getDb();
-        console.log("4. Intentando escribir en Firestore con addDoc...");
         const docRef = await addDoc(collection(db, SHARED_MAPS_COLLECTION), {
             ...mapState,
             createdAt: serverTimestamp(),
