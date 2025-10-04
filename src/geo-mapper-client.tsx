@@ -712,34 +712,33 @@ export default function GeoMapperClient() {
     const zoom = view.getZoom() || 1;
 
     const serializableLayers: SerializableMapLayer[] = layerManagerHook.layers.map(layer => {
-        if (layer.type === 'wms' || layer.type === 'wfs' || layer.type === 'gee') {
-            const geeParams = layer.olLayer.get('geeParams');
-            const sanitizedGeeParams = geeParams ? {
-                bandCombination: geeParams.bandCombination,
-                tileUrl: geeParams.tileUrl,
-            } : null;
-            
-            // Explicitly create a clean object, ensuring no complex OL properties are included
-            const remoteLayer: RemoteSerializableLayer = {
-                type: layer.type,
-                name: layer.name,
-                url: layer.olLayer.get('serverUrl') || null,
-                layerName: layer.olLayer.get('gsLayerName') || null,
-                opacity: layer.opacity,
-                visible: layer.visible,
-                wmsStyleEnabled: layer.wmsStyleEnabled || false,
-                styleName: layer.olLayer.get('styleName') || null,
-                geeParams: sanitizedGeeParams,
-            };
-            return remoteLayer;
-        }
-        
-        // Handle local layers
+      if (layer.type === 'wms' || layer.type === 'wfs' || layer.type === 'gee') {
+        const geeParams = layer.olLayer.get('geeParams');
+        const sanitizedGeeParams = geeParams ? {
+          bandCombination: geeParams.bandCombination,
+          tileUrl: geeParams.tileUrl,
+        } : null;
+
+        // Manually build a clean object to avoid `undefined` and complex OL objects.
+        const remoteLayer: RemoteSerializableLayer = {
+          type: layer.type,
+          name: layer.name,
+          url: layer.olLayer.get('serverUrl') || null,
+          layerName: layer.olLayer.get('gsLayerName') || null,
+          opacity: layer.opacity,
+          visible: layer.visible,
+          wmsStyleEnabled: layer.wmsStyleEnabled || false,
+          styleName: layer.olLayer.get('styleName') || null,
+          geeParams: sanitizedGeeParams,
+        };
+        return remoteLayer;
+      } else {
         const localLayer: LocalSerializableLayer = {
-            type: 'local',
-            name: layer.name,
+          type: 'local',
+          name: layer.name,
         };
         return localLayer;
+      }
     });
 
     const mapState = {
@@ -759,7 +758,7 @@ export default function GeoMapperClient() {
       });
 
     } catch (error: any) {
-      console.error("### ERROR EN handleShareMap ###", error);
+      console.error("Error saving map state:", error);
       toast({
         title: "Error al compartir",
         description: `No se pudo guardar el estado del mapa: ${error.message || 'Error desconocido'}`,
@@ -1198,3 +1197,5 @@ export default function GeoMapperClient() {
     </div>
   );
 }
+
+    
