@@ -25,18 +25,18 @@ function getDb() {
 export async function checkFirestoreConnection(): Promise<void> {
     try {
         const db = getDb();
-        // Perform a lightweight operation, like getting a non-existent document
-        // in a non-existent collection to test connectivity without incurring costs.
+        // A more robust check might be to fetch a known public document.
+        // For now, attempting to get a doc in a non-existent collection is a decent lightweight check.
         await getDoc(doc(db, 'health-check', 'status'));
+        // If the above line does not throw (e.g., due to permission errors which is expected), 
+        // it means the SDK is initialized and has attempted a network request. We consider this a success.
     } catch (error: any) {
-        // This is expected to fail with a permission error if rules are set,
-        // or a network error if offline, but it confirms the SDK is trying to connect.
-        // We can consider this a "successful" connection test if it's not a config error.
-        if (error.code === 'unavailable') {
-             throw new Error("No se pudo conectar con Firestore. Verifique su conexión a internet.");
+        // We only want to throw a user-facing error if it's a clear network issue.
+        if (error.code === 'unavailable' || error.code === 'unimplemented') {
+            throw new Error("No se pudo conectar con Firestore. Verifique su conexión a internet y la configuración.");
         }
-        // For other errors, we assume the connection is okay but something else is wrong (e.g., rules).
-        // This is sufficient for a "connection established" message.
+        // For other errors (like 'permission-denied' on the dummy doc), we can assume the
+        // connection itself is established, so we don't throw. The service is reachable.
     }
 }
 
