@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
@@ -63,6 +62,7 @@ import { useWfsLibrary } from '@/hooks/wfs-library/useWfsLibrary';
 import { useOsmQuery } from '@/hooks/osm-integration/useOsmQuery';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from '@/lib/utils';
+import { saveMapState } from '@/services/sharing-service';
 
 import type { OSMCategoryConfig, GeoServerDiscoveredLayer, BaseLayerOptionForSelect, MapLayer, ChatMessage, BaseLayerSettings, NominatimResult, PlainFeatureData, ActiveTool, TrelloCardInfo, GraduatedSymbology, VectorMapLayer, CategorizedSymbology, SerializableMapLayer, RemoteSerializableLayer, LocalSerializableLayer } from '@/lib/types';
 import { chatWithMapAssistant, type MapAssistantOutput } from '@/ai/flows/find-layer-flow';
@@ -709,6 +709,8 @@ export default function GeoMapperClient() {
         toast({ description: 'El mapa o el gestor de capas no están listos.', variant: 'destructive' });
         return;
     }
+    
+    toast({ description: 'Guardando el estado del mapa...' });
 
     const { layers } = layerManagerHookRef.current;
     const map = mapRef.current;
@@ -718,21 +720,29 @@ export default function GeoMapperClient() {
 
     const serializableLayers: SerializableMapLayer[] = layers
       .map((layer: MapLayer): SerializableMapLayer | null => {
+        const baseLayerData = {
+            name: layer.name,
+            opacity: layer.opacity,
+            visible: layer.visible,
+        };
+        
         if (['wms', 'wfs', 'gee'].includes(layer.type)) {
             const remoteLayer: RemoteSerializableLayer = {
+                ...baseLayerData,
                 type: layer.type as 'wms' | 'wfs' | 'gee',
-                name: layer.name,
                 url: layer.olLayer.get('serverUrl') || null,
                 layerName: layer.olLayer.get('gsLayerName') || null,
-                opacity: layer.opacity,
-                visible: layer.visible,
                 wmsStyleEnabled: layer.wmsStyleEnabled ?? false,
                 styleName: layer.olLayer.get('styleName') || null,
                 geeParams: layer.olLayer.get('geeParams') || null,
             };
             return remoteLayer;
         } else if (['vector', 'osm', 'drawing', 'sentinel', 'landsat', 'analysis', 'geotiff'].includes(layer.type)) {
-            return { type: 'local', name: layer.name };
+             // Local layers are not serializable remotely, so they are marked as such.
+            return {
+                type: 'local',
+                name: layer.name,
+            };
         }
         return null;
       })
@@ -745,26 +755,24 @@ export default function GeoMapperClient() {
     };
     
     try {
-        const jsonString = JSON.stringify(mapState);
-        // Use a robust encoding function
-        const encodedData = btoa(unescape(encodeURIComponent(jsonString)));
-        const shareUrl = `${window.location.origin}/share/local/${encodedData}`;
+        const mapId = await saveMapState(mapState);
+        const shareUrl = `${window.location.origin}/share/${mapId}`;
         
         await navigator.clipboard.writeText(shareUrl);
         toast({
-          title: "¡Enlace de simulación copiado!",
-          description: "El enlace para la simulación se ha copiado en tu portapapeles.",
+          title: "¡Enlace copiado!",
+          description: "El enlace para compartir el mapa se ha copiado en tu portapapeles.",
         });
 
     } catch (error: any) {
-      console.error("Error creating simulation link:", error);
+      console.error("Failed to share map:", error);
       toast({
-        title: "Error al Simular",
-        description: `No se pudo generar el enlace de simulación: ${error.message || 'Error desconocido'}`,
+        title: "Error al compartir",
+        description: `No se pudo guardar el estado del mapa: ${error.message || 'Error desconocido'}`,
         variant: "destructive",
       });
     }
-  }, [mapRef, activeBaseLayerId, toast, layerManagerHookRef]);
+  }, [mapRef, activeBaseLayerId, toast]);
 
   // Effect for right-click tool toggling
   useEffect(() => {
@@ -1195,3 +1203,5 @@ export default function GeoMapperClient() {
     </div>
   );
 }
+
+    
