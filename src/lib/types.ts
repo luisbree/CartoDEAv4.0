@@ -1,5 +1,4 @@
 
-
 import type { default as Layer } from 'ol/layer/Layer';
 import type VectorLayer from 'ol/layer/Vector';
 import type VectorSource from 'ol/source/Vector';
@@ -164,23 +163,23 @@ export interface GeeProfileOutput {
 // --- Map Sharing Types ---
 
 // Represents a layer that can be recreated remotely
-interface RemoteSerializableLayer {
+export interface RemoteSerializableLayer {
     type: 'wms' | 'wfs' | 'gee';
     name: string;
     url: string | null;
     layerName: string | null;
     opacity: number;
     visible: boolean;
-    wmsStyleEnabled?: boolean;
-    styleName?: string | null;
-    geeParams?: {
+    wmsStyleEnabled: boolean;
+    styleName: string | null;
+    geeParams: {
         bandCombination: GeeTileLayerInput['bandCombination'];
         tileUrl: string;
     } | null;
 }
 
 // Represents a layer that was local and cannot be recreated
-interface LocalSerializableLayer {
+export interface LocalSerializableLayer {
     type: 'local';
     name: string;
 }

@@ -711,35 +711,37 @@ export default function GeoMapperClient() {
     const center = transform(view.getCenter() || [0,0], 'EPSG:3857', 'EPSG:4326');
     const zoom = view.getZoom() || 1;
 
-    const serializableLayers: SerializableMapLayer[] = layerManagerHook.layers.map(layer => {
-      if (layer.type === 'wms' || layer.type === 'wfs' || layer.type === 'gee') {
-        const geeParams = layer.olLayer.get('geeParams');
-        const sanitizedGeeParams = geeParams ? {
-          bandCombination: geeParams.bandCombination,
-          tileUrl: geeParams.tileUrl,
-        } : null;
+    const serializableLayers: SerializableMapLayer[] = layerManagerHook.layers
+      .map(layer => {
+        if (layer.type === 'wms' || layer.type === 'wfs' || layer.type === 'gee') {
+            const geeParams = layer.olLayer.get('geeParams');
+            const sanitizedGeeParams = geeParams && geeParams.bandCombination && geeParams.tileUrl
+                ? { bandCombination: geeParams.bandCombination, tileUrl: geeParams.tileUrl }
+                : null;
+            
+            const remoteLayer: RemoteSerializableLayer = {
+                type: layer.type,
+                name: layer.name,
+                url: layer.olLayer.get('serverUrl') || null,
+                layerName: layer.olLayer.get('gsLayerName') || null,
+                opacity: layer.opacity,
+                visible: layer.visible,
+                wmsStyleEnabled: layer.wmsStyleEnabled || false,
+                styleName: layer.olLayer.get('styleName') || null,
+                geeParams: sanitizedGeeParams,
+            };
+            return remoteLayer;
+        } else if (layer.type === 'local-placeholder' || layer.type === 'vector' || layer.type === 'drawing' || layer.type === 'osm' || layer.type === 'sentinel' || layer.type === 'landsat' || layer.type === 'analysis') {
+            const localLayer: LocalSerializableLayer = {
+                type: 'local',
+                name: layer.name,
+            };
+            return localLayer;
+        }
+        return null; // Should not happen with current types
+      })
+      .filter((l): l is SerializableMapLayer => l !== null);
 
-        // Manually build a clean object to avoid `undefined` and complex OL objects.
-        const remoteLayer: RemoteSerializableLayer = {
-          type: layer.type,
-          name: layer.name,
-          url: layer.olLayer.get('serverUrl') || null,
-          layerName: layer.olLayer.get('gsLayerName') || null,
-          opacity: layer.opacity,
-          visible: layer.visible,
-          wmsStyleEnabled: layer.wmsStyleEnabled || false,
-          styleName: layer.olLayer.get('styleName') || null,
-          geeParams: sanitizedGeeParams,
-        };
-        return remoteLayer;
-      } else {
-        const localLayer: LocalSerializableLayer = {
-          type: 'local',
-          name: layer.name,
-        };
-        return localLayer;
-      }
-    });
 
     const mapState = {
       layers: serializableLayers,
