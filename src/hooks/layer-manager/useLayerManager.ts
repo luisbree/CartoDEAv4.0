@@ -13,7 +13,7 @@ import { Geometry, LineString, Point, Polygon } from 'ol/geom';
 import { useToast } from "@/hooks/use-toast";
 import { findSentinel2Footprints } from '@/services/sentinel';
 import { findLandsatFootprints } from '@/services/landsat';
-import type { MapLayer, VectorMapLayer, PlainFeatureData, LabelOptions, StyleOptions, GraduatedSymbology, CategorizedSymbology, RemoteSerializableLayer, LocalSerializableLayer } from '@/lib/types';
+import type { MapLayer, VectorMapLayer, PlainFeatureData, LabelOptions, StyleOptions, GraduatedSymbology, CategorizedSymbology, SerializableMapLayer, RemoteSerializableLayer, LocalSerializableLayer } from '@/lib/types';
 import { nanoid } from 'nanoid';
 import { Style, Stroke, Fill, Circle as CircleStyle, Text as TextStyle } from 'ol/style';
 import type { StyleLike } from 'ol/style/Style';
@@ -185,10 +185,11 @@ export const useLayerManager = ({
   const [isWfsLoading, setIsWfsLoading] = useState(false);
   const [lastRemovedLayers, setLastRemovedLayers] = useState<MapLayer[]>([]);
 
-  const setLayers = useCallback((newLayers: React.SetStateAction<MapLayer[]>) => {
+  const setLayers = useCallback((updater: React.SetStateAction<MapLayer[]>) => {
     setLayersInternal(prevLayers => {
-        const updatedLayers = typeof newLayers === 'function' ? newLayers(prevLayers) : newLayers;
+        const updatedLayers = typeof updater === 'function' ? updater(prevLayers) : updater;
 
+        // --- Start of zIndex logic ---
         const operationalLayers = updatedLayers.filter(l => l.type !== 'gee' && l.type !== 'wms');
         const layer_count = operationalLayers.length;
 
@@ -200,13 +201,17 @@ export const useLayerManager = ({
             } else {
                 const operationalIndex = operationalLayers.findIndex(opLayer => opLayer.id === layer.id);
                 if (operationalIndex !== -1) {
+                    // Layers are rendered from lowest z-index to highest.
+                    // To make the top layer in the list appear on top of the map, it needs the highest z-index.
                     layer.olLayer.setZIndex(LAYER_START_Z_INDEX + (layer_count - 1 - operationalIndex));
                 }
             }
         });
+        // --- End of zIndex logic ---
+
         return updatedLayers;
     });
-}, []);
+  }, []);
 
   // Effect to check the state of the drawing source
   useEffect(() => {

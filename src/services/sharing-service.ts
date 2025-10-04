@@ -18,42 +18,26 @@ function getDb() {
 }
 
 /**
- * Saves the given map state to Firestore with retry logic.
+ * Saves the given map state to Firestore.
  * @param mapState - The state of the map to save.
- * @param maxRetries - The maximum number of times to retry on failure.
  * @returns A promise that resolves to the unique ID of the saved map state.
  */
-export async function saveMapState(
-    mapState: Omit<MapState, 'createdAt'>,
-    maxRetries = 3,
-    delay = 1000
-): Promise<string> {
+export async function saveMapState(mapState: Omit<MapState, 'createdAt'>): Promise<string> {
     const db = getDb();
     const dataToSend = {
         ...mapState,
         createdAt: serverTimestamp(),
     };
-
-    console.log("--- Objeto a enviar a Firestore ---");
-    console.log(JSON.stringify(dataToSend, null, 2));
-
-    for (let i = 0; i < maxRetries; i++) {
-        try {
-            const docRef = await addDoc(collection(db, SHARED_MAPS_COLLECTION), dataToSend);
-            return docRef.id;
-        } catch (error) {
-            console.warn(`Firestore write failed (attempt ${i + 1}/${maxRetries}):`, error);
-            if (i < maxRetries - 1) {
-                await new Promise(resolve => setTimeout(resolve, delay * (i + 1))); // Incremental backoff
-            } else {
-                console.error("### ERROR DE FIREBASE AL GUARDAR (después de reintentos) ###", error);
-                throw new Error("Could not save map state after multiple attempts.");
-            }
-        }
+    
+    try {
+        const docRef = await addDoc(collection(db, SHARED_MAPS_COLLECTION), dataToSend);
+        return docRef.id;
+    } catch (error) {
+        console.error("### ERROR DE FIREBASE AL GUARDAR ###", error);
+        throw new Error("Could not save map state.");
     }
-    // This line should not be reachable, but is here for type safety.
-    throw new Error("Failed to save map state.");
 }
+
 
 /**
  * Retrieves a map state from Firestore using its unique ID.
