@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { collection, addDoc, getDoc, doc, serverTimestamp, Firestore, enableNetwork, disableNetwork } from "firebase/firestore";
@@ -89,6 +88,3 @@ export async function getMapState(mapId: string): Promise<MapState | null> {
         throw new Error("Could not retrieve map state.");
     }
 }
-
-
-    
