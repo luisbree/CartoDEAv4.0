@@ -12,16 +12,24 @@
           "items": {
             "type": "object",
             "properties": {
-              "type": { "type": "string", "description": "Layer type (e.g., 'wfs', 'wms', 'local')." },
+              "type": { "type": "string", "description": "Layer type (e.g., 'wfs', 'wms', 'local', 'gee')." },
               "name": { "type": "string", "description": "Display name of the layer." },
               "url": { "type": ["string", "null"], "description": "The base URL of the OGC server." },
               "layerName": { "type": ["string", "null"], "description": "The machine-readable layer name (e.g., 'workspace:layer')." },
               "opacity": { "type": "number", "description": "Layer opacity from 0 to 1." },
               "visible": { "type": "boolean", "description": "Layer visibility." },
               "wmsStyleEnabled": { "type": "boolean", "description": "Whether the WMS style is active." },
-              "styleName": { "type": ["string", "null"], "description": "The original WMS style name." }
+              "styleName": { "type": ["string", "null"], "description": "The original WMS style name." },
+              "geeParams": {
+                "type": ["object", "null"],
+                "description": "Parameters for GEE layers.",
+                 "properties": {
+                    "bandCombination": { "type": ["string", "null"] },
+                    "tileUrl": { "type": ["string", "null"] }
+                 }
+              }
             },
-            "required": ["type", "name"]
+            "required": ["type", "name", "opacity", "visible"]
           }
         },
         "view": {

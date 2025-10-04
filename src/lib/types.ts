@@ -171,6 +171,10 @@ export interface RemoteSerializableLayer {
     visible: boolean;
     wmsStyleEnabled: boolean;
     styleName: string | null;
+    geeParams: {
+        bandCombination: string | null;
+        tileUrl: string | null;
+    } | null;
 }
 
 // Represents a layer that was local and cannot be recreated
