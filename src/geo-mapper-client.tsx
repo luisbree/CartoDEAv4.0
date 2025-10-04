@@ -63,7 +63,6 @@ import { useWfsLibrary } from '@/hooks/wfs-library/useWfsLibrary';
 import { useOsmQuery } from '@/hooks/osm-integration/useOsmQuery';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from '@/lib/utils';
-import { saveMapState } from '@/services/sharing-service';
 
 import type { OSMCategoryConfig, GeoServerDiscoveredLayer, BaseLayerOptionForSelect, MapLayer, ChatMessage, BaseLayerSettings, NominatimResult, PlainFeatureData, ActiveTool, TrelloCardInfo, GraduatedSymbology, VectorMapLayer, CategorizedSymbology, SerializableMapLayer, RemoteSerializableLayer, LocalSerializableLayer } from '@/lib/types';
 import { chatWithMapAssistant, type MapAssistantOutput } from '@/ai/flows/find-layer-flow';
@@ -706,61 +705,64 @@ export default function GeoMapperClient() {
   }, [mapRef, isCapturing, toast, activeBaseLayerId]);
   
   const handleShareMap = useCallback(async () => {
-      if (!mapRef.current) return;
-  
-      const { layers } = layerManagerHookRef.current;
-  
-      const map = mapRef.current;
-      const view = map.getView();
-      const center = transform(view.getCenter() || [0,0], 'EPSG:3857', 'EPSG:4326');
-      const zoom = view.getZoom() || 1;
-  
-      const serializableLayers: SerializableMapLayer[] = layers
-        .map((layer: MapLayer): SerializableMapLayer | null => {
-            if (['wms', 'wfs', 'gee'].includes(layer.type)) {
-                return {
-                    type: layer.type as 'wms' | 'wfs' | 'gee',
-                    name: layer.name,
-                    url: layer.olLayer.get('serverUrl') || null,
-                    layerName: layer.olLayer.get('gsLayerName') || null,
-                    opacity: layer.opacity,
-                    visible: layer.visible,
-                    wmsStyleEnabled: layer.wmsStyleEnabled ?? false,
-                    styleName: layer.olLayer.get('styleName') || null,
-                    geeParams: layer.olLayer.get('geeParams') || null,
-                };
-            } else if (['vector', 'osm', 'drawing', 'sentinel', 'landsat', 'analysis', 'geotiff'].includes(layer.type)) {
-                return { type: 'local', name: layer.name };
-            }
-            return null;
-        })
-        .filter((l): l is SerializableMapLayer => l !== null);
-  
-      const mapState = {
-        layers: serializableLayers,
-        view: { center, zoom },
-        baseLayerId: activeBaseLayerId,
-      };
-      
-      try {
-          const jsonString = JSON.stringify(mapState);
-          const encodedData = btoa(jsonString); // Base64 encode
-          const shareUrl = `${window.location.origin}/share/local/${encodedData}`;
-          
-          await navigator.clipboard.writeText(shareUrl);
-          toast({
-            title: "¡Enlace de simulación copiado!",
-            description: "El enlace para la simulación se ha copiado en tu portapapeles.",
-          });
-  
-      } catch (error: any) {
-        console.error("Error creating simulation link:", error);
+    if (!mapRef.current || !layerManagerHookRef.current) {
+        toast({ description: 'El mapa o el gestor de capas no están listos.', variant: 'destructive' });
+        return;
+    }
+
+    const { layers } = layerManagerHookRef.current;
+    const map = mapRef.current;
+    const view = map.getView();
+    const center = transform(view.getCenter() || [0,0], 'EPSG:3857', 'EPSG:4326');
+    const zoom = view.getZoom() || 1;
+
+    const serializableLayers: SerializableMapLayer[] = layers
+      .map((layer: MapLayer): SerializableMapLayer | null => {
+        if (['wms', 'wfs', 'gee'].includes(layer.type)) {
+            const remoteLayer: RemoteSerializableLayer = {
+                type: layer.type as 'wms' | 'wfs' | 'gee',
+                name: layer.name,
+                url: layer.olLayer.get('serverUrl') || null,
+                layerName: layer.olLayer.get('gsLayerName') || null,
+                opacity: layer.opacity,
+                visible: layer.visible,
+                wmsStyleEnabled: layer.wmsStyleEnabled ?? false,
+                styleName: layer.olLayer.get('styleName') || null,
+                geeParams: layer.olLayer.get('geeParams') || null,
+            };
+            return remoteLayer;
+        } else if (['vector', 'osm', 'drawing', 'sentinel', 'landsat', 'analysis', 'geotiff'].includes(layer.type)) {
+            return { type: 'local', name: layer.name };
+        }
+        return null;
+      })
+      .filter((l): l is SerializableMapLayer => l !== null);
+
+    const mapState = {
+      layers: serializableLayers,
+      view: { center, zoom },
+      baseLayerId: activeBaseLayerId,
+    };
+    
+    try {
+        const jsonString = JSON.stringify(mapState);
+        const encodedData = btoa(unescape(encodeURIComponent(jsonString))); // Robust encoding
+        const shareUrl = `${window.location.origin}/share/local/${encodedData}`;
+        
+        await navigator.clipboard.writeText(shareUrl);
         toast({
-          title: "Error al Simular",
-          description: `No se pudo generar el enlace de simulación: ${error.message || 'Error desconocido'}`,
-          variant: "destructive",
+          title: "¡Enlace de simulación copiado!",
+          description: "El enlace para la simulación se ha copiado en tu portapapeles.",
         });
-      }
+
+    } catch (error: any) {
+      console.error("Error creating simulation link:", error);
+      toast({
+        title: "Error al Simular",
+        description: `No se pudo generar el enlace de simulación: ${error.message || 'Error desconocido'}`,
+        variant: "destructive",
+      });
+    }
   }, [mapRef, activeBaseLayerId, toast]);
 
   // Effect for right-click tool toggling
@@ -1104,7 +1106,6 @@ export default function GeoMapperClient() {
                 layer={statisticsLayer}
                 allLayers={layerManagerHook.layers}
                 selectedFeatures={featureInspectionHook.selectedFeatures}
-                onAddLayer={(layer: MapLayer, bringToTop?: boolean) => layerManagerHook.addLayer(layer, bringToTop)}
                 panelRef={statisticsPanelRef}
                 isCollapsed={panels.statistics.isCollapsed}
                 onToggleCollapse={() => togglePanelCollapse('statistics')}
