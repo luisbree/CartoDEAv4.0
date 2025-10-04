@@ -103,11 +103,15 @@ export const useGeoServerLayers = ({
           return { name, title, bbox, wmsAddedToMap: false, wfsAddedToMap: false, styleName };
       }).filter(l => l.name);
 
+      if (discoveredLayers.length > 0) {
+        toast({ title: "GeoServer DEAS Conectado", description: `Se encontraron ${discoveredLayers.length} capas.`});
+      }
+
       return discoveredLayers;
 
     } catch (error: any) {
       console.error("Error fetching GeoServer layers:", error);
-      toast({ title: "Error de Conexión", description: `${error.message}`, variant: 'destructive', duration: 8000 });
+      toast({ title: "Error de Conexión con DEAS", description: `${error.message}`, variant: 'destructive', duration: 8000 });
       return null;
     } finally {
       setIsFetching(false);

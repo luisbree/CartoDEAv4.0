@@ -303,7 +303,6 @@ export default function GeoMapperClient() {
           }
       } catch (error) {
           console.error("Failed to load initial DEAS layers:", error);
-          // Toast is now handled inside the hook for better error details
       }
   }, [handleFetchGeoServerLayers]);
 

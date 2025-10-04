@@ -58,8 +58,8 @@ function getTrelloAuth() {
 export async function checkTrelloCredentials(): Promise<{ success: boolean; message: string; configured: boolean; }> {
     const auth = getTrelloAuth();
     if (!auth) {
-        // Indicate that Trello is not configured, but don't treat as an error.
-        return { success: false, message: 'Credenciales de Trello no configuradas. Verifique las variables de entorno.', configured: false };
+        // Indicate that Trello is not configured, and this is not an error state.
+        return { success: false, message: 'Credenciales de Trello no configuradas.', configured: false };
     }
     
     const { authParams, boardIds } = auth;
@@ -85,8 +85,7 @@ export async function checkTrelloCredentials(): Promise<{ success: boolean; mess
 
     } catch (error: any) {
         console.error("Trello credential check failed:", error);
-        // Return a specific failure state instead of throwing, so the UI can handle it gracefully.
-        return { success: false, message: `Fallo en la verificación de Trello: ${error.message}`, configured: true };
+        throw new Error(`Fallo en la verificación de Trello: ${error.message}`);
     }
 }
 

@@ -24,17 +24,17 @@ function getDb() {
 export async function checkFirestoreConnection(): Promise<void> {
     try {
         const db = getDb();
+        // A more reliable way to check connection is to try to get a document,
+        // even a non-existent one. If it fails with a specific network error,
+        // we know the connection is bad. Permission errors mean we connected.
         await getDoc(doc(db, 'health-check', 'status'));
     } catch (error: any) {
-        if (error.code === 'unavailable' || error.code === 'unimplemented' || error.code === 'permission-denied') {
-            // A permission-denied error on a non-existent doc means we reached the service, which is a success for this check.
-            // So we only throw for actual network/connectivity issues.
-            if (error.code === 'unavailable') {
-                throw new Error("No se pudo conectar con Firestore. Verifique su conexión a internet y la configuración.");
-            }
+        // 'permission-denied' is a "successful" connection test because it means
+        // we reached the service and it responded according to its rules.
+        // We only want to throw for actual network/config issues.
+        if (error.code !== 'permission-denied') {
+             throw new Error(`No se pudo conectar a Firestore: ${error.message}`);
         }
-        // For other errors (like invalid config which might throw differently), or for permission-denied (which is OK here),
-        // we either let it pass or catch specific cases if needed.
     }
 }
 
