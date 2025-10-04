@@ -714,7 +714,6 @@ export default function GeoMapperClient() {
       const serializableLayers: SerializableMapLayer[] = layerManagerHook.layers
         .map(layer => {
           if (layer.type === 'wms' || layer.type === 'wfs' || layer.type === 'gee') {
-              // Explicitly create a new object to avoid carrying over complex properties
               const remoteLayer: RemoteSerializableLayer = {
                   type: layer.type,
                   name: layer.name,
@@ -722,13 +721,12 @@ export default function GeoMapperClient() {
                   layerName: layer.olLayer.get('gsLayerName') || null,
                   opacity: layer.opacity,
                   visible: layer.visible,
-                  wmsStyleEnabled: layer.wmsStyleEnabled || false,
+                  wmsStyleEnabled: layer.wmsStyleEnabled ?? false, // Ensure boolean
                   styleName: layer.olLayer.get('styleName') || null,
                   geeParams: layer.olLayer.get('geeParams') || null,
               };
               return remoteLayer;
           } else if (['vector', 'osm', 'drawing', 'sentinel', 'landsat', 'analysis', 'geotiff'].includes(layer.type)) {
-              // Treat all other vector/raster types as local, as they can't be recreated from a URL
               const localLayer: LocalSerializableLayer = {
                   type: 'local',
                   name: layer.name,

@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
@@ -31,7 +32,7 @@ interface UseLayerManagerProps {
   isMapReady: boolean;
   drawingSourceRef: React.RefObject<VectorSource>;
   onShowTableRequest: (plainData: PlainFeatureData[], layerName: string, layerId: string) => void;
-  updateGeoServerDiscoveredLayerState: (layerName: string, added: boolean, type: 'wfs' | 'wms') => void;
+  updateGeoServerDiscoveredLayerState: (layerName: string, added: boolean, type: 'wms' | 'wfs') => void;
   clearSelectionAfterExtraction: () => void;
   updateInspectedFeatureData: (featureId: string, key: string, value: any) => void;
 }
@@ -186,31 +187,34 @@ export const useLayerManager = ({
   const [lastRemovedLayers, setLastRemovedLayers] = useState<MapLayer[]>([]);
 
   const setLayers = useCallback((updater: React.SetStateAction<MapLayer[]>) => {
-    setLayersInternal(prevLayers => {
-        const updatedLayers = typeof updater === 'function' ? updater(prevLayers) : updater;
-
-        // --- Start of zIndex logic ---
-        const operationalLayers = updatedLayers.filter(l => l.type !== 'gee' && l.type !== 'wms');
-        const layer_count = operationalLayers.length;
-
-        updatedLayers.forEach(layer => {
-            if (layer.type === 'gee') {
-                layer.olLayer.setZIndex(GEE_LAYER_Z_INDEX);
-            } else if (layer.type === 'wms') {
-                layer.olLayer.setZIndex(WMS_LAYER_Z_INDEX);
-            } else {
-                const operationalIndex = operationalLayers.findIndex(opLayer => opLayer.id === layer.id);
-                if (operationalIndex !== -1) {
-                    // Layers are rendered from lowest z-index to highest.
-                    // To make the top layer in the list appear on top of the map, it needs the highest z-index.
-                    layer.olLayer.setZIndex(LAYER_START_Z_INDEX + (layer_count - 1 - operationalIndex));
-                }
-            }
-        });
-        // --- End of zIndex logic ---
-
-        return updatedLayers;
-    });
+      setLayersInternal(prevLayers => {
+          const newLayers = typeof updater === 'function' ? updater(prevLayers) : updater;
+  
+          // --- Start of zIndex logic ---
+          const operationalLayers = newLayers.filter(l => l.type !== 'gee' && l.type !== 'wms');
+          const layer_count = operationalLayers.length;
+  
+          newLayers.forEach(layer => {
+              const zIndex = layer.olLayer.getZIndex();
+              let newZIndex = zIndex;
+              if (layer.type === 'gee') {
+                  newZIndex = GEE_LAYER_Z_INDEX;
+              } else if (layer.type === 'wms') {
+                  newZIndex = WMS_LAYER_Z_INDEX;
+              } else {
+                  const operationalIndex = operationalLayers.findIndex(opLayer => opLayer.id === layer.id);
+                  if (operationalIndex !== -1) {
+                      newZIndex = LAYER_START_Z_INDEX + (layer_count - 1 - operationalIndex);
+                  }
+              }
+              if (zIndex !== newZIndex) {
+                  layer.olLayer.setZIndex(newZIndex);
+              }
+          });
+          // --- End of zIndex logic ---
+  
+          return newLayers;
+      });
   }, []);
 
   // Effect to check the state of the drawing source

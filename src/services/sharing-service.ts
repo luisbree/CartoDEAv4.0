@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { collection, addDoc, getDoc, doc, serverTimestamp, Firestore } from "firebase/firestore";
@@ -33,8 +34,8 @@ export async function saveMapState(mapState: Omit<MapState, 'createdAt'>): Promi
         const docRef = await addDoc(collection(db, SHARED_MAPS_COLLECTION), dataToSend);
         return docRef.id;
     } catch (error) {
-        console.error("### ERROR DE FIREBASE AL GUARDAR ###", error);
-        throw new Error("Could not save map state.");
+        console.error("Error writing document to Firestore:", error);
+        throw new Error("Could not save map state due to a database error.");
     }
 }
 
