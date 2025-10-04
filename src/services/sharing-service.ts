@@ -26,6 +26,11 @@ function getDb() {
 export async function saveMapState(mapState: Omit<MapState, 'createdAt'>): Promise<string> {
     try {
         const db = getDb();
+        
+        // **DEBUGGING STEP: Log the object before sending to Firestore**
+        console.log("--- Objeto a enviar a Firestore ---");
+        console.log(JSON.stringify(mapState, null, 2));
+        
         const docRef = await addDoc(collection(db, SHARED_MAPS_COLLECTION), {
             ...mapState,
             createdAt: serverTimestamp(),
@@ -49,7 +54,11 @@ export async function getMapState(mapId: string): Promise<MapState | null> {
         const docSnap = await getDoc(docRef);
 
         if (docSnap.exists()) {
-            return docSnap.data() as MapState;
+            // Firestore timestamps need to be handled if you need to display them
+            const data = docSnap.data();
+            // You might need to convert serverTimestamp to a serializable format here
+            // if you pass it directly to client components.
+            return data as MapState;
         } else {
             console.log("No such map state document!");
             return null;
