@@ -159,6 +159,9 @@ export default function GeoMapperClient() {
   const analysisPanelRef = useRef<HTMLDivElement>(null);
   const trelloPopupRef = useRef<Window | null>(null);
   const [isMounted, setIsMounted] = useState(false);
+  
+  const layerManagerHookRef = useRef<any>(null);
+
 
   useEffect(() => {
     setIsMounted(true);
@@ -261,6 +264,8 @@ export default function GeoMapperClient() {
     clearSelectionAfterExtraction: featureInspectionHook.clearSelection,
     updateInspectedFeatureData: featureInspectionHook.updateInspectedFeatureData,
   });
+  
+  layerManagerHookRef.current = layerManagerHook;
   
   const {
     handleFetchGeoServerLayers,
@@ -703,37 +708,31 @@ export default function GeoMapperClient() {
   const handleShareMap = useCallback(async () => {
       if (!mapRef.current) return;
   
-      toast({ description: 'Guardando el estado del mapa...' });
+      const { layers } = layerManagerHookRef.current;
   
       const map = mapRef.current;
       const view = map.getView();
-      
       const center = transform(view.getCenter() || [0,0], 'EPSG:3857', 'EPSG:4326');
       const zoom = view.getZoom() || 1;
   
-      const serializableLayers: SerializableMapLayer[] = layerManagerHook.layers
-        .map(layer => {
-          if (layer.type === 'wms' || layer.type === 'wfs' || layer.type === 'gee') {
-              const remoteLayer: RemoteSerializableLayer = {
-                  type: layer.type,
-                  name: layer.name,
-                  url: layer.olLayer.get('serverUrl') || null,
-                  layerName: layer.olLayer.get('gsLayerName') || null,
-                  opacity: layer.opacity,
-                  visible: layer.visible,
-                  wmsStyleEnabled: layer.wmsStyleEnabled ?? false, // Ensure boolean
-                  styleName: layer.olLayer.get('styleName') || null,
-                  geeParams: layer.olLayer.get('geeParams') || null,
-              };
-              return remoteLayer;
-          } else if (['vector', 'osm', 'drawing', 'sentinel', 'landsat', 'analysis', 'geotiff'].includes(layer.type)) {
-              const localLayer: LocalSerializableLayer = {
-                  type: 'local',
-                  name: layer.name,
-              };
-              return localLayer;
-          }
-          return null;
+      const serializableLayers: SerializableMapLayer[] = layers
+        .map((layer: MapLayer): SerializableMapLayer | null => {
+            if (['wms', 'wfs', 'gee'].includes(layer.type)) {
+                return {
+                    type: layer.type as 'wms' | 'wfs' | 'gee',
+                    name: layer.name,
+                    url: layer.olLayer.get('serverUrl') || null,
+                    layerName: layer.olLayer.get('gsLayerName') || null,
+                    opacity: layer.opacity,
+                    visible: layer.visible,
+                    wmsStyleEnabled: layer.wmsStyleEnabled ?? false,
+                    styleName: layer.olLayer.get('styleName') || null,
+                    geeParams: layer.olLayer.get('geeParams') || null,
+                };
+            } else if (['vector', 'osm', 'drawing', 'sentinel', 'landsat', 'analysis', 'geotiff'].includes(layer.type)) {
+                return { type: 'local', name: layer.name };
+            }
+            return null;
         })
         .filter((l): l is SerializableMapLayer => l !== null);
   
@@ -744,24 +743,25 @@ export default function GeoMapperClient() {
       };
       
       try {
-        const mapId = await saveMapState(mapState);
-        const shareUrl = `${window.location.origin}/share/${mapId}`;
-        
-        await navigator.clipboard.writeText(shareUrl);
-        toast({
-          title: "¡Enlace copiado!",
-          description: "El enlace para compartir el mapa se ha copiado en tu portapapeles.",
-        });
+          const jsonString = JSON.stringify(mapState);
+          const encodedData = btoa(jsonString); // Base64 encode
+          const shareUrl = `${window.location.origin}/share/local/${encodedData}`;
+          
+          await navigator.clipboard.writeText(shareUrl);
+          toast({
+            title: "¡Enlace de simulación copiado!",
+            description: "El enlace para la simulación se ha copiado en tu portapapeles.",
+          });
   
       } catch (error: any) {
-        console.error("Error saving map state:", error);
+        console.error("Error creating simulation link:", error);
         toast({
-          title: "Error al compartir",
-          description: `No se pudo guardar el estado del mapa: ${error.message || 'Error desconocido'}`,
+          title: "Error al Simular",
+          description: `No se pudo generar el enlace de simulación: ${error.message || 'Error desconocido'}`,
           variant: "destructive",
         });
       }
-  }, [mapRef, layerManagerHook.layers, activeBaseLayerId, toast]);
+  }, [mapRef, activeBaseLayerId, toast]);
 
   // Effect for right-click tool toggling
   useEffect(() => {
