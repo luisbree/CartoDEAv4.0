@@ -7,7 +7,6 @@ import { getMapState } from '@/services/sharing-service';
 import type { MapState, MapLayer as AppMapLayer, RemoteSerializableLayer } from '@/lib/types';
 import MapView from '@/components/map-view';
 import { useOpenLayersMap } from '@/hooks/map-core/useOpenLayersMap';
-import { useLayerManager } from '@/hooks/layer-manager/useLayerManager';
 import { useToast } from '@/hooks/use-toast';
 import { useFirestore } from '@/firebase';
 import { transform } from 'ol/proj';
@@ -15,7 +14,12 @@ import { Button } from '@/components/ui/button';
 import { nanoid } from 'nanoid';
 import VectorLayer from 'ol/layer/Vector';
 import VectorSource from 'ol/source/Vector';
+import TileLayer from 'ol/layer/Tile';
+import TileWMS from 'ol/source/TileWMS';
+import XYZ from 'ol/source/XYZ';
 import type { Map } from 'ol';
+import type { GeeValueQueryInput } from '@/ai/flows/gee-types';
+
 
 interface SharedMapClientProps {
     mapId?: string;
@@ -27,85 +31,136 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
     const firestore = useFirestore();
     const { toast } = useToast();
     
+    const [mapState, setMapState] = useState<MapState | null>(initialMapState || null);
     const [isLoading, setIsLoading] = useState(!initialMapState);
     const [error, setError] = useState<string | null>(null);
     const [displayLayers, setDisplayLayers] = useState<Partial<AppMapLayer>[]>([]);
     
-    const { handleAddHybridLayer, addGeeLayerToMap } = useLayerManager({
-        mapRef,
-        isMapReady,
-        drawingSourceRef,
-        onShowTableRequest: () => {},
-        updateGeoServerDiscoveredLayerState: () => {},
-        clearSelectionAfterExtraction: () => {},
-        updateInspectedFeatureData: () => {},
-    });
-
+    // Fetch data effect
     useEffect(() => {
-        let isMounted = true;
-
-        const loadMap = async () => {
-            if (!isMapReady || !mapRef.current) return;
-            
-            let finalMapState: MapState | null = initialMapState || null;
-            
-            if (!finalMapState && mapId && firestore) {
-                console.log("Fetching map state from DB for mapId:", mapId);
-                try {
-                    const stateFromDb = await getMapState(firestore, mapId);
-                    if (isMounted) {
-                        if (stateFromDb) {
-                            finalMapState = stateFromDb;
-                        } else {
-                            setError('No se pudo encontrar el estado del mapa para este ID.');
-                            setIsLoading(false);
-                            return;
-                        }
-                    }
-                } catch (err) {
-                    if (isMounted) {
-                        console.error(err);
-                        setError('Ocurrió un error al cargar el mapa compartido.');
-                        setIsLoading(false);
-                        return;
-                    }
-                }
+        if (initialMapState || !mapId || !firestore) {
+            if (!mapId && !initialMapState) {
+                setError("No se proporcionó un ID de mapa.");
+                setIsLoading(false);
             }
+            return;
+        }
 
-            if (!finalMapState) {
-                if (isMounted) setIsLoading(false);
-                return;
-            }
-
-            console.log("Applying map state:", finalMapState);
-            const map = mapRef.current;
-            const view = map.getView();
+        const fetchMapState = async () => {
+            console.log("Fetching map state from DB for mapId:", mapId);
             try {
-                const center3857 = transform(finalMapState.view.center, 'EPSG:4326', 'EPSG:3857');
+                const stateFromDb = await getMapState(firestore, mapId);
+                if (stateFromDb) {
+                    setMapState(stateFromDb);
+                } else {
+                    setError('No se pudo encontrar el estado del mapa para este ID.');
+                }
+            } catch (err) {
+                console.error(err);
+                setError('Ocurrió un error al cargar el mapa compartido.');
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        fetchMapState();
+    }, [mapId, firestore, initialMapState]);
+    
+
+    // Apply map state effect
+    useEffect(() => {
+        if (!isMapReady || !mapState || !mapRef.current) {
+            return;
+        }
+        
+        console.log("Applying map state:", mapState);
+        const map = mapRef.current;
+        const loadedLayers: Partial<AppMapLayer>[] = [];
+
+        // Helper functions defined locally to avoid hook dependencies
+        const addGeeLayerToMap = (tileUrl: string, layerName: string, geeParams: Omit<GeeValueQueryInput, 'aoi' | 'zoom'>) => {
+            const layerId = `gee-${nanoid()}`;
+            const geeSource = new XYZ({ url: tileUrl, crossOrigin: 'anonymous' });
+            const geeLayer = new TileLayer({
+              source: geeSource,
+              properties: { id: layerId, name: layerName, type: 'gee', geeParams },
+              zIndex: 5,
+            });
+            map.addLayer(geeLayer);
+            return { id: layerId, name: layerName, olLayer: geeLayer, visible: true, opacity: 1, type: 'gee' };
+        };
+
+        const handleAddHybridLayer = (layerName: string, layerTitle: string, serverUrl: string, bbox?: [number, number, number, number], styleName?: string): AppMapLayer | null => {
+            const cleanedServerUrl = serverUrl.replace(/\/wms\/?$|\/wfs\/?$/i, '');
+            const wfsId = `wfs-layer-${layerName}-${nanoid()}`;
+            
+            const wfsSource = new VectorSource(); // WFS source is not used for rendering, just a placeholder
+            const wfsLayer = new VectorLayer({
+                source: wfsSource,
+                style: new Style(),
+                properties: { id: wfsId, name: layerTitle, type: 'wfs', gsLayerName: layerName, serverUrl: cleanedServerUrl, styleName },
+            });
+
+            const wmsParams: Record<string, any> = { 'LAYERS': layerName, 'TILED': true, 'VERSION': '1.1.1' };
+            if (styleName) wmsParams['STYLES'] = styleName;
+        
+            const wmsSource = new TileWMS({
+                url: `${cleanedServerUrl}/wms`,
+                params: wmsParams,
+                serverType: 'geoserver',
+                transition: 0,
+            });
+            
+            const wmsLayer = new TileLayer({
+                source: wmsSource,
+                properties: { id: `wms-${nanoid()}`, isVisualPartner: true },
+                zIndex: 5,
+            });
+        
+            map.addLayer(wmsLayer);
+            wfsLayer.set('visualLayer', wmsLayer);
+
+            return {
+                id: wfsId,
+                name: layerTitle,
+                olLayer: wfsLayer,
+                visible: true,
+                opacity: 1,
+                type: 'wfs',
+                wmsStyleEnabled: true,
+            };
+        };
+
+
+        const loadMapFromState = async () => {
+            // Apply View
+            try {
+                const view = map.getView();
+                const center3857 = transform(mapState.view.center, 'EPSG:4326', 'EPSG:3857');
                 view.setCenter(center3857);
-                view.setZoom(finalMapState.view.zoom);
+                view.setZoom(mapState.view.zoom);
             } catch (viewError) {
                 console.error("Error setting map view:", viewError);
             }
-
-            const loadedLayers: Partial<AppMapLayer>[] = [];
-            for (const layerState of finalMapState.layers) {
-                if (!isMounted) return;
-
+            
+            // Apply Layers
+            console.log("Loading layers from mapState...");
+            for (const layerState of mapState.layers) {
                 try {
                     if (layerState.type === 'local') {
-                        loadedLayers.push({ id: nanoid(), name: layerState.name, type: 'local-placeholder', visible: false, olLayer: new VectorLayer({ source: new VectorSource() }) });
+                        loadedLayers.push({ id: nanoid(), name: layerState.name, type: 'local-placeholder', visible: false });
                         continue;
                     }
-                    
+
                     const remoteLayer = layerState as RemoteSerializableLayer;
                     let newLayer: AppMapLayer | null = null;
+                    
                     if ((remoteLayer.type === 'wms' || remoteLayer.type === 'wfs') && remoteLayer.url && remoteLayer.layerName) {
-                        newLayer = await handleAddHybridLayer(remoteLayer.layerName, remoteLayer.name, remoteLayer.url, undefined, remoteLayer.styleName || undefined);
+                        newLayer = handleAddHybridLayer(remoteLayer.layerName, remoteLayer.name, remoteLayer.url, undefined, remoteLayer.styleName || undefined);
                     } else if (remoteLayer.type === 'gee' && remoteLayer.geeParams?.tileUrl) {
                         newLayer = addGeeLayerToMap(remoteLayer.geeParams.tileUrl, remoteLayer.name, remoteLayer.geeParams);
                     }
-                    
+
                     if (newLayer) {
                         newLayer.olLayer.setVisible(remoteLayer.visible);
                         newLayer.olLayer.setOpacity(remoteLayer.opacity);
@@ -120,27 +175,15 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
                     console.error(`Failed to load layer "${layerState.name}":`, layerError);
                 }
             }
-
-            if (isMounted) {
-                setDisplayLayers(loadedLayers.reverse());
-                setIsLoading(false);
-                console.log("Finished loading all layers. Total:", loadedLayers.length);
-            }
-        };
-
-        if(isMapReady && (mapId || initialMapState)) {
-           loadMap();
-        } else if (!mapId && !initialMapState) {
+            
+            console.log(`Finished loading ${loadedLayers.length} layers.`);
+            setDisplayLayers(loadedLayers.reverse());
             setIsLoading(false);
-            setError("No se proporcionó un ID de mapa o un estado de mapa inicial.");
-        }
-
-
-        return () => {
-            isMounted = false;
         };
-    }, [isMapReady, mapId, firestore, initialMapState, mapRef, handleAddHybridLayer, addGeeLayerToMap]);
+        
+        loadMapFromState();
 
+    }, [isMapReady, mapState, mapRef]);
 
     const handleToggleVisibility = useCallback((layerId: string) => {
         setDisplayLayers(prev => prev.map(l => {
@@ -185,7 +228,7 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
         <div className="relative h-screen w-screen bg-gray-800">
             <MapView
                 setMapInstanceAndElement={setMapInstanceAndElement}
-                activeBaseLayerId={initialMapState?.baseLayerId || 'osm-standard'}
+                activeBaseLayerId={mapState?.baseLayerId || 'osm-standard'}
                 baseLayerSettings={{ opacity: 1, brightness: 100, contrast: 100 }}
             />
              <div className="absolute top-4 right-4 z-10">
