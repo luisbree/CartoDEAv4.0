@@ -12,9 +12,11 @@ export function initializeFirebase(): {
 } {
   if (getApps().length === 0) {
     // This will only run on the first call
+    console.log("INICIALIZANDO FIREBASE POR PRIMERA VEZ CON ESTA CONFIGURACIÓN:", firebaseConfig);
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const firestore = getFirestore(app);
+    console.log("INSTANCIA DE FIRESTORE CREADA:", firestore);
     return { app, auth, firestore };
   } else {
     // For subsequent calls, it returns the existing instances.
