@@ -36,6 +36,8 @@ interface LayerListProps {
   // Editing props
   activeTool: InteractionToolId | null;
   onToggleEditing: (tool: InteractionToolId) => void;
+  
+  isSharedView?: boolean;
 }
 
 const LayerList: React.FC<LayerListProps> = ({
@@ -63,6 +65,7 @@ const LayerList: React.FC<LayerListProps> = ({
   onLayerClick,
   activeTool,
   onToggleEditing,
+  isSharedView = false,
 }) => {
   const dragItemIndex = useRef<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
@@ -114,8 +117,10 @@ const LayerList: React.FC<LayerListProps> = ({
     return (
       <div className="text-center py-6 px-3 border border-dashed border-white/10 rounded-md">
         <Layers className="mx-auto h-10 w-10 text-gray-400/40" />
-        <p className="mt-1.5 text-xs text-gray-300/90">No hay capas cargadas.</p>
-        <p className="text-xs text-gray-400/70">Use el botón "Importar" para añadir.</p>
+        <p className="mt-1.5 text-xs text-gray-300/90">
+            {isSharedView ? "No hay capas compartidas." : "No hay capas cargadas."}
+        </p>
+        {!isSharedView && <p className="text-xs text-gray-400/70">Use el botón "Importar" para añadir.</p>}
       </div>
     );
   }
@@ -145,7 +150,7 @@ const LayerList: React.FC<LayerListProps> = ({
           isDrawingSourceEmptyOrNotPolygon={isDrawingSourceEmptyOrNotPolygon}
           isSelectionEmpty={isSelectionEmpty}
           onSetLayerOpacity={onSetLayerOpacity}
-          isDraggable={true} // All layers are now draggable
+          isDraggable={!isSharedView} // Dragging is disabled in shared view
           onDragStart={(e) => handleDragStart(e, index)}
           onDragEnter={(e) => handleDragEnter(e, index)}
           onDragLeave={handleDragLeave}
@@ -158,6 +163,7 @@ const LayerList: React.FC<LayerListProps> = ({
           onClick={(e) => onLayerClick(index, e)}
           activeTool={activeTool}
           onToggleEditing={onToggleEditing}
+          isSharedView={isSharedView}
         />
       ))}
     </ul>

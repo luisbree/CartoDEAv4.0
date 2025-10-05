@@ -291,6 +291,7 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
                             onLayerClick={handleLayerClick}
                             activeTool={activeTool}
                             onToggleEditing={handleToggleEditing}
+                            isSharedView={isSharedView}
                         />
                     </div>
                 </ScrollArea>
@@ -407,3 +408,5 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
 };
 
 export default LegendPanel;
+
+    

@@ -816,47 +816,50 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
       }
   }, [layerManagerHook.layers, togglePanelMinimize, toast]);
 
-    // This effect runs only when in shared map mode
+  // This effect runs only when in shared map mode to load the state
   useEffect(() => {
-      if (!initialMapState || !isMapReady || !layerManagerHookRef.current || !mapRef.current) return;
-      const { handleAddHybridLayer, addGeeLayerToMap } = layerManagerHookRef.current;
-      const map = mapRef.current;
+    if (!initialMapState || !isMapReady || !mapRef.current || !layerManagerHookRef.current) return;
+    
+    const { handleAddHybridLayer, addGeeLayerToMap } = layerManagerHookRef.current;
+    const map = mapRef.current;
 
-      const loadSharedMap = async () => {
-          console.log("Applying shared map state...", initialMapState);
+    const loadSharedMap = async () => {
+        console.log("Applying shared map state...", initialMapState);
 
-          try {
-              const view = map.getView();
-              const center3857 = transform(initialMapState.view.center, 'EPSG:4326', 'EPSG:3857');
-              view.setCenter(center3857);
-              view.setZoom(initialMapState.view.zoom);
-          } catch (e) {
-              console.error("Error setting shared view", e);
-          }
+        try {
+            const view = map.getView();
+            const center3857 = transform(initialMapState.view.center, 'EPSG:4326', 'EPSG:3857');
+            view.setCenter(center3857);
+            view.setZoom(initialMapState.view.zoom);
+            map.renderSync(); // Force a re-render after setting view
+        } catch (e) {
+            console.error("Error setting shared view", e);
+        }
 
-          for (const layerState of initialMapState.layers) {
-              try {
-                  if (layerState.type === 'wfs' && layerState.url && layerState.layerName) {
-                      const addedLayer = await handleAddHybridLayer(layerState.layerName, layerState.name, layerState.url, undefined, layerState.styleName);
-                      if (addedLayer) {
-                          addedLayer.olLayer.setOpacity(layerState.opacity);
-                          addedLayer.olLayer.setVisible(layerState.visible);
-                      }
-                  } else if (layerState.type === 'gee' && layerState.geeParams?.tileUrl && layerState.geeParams.bandCombination) {
-                      addGeeLayerToMap(layerState.geeParams.tileUrl, layerState.name, {
-                          bandCombination: layerState.geeParams.bandCombination as any,
-                      });
-                  }
-              } catch (e) {
-                  console.error("Error loading shared layer", layerState, e);
-              }
-          }
-          console.log("Finished applying shared map state.");
-      };
+        for (const layerState of initialMapState.layers) {
+            try {
+                 console.log("Processing shared layer:", layerState);
+                if (layerState.type === 'wfs' && layerState.url && layerState.layerName) {
+                    const addedLayer = await handleAddHybridLayer(layerState.layerName, layerState.name, layerState.url, undefined, layerState.styleName);
+                    if (addedLayer) {
+                        addedLayer.olLayer.setOpacity(layerState.opacity);
+                        addedLayer.olLayer.setVisible(layerState.visible);
+                    }
+                } else if (layerState.type === 'gee' && layerState.geeParams?.tileUrl && layerState.geeParams.bandCombination) {
+                    addGeeLayerToMap(layerState.geeParams.tileUrl, layerState.name, {
+                        bandCombination: layerState.geeParams.bandCombination as any,
+                    });
+                }
+            } catch (e) {
+                console.error("Error loading shared layer", layerState, e);
+            }
+        }
+        console.log("Finished applying shared map state.");
+    };
 
-      loadSharedMap();
+    loadSharedMap();
 
-  }, [initialMapState, isMapReady, layerManagerHookRef, mapRef]);
+  }, [initialMapState, isMapReady, mapRef, layerManagerHookRef]);
 
 
   return (
@@ -1029,7 +1032,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
         
         {!initialMapState && <Notepad />}
 
-        {isMounted && !initialMapState && panels.tools && !panels.tools.isMinimized && (
+        {isMounted && panels.tools && !panels.tools.isMinimized && (
           <ToolsPanel
             panelRef={toolsPanelRef}
             isCollapsed={panels.tools.isCollapsed}
@@ -1155,7 +1158,6 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
                 layer={statisticsLayer}
                 allLayers={layerManagerHook.layers}
                 selectedFeatures={featureInspectionHook.selectedFeatures}
-                onAddLayer={(layer: MapLayer, bringToTop?: boolean) => layerManagerHook.addLayer(layer, bringToTop)}
                 panelRef={statisticsPanelRef}
                 isCollapsed={panels.statistics.isCollapsed}
                 onToggleCollapse={() => togglePanelCollapse('statistics')}
@@ -1244,3 +1246,5 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
     </div>
   );
 }
+
+    
