@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { collection, addDoc, getDoc, doc, serverTimestamp, type Firestore } from "firebase/firestore";
@@ -8,17 +7,6 @@ import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
 
 const SHARED_MAPS_COLLECTION = 'sharedMaps';
-
-/**
- * Debug function to read a specific document and log its content or error.
- */
-export async function debugReadDocument(db: Firestore): Promise<void> {
-    // This function remains for debugging purposes if needed, but is not critical for sharing.
-    if (!db) {
-        console.log("DEBUG: Firestore instance not available for debug read.");
-        return;
-    }
-}
 
 /**
  * Saves the current map state to Firestore and returns the new document's ID.

@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import { Encode_Sans, Encode_Sans_Condensed } from 'next/font/google';
 import './globals.css';
 import { Toaster } from '@/components/ui/toaster';
+import FirebaseClientProvider from '@/firebase/client-provider';
 
 const encodeSans = Encode_Sans({
   subsets: ['latin'],
@@ -31,7 +32,9 @@ export default function RootLayout({
       <body
         className={`${encodeSans.variable} ${encodeSansCondensed.variable} antialiased`}
       >
-        {children}
+        <FirebaseClientProvider>
+          {children}
+        </FirebaseClientProvider>
         <Toaster />
       </body>
     </html>
