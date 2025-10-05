@@ -1,14 +1,12 @@
-
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { Loader2, ListTree, Eye, EyeOff, ArrowLeft, CloudOff } from 'lucide-react';
 import { getMapState } from '@/services/sharing-service';
-import type { MapState, MapLayer as AppMapLayer } from '@/lib/types';
+import type { MapState, MapLayer as AppMapLayer, RemoteSerializableLayer } from '@/lib/types';
 import MapView from '@/components/map-view';
 import { useOpenLayersMap } from '@/hooks/map-core/useOpenLayersMap';
-import { useLayerManager } from '@/hooks/layer-manager/useLayerManager';
 import { useToast } from '@/hooks/use-toast';
 import { useFirestore } from '@/firebase';
 import { transform } from 'ol/proj';
@@ -16,14 +14,98 @@ import { Button } from '@/components/ui/button';
 import { nanoid } from 'nanoid';
 import VectorLayer from 'ol/layer/Vector';
 import VectorSource from 'ol/source/Vector';
+import TileLayer from 'ol/layer/Tile';
+import TileWMS from 'ol/source/TileWMS';
+import XYZ from 'ol/source/XYZ';
+import GeoJSON from 'ol/format/GeoJSON';
+import { bbox as bboxStrategy } from 'ol/loadingstrategy';
+import { Style } from 'ol/style';
+
 
 interface SharedMapClientProps {
     mapId?: string;
     mapState?: MapState | null; // For local/example previews
 }
 
+// Helper function adapted from useLayerManager to avoid using the hook
+const addHybridLayerDirectly = async (
+    map: any,
+    layerName: string,
+    layerTitle: string,
+    serverUrl: string,
+    styleName?: string
+): Promise<AppMapLayer | null> => {
+    try {
+        const cleanedServerUrl = serverUrl.replace(/\/wms\/?$|\/wfs\/?$/i, '');
+        const wfsId = `wfs-layer-${layerName}-${nanoid()}`;
+
+        const wfsSource = new VectorSource({
+            format: new GeoJSON(),
+            url: (extent) => {
+                const wfsUrl = `${cleanedServerUrl}/wfs?service=WFS&version=1.1.0&request=GetFeature&typename=${layerName}&outputFormat=application/json&srsname=EPSG:3857&bbox=${extent.join(',')},EPSG:3857`;
+                return `/api/geoserver-proxy?url=${encodeURIComponent(wfsUrl)}`;
+            },
+            strategy: bboxStrategy,
+        });
+
+        const wfsLayer = new VectorLayer({
+            source: wfsSource,
+            style: new Style(),
+            properties: { id: wfsId, name: layerTitle, type: 'wfs', gsLayerName: layerName, serverUrl: cleanedServerUrl, styleName },
+        });
+
+        const wmsParams: Record<string, any> = { 'LAYERS': layerName, 'TILED': true, 'VERSION': '1.1.1' };
+        if (styleName) wmsParams['STYLES'] = styleName;
+
+        const wmsSource = new TileWMS({
+            url: `${cleanedServerUrl}/wms`,
+            params: wmsParams,
+            serverType: 'geoserver',
+            transition: 0,
+            crossOrigin: 'anonymous',
+        });
+
+        const wmsLayer = new TileLayer({
+            source: wmsSource,
+            properties: { id: `wms-layer-${layerName}-${nanoid()}`, isVisualPartner: true, partnerId: wfsId },
+            zIndex: 5,
+        });
+
+        map.addLayer(wmsLayer);
+        wfsLayer.set('visualLayer', wmsLayer);
+
+        map.addLayer(wfsLayer);
+
+        return {
+            id: wfsId,
+            name: layerTitle,
+            olLayer: wfsLayer,
+            visible: true,
+            opacity: 1,
+            type: 'wfs',
+            wmsStyleEnabled: true,
+        };
+    } catch (error) {
+        console.error("Error adding hybrid layer directly:", error);
+        return null;
+    }
+};
+
+const addGeeLayerDirectly = (map: any, tileUrl: string, layerName: string, geeParams: any): AppMapLayer => {
+    const layerId = `gee-${nanoid()}`;
+    const geeSource = new XYZ({ url: tileUrl, crossOrigin: 'anonymous' });
+    const geeLayer = new TileLayer({
+        source: geeSource,
+        properties: { id: layerId, name: layerName, type: 'gee', geeParams },
+        zIndex: 5,
+    });
+    map.addLayer(geeLayer);
+    return { id: layerId, name: layerName, olLayer: geeLayer, visible: true, opacity: 1, type: 'gee' };
+};
+
+
 const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: initialMapState }) => {
-    const { mapRef, setMapInstanceAndElement, isMapReady, drawingSourceRef } = useOpenLayersMap();
+    const { mapRef, setMapInstanceAndElement, isMapReady } = useOpenLayersMap();
     const { toast } = useToast();
     const firestore = useFirestore();
     const [mapState, setMapState] = useState<MapState | null>(initialMapState || null);
@@ -31,13 +113,6 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
     const [error, setError] = useState<string | null>(null);
     const [displayLayers, setDisplayLayers] = useState<Partial<AppMapLayer>[]>([]);
     
-    // Instantiate the layer manager hook here. It will be used to add layers to the map.
-    const layerManager = useLayerManager({
-        mapRef, isMapReady, drawingSourceRef,
-        onShowTableRequest: () => {}, updateGeoServerDiscoveredLayerState: () => {},
-        clearSelectionAfterExtraction: () => {}, updateInspectedFeatureData: () => {},
-    });
-
     // Effect to fetch the map state from Firestore ONCE.
     useEffect(() => {
         if (initialMapState || !mapId || !firestore) {
@@ -83,14 +158,12 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
         if (!isMapReady || !mapState || !mapRef.current) return;
 
         let isMounted = true;
-        const { handleAddHybridLayer, addGeeLayerToMap } = layerManager;
-        
+        const map = mapRef.current;
+
         const loadAllLayers = async () => {
             console.log("Starting to load layers from map state...");
-            const map = mapRef.current!;
+            
             const view = map.getView();
-
-            // Set the map view first
             const center3857 = transform(mapState.view.center, 'EPSG:4326', 'EPSG:3857');
             view.setCenter(center3857);
             view.setZoom(mapState.view.zoom);
@@ -100,47 +173,31 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
 
                 try {
                     if (layerState.type === 'local') {
-                        return {
-                            id: nanoid(),
-                            name: layerState.name,
-                            type: 'local-placeholder',
-                            visible: false,
-                            olLayer: new VectorLayer({ source: new VectorSource() }),
-                        };
+                        return { id: nanoid(), name: layerState.name, type: 'local-placeholder', visible: false, olLayer: new VectorLayer({ source: new VectorSource() })};
                     }
-
-                    if ((layerState.type === 'wms' || layerState.type === 'wfs') && layerState.url && layerState.layerName) {
-                        const newLayer = await handleAddHybridLayer(
-                            layerState.layerName,
-                            layerState.name,
-                            layerState.url,
-                            undefined,
-                            layerState.styleName || undefined
-                        );
-
+                    
+                    const remoteLayer = layerState as RemoteSerializableLayer;
+                    if ((remoteLayer.type === 'wms' || remoteLayer.type === 'wfs') && remoteLayer.url && remoteLayer.layerName) {
+                        const newLayer = await addHybridLayerDirectly(map, remoteLayer.layerName, remoteLayer.name, remoteLayer.url, remoteLayer.styleName || undefined);
                         if (newLayer && isMounted) {
-                            newLayer.olLayer.setVisible(layerState.visible);
-                            newLayer.olLayer.setOpacity(layerState.opacity);
+                            newLayer.olLayer.setVisible(remoteLayer.visible);
+                            newLayer.olLayer.setOpacity(remoteLayer.opacity);
                             const visualLayer = newLayer.olLayer.get('visualLayer');
                             if (visualLayer) {
-                                visualLayer.setVisible(layerState.visible && (layerState.wmsStyleEnabled ?? true));
-                                visualLayer.setOpacity(layerState.opacity);
+                                visualLayer.setVisible(remoteLayer.visible && (remoteLayer.wmsStyleEnabled ?? true));
+                                visualLayer.setOpacity(remoteLayer.opacity);
                             }
-                            return { ...newLayer, visible: layerState.visible, opacity: layerState.opacity, wmsStyleEnabled: layerState.wmsStyleEnabled };
+                            return { ...newLayer, visible: remoteLayer.visible, opacity: remoteLayer.opacity, wmsStyleEnabled: remoteLayer.wmsStyleEnabled };
                         }
-                    } else if (layerState.type === 'gee' && layerState.geeParams?.tileUrl) {
-                        const newLayer = addGeeLayerToMap(layerState.geeParams.tileUrl, layerState.name, layerState.geeParams);
+                    } else if (remoteLayer.type === 'gee' && remoteLayer.geeParams?.tileUrl) {
+                        const newLayer = addGeeLayerDirectly(map, remoteLayer.geeParams.tileUrl, remoteLayer.name, remoteLayer.geeParams);
                         if (newLayer && isMounted) {
                            return newLayer;
                         }
                     }
                 } catch (layerError) {
                     console.error(`Failed to load layer "${layerState.name}":`, layerError);
-                    toast({
-                        title: `Error al Cargar Capa`,
-                        description: `No se pudo cargar la capa "${layerState.name}".`,
-                        variant: "destructive"
-                    });
+                    toast({ title: `Error al Cargar Capa`, description: `No se pudo cargar la capa "${layerState.name}".`, variant: "destructive" });
                 }
                  return null;
             });
@@ -148,7 +205,6 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
             const loadedLayers = (await Promise.all(loadedLayersPromises)).filter((l): l is Partial<AppMapLayer> => l !== null);
 
             if (isMounted) {
-                // Reverse the order to match the original layer stack appearance
                 setDisplayLayers(loadedLayers.reverse());
                 console.log("Finished loading all layers.");
             }
@@ -156,10 +212,8 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
         
         loadAllLayers();
 
-        return () => {
-            isMounted = false;
-        };
-    }, [isMapReady, mapState, mapRef, layerManager, toast]);
+        return () => { isMounted = false; };
+    }, [isMapReady, mapState, mapRef, toast]);
 
 
     const handleToggleVisibility = useCallback((layerId: string) => {
@@ -198,14 +252,6 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
     }
     
     if (!mapState) {
-        if (mapId) {
-             return (
-                <div className="flex flex-col items-center justify-center h-screen bg-gray-800 text-white">
-                    <Loader2 className="h-12 w-12 animate-spin text-primary" />
-                    <p className="mt-4 text-lg">Inicializando servicios...</p>
-                </div>
-            );
-        }
         return (
              <div className="flex items-center justify-center h-screen bg-gray-100">
                 <div className="text-center">
