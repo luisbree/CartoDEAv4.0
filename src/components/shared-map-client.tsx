@@ -20,6 +20,7 @@ import XYZ from 'ol/source/XYZ';
 import GeoJSON from 'ol/format/GeoJSON';
 import { bbox as bboxStrategy } from 'ol/loadingstrategy';
 import { Style } from 'ol/style';
+import type { Map } from 'ol';
 
 
 interface SharedMapClientProps {
@@ -29,7 +30,7 @@ interface SharedMapClientProps {
 
 // Helper function adapted from useLayerManager to avoid using the hook
 const addHybridLayerDirectly = async (
-    map: any,
+    map: Map,
     layerName: string,
     layerTitle: string,
     serverUrl: string,
@@ -91,7 +92,7 @@ const addHybridLayerDirectly = async (
     }
 };
 
-const addGeeLayerDirectly = (map: any, tileUrl: string, layerName: string, geeParams: any): AppMapLayer => {
+const addGeeLayerDirectly = (map: Map, tileUrl: string, layerName: string, geeParams: any): AppMapLayer => {
     const layerId = `gee-${nanoid()}`;
     const geeSource = new XYZ({ url: tileUrl, crossOrigin: 'anonymous' });
     const geeLayer = new TileLayer({
@@ -106,7 +107,6 @@ const addGeeLayerDirectly = (map: any, tileUrl: string, layerName: string, geePa
 
 const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: initialMapState }) => {
     const { mapRef, setMapInstanceAndElement, isMapReady } = useOpenLayersMap();
-    const { toast } = useToast();
     const firestore = useFirestore();
     const [mapState, setMapState] = useState<MapState | null>(initialMapState || null);
     const [isLoading, setIsLoading] = useState(!initialMapState && !!mapId);
@@ -153,21 +153,23 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
         };
     }, [mapId, initialMapState, firestore]);
 
-    // Effect to load layers onto the map from the fetched mapState.
+    // Effect to load layers and set view from the fetched mapState.
     useEffect(() => {
         if (!isMapReady || !mapState || !mapRef.current) return;
 
         let isMounted = true;
         const map = mapRef.current;
 
-        const loadAllLayers = async () => {
-            console.log("Starting to load layers from map state...");
+        const loadMapFromState = async () => {
+            console.log("Applying map state:", mapState);
             
+            // 1. Set View
             const view = map.getView();
             const center3857 = transform(mapState.view.center, 'EPSG:4326', 'EPSG:3857');
             view.setCenter(center3857);
             view.setZoom(mapState.view.zoom);
             
+            // 2. Load Layers
             const loadedLayersPromises = mapState.layers.map(async (layerState) => {
                  if (!isMounted) return null;
 
@@ -192,12 +194,13 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
                     } else if (remoteLayer.type === 'gee' && remoteLayer.geeParams?.tileUrl) {
                         const newLayer = addGeeLayerDirectly(map, remoteLayer.geeParams.tileUrl, remoteLayer.name, remoteLayer.geeParams);
                         if (newLayer && isMounted) {
+                           newLayer.olLayer.setVisible(remoteLayer.visible);
+                           newLayer.olLayer.setOpacity(remoteLayer.opacity);
                            return newLayer;
                         }
                     }
                 } catch (layerError) {
                     console.error(`Failed to load layer "${layerState.name}":`, layerError);
-                    toast({ title: `Error al Cargar Capa`, description: `No se pudo cargar la capa "${layerState.name}".`, variant: "destructive" });
                 }
                  return null;
             });
@@ -205,15 +208,16 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
             const loadedLayers = (await Promise.all(loadedLayersPromises)).filter((l): l is Partial<AppMapLayer> => l !== null);
 
             if (isMounted) {
+                // Reverse the order to display correctly (last added on top)
                 setDisplayLayers(loadedLayers.reverse());
-                console.log("Finished loading all layers.");
+                console.log("Finished loading all layers. Total:", loadedLayers.length);
             }
         };
         
-        loadAllLayers();
+        loadMapFromState();
 
         return () => { isMounted = false; };
-    }, [isMapReady, mapState, mapRef, toast]);
+    }, [isMapReady, mapState, mapRef]);
 
 
     const handleToggleVisibility = useCallback((layerId: string) => {
@@ -310,7 +314,7 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
                             ))}
                         </ul>
                     ) : (
-                         <p className="text-xs text-center text-gray-400 py-3">Cargando capas...</p>
+                         <p className="text-xs text-center text-gray-400 py-3">No hay capas remotas en este mapa.</p>
                     )}
                 </div>
             </div>
