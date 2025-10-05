@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -9,7 +10,7 @@ import MapView from '@/components/map-view';
 import { useOpenLayersMap } from '@/hooks/map-core/useOpenLayersMap';
 import { useToast } from '@/hooks/use-toast';
 import { useFirestore } from '@/firebase';
-import { transform } from 'ol/proj';
+import { transform, transformExtent } from 'ol/proj';
 import { Button } from '@/components/ui/button';
 import { nanoid } from 'nanoid';
 import VectorLayer from 'ol/layer/Vector';
@@ -18,6 +19,7 @@ import TileLayer from 'ol/layer/Tile';
 import TileWMS from 'ol/source/TileWMS';
 import XYZ from 'ol/source/XYZ';
 import type { Map } from 'ol';
+import { Style } from 'ol/style'; // Importación añadida
 import type { GeeValueQueryInput } from '@/ai/flows/gee-types';
 
 
@@ -27,7 +29,7 @@ interface SharedMapClientProps {
 }
 
 const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: initialMapState }) => {
-    const { mapRef, setMapInstanceAndElement, isMapReady, drawingSourceRef } = useOpenLayersMap();
+    const { mapRef, setMapInstanceAndElement, isMapReady } = useOpenLayersMap();
     const firestore = useFirestore();
     const { toast } = useToast();
     
@@ -36,7 +38,7 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
     const [error, setError] = useState<string | null>(null);
     const [displayLayers, setDisplayLayers] = useState<Partial<AppMapLayer>[]>([]);
     
-    // Fetch data effect
+    // Effect to fetch data from Firestore
     useEffect(() => {
         if (initialMapState || !mapId || !firestore) {
             if (!mapId && !initialMapState) {
@@ -67,34 +69,34 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
     }, [mapId, firestore, initialMapState]);
     
 
-    // Apply map state effect
+    // Effect to apply map state once map is ready and state is loaded
     useEffect(() => {
         if (!isMapReady || !mapState || !mapRef.current) {
             return;
         }
         
-        console.log("Applying map state:", mapState);
+        console.log("Applying map state to the map...");
         const map = mapRef.current;
         const loadedLayers: Partial<AppMapLayer>[] = [];
 
-        // Helper functions defined locally to avoid hook dependencies
-        const addGeeLayerToMap = (tileUrl: string, layerName: string, geeParams: Omit<GeeValueQueryInput, 'aoi' | 'zoom'>) => {
+        // Helper functions defined inside useEffect to capture current scope
+        const addGeeLayerToMap = (tileUrl: string, layerName: string, geeParams: Omit<GeeValueQueryInput, 'aoi' | 'zoom'>): AppMapLayer => {
             const layerId = `gee-${nanoid()}`;
             const geeSource = new XYZ({ url: tileUrl, crossOrigin: 'anonymous' });
             const geeLayer = new TileLayer({
               source: geeSource,
               properties: { id: layerId, name: layerName, type: 'gee', geeParams },
-              zIndex: 5,
+              zIndex: 5, // Consistent Z-index
             });
             map.addLayer(geeLayer);
             return { id: layerId, name: layerName, olLayer: geeLayer, visible: true, opacity: 1, type: 'gee' };
         };
 
-        const handleAddHybridLayer = (layerName: string, layerTitle: string, serverUrl: string, bbox?: [number, number, number, number], styleName?: string): AppMapLayer | null => {
+        const handleAddHybridLayer = (layerName: string, layerTitle: string, serverUrl: string, styleName?: string): AppMapLayer => {
             const cleanedServerUrl = serverUrl.replace(/\/wms\/?$|\/wfs\/?$/i, '');
             const wfsId = `wfs-layer-${layerName}-${nanoid()}`;
             
-            const wfsSource = new VectorSource(); // WFS source is not used for rendering, just a placeholder
+            const wfsSource = new VectorSource();
             const wfsLayer = new VectorLayer({
                 source: wfsSource,
                 style: new Style(),
@@ -131,8 +133,7 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
             };
         };
 
-
-        const loadMapFromState = async () => {
+        const loadMap = async () => {
             // Apply View
             try {
                 const view = map.getView();
@@ -156,7 +157,7 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
                     let newLayer: AppMapLayer | null = null;
                     
                     if ((remoteLayer.type === 'wms' || remoteLayer.type === 'wfs') && remoteLayer.url && remoteLayer.layerName) {
-                        newLayer = handleAddHybridLayer(remoteLayer.layerName, remoteLayer.name, remoteLayer.url, undefined, remoteLayer.styleName || undefined);
+                        newLayer = handleAddHybridLayer(remoteLayer.layerName, remoteLayer.name, remoteLayer.url, remoteLayer.styleName || undefined);
                     } else if (remoteLayer.type === 'gee' && remoteLayer.geeParams?.tileUrl) {
                         newLayer = addGeeLayerToMap(remoteLayer.geeParams.tileUrl, remoteLayer.name, remoteLayer.geeParams);
                     }
@@ -179,9 +180,12 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
             console.log(`Finished loading ${loadedLayers.length} layers.`);
             setDisplayLayers(loadedLayers.reverse());
             setIsLoading(false);
+            
+            // Force map to re-render after all layers and view are set
+            map.renderSync();
         };
         
-        loadMapFromState();
+        loadMap();
 
     }, [isMapReady, mapState, mapRef]);
 
