@@ -90,5 +90,3 @@ export async function getMapState(db: Firestore, mapId: string): Promise<MapStat
         throw new Error("Could not retrieve map state.");
     }
 }
-
-    

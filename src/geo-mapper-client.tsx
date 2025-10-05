@@ -1172,4 +1172,3 @@ export default function GeoMapperClient() {
   );
 }
 
-    
