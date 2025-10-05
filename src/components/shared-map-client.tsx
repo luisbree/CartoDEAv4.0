@@ -51,6 +51,7 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
             setIsLoading(true);
             try {
                 const state = await getMapState(firestore, mapId);
+                console.log("Estado del mapa recuperado de la DB:", state); // DEBUG LOG
                 if (state) {
                     setMapState(state);
                 } else {
