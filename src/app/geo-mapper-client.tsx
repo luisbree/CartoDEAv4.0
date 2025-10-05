@@ -65,7 +65,7 @@ import { useOsmQuery } from '@/hooks/osm-integration/useOsmQuery';
 import { useToast } from "@/hooks/use-toast";
 import { useFirestore } from '@/firebase';
 import { cn } from '@/lib/utils';
-import { saveMapState, debugReadDocument } from '@/services/sharing-service';
+import { saveMapState } from '@/services/sharing-service';
 
 import type { OSMCategoryConfig, GeoServerDiscoveredLayer, BaseLayerOptionForSelect, MapLayer, ChatMessage, BaseLayerSettings, NominatimResult, PlainFeatureData, ActiveTool, TrelloCardInfo, GraduatedSymbology, VectorMapLayer, CategorizedSymbology, SerializableMapLayer, RemoteSerializableLayer, LocalSerializableLayer } from '@/lib/types';
 import { chatWithMapAssistant, type MapAssistantOutput } from '@/ai/flows/find-layer-flow';
@@ -350,9 +350,6 @@ export default function GeoMapperClient() {
         console.error("Fallo al cargar las capas iniciales de DEAS:", error);
     });
     
-    debugReadDocument(firestore);
-
-
   }, [isMapReady, toast, handleFetchGeoServerLayers, firestore]);
   
   const handleReloadDeasLayers = useCallback(async () => {
@@ -743,9 +740,22 @@ export default function GeoMapperClient() {
       baseLayerId: activeBaseLayerId,
     };
     
-    // The saveMapState function now handles its own try/catch and error emitting
-    saveMapState(firestore, mapState);
+    try {
+        toast({ description: 'Guardando el estado del mapa...' });
+        const mapId = await saveMapState(firestore, mapState);
+        const shareUrl = `${window.location.origin}/share/${mapId}`;
+        
+        await navigator.clipboard.writeText(shareUrl);
+        toast({
+            title: "¡Enlace copiado!",
+            description: "El enlace para compartir el mapa se ha copiado en tu portapapeles.",
+        });
 
+    } catch (error) {
+        // The saveMapState function now emits a rich error, which is caught
+        // by the FirebaseErrorListener. We don't need a redundant toast here.
+        console.error("Failed to share map:", error);
+    }
   }, [mapRef, activeBaseLayerId, firestore, toast]);
 
   // Effect for right-click tool toggling

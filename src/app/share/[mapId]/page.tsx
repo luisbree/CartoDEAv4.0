@@ -3,6 +3,7 @@
 
 import React from 'react';
 import SharedMapClient from '@/components/shared-map-client';
+import FirebaseClientProvider from '@/firebase/client-provider';
 
 interface SharedMapPageProps {
     params: {
@@ -22,5 +23,9 @@ export default function SharedMapPage({ params }: SharedMapPageProps) {
         );
     }
 
-    return <SharedMapClient mapId={params.mapId} />;
+    return (
+        <FirebaseClientProvider>
+            <SharedMapClient mapId={params.mapId} />
+        </FirebaseClientProvider>
+    );
 }

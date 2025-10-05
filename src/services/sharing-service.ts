@@ -13,66 +13,61 @@ const SHARED_MAPS_COLLECTION = 'sharedMaps';
  * Debug function to read a specific document and log its content or error.
  */
 export async function debugReadDocument(db: Firestore): Promise<void> {
+    // This function remains for debugging purposes if needed, but is not critical for sharing.
     if (!db) {
         console.log("DEBUG: Firestore instance not available for debug read.");
         return;
     }
-    console.log("DEBUG: Attempting to read debug document from Firestore...");
-    try {
-        const docId = "dtP6WVCYBmxUHPXbxcxZ"; // ID from the user's screenshot
-        const docRef = doc(db, SHARED_MAPS_COLLECTION, docId);
-        const docSnap = await getDoc(docRef);
-
-        if (docSnap.exists()) {
-            console.log("DEBUG SUCCESS! Document data:", docSnap.data());
-        } else {
-            console.log("DEBUG SUCCESS! Document not found, but connection was successful.");
-        }
-    } catch (error: any) {
-        console.error("DEBUG READ FAILED:", error);
-    }
 }
 
-export function saveMapState(db: Firestore, mapState: Omit<MapState, 'createdAt'>) {
-    // Console log to verify the db object, as requested.
-    console.log("Verificando la instancia 'db' en saveMapState:", db);
-
-    if (!db) {
-        // This case should be prevented by the UI logic, but it's a good safeguard.
-        console.error("Firestore instance not provided to saveMapState.");
-        const err = new Error("Firestore not initialized. Cannot save map state.");
-        const permissionError = new FirestorePermissionError({
-            path: `/${SHARED_MAPS_COLLECTION}/{new_doc_id}`,
-            operation: 'create',
-            requestResourceData: {}, // No data to send
-        });
-        // We can still emit the error to show something is wrong with the connection setup
-        errorEmitter.emit('permission-error', permissionError);
-        return;
-    }
-    
-    // Console log to verify the mapState object.
-    console.log("Objeto a guardar en Firestore:", mapState);
-
-    const mapStateJSON = JSON.stringify(mapState);
-    const dataToSend = {
-        mapStateJSON: mapStateJSON,
-        createdAt: serverTimestamp(),
-    };
-    const collectionRef = collection(db, SHARED_MAPS_COLLECTION);
-
-    addDoc(collectionRef, dataToSend)
-        .catch(serverError => {
-            console.error("Caught error during addDoc:", serverError);
-            const permissionError = new FirestorePermissionError({
+/**
+ * Saves the current map state to Firestore and returns the new document's ID.
+ * @param db The Firestore instance.
+ * @param mapState The map state object to save.
+ * @returns A promise that resolves to the new document ID, or rejects on error.
+ */
+export function saveMapState(db: Firestore, mapState: Omit<MapState, 'createdAt'>): Promise<string> {
+    return new Promise((resolve, reject) => {
+        if (!db) {
+            console.error("Firestore instance not provided to saveMapState.");
+            const err = new FirestorePermissionError({
                 path: `/${SHARED_MAPS_COLLECTION}/{new_doc_id}`,
                 operation: 'create',
-                requestResourceData: dataToSend,
+                requestResourceData: {},
             });
-            errorEmitter.emit('permission-error', permissionError);
-        });
+            errorEmitter.emit('permission-error', err);
+            return reject(err);
+        }
+
+        const dataToSend = {
+            ...mapState,
+            createdAt: serverTimestamp(),
+        };
+
+        addDoc(collection(db, SHARED_MAPS_COLLECTION), dataToSend)
+            .then(docRef => {
+                resolve(docRef.id); // Resolve the promise with the new document ID
+            })
+            .catch(serverError => {
+                console.error("Caught error during addDoc:", serverError);
+                const permissionError = new FirestorePermissionError({
+                    path: `/${SHARED_MAPS_COLLECTION}/{new_doc_id}`,
+                    operation: 'create',
+                    requestResourceData: dataToSend,
+                });
+                errorEmitter.emit('permission-error', permissionError);
+                reject(permissionError);
+            });
+    });
 }
 
+
+/**
+ * Retrieves a map state from Firestore by its ID.
+ * @param db The Firestore instance.
+ * @param mapId The ID of the document to retrieve.
+ * @returns A promise that resolves to the MapState object or null if not found.
+ */
 export async function getMapState(db: Firestore, mapId: string): Promise<MapState | null> {
     if (!db) {
         console.error("Firestore instance not available for getMapState.");
@@ -83,11 +78,8 @@ export async function getMapState(db: Firestore, mapId: string): Promise<MapStat
         const docSnap = await getDoc(docRef);
 
         if (docSnap.exists()) {
-            const data = docSnap.data();
-            if (data.mapStateJSON && typeof data.mapStateJSON === 'string') {
-                return JSON.parse(data.mapStateJSON) as MapState;
-            }
-            return null;
+            // The data is already in the correct format, just cast it.
+            return docSnap.data() as MapState;
         } else {
             console.log("No such map state document!");
             return null;

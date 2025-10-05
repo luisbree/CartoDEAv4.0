@@ -11,6 +11,7 @@ import MapView from '@/components/map-view';
 import { useOpenLayersMap } from '@/hooks/map-core/useOpenLayersMap';
 import { useLayerManager } from '@/hooks/layer-manager/useLayerManager';
 import { useToast } from '@/hooks/use-toast';
+import { useFirestore } from '@/firebase';
 import { transform } from 'ol/proj';
 import { Button } from '@/components/ui/button';
 import { nanoid } from 'nanoid';
@@ -25,6 +26,7 @@ interface SharedMapClientProps {
 const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: initialMapState }) => {
     const { mapRef, setMapInstanceAndElement, isMapReady, drawingSourceRef } = useOpenLayersMap();
     const { toast } = useToast();
+    const firestore = useFirestore(); // Get firestore instance
     const [mapState, setMapState] = useState<MapState | null>(initialMapState || null);
     const [isLoading, setIsLoading] = useState(!initialMapState);
     const [error, setError] = useState<string | null>(null);
@@ -44,11 +46,11 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
     }, [handleAddHybridLayer, addGeeLayerToMap]);
 
     useEffect(() => {
-        if (!mapId || initialMapState) return;
+        if (!mapId || initialMapState || !firestore) return;
         
         const fetchAndSetState = async () => {
             try {
-                const state = await getMapState(mapId);
+                const state = await getMapState(firestore, mapId);
                 if (state) {
                     setMapState(state);
                 } else {
@@ -62,7 +64,7 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
             }
         };
         fetchAndSetState();
-    }, [mapId, initialMapState]);
+    }, [mapId, initialMapState, firestore]);
 
     useEffect(() => {
         if (isMapReady && mapState && mapRef.current) {
