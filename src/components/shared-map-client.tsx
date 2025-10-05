@@ -1,10 +1,11 @@
+
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { Loader2, ListTree, Eye, EyeOff, ArrowLeft, CloudOff } from 'lucide-react';
 import { getMapState } from '@/services/sharing-service';
-import type { MapState, MapLayer as AppMapLayer, SerializableMapLayer } from '@/lib/types';
+import type { MapState, MapLayer as AppMapLayer } from '@/lib/types';
 import MapView from '@/components/map-view';
 import { useOpenLayersMap } from '@/hooks/map-core/useOpenLayersMap';
 import { useLayerManager } from '@/hooks/layer-manager/useLayerManager';
@@ -24,22 +25,21 @@ interface SharedMapClientProps {
 const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: initialMapState }) => {
     const { mapRef, setMapInstanceAndElement, isMapReady, drawingSourceRef } = useOpenLayersMap();
     const { toast } = useToast();
-    const firestore = useFirestore(); // Get firestore instance
+    const firestore = useFirestore();
     const [mapState, setMapState] = useState<MapState | null>(initialMapState || null);
     const [isLoading, setIsLoading] = useState(!initialMapState && !!mapId);
     const [error, setError] = useState<string | null>(null);
     const [displayLayers, setDisplayLayers] = useState<Partial<AppMapLayer>[]>([]);
     
-    // Using refs for functions from hooks to stabilize dependencies in useEffect
-    const layerManagerRef = useRef(useLayerManager({
+    // Instantiate the layer manager hook here. It will be used to add layers to the map.
+    const layerManager = useLayerManager({
         mapRef, isMapReady, drawingSourceRef,
         onShowTableRequest: () => {}, updateGeoServerDiscoveredLayerState: () => {},
         clearSelectionAfterExtraction: () => {}, updateInspectedFeatureData: () => {},
-    }));
+    });
 
     // Effect to fetch the map state from Firestore ONCE.
     useEffect(() => {
-        // Don't run if we have an initial state (local/example), or if mapId/firestore isn't ready
         if (initialMapState || !mapId || !firestore) {
             return;
         }
@@ -53,7 +53,7 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
                 const state = await getMapState(firestore, mapId);
                 if (isMounted) {
                     if (state) {
-                        console.log("Estado del mapa recuperado de la DB:", state);
+                        console.log("Map state retrieved from DB:", state);
                         setMapState(state);
                     } else {
                         setError('No se pudo encontrar el estado del mapa para este ID.');
@@ -76,27 +76,26 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
         return () => {
             isMounted = false;
         };
-    // This effect should only run when mapId or firestore changes.
     }, [mapId, initialMapState, firestore]);
-
 
     // Effect to load layers onto the map from the fetched mapState.
     useEffect(() => {
         if (!isMapReady || !mapState || !mapRef.current) return;
 
         let isMounted = true;
-        const { handleAddHybridLayer, addGeeLayerToMap } = layerManagerRef.current;
+        const { handleAddHybridLayer, addGeeLayerToMap } = layerManager;
         
         const loadAllLayers = async () => {
             console.log("Starting to load layers from map state...");
             const map = mapRef.current!;
             const view = map.getView();
 
+            // Set the map view first
             const center3857 = transform(mapState.view.center, 'EPSG:4326', 'EPSG:3857');
             view.setCenter(center3857);
             view.setZoom(mapState.view.zoom);
             
-            const loadedLayersPromises = mapState.layers.map(async (layerState): Promise<Partial<AppMapLayer> | null> => {
+            const loadedLayersPromises = mapState.layers.map(async (layerState) => {
                  if (!isMounted) return null;
 
                 try {
@@ -149,6 +148,7 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
             const loadedLayers = (await Promise.all(loadedLayersPromises)).filter((l): l is Partial<AppMapLayer> => l !== null);
 
             if (isMounted) {
+                // Reverse the order to match the original layer stack appearance
                 setDisplayLayers(loadedLayers.reverse());
                 console.log("Finished loading all layers.");
             }
@@ -159,8 +159,7 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
         return () => {
             isMounted = false;
         };
-    // This effect now depends on the map being ready and mapState being populated.
-    }, [isMapReady, mapState]);
+    }, [isMapReady, mapState, mapRef, layerManager, toast]);
 
 
     const handleToggleVisibility = useCallback((layerId: string) => {
