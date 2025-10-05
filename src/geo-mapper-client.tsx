@@ -63,7 +63,7 @@ import { useWfsLibrary } from '@/hooks/wfs-library/useWfsLibrary';
 import { useOsmQuery } from '@/hooks/osm-integration/useOsmQuery';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from '@/lib/utils';
-import { saveMapState, checkFirestoreConnection, debugReadDocument } from '@/services/sharing-service';
+import { saveMapState, debugReadDocument } from '@/services/sharing-service';
 
 import type { OSMCategoryConfig, GeoServerDiscoveredLayer, BaseLayerOptionForSelect, MapLayer, ChatMessage, BaseLayerSettings, NominatimResult, PlainFeatureData, ActiveTool, TrelloCardInfo, GraduatedSymbology, VectorMapLayer, CategorizedSymbology, SerializableMapLayer, RemoteSerializableLayer, LocalSerializableLayer } from '@/lib/types';
 import { chatWithMapAssistant, type MapAssistantOutput } from '@/ai/flows/find-layer-flow';
@@ -300,61 +300,48 @@ export default function GeoMapperClient() {
   useEffect(() => {
     if (!isMapReady) return;
 
-    const runInitialAuths = async () => {
-        // GEE Auth
-        setIsGeeAuthenticating(true);
-        try {
-            const geeResult = await authenticateWithGee();
-            if (geeResult.success) {
-                toast({ title: "GEE Conectado", description: geeResult.message });
-                setIsGeeAuthenticated(true);
+    // GEE Auth
+    setIsGeeAuthenticating(true);
+    authenticateWithGee().then(result => {
+        if (result.success) {
+            toast({ title: "GEE Conectado", description: result.message });
+            setIsGeeAuthenticated(true);
+        } else {
+            throw new Error(result.message);
+        }
+    }).catch(error => {
+        console.error("Error de autenticación automática con GEE:", error);
+        toast({ title: "Error de Autenticación GEE", description: error.message, variant: "destructive" });
+        setIsGeeAuthenticated(false);
+    }).finally(() => {
+        setIsGeeAuthenticating(false);
+    });
+
+    // Trello Auth Check
+    checkTrelloCredentials().then(result => {
+        if (result.configured) {
+            if (result.success) {
+                toast({ title: "Trello Conectado", description: result.message });
             } else {
-                throw new Error(geeResult.message);
+                toast({ title: "Error de Conexión con Trello", description: result.message, variant: "destructive" });
             }
-        } catch (error: any) {
-            console.error("Error de autenticación automática con GEE:", error);
-            toast({ title: "Error de Autenticación GEE", description: error.message, variant: "destructive" });
-            setIsGeeAuthenticated(false);
-        } finally {
-            setIsGeeAuthenticating(false);
         }
-
-        // Trello Auth Check
-        try {
-            const trelloResult = await checkTrelloCredentials();
-            if (trelloResult.configured) {
-                if (trelloResult.success) {
-                    toast({ title: "Trello Conectado", description: trelloResult.message });
-                } else {
-                    toast({ title: "Error de Conexión con Trello", description: trelloResult.message, variant: "destructive" });
-                }
-            }
-        } catch (error: any) {
-            console.error("Error de verificación automática de Trello:", error);
-            toast({ title: "Error de Conexión con Trello", description: error.message, variant: "destructive" });
-        }
-    };
+    }).catch(error => {
+        console.error("Error de verificación automática de Trello:", error);
+        toast({ title: "Error de Conexión con Trello", description: error.message, variant: "destructive" });
+    });
     
-    const runInitialDataFetches = async () => {
-        // GeoServer DEAS Layers
-        try {
-            const discovered = await handleFetchGeoServerLayers(initialGeoServerUrl);
-            if (discovered) {
-                setDiscoveredGeoServerLayers(discovered);
-            }
-        } catch (error: any) {
-            console.error("Fallo al cargar las capas iniciales de DEAS:", error);
+    // GeoServer DEAS Layers
+    handleFetchGeoServerLayers(initialGeoServerUrl).then(discovered => {
+        if (discovered) {
+            setDiscoveredGeoServerLayers(discovered);
         }
-    };
-
-    const runFirestoreCheck = async () => {
-      // This function will now be called from the service, which includes logging.
-      debugReadDocument();
-    };
+    }).catch(error => {
+        console.error("Fallo al cargar las capas iniciales de DEAS:", error);
+    });
     
-    runInitialAuths();
-    runInitialDataFetches();
-    runFirestoreCheck();
+    // Firestore Connection Check (with debug read)
+    debugReadDocument();
 
   }, [isMapReady, toast, handleFetchGeoServerLayers]);
   
@@ -715,8 +702,6 @@ export default function GeoMapperClient() {
       .map((layer: MapLayer): SerializableMapLayer | null => {
         const baseLayerData = {
             name: layer.name,
-            opacity: layer.opacity,
-            visible: layer.visible,
         };
         
         if (['wms', 'wfs', 'gee'].includes(layer.type)) {
@@ -725,6 +710,8 @@ export default function GeoMapperClient() {
                 type: layer.type as 'wms' | 'wfs' | 'gee',
                 url: layer.olLayer.get('serverUrl') || null,
                 layerName: layer.olLayer.get('gsLayerName') || null,
+                opacity: layer.opacity,
+                visible: layer.visible,
                 wmsStyleEnabled: layer.wmsStyleEnabled ?? false,
                 styleName: layer.olLayer.get('styleName') || null,
                 geeParams: layer.olLayer.get('geeParams') || null,
