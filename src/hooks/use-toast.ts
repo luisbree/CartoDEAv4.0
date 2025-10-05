@@ -164,14 +164,6 @@ function toast({ ...props }: Toast) {
     },
   })
 
-  // Automatically dismiss the toast after the delay
-  const dismissTimeout = setTimeout(() => {
-    dismiss();
-  }, props.duration || TOAST_REMOVE_DELAY);
-
-  // Store timeout to clear it if the toast is dismissed manually
-  toastTimeouts.set(id, dismissTimeout);
-
   return {
     id: id,
     dismiss,

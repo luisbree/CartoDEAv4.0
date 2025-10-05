@@ -1,6 +1,5 @@
 "use client"
 
-import { useToast } from "@/hooks/use-toast"
 import {
   Toast,
   ToastClose,
@@ -9,7 +8,7 @@ import {
   ToastTitle,
   ToastViewport,
 } from "@/components/ui/toast"
-import { ToastAction } from "./toast"
+import { useToast } from "@/hooks/use-toast"
 
 export function Toaster() {
   const { toasts } = useToast()
@@ -30,8 +29,7 @@ export function Toaster() {
           </Toast>
         )
       })}
-      {/* The pointer-events-none class is added here to allow clicks to pass through the viewport to the map below */}
-      <ToastViewport className="pointer-events-none" />
+      <ToastViewport />
     </ToastProvider>
   )
 }
