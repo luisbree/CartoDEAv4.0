@@ -16,20 +16,12 @@ import { Button } from '@/components/ui/button';
 import { nanoid } from 'nanoid';
 import VectorLayer from 'ol/layer/Vector';
 import VectorSource from 'ol/source/Vector';
-import TileLayer from 'ol/layer/Tile';
-import TileWMS from 'ol/source/TileWMS';
-import XYZ from 'ol/source/XYZ';
-import GeoJSON from 'ol/format/GeoJSON';
-import { bbox as bboxStrategy } from 'ol/loadingstrategy';
-import { Style } from 'ol/style';
 import type { Map } from 'ol';
-
 
 interface SharedMapClientProps {
     mapId?: string;
-    mapState?: MapState | null; // For local/example previews
+    mapState?: MapState | null;
 }
-
 
 const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: initialMapState }) => {
     const { mapRef, setMapInstanceAndElement, isMapReady, drawingSourceRef } = useOpenLayersMap();
@@ -39,7 +31,7 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
     const [error, setError] = useState<string | null>(null);
     const [displayLayers, setDisplayLayers] = useState<Partial<AppMapLayer>[]>([]);
     
-    // Use the layer manager hook to get the functions needed to add layers.
+    // The layer manager hook is needed for its functions to add layers.
     const { handleAddHybridLayer, addGeeLayerToMap } = useLayerManager({
         mapRef,
         isMapReady,
@@ -59,13 +51,12 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
         let isMounted = true;
 
         const fetchAndSetState = async () => {
-            console.log("Fetching map state from DB for mapId:", mapId);
             setIsLoading(true);
             try {
+                console.log("Fetching map state from DB for mapId:", mapId);
                 const state = await getMapState(firestore, mapId);
                 if (isMounted) {
                     if (state) {
-                        console.log("Map state retrieved from DB:", state);
                         setMapState(state);
                     } else {
                         setError('No se pudo encontrar el estado del mapa para este ID.');
@@ -91,25 +82,41 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
     }, [mapId, initialMapState, firestore]);
     
     
-    const loadMapFromState = useCallback(async (state: MapState, map: Map) => {
-        console.log("Applying map state:", state);
-        
-        // 1. Set View
-        const view = map.getView();
-        const center3857 = transform(state.view.center, 'EPSG:4326', 'EPSG:3857');
-        view.setCenter(center3857);
-        view.setZoom(state.view.zoom);
-        
-        // 2. Load Layers
-        const loadedLayersPromises = state.layers.map(async (layerState) => {
-            try {
-                if (layerState.type === 'local') {
-                    return { id: nanoid(), name: layerState.name, type: 'local-placeholder', visible: false, olLayer: new VectorLayer({ source: new VectorSource() })};
-                }
-                
-                const remoteLayer = layerState as RemoteSerializableLayer;
-                if ((remoteLayer.type === 'wms' || remoteLayer.type === 'wfs') && remoteLayer.url && remoteLayer.layerName) {
-                    const newLayer = await handleAddHybridLayer(remoteLayer.layerName, remoteLayer.name, remoteLayer.url, undefined, remoteLayer.styleName || undefined);
+    // This consolidated useEffect runs ONCE when the map and state are ready.
+    useEffect(() => {
+        if (!isMapReady || !mapState || !mapRef.current) {
+            return;
+        }
+
+        const map = mapRef.current;
+        let isComponentMounted = true;
+        const loadedLayers: Partial<AppMapLayer>[] = [];
+
+        const applyStateToMap = async () => {
+            console.log("Applying map state:", mapState);
+            
+            // 1. Set View
+            const view = map.getView();
+            const center3857 = transform(mapState.view.center, 'EPSG:4326', 'EPSG:3857');
+            view.setCenter(center3857);
+            view.setZoom(mapState.view.zoom);
+            
+            // 2. Load Layers
+            for (const layerState of mapState.layers) {
+                try {
+                    if (layerState.type === 'local') {
+                        loadedLayers.push({ id: nanoid(), name: layerState.name, type: 'local-placeholder', visible: false, olLayer: new VectorLayer({ source: new VectorSource() }) });
+                        continue;
+                    }
+                    
+                    const remoteLayer = layerState as RemoteSerializableLayer;
+                    let newLayer: AppMapLayer | null = null;
+                    if ((remoteLayer.type === 'wms' || remoteLayer.type === 'wfs') && remoteLayer.url && remoteLayer.layerName) {
+                        newLayer = await handleAddHybridLayer(remoteLayer.layerName, remoteLayer.name, remoteLayer.url, undefined, remoteLayer.styleName || undefined);
+                    } else if (remoteLayer.type === 'gee' && remoteLayer.geeParams?.tileUrl) {
+                        newLayer = addGeeLayerToMap(remoteLayer.geeParams.tileUrl, remoteLayer.name, remoteLayer.geeParams);
+                    }
+                    
                     if (newLayer) {
                         newLayer.olLayer.setVisible(remoteLayer.visible);
                         newLayer.olLayer.setOpacity(remoteLayer.opacity);
@@ -118,36 +125,27 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
                             visualLayer.setVisible(remoteLayer.visible && (remoteLayer.wmsStyleEnabled ?? true));
                             visualLayer.setOpacity(remoteLayer.opacity);
                         }
-                        return { ...newLayer, visible: remoteLayer.visible, opacity: remoteLayer.opacity, wmsStyleEnabled: remoteLayer.wmsStyleEnabled };
+                        loadedLayers.push({ ...newLayer, visible: remoteLayer.visible, opacity: remoteLayer.opacity, wmsStyleEnabled: remoteLayer.wmsStyleEnabled });
                     }
-                } else if (remoteLayer.type === 'gee' && remoteLayer.geeParams?.tileUrl) {
-                    const newLayer = addGeeLayerToMap(remoteLayer.geeParams.tileUrl, remoteLayer.name, remoteLayer.geeParams);
-                    if (newLayer) {
-                       newLayer.olLayer.setVisible(remoteLayer.visible);
-                       newLayer.olLayer.setOpacity(remoteLayer.opacity);
-                       return newLayer;
-                    }
+                } catch (layerError) {
+                    console.error(`Failed to load layer "${layerState.name}":`, layerError);
                 }
-            } catch (layerError) {
-                console.error(`Failed to load layer "${layerState.name}":`, layerError);
             }
-             return null;
-        });
+
+            if (isComponentMounted) {
+                setDisplayLayers(loadedLayers.reverse());
+                console.log("Finished loading all layers. Total:", loadedLayers.length);
+            }
+        };
+
+        applyStateToMap();
         
-        const loadedLayers = (await Promise.all(loadedLayersPromises)).filter((l): l is Partial<AppMapLayer> => l !== null);
-        setDisplayLayers(loadedLayers.reverse());
-        console.log("Finished loading all layers. Total:", loadedLayers.length);
-
-    }, [handleAddHybridLayer, addGeeLayerToMap]);
-
-
-    // This useEffect now correctly depends on the stable `loadMapFromState` function
-    // and runs only when the necessary components are ready.
-    useEffect(() => {
-        if (isMapReady && mapState && mapRef.current) {
-            loadMapFromState(mapState, mapRef.current);
-        }
-    }, [isMapReady, mapState, mapRef, loadMapFromState]);
+        return () => {
+            isComponentMounted = false;
+        };
+        // By using an empty dependency array, this effect will run only once
+        // after the initial render when the required conditions (isMapReady, mapState, mapRef.current) are met.
+    }, [isMapReady, mapState]);
 
 
     const handleToggleVisibility = useCallback((layerId: string) => {
