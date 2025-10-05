@@ -1,35 +1,37 @@
 /**
- * @file Firestore Security Rules
- * @core_philosophy This ruleset allows public read access to shared maps
- * while restricting write access to authenticated users.
- * @data_structure The data is stored in a top-level `sharedMaps` collection.
- * @key_security_decisions Public read access is granted to the `sharedMaps` collection,
- *  but write access is restricted to prevent unauthorized modifications.
+ * @file Firebase Security Rules for Shared Maps
+ * @core-philosophy: This ruleset allows public read access to shared maps, but restricts write access to prevent unauthorized modifications.
+ * @data-structure: Shared map data is stored in the `/sharedMaps/{sharedMapId}` collection.
+ * @key-security-decisions:
+ *   - Shared maps are publicly readable.
+ *   - Only authenticated users can create shared maps.
+ *   - Once created, shared maps cannot be updated or deleted by anyone.
+ * @denormalization-for-authorization: The `createdAt` timestamp is managed by the server and not used for authorization in these rules.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Allows public read access to shared maps and restricts write access to authenticated users.
-     * @path /sharedMaps/{sharedMapId}
-     * @allow (get, list) Public users can read shared maps.
-     * @allow (create) Authenticated users can create shared maps. The 'createdAt' field will be set by the server.
-     * @allow (update, delete) Authenticated users can update or delete shared maps.
-     * @deny Any unauthenticated user cannot create, update, or delete shared maps.
-     * @principle Allows public read access but restricts write access to authenticated users to prevent unauthorized modifications.
+     * @description: Allows public read access to shared maps, but restricts creation to authenticated users. Updates and deletes are disallowed.
+     * @path: /sharedMaps/{sharedMapId}
+     * @allow: (get, list) Any user can read shared maps.
+     * @allow: (create) Authenticated user creates a shared map.
+     * @deny: (create) Unauthenticated user attempts to create a shared map.
+     * @deny: (update, delete) Any user attempts to modify or delete a shared map.
+     * @principle: Allows public read access while restricting write access to authenticated users for creation, and denies updates/deletes to preserve data integrity.
      */
     match /sharedMaps/{sharedMapId} {
       allow get: if true;
       allow list: if true;
-      allow create: if isSignedIn() && request.resource.data.createdAt == request.time;
-      allow update: if isSignedIn() && resource.data.createdAt == resource.data.createdAt;
-      allow delete: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if false;
+      allow delete: if false;
     }
+  }
 
-    // Define helper functions.
-    function isSignedIn() {
-      return request.auth != null;
-    }
+  // Helper function to determine if a user is signed in
+  function isSignedIn() {
+    return request.auth != null;
   }
 }
