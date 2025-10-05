@@ -79,6 +79,8 @@ interface LegendPanelProps {
   // Selection props
   selectedFeaturesForSelection: Feature<Geometry>[];
 
+  isSharedView: boolean;
+
   style?: React.CSSProperties;
 }
 
@@ -98,6 +100,7 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
   discoveredDeasLayers, onAddDeasLayer, isFetchingDeasLayers, onReloadDeasLayers,
   canUndoRemove, onUndoRemove,
   selectedFeaturesForSelection,
+  isSharedView,
   style,
 }) => {
   const [selectedLayerIds, setSelectedLayerIds] = useState<string[]>([]);
@@ -203,62 +206,64 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
       minSize={{ width: 300, height: 300 }}
     >
       <div className="flex flex-col h-full">
-        {/* --- Top Toolbar --- */}
-        <div className="flex-shrink-0 space-y-2 mb-2"> 
-          <div className="flex items-center gap-1 p-1 bg-white/5 rounded-md"> 
-            <FileUploadControl onAddLayer={onAddLayer} uniqueIdPrefix="legendpanel-upload" />
-            <TooltipProvider delayDuration={300}>
-                <Tooltip>
+        {/* --- Top Toolbar (only in full editor mode) --- */}
+        {!isSharedView && (
+          <div className="flex-shrink-0 space-y-2 mb-2"> 
+            <div className="flex items-center gap-1 p-1 bg-white/5 rounded-md"> 
+              <FileUploadControl onAddLayer={onAddLayer} uniqueIdPrefix="legendpanel-upload" />
+              <TooltipProvider delayDuration={300}>
+                  <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div> {/* Wrapper for disabled button */}
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-8 w-8 bg-black/20 hover:bg-white/10 border border-white/30 text-white/90 disabled:opacity-50 disabled:bg-black/20 disabled:text-white/50"
+                            onClick={onUndoRemove}
+                            disabled={!canUndoRemove}
+                            aria-label="Deshacer última eliminación"
+                          >
+                            <Undo2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom" className="bg-gray-700 text-white border-gray-600">
+                        <p className="text-xs">Deshacer Eliminación</p>
+                      </TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
                     <TooltipTrigger asChild>
                       <div> {/* Wrapper for disabled button */}
                         <Button
                           variant="outline"
                           size="icon"
-                          className="h-8 w-8 bg-black/20 hover:bg-white/10 border border-white/30 text-white/90 disabled:opacity-50 disabled:bg-black/20 disabled:text-white/50"
-                          onClick={onUndoRemove}
-                          disabled={!canUndoRemove}
-                          aria-label="Deshacer última eliminación"
+                          className="h-8 w-8 bg-red-700/30 hover:bg-red-600/50 border border-red-500/50 text-white/90 disabled:opacity-50 disabled:bg-black/20 disabled:text-white/90 disabled:border-white/30"
+                          onClick={handleDeleteSelected}
+                          disabled={selectedLayerIds.length === 0}
+                          aria-label="Eliminar capas seleccionadas"
                         >
-                          <Undo2 className="h-4 w-4" />
+                          <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
                     </TooltipTrigger>
                     <TooltipContent side="bottom" className="bg-gray-700 text-white border-gray-600">
-                      <p className="text-xs">Deshacer Eliminación</p>
+                      <p className="text-xs">Eliminar seleccionadas</p>
                     </TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <div> {/* Wrapper for disabled button */}
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="h-8 w-8 bg-red-700/30 hover:bg-red-600/50 border border-red-500/50 text-white/90 disabled:opacity-50 disabled:bg-black/20 disabled:text-white/90 disabled:border-white/30"
-                        onClick={handleDeleteSelected}
-                        disabled={selectedLayerIds.length === 0}
-                        aria-label="Eliminar capas seleccionadas"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom" className="bg-gray-700 text-white border-gray-600">
-                    <p className="text-xs">Eliminar seleccionadas</p>
-                  </TooltipContent>
-                </Tooltip>
-            </TooltipProvider>
-            <FeatureInteractionToolbar
-              activeTool={activeTool}
-              onSetActiveTool={onSetActiveTool}
-              onClearSelection={onClearSelection}
-            />
+                  </Tooltip>
+              </TooltipProvider>
+              <FeatureInteractionToolbar
+                activeTool={activeTool}
+                onSetActiveTool={onSetActiveTool}
+                onClearSelection={onClearSelection}
+              />
+            </div>
           </div>
-        </div>
+        )}
 
-        {/* --- Main Content Area (split into two scrollable sections) --- */}
+        {/* --- Main Content Area --- */}
         <div className="flex-grow flex flex-col min-h-0">
             {/* --- Active Layers List --- */}
-            <div className="flex-grow flex flex-col basis-2/3">
+            <div className={`flex-grow flex flex-col ${isSharedView ? 'basis-full' : 'basis-2/3'}`}>
                 <ScrollArea className="flex-grow">
                     <div className="pr-3">
                         <LayerList
@@ -290,109 +295,111 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
                     </div>
                 </ScrollArea>
             </div>
-
-            {/* --- DEAS Catalog Section --- */}
-            <div className="flex flex-col pt-2 basis-1/3">
-                <Separator className="bg-white/10 mb-2" />
-                <div className="flex items-center justify-between px-2 pb-2 flex-shrink-0">
-                  <h3 className="text-sm font-semibold text-white">Capas Predefinidas (DEAS)</h3>
-                  <TooltipProvider delayDuration={300}>
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-6 w-6 text-white/70 hover:text-white hover:bg-white/10"
-                                onClick={onReloadDeasLayers}
-                                disabled={isFetchingDeasLayers}
-                            >
-                                {isFetchingDeasLayers ? (
-                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                ) : (
-                                    <RefreshCw className="h-3.5 w-3.5" />
-                                )}
-                            </Button>
-                        </TooltipTrigger>
-                        <TooltipContent side="top" className="bg-gray-700 text-white border-gray-600">
-                           <p className="text-xs">Recargar capas</p>
-                        </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </div>
-
-                 <div className="relative mb-2 px-2">
-                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
-                    <Input
-                        placeholder="Buscar capa, proyecto u org..."
-                        value={deasSearchTerm}
-                        onChange={(e) => setDeasSearchTerm(e.target.value)}
-                        className="text-xs h-8 border-white/30 bg-black/20 text-white/90 focus:ring-primary pl-8 pr-8"
-                    />
-                    {deasSearchTerm && (
-                        <button
-                            onClick={() => setDeasSearchTerm('')}
-                            className="absolute right-4 top-1/2 -translate-y-1/2 p-1 text-gray-400/80 hover:text-white"
-                            aria-label="Limpiar búsqueda"
-                        >
-                            <ClearIcon className="h-3.5 w-3.5" />
-                        </button>
-                    )}
-                </div>
-                <ScrollArea className="flex-grow min-h-0 border-t border-gray-700/50">
-                <div className="pr-3">
-                  {Object.keys(hierarchicalDeasLayers).length > 0 ? (
-                      <Accordion type="multiple" className="w-full">
-                        {Object.entries(hierarchicalDeasLayers).sort(([orgA], [orgB]) => orgA.localeCompare(orgB)).map(([orgName, projects]) => (
-                          <AccordionItem value={orgName} key={orgName} className="border-b border-gray-700/50">
-                            <AccordionTrigger className="p-2 text-xs font-semibold text-white/90 hover:no-underline hover:bg-gray-700/30 rounded-t-md">
-                              {orgName} ({Object.values(projects).reduce((acc, p) => acc + p.length, 0)})
-                            </AccordionTrigger>
-                            <AccordionContent className="p-1 pl-2 bg-black/20">
-                                <Accordion type="multiple" className="w-full">
-                                    {Object.entries(projects).sort(([projA], [projB]) => projA.localeCompare(projB)).map(([projectName, projectLayers]) => (
-                                        <AccordionItem value={projectName} key={projectName} className="border-b-0">
-                                            <AccordionTrigger className="p-1.5 text-xs font-medium text-white/70 hover:no-underline hover:bg-white/5 rounded-md">
-                                                {projectName} ({projectLayers.length})
-                                            </AccordionTrigger>
-                                            <AccordionContent className="p-1 pl-4">
-                                                <div className="space-y-1">
-                                                  {projectLayers.sort((a,b) => a.title.localeCompare(b.title)).map(layer => (
-                                                    <div key={layer.name} className="flex items-center space-x-2 p-1 rounded-md hover:bg-white/5">
-                                                        <Button 
-                                                          variant="outline" 
-                                                          size="icon" 
-                                                          className="h-6 w-6 p-0"
-                                                          title={`Añadir capa`}
-                                                          onClick={() => onAddDeasLayer(layer)}
-                                                          disabled={layer.wfsAddedToMap}
-                                                          >
-                                                          <Database className="h-3.5 w-3.5" />
-                                                        </Button>
-                                                        <Label
-                                                          className="text-xs font-medium text-white/80 cursor-pointer flex-1 capitalize"
-                                                          title={layer.name}
-                                                        >
-                                                          {layer.title.toLowerCase()}
-                                                        </Label>
-                                                    </div>
-                                                  ))}
-                                                </div>
-                                            </AccordionContent>
-                                        </AccordionItem>
-                                    ))}
-                                </Accordion>
-                            </AccordionContent>
-                          </AccordionItem>
-                        ))}
-                      </Accordion>
-                  ) : (
-                      <p className="p-4 text-center text-xs text-gray-400">
-                        {isFetchingDeasLayers ? "Cargando capas..." : "No se encontraron resultados."}
-                      </p>
-                  )}
+            
+            {/* --- DEAS Catalog (only in full editor mode) --- */}
+            {!isSharedView && (
+              <div className="flex flex-col pt-2 basis-1/3">
+                  <Separator className="bg-white/10 mb-2" />
+                  <div className="flex items-center justify-between px-2 pb-2 flex-shrink-0">
+                    <h3 className="text-sm font-semibold text-white">Capas Predefinidas (DEAS)</h3>
+                    <TooltipProvider delayDuration={300}>
+                      <Tooltip>
+                          <TooltipTrigger asChild>
+                              <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6 text-white/70 hover:text-white hover:bg-white/10"
+                                  onClick={onReloadDeasLayers}
+                                  disabled={isFetchingDeasLayers}
+                              >
+                                  {isFetchingDeasLayers ? (
+                                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  ) : (
+                                      <RefreshCw className="h-3.5 w-3.5" />
+                                  )}
+                              </Button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="bg-gray-700 text-white border-gray-600">
+                             <p className="text-xs">Recargar capas</p>
+                          </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                   </div>
-                </ScrollArea>
-            </div>
+
+                   <div className="relative mb-2 px-2">
+                      <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                      <Input
+                          placeholder="Buscar capa, proyecto u org..."
+                          value={deasSearchTerm}
+                          onChange={(e) => setDeasSearchTerm(e.target.value)}
+                          className="text-xs h-8 border-white/30 bg-black/20 text-white/90 focus:ring-primary pl-8 pr-8"
+                      />
+                      {deasSearchTerm && (
+                          <button
+                              onClick={() => setDeasSearchTerm('')}
+                              className="absolute right-4 top-1/2 -translate-y-1/2 p-1 text-gray-400/80 hover:text-white"
+                              aria-label="Limpiar búsqueda"
+                          >
+                              <ClearIcon className="h-3.5 w-3.5" />
+                          </button>
+                      )}
+                  </div>
+                  <ScrollArea className="flex-grow min-h-0 border-t border-gray-700/50">
+                  <div className="pr-3">
+                    {Object.keys(hierarchicalDeasLayers).length > 0 ? (
+                        <Accordion type="multiple" className="w-full">
+                          {Object.entries(hierarchicalDeasLayers).sort(([orgA], [orgB]) => orgA.localeCompare(orgB)).map(([orgName, projects]) => (
+                            <AccordionItem value={orgName} key={orgName} className="border-b border-gray-700/50">
+                              <AccordionTrigger className="p-2 text-xs font-semibold text-white/90 hover:no-underline hover:bg-gray-700/30 rounded-t-md">
+                                {orgName} ({Object.values(projects).reduce((acc, p) => acc + p.length, 0)})
+                              </AccordionTrigger>
+                              <AccordionContent className="p-1 pl-2 bg-black/20">
+                                  <Accordion type="multiple" className="w-full">
+                                      {Object.entries(projects).sort(([projA], [projB]) => projA.localeCompare(projB)).map(([projectName, projectLayers]) => (
+                                          <AccordionItem value={projectName} key={projectName} className="border-b-0">
+                                              <AccordionTrigger className="p-1.5 text-xs font-medium text-white/70 hover:no-underline hover:bg-white/5 rounded-md">
+                                                  {projectName} ({projectLayers.length})
+                                              </AccordionTrigger>
+                                              <AccordionContent className="p-1 pl-4">
+                                                  <div className="space-y-1">
+                                                    {projectLayers.sort((a,b) => a.title.localeCompare(b.title)).map(layer => (
+                                                      <div key={layer.name} className="flex items-center space-x-2 p-1 rounded-md hover:bg-white/5">
+                                                          <Button 
+                                                            variant="outline" 
+                                                            size="icon" 
+                                                            className="h-6 w-6 p-0"
+                                                            title={`Añadir capa`}
+                                                            onClick={() => onAddDeasLayer(layer)}
+                                                            disabled={layer.wfsAddedToMap}
+                                                            >
+                                                            <Database className="h-3.5 w-3.5" />
+                                                          </Button>
+                                                          <Label
+                                                            className="text-xs font-medium text-white/80 cursor-pointer flex-1 capitalize"
+                                                            title={layer.name}
+                                                          >
+                                                            {layer.title.toLowerCase()}
+                                                          </Label>
+                                                      </div>
+                                                    ))}
+                                                  </div>
+                                              </AccordionContent>
+                                          </AccordionItem>
+                                      ))}
+                                  </Accordion>
+                              </AccordionContent>
+                            </AccordionItem>
+                          ))}
+                        </Accordion>
+                    ) : (
+                        <p className="p-4 text-center text-xs text-gray-400">
+                          {isFetchingDeasLayers ? "Cargando capas..." : "No se encontraron resultados."}
+                        </p>
+                    )}
+                    </div>
+                  </ScrollArea>
+              </div>
+            )}
         </div>
       </div>
     </DraggablePanel>
@@ -400,5 +407,3 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
 };
 
 export default LegendPanel;
-
-    

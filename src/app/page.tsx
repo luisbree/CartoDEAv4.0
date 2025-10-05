@@ -1,8 +1,9 @@
+
 "use client";
 
-import GeoMapperClient from './geo-mapper-client';
+import { GeoMapperClient } from './geo-mapper-client';
 
-export default function HomePage() {
+export default function MainPage() {
   return (
       <GeoMapperClient />
   );
