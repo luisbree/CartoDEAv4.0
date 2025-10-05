@@ -299,7 +299,7 @@ export default function GeoMapperClient() {
   useEffect(() => {
     if (!isMapReady) return;
 
-    const runInitialTasks = async () => {
+    const runInitialAuths = async () => {
         // GEE Auth
         setIsGeeAuthenticating(true);
         try {
@@ -318,21 +318,23 @@ export default function GeoMapperClient() {
             setIsGeeAuthenticating(false);
         }
 
-        // Trello Auth
+        // Trello Auth Check
         try {
             const trelloResult = await checkTrelloCredentials();
             if (trelloResult.configured) {
-              if (trelloResult.success) {
-                  toast({ title: "Trello Conectado", description: trelloResult.message });
-              } else {
-                   toast({ title: "Error de Conexión con Trello", description: trelloResult.message, variant: "destructive" });
-              }
+                if (trelloResult.success) {
+                    toast({ title: "Trello Conectado", description: trelloResult.message });
+                } else {
+                    toast({ title: "Error de Conexión con Trello", description: trelloResult.message, variant: "destructive" });
+                }
             }
         } catch (error: any) {
             console.error("Error de verificación automática de Trello:", error);
             toast({ title: "Error de Conexión con Trello", description: error.message, variant: "destructive" });
         }
-        
+    };
+    
+    const runInitialDataFetches = async () => {
         // GeoServer DEAS Layers
         try {
             const discovered = await handleFetchGeoServerLayers(initialGeoServerUrl);
@@ -342,18 +344,24 @@ export default function GeoMapperClient() {
         } catch (error: any) {
             console.error("Fallo al cargar las capas iniciales de DEAS:", error);
         }
-        
+    };
+
+    const runFirestoreCheck = async () => {
         // Firestore Connection Check
         try {
+            console.log("Iniciando la verificación de Firestore desde el cliente...");
             await checkFirestoreConnection();
             toast({ title: "Firestore Conectado", description: "La conexión con la base de datos se ha establecido correctamente." });
         } catch (error: any) {
-            console.error("Error de conexión con Firestore:", error);
+            console.error("Error de conexión con Firestore capturado en el cliente:", error);
             toast({ title: "Error de Conexión con Firestore", description: error.message, variant: "destructive" });
         }
     };
+    
+    runInitialAuths();
+    runInitialDataFetches();
+    runFirestoreCheck();
 
-    runInitialTasks();
   }, [isMapReady, toast, handleFetchGeoServerLayers]);
   
   const handleReloadDeasLayers = useCallback(async () => {
