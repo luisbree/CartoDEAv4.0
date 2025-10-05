@@ -12,17 +12,8 @@ interface SharedMapPageProps {
 }
 
 export default function SharedMapPage({ params }: SharedMapPageProps) {
-    if (!params.mapId) {
-        return (
-            <div className="flex items-center justify-center h-screen bg-gray-100">
-                <div className="text-center">
-                    <h1 className="text-2xl font-bold">ID de Mapa no encontrado</h1>
-                    <p className="mt-2 text-gray-600">No se proporcionó un ID de mapa para cargar.</p>
-                </div>
-            </div>
-        );
-    }
-
+    // This page now acts as a container, passing the mapId to the client component
+    // which will handle all the logic of fetching and displaying the map.
     return (
         <FirebaseClientProvider>
             <SharedMapClient mapId={params.mapId} />

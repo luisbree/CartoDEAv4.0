@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -20,7 +19,7 @@ import VectorSource from 'ol/source/Vector';
 
 interface SharedMapClientProps {
     mapId?: string;
-    mapState?: MapState | null;
+    mapState?: MapState | null; // For local/example previews
 }
 
 const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: initialMapState }) => {
@@ -28,10 +27,9 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
     const { toast } = useToast();
     const firestore = useFirestore(); // Get firestore instance
     const [mapState, setMapState] = useState<MapState | null>(initialMapState || null);
-    const [isLoading, setIsLoading] = useState(!initialMapState);
+    const [isLoading, setIsLoading] = useState(!initialMapState && !!mapId); // Only load if mapId is provided and no initial state exists
     const [error, setError] = useState<string | null>(null);
     
-    // This state will now hold a mix of real and placeholder layers
     const [displayLayers, setDisplayLayers] = useState<Partial<AppMapLayer>[]>([]);
     
     const { handleAddHybridLayer, addGeeLayerToMap } = useLayerManager({
@@ -46,9 +44,16 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
     }, [handleAddHybridLayer, addGeeLayerToMap]);
 
     useEffect(() => {
-        if (!mapId || initialMapState || !firestore) return;
+        if (!mapId || initialMapState) return; // Don't fetch if we have initial state or no ID
         
+        // Only fetch if firestore is available
+        if (!firestore) {
+            if (!isLoading) setIsLoading(true); // Show loader while waiting for firestore
+            return;
+        }
+
         const fetchAndSetState = async () => {
+            setIsLoading(true);
             try {
                 const state = await getMapState(firestore, mapId);
                 if (state) {
@@ -64,7 +69,7 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
             }
         };
         fetchAndSetState();
-    }, [mapId, initialMapState, firestore]);
+    }, [mapId, initialMapState, firestore, isLoading]);
 
     useEffect(() => {
         if (isMapReady && mapState && mapRef.current) {
@@ -80,13 +85,12 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
             const loadAllLayers = async () => {
                 for (const layerState of mapState.layers) {
                     if (layerState.type === 'local') {
-                        // Create a placeholder for local layers
                         const placeholderLayer: Partial<AppMapLayer> = {
                             id: nanoid(),
                             name: layerState.name,
                             type: 'local-placeholder',
-                            visible: false, // Not visually toggleable
-                            olLayer: new VectorLayer({ source: new VectorSource() }), // Dummy OL layer
+                            visible: false,
+                            olLayer: new VectorLayer({ source: new VectorSource() }),
                         };
                         loadedLayers.push(placeholderLayer);
                         continue;
@@ -161,7 +165,23 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
     }
     
     if (!mapState) {
-        return null;
+        // This case handles when there's no mapId and no initialMapState, or if firestore is not ready.
+        if (mapId) { // If there should be a map, show loading.
+             return (
+                <div className="flex flex-col items-center justify-center h-screen bg-gray-800 text-white">
+                    <Loader2 className="h-12 w-12 animate-spin text-primary" />
+                    <p className="mt-4 text-lg">Inicializando servicios...</p>
+                </div>
+            );
+        }
+        return (
+             <div className="flex items-center justify-center h-screen bg-gray-100">
+                <div className="text-center">
+                    <h1 className="text-2xl font-bold">ID de Mapa no encontrado</h1>
+                    <p className="mt-2 text-gray-600">No se proporcionó un ID de mapa para cargar.</p>
+                </div>
+            </div>
+        );
     }
 
     return (
