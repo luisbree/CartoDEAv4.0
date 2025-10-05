@@ -260,10 +260,9 @@ export const useLayerManager = ({
 
   }, [mapRef, setLayers]);
 
-  const handleAddHybridLayer = useCallback(async (layerName: string, layerTitle: string, serverUrl: string, bbox?: [number, number, number, number], styleName?: string): Promise<MapLayer | null> => {
+  const handleAddHybridLayer = useCallback(async (layerName: string, layerTitle: string, serverUrl: string, bbox?: [number, number, number, number], styleName?: string, isInitiallyVisible: boolean = true, initialOpacity: number = 0.7, useWmsStyle: boolean = true): Promise<MapLayer | null> => {
     if (!isMapReady || !mapRef.current) return null;
     const map = mapRef.current;
-    const initialOpacity = 0.7;
 
     try {
         const cleanedServerUrl = serverUrl.replace(/\/wms\/?$|\/wfs\/?$/i, '');
@@ -287,10 +286,12 @@ export const useLayerManager = ({
 
         const wfsLayer = new VectorLayer({
             source: wfsSource,
-            style: new Style(),
+            // Initially, the vector layer is transparent if WMS style is used.
+            style: useWmsStyle ? new Style() : undefined,
             properties: { id: wfsId, name: layerTitle, type: 'wfs', gsLayerName: layerName, serverUrl: cleanedServerUrl, styleName },
+            visible: isInitiallyVisible, // The data layer is visible to be interactive
         });
-
+        
         if (bbox) {
             wfsLayer.set('bbox', bbox);
         }
@@ -314,6 +315,8 @@ export const useLayerManager = ({
             properties: { id: wmsId, name: `${layerTitle} (Visual)`, isVisualPartner: true, partnerId: wfsId },
             zIndex: WMS_LAYER_Z_INDEX,
             opacity: initialOpacity,
+            // The WMS layer visibility depends on both the general layer visibility and if the WMS style is enabled.
+            visible: isInitiallyVisible && useWmsStyle,
         });
         
         map.addLayer(wmsLayer);
@@ -323,15 +326,15 @@ export const useLayerManager = ({
             id: wfsId,
             name: layerTitle,
             olLayer: wfsLayer,
-            visible: true,
+            visible: isInitiallyVisible,
             opacity: initialOpacity,
             type: 'wfs',
-            wmsStyleEnabled: true,
+            wmsStyleEnabled: useWmsStyle,
         };
 
         addLayer(newLayer, true);
         
-        // Force initial load of the vector data
+        // Force initial load of the vector data for the current view
         wfsSource.loadFeatures(map.getView().calculateExtent());
 
         updateGeoServerDiscoveredLayerState(layerName, true, 'wfs');
