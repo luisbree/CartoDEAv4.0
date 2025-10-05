@@ -280,7 +280,10 @@ export const useLayerManager = ({
         });
 
         wfsSource.on('featuresloadstart', () => setIsWfsLoading(true));
-        wfsSource.on('featuresloadend', () => setIsWfsLoading(false));
+        wfsSource.on('featuresloadend', (event) => {
+            console.log(`WFS features loaded for ${layerName}:`, event.features.length);
+            setIsWfsLoading(false);
+        });
         wfsSource.on('featuresloaderror', () => setIsWfsLoading(false));
 
         const wfsLayer = new VectorLayer({
@@ -288,6 +291,9 @@ export const useLayerManager = ({
             style: new Style(), // Invisible style initially, as WMS is visible
             properties: { id: wfsId, name: layerTitle, type: 'wfs', gsLayerName: layerName, serverUrl: cleanedServerUrl, styleName },
         });
+
+        // Force initial load
+        wfsSource.loadFeatures(map.getView().calculateExtent());
 
         // Store the authoritative bbox from GetCapabilities on the OL layer object
         if (bbox) {
@@ -1103,3 +1109,6 @@ export const useLayerManager = ({
     addFieldToLayer,
   };
 };
+
+
+    
