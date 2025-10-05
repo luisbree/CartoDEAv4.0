@@ -38,10 +38,12 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
         clearSelectionAfterExtraction: () => {}, updateInspectedFeatureData: () => {},
     });
 
+    // Use a ref to hold a stable reference to the layer loading functions
     const addLayerFnsRef = useRef({ handleAddHybridLayer, addGeeLayerToMap });
     useEffect(() => { 
       addLayerFnsRef.current = { handleAddHybridLayer, addGeeLayerToMap };
     }, [handleAddHybridLayer, addGeeLayerToMap]);
+
 
     useEffect(() => {
         if (!mapId || initialMapState) return; // Don't fetch if we have initial state or no ID
@@ -72,62 +74,72 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
     }, [mapId, initialMapState, firestore, isLoading]);
 
     useEffect(() => {
-        if (isMapReady && mapState && mapRef.current) {
-            const map = mapRef.current;
-            const view = map.getView();
+        if (!isMapReady || !mapState || !mapRef.current || displayLayers.length > 0) return;
 
-            const center3857 = transform(mapState.view.center, 'EPSG:4326', 'EPSG:3857');
-            view.setCenter(center3857);
-            view.setZoom(mapState.view.zoom);
-            
-            const loadedLayers: Partial<AppMapLayer>[] = [];
+        const map = mapRef.current;
+        const view = map.getView();
 
-            const loadAllLayers = async () => {
-                for (const layerState of mapState.layers) {
-                    if (layerState.type === 'local') {
-                        const placeholderLayer: Partial<AppMapLayer> = {
-                            id: nanoid(),
-                            name: layerState.name,
-                            type: 'local-placeholder',
-                            visible: false,
-                            olLayer: new VectorLayer({ source: new VectorSource() }),
-                        };
-                        loadedLayers.push(placeholderLayer);
-                        continue;
+        const center3857 = transform(mapState.view.center, 'EPSG:4326', 'EPSG:3857');
+        view.setCenter(center3857);
+        view.setZoom(mapState.view.zoom);
+        
+        const loadedLayers: Partial<AppMapLayer>[] = [];
+        let isMounted = true;
+
+        const loadAllLayers = async () => {
+            for (const layerState of mapState.layers) {
+                if (!isMounted) return;
+
+                if (layerState.type === 'local') {
+                    const placeholderLayer: Partial<AppMapLayer> = {
+                        id: nanoid(),
+                        name: layerState.name,
+                        type: 'local-placeholder',
+                        visible: false,
+                        olLayer: new VectorLayer({ source: new VectorSource() }),
+                    };
+                    loadedLayers.push(placeholderLayer);
+                    continue;
+                }
+
+                if ((layerState.type === 'wms' || layerState.type === 'wfs') && layerState.url && layerState.layerName) {
+                    const newLayer = await addLayerFnsRef.current.handleAddHybridLayer(
+                        layerState.layerName,
+                        layerState.name,
+                        layerState.url,
+                        undefined,
+                        layerState.styleName || undefined
+                    );
+
+                    if (newLayer && isMounted) {
+                        newLayer.olLayer.setVisible(layerState.visible);
+                        newLayer.olLayer.setOpacity(layerState.opacity);
+                        const visualLayer = newLayer.olLayer.get('visualLayer');
+                        if (visualLayer) {
+                            visualLayer.setVisible(layerState.visible && (layerState.wmsStyleEnabled ?? true));
+                            visualLayer.setOpacity(layerState.opacity);
+                        }
+                        loadedLayers.push({ ...newLayer, visible: layerState.visible, opacity: layerState.opacity, wmsStyleEnabled: layerState.wmsStyleEnabled });
                     }
-
-                    if ((layerState.type === 'wms' || layerState.type === 'wfs') && layerState.url && layerState.layerName) {
-                        const newLayer = await addLayerFnsRef.current.handleAddHybridLayer(
-                            layerState.layerName,
-                            layerState.name,
-                            layerState.url,
-                            undefined,
-                            layerState.styleName || undefined
-                        );
-
-                        if (newLayer) {
-                            newLayer.olLayer.setVisible(layerState.visible);
-                            newLayer.olLayer.setOpacity(layerState.opacity);
-                            const visualLayer = newLayer.olLayer.get('visualLayer');
-                            if (visualLayer) {
-                                visualLayer.setVisible(layerState.visible && (layerState.wmsStyleEnabled ?? true));
-                                visualLayer.setOpacity(layerState.opacity);
-                            }
-                            loadedLayers.push({ ...newLayer, visible: layerState.visible, opacity: layerState.opacity, wmsStyleEnabled: layerState.wmsStyleEnabled });
-                        }
-                    } else if (layerState.type === 'gee' && layerState.geeParams?.tileUrl) {
-                        const newLayer = addLayerFnsRef.current.addGeeLayerToMap(layerState.geeParams.tileUrl, layerState.name, layerState.geeParams);
-                        if (newLayer) {
-                          loadedLayers.push(newLayer);
-                        }
+                } else if (layerState.type === 'gee' && layerState.geeParams?.tileUrl) {
+                    const newLayer = addLayerFnsRef.current.addGeeLayerToMap(layerState.geeParams.tileUrl, layerState.name, layerState.geeParams);
+                    if (newLayer && isMounted) {
+                      loadedLayers.push(newLayer);
                     }
                 }
+            }
+            if (isMounted) {
                 setDisplayLayers(loadedLayers.reverse());
-            };
-            
-            loadAllLayers();
-        }
-    }, [isMapReady, mapState, mapRef, toast]);
+            }
+        };
+        
+        loadAllLayers();
+
+        return () => {
+            isMounted = false;
+        };
+
+    }, [isMapReady, mapState, mapRef, displayLayers]);
 
     const handleToggleVisibility = useCallback((layerId: string) => {
         setDisplayLayers(prev => prev.map(l => {
@@ -241,3 +253,5 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
 };
 
 export default SharedMapClient;
+
+    
