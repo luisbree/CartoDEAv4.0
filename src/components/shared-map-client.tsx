@@ -27,12 +27,10 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
     const firestore = useFirestore();
     const { toast } = useToast();
     
-    // State for managing loading, errors, and the final displayed layers
     const [isLoading, setIsLoading] = useState(!initialMapState);
     const [error, setError] = useState<string | null>(null);
     const [displayLayers, setDisplayLayers] = useState<Partial<AppMapLayer>[]>([]);
     
-    // Use the layer manager hook to get layer manipulation functions
     const { handleAddHybridLayer, addGeeLayerToMap } = useLayerManager({
         mapRef,
         isMapReady,
@@ -44,22 +42,13 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
     });
 
     useEffect(() => {
-        // This is the main effect that orchestrates everything.
-        // It runs only when the core dependencies change.
-        
         let isMounted = true;
 
         const loadMap = async () => {
-            if (!isMapReady || !mapRef.current) {
-                return; // Guard: Wait for the map to be ready
-            }
-            
-            setIsLoading(true);
-            setError(null);
+            if (!isMapReady || !mapRef.current) return;
             
             let finalMapState: MapState | null = initialMapState || null;
-
-            // Step 1: Fetch map state from DB if a mapId is provided and we don't have it already
+            
             if (!finalMapState && mapId && firestore) {
                 console.log("Fetching map state from DB for mapId:", mapId);
                 try {
@@ -67,7 +56,6 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
                     if (isMounted) {
                         if (stateFromDb) {
                             finalMapState = stateFromDb;
-                            console.log("Map state successfully fetched:", finalMapState);
                         } else {
                             setError('No se pudo encontrar el estado del mapa para este ID.');
                             setIsLoading(false);
@@ -85,17 +73,14 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
             }
 
             if (!finalMapState) {
-                if(isMounted) setIsLoading(false);
-                return; // Nothing to do if we don't have a map state
+                if (isMounted) setIsLoading(false);
+                return;
             }
-            
-            // Step 2: Apply the map state to the OpenLayers map instance
-            const map = mapRef.current;
-            console.log("Applying map state:", finalMapState);
 
-            // Set View
+            console.log("Applying map state:", finalMapState);
+            const map = mapRef.current;
+            const view = map.getView();
             try {
-                const view = map.getView();
                 const center3857 = transform(finalMapState.view.center, 'EPSG:4326', 'EPSG:3857');
                 view.setCenter(center3857);
                 view.setZoom(finalMapState.view.zoom);
@@ -103,14 +88,12 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
                 console.error("Error setting map view:", viewError);
             }
 
-            // Load Layers
             const loadedLayers: Partial<AppMapLayer>[] = [];
             for (const layerState of finalMapState.layers) {
-                if (!isMounted) return; // Exit if component unmounted during async loop
+                if (!isMounted) return;
 
                 try {
                     if (layerState.type === 'local') {
-                        // For local layers, we just add a placeholder.
                         loadedLayers.push({ id: nanoid(), name: layerState.name, type: 'local-placeholder', visible: false, olLayer: new VectorLayer({ source: new VectorSource() }) });
                         continue;
                     }
@@ -123,7 +106,6 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
                         newLayer = addGeeLayerToMap(remoteLayer.geeParams.tileUrl, remoteLayer.name, remoteLayer.geeParams);
                     }
                     
-                    // After adding, set its stored properties
                     if (newLayer) {
                         newLayer.olLayer.setVisible(remoteLayer.visible);
                         newLayer.olLayer.setOpacity(remoteLayer.opacity);
@@ -139,18 +121,23 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
                 }
             }
 
-            // Step 3: Update the UI state once all layers are processed
             if (isMounted) {
-                setDisplayLayers(loadedLayers.reverse()); // Reverse to match the order in the main app's legend
-                console.log("Finished loading all layers. Total:", loadedLayers.length);
+                setDisplayLayers(loadedLayers.reverse());
                 setIsLoading(false);
+                console.log("Finished loading all layers. Total:", loadedLayers.length);
             }
         };
 
-        loadMap();
+        if(isMapReady && (mapId || initialMapState)) {
+           loadMap();
+        } else if (!mapId && !initialMapState) {
+            setIsLoading(false);
+            setError("No se proporcionó un ID de mapa o un estado de mapa inicial.");
+        }
+
 
         return () => {
-            isMounted = false; // Cleanup function to prevent state updates on unmounted component
+            isMounted = false;
         };
     }, [isMapReady, mapId, firestore, initialMapState, mapRef, handleAddHybridLayer, addGeeLayerToMap]);
 
@@ -189,17 +176,6 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
                      <Button asChild variant="link" className="mt-4">
                         <Link href="/">Volver al Editor Principal</Link>
                     </Button>
-                </div>
-            </div>
-        );
-    }
-    
-    if (!initialMapState && !mapId) {
-        return (
-             <div className="flex items-center justify-center h-screen bg-gray-100">
-                <div className="text-center">
-                    <h1 className="text-2xl font-bold">ID de Mapa no encontrado</h1>
-                    <p className="mt-2 text-gray-600">No se proporcionó un ID de mapa para cargar.</p>
                 </div>
             </div>
         );
@@ -253,7 +229,7 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
                             ))}
                         </ul>
                     ) : (
-                         <p className="text-xs text-center text-gray-400 py-3">Cargando capas...</p>
+                         <p className="text-xs text-center text-gray-400 py-3">No hay capas en este mapa.</p>
                     )}
                 </div>
             </div>
