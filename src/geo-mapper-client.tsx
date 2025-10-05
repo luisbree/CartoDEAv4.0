@@ -46,6 +46,7 @@ import { StreetViewIcon } from '@/components/icons/StreetViewIcon';
 import TrelloCardNotification from '@/components/trello-integration/TrelloCardNotification';
 import { DphLogoIcon } from '@/components/icons/DphLogoIcon';
 import Notepad from '@/components/notepad/Notepad';
+import FirebaseErrorListener from '@/components/FirebaseErrorListener';
 
 
 import { useOpenLayersMap } from '@/hooks/map-core/useOpenLayersMap';
@@ -62,7 +63,7 @@ import { useWfsLibrary } from '@/hooks/wfs-library/useWfsLibrary';
 import { useOsmQuery } from '@/hooks/osm-integration/useOsmQuery';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from '@/lib/utils';
-import { saveMapState, checkFirestoreConnection } from '@/services/sharing-service';
+import { saveMapState, checkFirestoreConnection, debugReadDocument } from '@/services/sharing-service';
 
 import type { OSMCategoryConfig, GeoServerDiscoveredLayer, BaseLayerOptionForSelect, MapLayer, ChatMessage, BaseLayerSettings, NominatimResult, PlainFeatureData, ActiveTool, TrelloCardInfo, GraduatedSymbology, VectorMapLayer, CategorizedSymbology, SerializableMapLayer, RemoteSerializableLayer, LocalSerializableLayer } from '@/lib/types';
 import { chatWithMapAssistant, type MapAssistantOutput } from '@/ai/flows/find-layer-flow';
@@ -347,15 +348,8 @@ export default function GeoMapperClient() {
     };
 
     const runFirestoreCheck = async () => {
-        // Firestore Connection Check
-        try {
-            console.log("Iniciando la verificación de Firestore desde el cliente...");
-            await checkFirestoreConnection();
-            toast({ title: "Firestore Conectado", description: "La conexión con la base de datos se ha establecido correctamente." });
-        } catch (error: any) {
-            console.error("Error de conexión con Firestore capturado en el cliente:", error);
-            toast({ title: "Error de Conexión con Firestore", description: error.message, variant: "destructive" });
-        }
+      // This function will now be called from the service, which includes logging.
+      debugReadDocument();
     };
     
     runInitialAuths();
@@ -711,8 +705,6 @@ export default function GeoMapperClient() {
         return;
     }
     
-    toast({ description: 'Guardando el estado del mapa...' });
-
     const { layers } = layerManagerHookRef.current;
     const map = mapRef.current;
     const view = map.getView();
@@ -739,7 +731,6 @@ export default function GeoMapperClient() {
             };
             return remoteLayer;
         } else if (['vector', 'osm', 'drawing', 'sentinel', 'landsat', 'analysis', 'geotiff'].includes(layer.type)) {
-             // Local layers are not serializable remotely, so they are marked as such.
             return {
                 type: 'local',
                 name: layer.name,
@@ -755,24 +746,8 @@ export default function GeoMapperClient() {
       baseLayerId: activeBaseLayerId,
     };
     
-    try {
-        const mapId = await saveMapState(mapState);
-        const shareUrl = `${window.location.origin}/share/${mapId}`;
-        
-        await navigator.clipboard.writeText(shareUrl);
-        toast({
-          title: "¡Enlace copiado!",
-          description: "El enlace para compartir el mapa se ha copiado en tu portapapeles.",
-        });
+    saveMapState(mapState);
 
-    } catch (error: any) {
-      console.error("Failed to share map:", error);
-      toast({
-        title: "Error al compartir",
-        description: `No se pudo guardar el estado del mapa: ${error.message || 'Error desconocido'}`,
-        variant: "destructive",
-      });
-    }
   }, [mapRef, activeBaseLayerId, toast]);
 
   // Effect for right-click tool toggling
@@ -826,7 +801,7 @@ export default function GeoMapperClient() {
 
   return (
     <div className="flex h-screen w-screen flex-col bg-background text-foreground">
-
+      <FirebaseErrorListener />
       <div className="bg-gray-700/90 backdrop-blur-sm shadow-md p-2 z-20 flex items-center gap-2">
         <DphLogoIcon className="h-8 w-8 flex-shrink-0" />
         <TooltipProvider delayDuration={200}>
