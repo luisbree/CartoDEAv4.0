@@ -53,12 +53,12 @@ export function saveMapState(db: Firestore, mapState: Omit<MapState, 'createdAt'
         createdAt: serverTimestamp(),
     };
     const collectionRef = collection(db, SHARED_MAPS_COLLECTION);
-    console.log(collectionRef)
+
     addDoc(collectionRef, dataToSend)
         .catch(serverError => {
             console.error("Caught error during addDoc:", serverError);
             const permissionError = new FirestorePermissionError({
-                path: `/${'\'\'\''}${SHARED_MAPS_COLLECTION}${'\'\'\''}}/{new_doc_id}`,
+                path: `/${SHARED_MAPS_COLLECTION}/{new_doc_id}`,
                 operation: 'create',
                 requestResourceData: dataToSend,
             });

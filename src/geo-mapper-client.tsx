@@ -164,6 +164,13 @@ export default function GeoMapperClient() {
   
   const layerManagerHookRef = useRef<ReturnType<typeof useLayerManager> | null>(null);
 
+  useEffect(() => {
+    // Log the Firestore instance to the console when it's available.
+    if (firestore) {
+      console.log("Firestore instance is now available:", firestore);
+    }
+  }, [firestore]);
+
 
   useEffect(() => {
     setIsMounted(true);
