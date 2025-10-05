@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -27,55 +26,69 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
     const { toast } = useToast();
     const firestore = useFirestore(); // Get firestore instance
     const [mapState, setMapState] = useState<MapState | null>(initialMapState || null);
-    const [isLoading, setIsLoading] = useState(!initialMapState && !!mapId); // Only load if mapId is provided and no initial state exists
+    const [isLoading, setIsLoading] = useState(!initialMapState && !!mapId);
     const [error, setError] = useState<string | null>(null);
-    
-    // This state will hold the layers for display purposes only. It's populated once.
     const [displayLayers, setDisplayLayers] = useState<Partial<AppMapLayer>[]>([]);
     
-    const { handleAddHybridLayer, addGeeLayerToMap } = useLayerManager({
+    // Using refs for functions from hooks to stabilize dependencies in useEffect
+    const layerManagerRef = useRef(useLayerManager({
         mapRef, isMapReady, drawingSourceRef,
         onShowTableRequest: () => {}, updateGeoServerDiscoveredLayerState: () => {},
         clearSelectionAfterExtraction: () => {}, updateInspectedFeatureData: () => {},
-    });
+    }));
 
+    // Effect to fetch the map state from Firestore ONCE.
     useEffect(() => {
-        if (!mapId || initialMapState) return;
-        
-        if (!firestore) {
-            if (!isLoading) setIsLoading(true);
+        // Don't run if we have an initial state (local/example), or if mapId/firestore isn't ready
+        if (initialMapState || !mapId || !firestore) {
             return;
         }
 
+        let isMounted = true;
+
         const fetchAndSetState = async () => {
+            console.log("Fetching map state from DB for mapId:", mapId);
             setIsLoading(true);
             try {
                 const state = await getMapState(firestore, mapId);
-                console.log("Estado del mapa recuperado de la DB:", state); // DEBUG LOG
-                if (state) {
-                    setMapState(state);
-                } else {
-                    setError('No se pudo encontrar el estado del mapa para este ID.');
+                if (isMounted) {
+                    if (state) {
+                        console.log("Estado del mapa recuperado de la DB:", state);
+                        setMapState(state);
+                    } else {
+                        setError('No se pudo encontrar el estado del mapa para este ID.');
+                    }
                 }
             } catch (err) {
                 console.error(err);
-                setError('Ocurrió un error al cargar el mapa compartido.');
+                if (isMounted) {
+                    setError('Ocurrió un error al cargar el mapa compartido.');
+                }
             } finally {
-                setIsLoading(false);
+                if (isMounted) {
+                    setIsLoading(false);
+                }
             }
         };
-        fetchAndSetState();
-    }, [mapId, initialMapState, firestore, isLoading]);
 
-    // This is the core effect for loading layers. It now has a stable dependency array.
+        fetchAndSetState();
+
+        return () => {
+            isMounted = false;
+        };
+    // This effect should only run when mapId or firestore changes.
+    }, [mapId, initialMapState, firestore]);
+
+
+    // Effect to load layers onto the map from the fetched mapState.
     useEffect(() => {
-        // Guard clauses to ensure everything is ready
         if (!isMapReady || !mapState || !mapRef.current || displayLayers.length > 0) return;
 
         let isMounted = true;
+        const { handleAddHybridLayer, addGeeLayerToMap } = layerManagerRef.current;
         
         const loadAllLayers = async () => {
-            console.log("Starting to load layers...");
+            console.log("Starting to load layers from map state...");
             const map = mapRef.current!;
             const view = map.getView();
 
@@ -83,21 +96,18 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
             view.setCenter(center3857);
             view.setZoom(mapState.view.zoom);
             
-            const loadedLayers: Partial<AppMapLayer>[] = [];
-
-            for (const layerState of mapState.layers) {
-                if (!isMounted) return; // Prevent state updates if component unmounts
+            const loadedLayersPromises = mapState.layers.map(async (layerState): Promise<Partial<AppMapLayer> | null> => {
+                 if (!isMounted) return null;
 
                 try {
                     if (layerState.type === 'local') {
-                        loadedLayers.push({
+                        return {
                             id: nanoid(),
                             name: layerState.name,
                             type: 'local-placeholder',
                             visible: false,
                             olLayer: new VectorLayer({ source: new VectorSource() }),
-                        });
-                        continue;
+                        };
                     }
 
                     if ((layerState.type === 'wms' || layerState.type === 'wfs') && layerState.url && layerState.layerName) {
@@ -117,12 +127,12 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
                                 visualLayer.setVisible(layerState.visible && (layerState.wmsStyleEnabled ?? true));
                                 visualLayer.setOpacity(layerState.opacity);
                             }
-                            loadedLayers.push({ ...newLayer, visible: layerState.visible, opacity: layerState.opacity, wmsStyleEnabled: layerState.wmsStyleEnabled });
+                            return { ...newLayer, visible: layerState.visible, opacity: layerState.opacity, wmsStyleEnabled: layerState.wmsStyleEnabled };
                         }
                     } else if (layerState.type === 'gee' && layerState.geeParams?.tileUrl) {
                         const newLayer = addGeeLayerToMap(layerState.geeParams.tileUrl, layerState.name, layerState.geeParams);
                         if (newLayer && isMounted) {
-                            loadedLayers.push(newLayer);
+                           return newLayer;
                         }
                     }
                 } catch (layerError) {
@@ -133,10 +143,12 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
                         variant: "destructive"
                     });
                 }
-            }
+                 return null;
+            });
+            
+            const loadedLayers = (await Promise.all(loadedLayersPromises)).filter((l): l is Partial<AppMapLayer> => l !== null);
 
             if (isMounted) {
-                // Reverse the order to match the original layer stack (top-down)
                 setDisplayLayers(loadedLayers.reverse());
                 console.log("Finished loading all layers.");
             }
@@ -144,12 +156,11 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
         
         loadAllLayers();
 
-        // Cleanup function to prevent updates after unmount
         return () => {
             isMounted = false;
         };
-    // The dependency array is now stable and won't cause re-runs.
-    }, [isMapReady, mapState, mapRef, handleAddHybridLayer, addGeeLayerToMap, toast, displayLayers.length]);
+    // This effect now depends on stable values and the mapState, running only when the state is populated.
+    }, [isMapReady, mapState, mapRef, toast, displayLayers.length]);
 
 
     const handleToggleVisibility = useCallback((layerId: string) => {
