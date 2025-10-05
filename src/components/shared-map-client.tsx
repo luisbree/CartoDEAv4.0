@@ -30,6 +30,7 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
     const [isLoading, setIsLoading] = useState(!initialMapState && !!mapId); // Only load if mapId is provided and no initial state exists
     const [error, setError] = useState<string | null>(null);
     
+    // This state will hold the layers for display purposes only. It's populated once.
     const [displayLayers, setDisplayLayers] = useState<Partial<AppMapLayer>[]>([]);
     
     const { handleAddHybridLayer, addGeeLayerToMap } = useLayerManager({
@@ -38,19 +39,11 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
         clearSelectionAfterExtraction: () => {}, updateInspectedFeatureData: () => {},
     });
 
-    // Use a ref to hold a stable reference to the layer loading functions
-    const addLayerFnsRef = useRef({ handleAddHybridLayer, addGeeLayerToMap });
-    useEffect(() => { 
-      addLayerFnsRef.current = { handleAddHybridLayer, addGeeLayerToMap };
-    }, [handleAddHybridLayer, addGeeLayerToMap]);
-
-
     useEffect(() => {
-        if (!mapId || initialMapState) return; // Don't fetch if we have initial state or no ID
+        if (!mapId || initialMapState) return;
         
-        // Only fetch if firestore is available
         if (!firestore) {
-            if (!isLoading) setIsLoading(true); // Show loader while waiting for firestore
+            if (!isLoading) setIsLoading(true);
             return;
         }
 
@@ -73,73 +66,90 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
         fetchAndSetState();
     }, [mapId, initialMapState, firestore, isLoading]);
 
+    // This is the core effect for loading layers. It now has a stable dependency array.
     useEffect(() => {
+        // Guard clauses to ensure everything is ready
         if (!isMapReady || !mapState || !mapRef.current || displayLayers.length > 0) return;
 
-        const map = mapRef.current;
-        const view = map.getView();
-
-        const center3857 = transform(mapState.view.center, 'EPSG:4326', 'EPSG:3857');
-        view.setCenter(center3857);
-        view.setZoom(mapState.view.zoom);
-        
-        const loadedLayers: Partial<AppMapLayer>[] = [];
         let isMounted = true;
-
+        
         const loadAllLayers = async () => {
+            console.log("Starting to load layers...");
+            const map = mapRef.current!;
+            const view = map.getView();
+
+            const center3857 = transform(mapState.view.center, 'EPSG:4326', 'EPSG:3857');
+            view.setCenter(center3857);
+            view.setZoom(mapState.view.zoom);
+            
+            const loadedLayers: Partial<AppMapLayer>[] = [];
+
             for (const layerState of mapState.layers) {
-                if (!isMounted) return;
+                if (!isMounted) return; // Prevent state updates if component unmounts
 
-                if (layerState.type === 'local') {
-                    const placeholderLayer: Partial<AppMapLayer> = {
-                        id: nanoid(),
-                        name: layerState.name,
-                        type: 'local-placeholder',
-                        visible: false,
-                        olLayer: new VectorLayer({ source: new VectorSource() }),
-                    };
-                    loadedLayers.push(placeholderLayer);
-                    continue;
-                }
+                try {
+                    if (layerState.type === 'local') {
+                        loadedLayers.push({
+                            id: nanoid(),
+                            name: layerState.name,
+                            type: 'local-placeholder',
+                            visible: false,
+                            olLayer: new VectorLayer({ source: new VectorSource() }),
+                        });
+                        continue;
+                    }
 
-                if ((layerState.type === 'wms' || layerState.type === 'wfs') && layerState.url && layerState.layerName) {
-                    const newLayer = await addLayerFnsRef.current.handleAddHybridLayer(
-                        layerState.layerName,
-                        layerState.name,
-                        layerState.url,
-                        undefined,
-                        layerState.styleName || undefined
-                    );
+                    if ((layerState.type === 'wms' || layerState.type === 'wfs') && layerState.url && layerState.layerName) {
+                        const newLayer = await handleAddHybridLayer(
+                            layerState.layerName,
+                            layerState.name,
+                            layerState.url,
+                            undefined,
+                            layerState.styleName || undefined
+                        );
 
-                    if (newLayer && isMounted) {
-                        newLayer.olLayer.setVisible(layerState.visible);
-                        newLayer.olLayer.setOpacity(layerState.opacity);
-                        const visualLayer = newLayer.olLayer.get('visualLayer');
-                        if (visualLayer) {
-                            visualLayer.setVisible(layerState.visible && (layerState.wmsStyleEnabled ?? true));
-                            visualLayer.setOpacity(layerState.opacity);
+                        if (newLayer && isMounted) {
+                            newLayer.olLayer.setVisible(layerState.visible);
+                            newLayer.olLayer.setOpacity(layerState.opacity);
+                            const visualLayer = newLayer.olLayer.get('visualLayer');
+                            if (visualLayer) {
+                                visualLayer.setVisible(layerState.visible && (layerState.wmsStyleEnabled ?? true));
+                                visualLayer.setOpacity(layerState.opacity);
+                            }
+                            loadedLayers.push({ ...newLayer, visible: layerState.visible, opacity: layerState.opacity, wmsStyleEnabled: layerState.wmsStyleEnabled });
                         }
-                        loadedLayers.push({ ...newLayer, visible: layerState.visible, opacity: layerState.opacity, wmsStyleEnabled: layerState.wmsStyleEnabled });
+                    } else if (layerState.type === 'gee' && layerState.geeParams?.tileUrl) {
+                        const newLayer = addGeeLayerToMap(layerState.geeParams.tileUrl, layerState.name, layerState.geeParams);
+                        if (newLayer && isMounted) {
+                            loadedLayers.push(newLayer);
+                        }
                     }
-                } else if (layerState.type === 'gee' && layerState.geeParams?.tileUrl) {
-                    const newLayer = addLayerFnsRef.current.addGeeLayerToMap(layerState.geeParams.tileUrl, layerState.name, layerState.geeParams);
-                    if (newLayer && isMounted) {
-                      loadedLayers.push(newLayer);
-                    }
+                } catch (layerError) {
+                    console.error(`Failed to load layer "${layerState.name}":`, layerError);
+                    toast({
+                        title: `Error al Cargar Capa`,
+                        description: `No se pudo cargar la capa "${layerState.name}".`,
+                        variant: "destructive"
+                    });
                 }
             }
+
             if (isMounted) {
+                // Reverse the order to match the original layer stack (top-down)
                 setDisplayLayers(loadedLayers.reverse());
+                console.log("Finished loading all layers.");
             }
         };
         
         loadAllLayers();
 
+        // Cleanup function to prevent updates after unmount
         return () => {
             isMounted = false;
         };
+    // The dependency array is now stable and won't cause re-runs.
+    }, [isMapReady, mapState, mapRef, handleAddHybridLayer, addGeeLayerToMap, toast, displayLayers.length]);
 
-    }, [isMapReady, mapState, mapRef, displayLayers]);
 
     const handleToggleVisibility = useCallback((layerId: string) => {
         setDisplayLayers(prev => prev.map(l => {
@@ -177,8 +187,7 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
     }
     
     if (!mapState) {
-        // This case handles when there's no mapId and no initialMapState, or if firestore is not ready.
-        if (mapId) { // If there should be a map, show loading.
+        if (mapId) {
              return (
                 <div className="flex flex-col items-center justify-center h-screen bg-gray-800 text-white">
                     <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -253,5 +262,3 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
 };
 
 export default SharedMapClient;
-
-    
