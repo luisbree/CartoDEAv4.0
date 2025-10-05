@@ -47,6 +47,10 @@ export function saveMapState(db: Firestore, mapState: Omit<MapState, 'createdAt'
         return;
     }
     
+    // --- NUEVO CONSOLE.LOG ---
+    // Mostramos el objeto que vamos a intentar escribir.
+    console.log("Objeto a guardar en Firestore:", mapState);
+
     const mapStateJSON = JSON.stringify(mapState);
     const dataToSend = {
         mapStateJSON: mapStateJSON,
