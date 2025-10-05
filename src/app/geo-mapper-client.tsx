@@ -702,13 +702,14 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
   
   const handleShareMap = useCallback(async () => {
     if (!mapRef.current || !layerManagerHookRef.current || !firestore) {
-        toast({ description: 'El mapa o los servicios no están listos para compartir.', variant: 'destructive' });
-        return;
+      toast({ description: 'El mapa o los servicios no están listos para compartir.', variant: 'destructive' });
+      return;
     }
-    
+
     const { layers } = layerManagerHookRef.current;
     const map = mapRef.current;
     const view = map.getView();
+    
     const center = transform(view.getCenter() || [0,0], 'EPSG:3857', 'EPSG:4326');
     const zoom = view.getZoom() || 1;
 
@@ -746,11 +747,26 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
       view: { center, zoom },
       baseLayerId: activeBaseLayerId,
     };
-    
-    // The saveMapState function now handles its own try/catch and error emitting
-    saveMapState(firestore, mapState);
 
-  }, [mapRef, activeBaseLayerId, firestore]);
+    try {
+        toast({ description: 'Guardando el estado del mapa...' });
+        const mapId = await saveMapState(firestore, mapState);
+        const shareUrl = `${window.location.origin}/share/${mapId}`;
+        
+        await navigator.clipboard.writeText(shareUrl);
+        toast({
+            title: "¡Enlace copiado!",
+            description: "El enlace para compartir el mapa se ha copiado en tu portapapeles.",
+        });
+    } catch (error) {
+        console.error("Failed to share map:", error);
+        toast({
+            title: "Error al compartir",
+            description: "No se pudo guardar el estado del mapa para compartir.",
+            variant: "destructive",
+        });
+    }
+  }, [mapRef, layerManagerHookRef, activeBaseLayerId, firestore, toast]);
 
   // Effect for right-click tool toggling
   useEffect(() => {
