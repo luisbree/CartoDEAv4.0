@@ -52,8 +52,8 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
 
         const fetchAndSetState = async () => {
             setIsLoading(true);
+            console.log("Fetching map state from DB for mapId:", mapId);
             try {
-                console.log("Fetching map state from DB for mapId:", mapId);
                 const state = await getMapState(firestore, mapId);
                 if (isMounted) {
                     if (state) {
@@ -90,8 +90,7 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
 
         const map = mapRef.current;
         let isComponentMounted = true;
-        const loadedLayers: Partial<AppMapLayer>[] = [];
-
+        
         const applyStateToMap = async () => {
             console.log("Applying map state:", mapState);
             
@@ -102,6 +101,7 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
             view.setZoom(mapState.view.zoom);
             
             // 2. Load Layers
+            const loadedLayers: Partial<AppMapLayer>[] = [];
             for (const layerState of mapState.layers) {
                 try {
                     if (layerState.type === 'local') {
@@ -136,6 +136,9 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
                 setDisplayLayers(loadedLayers.reverse());
                 console.log("Finished loading all layers. Total:", loadedLayers.length);
             }
+            
+            // Force the map to re-render with the new state.
+            map.renderSync();
         };
 
         applyStateToMap();
@@ -143,9 +146,7 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
         return () => {
             isComponentMounted = false;
         };
-        // By using an empty dependency array, this effect will run only once
-        // after the initial render when the required conditions (isMapReady, mapState, mapRef.current) are met.
-    }, [isMapReady, mapState]);
+    }, [isMapReady, mapState, mapRef, handleAddHybridLayer, addGeeLayerToMap]);
 
 
     const handleToggleVisibility = useCallback((layerId: string) => {
