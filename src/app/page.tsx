@@ -1,3 +1,4 @@
+"use client";
 
 import GeoMapperClient from './geo-mapper-client';
 import FirebaseClientProvider from '@/firebase/client-provider';
