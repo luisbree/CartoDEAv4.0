@@ -146,6 +146,7 @@ const panelToggleConfigs = [
 
 
 export default function GeoMapperClient() {
+  const firestore = useFirestore();
   const mapAreaRef = useRef<HTMLDivElement>(null);
   const toolsPanelRef = useRef<HTMLDivElement>(null);
   const legendPanelRef = useRef<HTMLDivElement>(null);
@@ -162,12 +163,20 @@ export default function GeoMapperClient() {
   const [isMounted, setIsMounted] = useState(false);
   
   const layerManagerHookRef = useRef<ReturnType<typeof useLayerManager> | null>(null);
-  const firestore = useFirestore();
 
 
   useEffect(() => {
     setIsMounted(true);
   }, []);
+  
+  useEffect(() => {
+    if (firestore) {
+      console.log("Instancia de Firestore recibida en GeoMapperClient:", firestore);
+    } else {
+      console.log("GeoMapperClient: Esperando instancia de Firestore...");
+    }
+  }, [firestore]);
+
 
   const { mapRef, mapElementRef, setMapInstanceAndElement, isMapReady, drawingSourceRef } = useOpenLayersMap();
   const { toast } = useToast();
@@ -300,7 +309,7 @@ export default function GeoMapperClient() {
 
   // Effect for initial authentications and data loading
   useEffect(() => {
-    if (!isMapReady) return;
+    if (!isMapReady || !firestore) return;
 
     // GEE Auth
     setIsGeeAuthenticating(true);
@@ -342,9 +351,7 @@ export default function GeoMapperClient() {
         console.error("Fallo al cargar las capas iniciales de DEAS:", error);
     });
     
-    if (firestore) {
-        debugReadDocument(firestore);
-    }
+    debugReadDocument(firestore);
 
 
   }, [isMapReady, toast, handleFetchGeoServerLayers, firestore]);
