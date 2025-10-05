@@ -263,13 +263,12 @@ export const useLayerManager = ({
   const handleAddHybridLayer = useCallback(async (layerName: string, layerTitle: string, serverUrl: string, bbox?: [number, number, number, number], styleName?: string): Promise<MapLayer | null> => {
     if (!isMapReady || !mapRef.current) return null;
     const map = mapRef.current;
-    const initialOpacity = 0.7; // The desired initial opacity
+    const initialOpacity = 0.7;
 
     try {
         const cleanedServerUrl = serverUrl.replace(/\/wms\/?$|\/wfs\/?$/i, '');
         const wfsId = `wfs-layer-${layerName}-${nanoid()}`;
-        
-        // 1. Create the WFS Vector Layer (for interaction)
+
         const wfsSource = new VectorSource({
             format: new GeoJSON(),
             url: (extent) => {
@@ -281,31 +280,25 @@ export const useLayerManager = ({
 
         wfsSource.on('featuresloadstart', () => setIsWfsLoading(true));
         wfsSource.on('featuresloadend', (event) => {
-            console.log(`WFS features loaded for ${layerName}:`, event.features.length);
+            console.log(`WFS features loaded for ${layerName}:`, event.features?.length);
             setIsWfsLoading(false);
         });
         wfsSource.on('featuresloaderror', () => setIsWfsLoading(false));
 
         const wfsLayer = new VectorLayer({
             source: wfsSource,
-            style: new Style(), // Invisible style initially, as WMS is visible
+            style: new Style(),
             properties: { id: wfsId, name: layerTitle, type: 'wfs', gsLayerName: layerName, serverUrl: cleanedServerUrl, styleName },
         });
 
-        // Force initial load
-        wfsSource.loadFeatures(map.getView().calculateExtent());
-
-        // Store the authoritative bbox from GetCapabilities on the OL layer object
         if (bbox) {
             wfsLayer.set('bbox', bbox);
         }
-
-        // 2. Create the WMS Tile Layer (for visualization)
+        
         const wmsId = `wms-layer-${layerName}-${nanoid()}`;
         const wmsParams: Record<string, any> = { 'LAYERS': layerName, 'TILED': true, 'VERSION': '1.1.1' };
-        
         if (styleName && styleName.trim() !== '') {
-          wmsParams['STYLES'] = styleName;
+            wmsParams['STYLES'] = styleName;
         }
 
         const wmsSource = new TileWMS({
@@ -315,18 +308,15 @@ export const useLayerManager = ({
             transition: 0,
             crossOrigin: 'anonymous',
         });
-        
+
         const wmsLayer = new TileLayer({
             source: wmsSource,
             properties: { id: wmsId, name: `${layerTitle} (Visual)`, isVisualPartner: true, partnerId: wfsId },
             zIndex: WMS_LAYER_Z_INDEX,
-            opacity: initialOpacity, // Set initial opacity on the visual layer
+            opacity: initialOpacity,
         });
-
-        // 3. Add WMS layer to the map
-        map.addLayer(wmsLayer);
         
-        // 4. Link the visual layer to the main layer object for control
+        map.addLayer(wmsLayer);
         wfsLayer.set('visualLayer', wmsLayer);
 
         const newLayer: MapLayer = {
@@ -339,9 +329,11 @@ export const useLayerManager = ({
             wmsStyleEnabled: true,
         };
 
-        // 5. Add only the main WFS layer to the panel state and the map
         addLayer(newLayer, true);
         
+        // Force initial load of the vector data
+        wfsSource.loadFeatures(map.getView().calculateExtent());
+
         updateGeoServerDiscoveredLayerState(layerName, true, 'wfs');
         setTimeout(() => toast({ description: `Capa "${layerTitle}" añadida.` }), 0);
 
@@ -487,7 +479,7 @@ export const useLayerManager = ({
         if (l.id === layerId) {
             const newVisibility = !l.visible;
             l.olLayer.setVisible(newVisibility);
-            // Also toggle the visual partner layer if it exists, respecting its own enabled state
+            // Also toggle the visual partner layer if it exists
             const visualLayer = l.olLayer.get('visualLayer');
             if (visualLayer) {
                 visualLayer.setVisible(newVisibility && (l.wmsStyleEnabled ?? false));
@@ -1110,5 +1102,7 @@ export const useLayerManager = ({
   };
 };
 
+
+    
 
     
