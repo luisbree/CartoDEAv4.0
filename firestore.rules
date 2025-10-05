@@ -1,69 +1,35 @@
 /**
- * @fileoverview Firestore Security Rules for Prototyping.
- *
- * Core Philosophy:
- * This ruleset provides secure but flexible data access control, focusing on preventing unauthorized data modification while allowing rapid schema iteration.
- * It enforces strict ownership for user-specific data and public read access where appropriate.
- *
- * Data Structure:
- * The primary data resides in a top-level `/maps` collection.
- *
- * Key Security Decisions:
- * - Public read access for all maps.
- * - Only the creator of a map can modify or delete it.
- * - Schema validation is minimized to allow for rapid prototyping.
- *
- * Denormalization for Authorization:
- * To avoid costly `get()` calls, the `SharedMap` documents must contain an `ownerId` field that matches the UID of the user who created it.
+ * @file Firestore Security Rules
+ * @core_philosophy This ruleset allows public read access to shared maps
+ * while restricting write access to authenticated users.
+ * @data_structure The data is stored in a top-level `sharedMaps` collection.
+ * @key_security_decisions Public read access is granted to the `sharedMaps` collection,
+ *  but write access is restricted to prevent unauthorized modifications.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Allows public read access to shared maps, but restricts creation, updates, and deletion to the owner.
-     * @path /maps/{mapId}
-     * @allow (get, list) - Any user can read any map.
-     * @allow (create) - An authenticated user can create a map if `request.auth.uid` matches `request.resource.data.ownerId`.
-     * @allow (update, delete) - Only the owner of the map (where `request.auth.uid` matches `resource.data.ownerId`) can update or delete it.
-     * @deny (create) - An unauthenticated user cannot create a map.
-     * @deny (update) - A user cannot update a map they don't own.
-     * @deny (delete) - A user cannot delete a map they don't own.
-     * @principle Public read, owner-only write access.
+     * @description Allows public read access to shared maps and restricts write access to authenticated users.
+     * @path /sharedMaps/{sharedMapId}
+     * @allow (get, list) Public users can read shared maps.
+     * @allow (create) Authenticated users can create shared maps. The 'createdAt' field will be set by the server.
+     * @allow (update, delete) Authenticated users can update or delete shared maps.
+     * @deny Any unauthenticated user cannot create, update, or delete shared maps.
+     * @principle Allows public read access but restricts write access to authenticated users to prevent unauthorized modifications.
      */
-    match /maps/{mapId} {
-      allow get, list: if true;
-      allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
-      allow update: if isSignedIn() && isExistingOwner(resource.data.ownerId);
-      allow delete: if isSignedIn() && isExistingOwner(resource.data.ownerId);
+    match /sharedMaps/{sharedMapId} {
+      allow get: if true;
+      allow list: if true;
+      allow create: if isSignedIn() && request.resource.data.createdAt == request.time;
+      allow update: if isSignedIn() && resource.data.createdAt == resource.data.createdAt;
+      allow delete: if isSignedIn();
     }
 
-    // Helper functions
-
-    /**
-     * @description Checks if the user is signed in.
-     * @return {bool} True if the user is signed in, false otherwise.
-     */
+    // Define helper functions.
     function isSignedIn() {
       return request.auth != null;
-    }
-
-    /**
-     * @description Checks if the user is the owner of the resource.
-     * @param {string} userId The user ID to check against.
-     * @return {bool} True if the user is the owner, false otherwise.
-     */
-    function isOwner(userId) {
-      return request.auth.uid == userId;
-    }
-
-    /**
-     * @description Checks if the user is the owner of the resource and the resource exists.
-     * @param {string} userId The user ID to check against.
-     * @return {bool} True if the user is the owner and the resource exists, false otherwise.
-     */
-    function isExistingOwner(userId) {
-        return isOwner(userId) && resource != null;
     }
   }
 }
