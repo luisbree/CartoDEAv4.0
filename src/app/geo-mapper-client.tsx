@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
@@ -46,6 +47,7 @@ import { StreetViewIcon } from '@/components/icons/StreetViewIcon';
 import TrelloCardNotification from '@/components/trello-integration/TrelloCardNotification';
 import { DphLogoIcon } from '@/components/icons/DphLogoIcon';
 import Notepad from '@/components/notepad/Notepad';
+import FirebaseErrorListener from '@/components/FirebaseErrorListener';
 
 
 import { useOpenLayersMap } from '@/hooks/map-core/useOpenLayersMap';
@@ -61,10 +63,11 @@ import { useMapCapture } from '@/hooks/map-tools/useMapCapture';
 import { useWfsLibrary } from '@/hooks/wfs-library/useWfsLibrary';
 import { useOsmQuery } from '@/hooks/osm-integration/useOsmQuery';
 import { useToast } from "@/hooks/use-toast";
+import { useFirestore } from '@/firebase';
 import { cn } from '@/lib/utils';
-import { saveMapState } from '@/services/sharing-service';
+import { saveMapState, debugReadDocument } from '@/services/sharing-service';
 
-import type { OSMCategoryConfig, GeoServerDiscoveredLayer, BaseLayerOptionForSelect, MapLayer, ChatMessage, BaseLayerSettings, NominatimResult, PlainFeatureData, ActiveTool, TrelloCardInfo, GraduatedSymbology, VectorMapLayer, CategorizedSymbology, SerializableMapLayer } from '@/lib/types';
+import type { OSMCategoryConfig, GeoServerDiscoveredLayer, BaseLayerOptionForSelect, MapLayer, ChatMessage, BaseLayerSettings, NominatimResult, PlainFeatureData, ActiveTool, TrelloCardInfo, GraduatedSymbology, VectorMapLayer, CategorizedSymbology, SerializableMapLayer, RemoteSerializableLayer, LocalSerializableLayer } from '@/lib/types';
 import { chatWithMapAssistant, type MapAssistantOutput } from '@/ai/flows/find-layer-flow';
 import { authenticateWithGee } from '@/ai/flows/gee-flow';
 import { checkTrelloCredentials } from '@/ai/flows/trello-actions';
@@ -144,6 +147,7 @@ const panelToggleConfigs = [
 
 
 export default function GeoMapperClient() {
+  const firestore = useFirestore();
   const mapAreaRef = useRef<HTMLDivElement>(null);
   const toolsPanelRef = useRef<HTMLDivElement>(null);
   const legendPanelRef = useRef<HTMLDivElement>(null);
@@ -158,11 +162,21 @@ export default function GeoMapperClient() {
   const analysisPanelRef = useRef<HTMLDivElement>(null);
   const trelloPopupRef = useRef<Window | null>(null);
   const [isMounted, setIsMounted] = useState(false);
+  
+  const layerManagerHookRef = useRef<ReturnType<typeof useLayerManager> | null>(null);
+
+  useEffect(() => {
+    // Log the Firestore instance to the console when it's available.
+    if (firestore) {
+      console.log("Instancia de Firestore disponible en GeoMapperClient:", firestore);
+    }
+  }, [firestore]);
+
 
   useEffect(() => {
     setIsMounted(true);
   }, []);
-
+  
   const { mapRef, mapElementRef, setMapInstanceAndElement, isMapReady, drawingSourceRef } = useOpenLayersMap();
   const { toast } = useToast();
 
@@ -261,6 +275,8 @@ export default function GeoMapperClient() {
     updateInspectedFeatureData: featureInspectionHook.updateInspectedFeatureData,
   });
   
+  layerManagerHookRef.current = layerManagerHook;
+  
   const {
     handleFetchGeoServerLayers,
     isFetching: isFetchingDeasLayers,
@@ -290,85 +306,66 @@ export default function GeoMapperClient() {
 
   const initialGeoServerUrl = 'https://www.minfra.gba.gob.ar/ambientales/geoserver';
 
-  const loadInitialDeasLayers = useCallback(async () => {
-      try {
-          const discovered = await handleFetchGeoServerLayers(initialGeoServerUrl);
-          if (discovered) {
-              setDiscoveredGeoServerLayers(discovered);
-          }
-      } catch (error) {
-          console.error("Failed to load initial DEAS layers:", error);
-          // Toast is now handled inside the hook for better error details
-      }
-  }, [handleFetchGeoServerLayers]);
-
-  // Effect for initial GeoServer layer loading
+  // Effect for initial authentications and data loading
   useEffect(() => {
-    if (isMapReady) {
-       loadInitialDeasLayers();
-    }
-  }, [isMapReady, loadInitialDeasLayers]);
+    if (!isMapReady || !firestore) return;
+
+    // GEE Auth
+    setIsGeeAuthenticating(true);
+    authenticateWithGee().then(result => {
+        if (result.success) {
+            toast({ title: "GEE Conectado", description: result.message });
+            setIsGeeAuthenticated(true);
+        } else {
+            throw new Error(result.message);
+        }
+    }).catch(error => {
+        console.error("Error de autenticación automática con GEE:", error);
+        toast({ title: "Error de Autenticación GEE", description: error.message, variant: "destructive" });
+        setIsGeeAuthenticated(false);
+    }).finally(() => {
+        setIsGeeAuthenticating(false);
+    });
+
+    // Trello Auth Check
+    checkTrelloCredentials().then(result => {
+        if (result.configured) {
+            if (result.success) {
+                toast({ title: "Trello Conectado", description: result.message });
+            } else {
+                toast({ title: "Error de Conexión con Trello", description: result.message, variant: "destructive" });
+            }
+        }
+    }).catch(error => {
+        console.error("Error de verificación automática de Trello:", error);
+        toast({ title: "Error de Conexión con Trello", description: error.message, variant: "destructive" });
+    });
+    
+    // GeoServer DEAS Layers
+    handleFetchGeoServerLayers(initialGeoServerUrl).then(discovered => {
+        if (discovered) {
+            setDiscoveredGeoServerLayers(discovered);
+        }
+    }).catch(error => {
+        console.error("Fallo al cargar las capas iniciales de DEAS:", error);
+    });
+    
+    debugReadDocument(firestore);
+
+
+  }, [isMapReady, toast, handleFetchGeoServerLayers, firestore]);
   
   const handleReloadDeasLayers = useCallback(async () => {
     toast({ description: "Recargando capas desde el servidor de DEAS..." });
-    await loadInitialDeasLayers();
-  }, [loadInitialDeasLayers, toast]);
-
-
-  // Effect for automatic GEE and Trello authentication on load
-  useEffect(() => {
-    const runGeeAuth = async () => {
-        setIsGeeAuthenticating(true);
-        try {
-            const result = await authenticateWithGee();
-            if (result.success) {
-                toast({
-                    title: "GEE Conectado",
-                    description: result.message,
-                });
-                setIsGeeAuthenticated(true);
-            } else {
-                throw new Error(result.message);
-            }
-        } catch (error: any) {
-            console.error("Error de autenticación automática con GEE:", error);
-            toast({
-                title: "Error de Autenticación GEE",
-                description: error.message || "No se pudo autenticar con Google Earth Engine.",
-                variant: "destructive",
-            });
-            setIsGeeAuthenticated(false);
-        } finally {
-            setIsGeeAuthenticating(false);
+    try {
+        const discovered = await handleFetchGeoServerLayers(initialGeoServerUrl);
+        if (discovered) {
+            setDiscoveredGeoServerLayers(discovered);
         }
-    };
-
-    const runTrelloAuth = async () => {
-        try {
-            const result = await checkTrelloCredentials();
-            if (result.success) {
-                toast({
-                    title: "Trello Conectado",
-                    description: result.message,
-                });
-            }
-            // If not configured, do nothing (no toast).
-        } catch (error: any) {
-            console.error("Error de verificación automática de Trello:", error);
-            toast({
-                title: "Error de Conexión con Trello",
-                description: error.message,
-                variant: "destructive",
-            });
-        }
-    };
-
-    if (isMapReady) {
-        runGeeAuth();
-        runTrelloAuth();
+    } catch (error: any) {
+        console.error("Fallo al recargar las capas de DEAS:", error);
     }
-  }, [isMapReady, toast]);
-  
+  }, [handleFetchGeoServerLayers, toast]);
 
   const osmDataHook = useOSMData({ 
     mapRef, 
@@ -700,33 +697,41 @@ export default function GeoMapperClient() {
   }, [mapRef, isCapturing, toast, activeBaseLayerId]);
   
   const handleShareMap = useCallback(async () => {
-    if (!mapRef.current) return;
-
-    toast({ description: 'Guardando el estado del mapa...' });
-
+    if (!mapRef.current || !layerManagerHookRef.current || !firestore) {
+        toast({ description: 'El mapa o los servicios no están listos para compartir.', variant: 'destructive' });
+        return;
+    }
+    
+    const { layers } = layerManagerHookRef.current;
     const map = mapRef.current;
     const view = map.getView();
-    
-    // 1. Gather map state
     const center = transform(view.getCenter() || [0,0], 'EPSG:3857', 'EPSG:4326');
     const zoom = view.getZoom() || 1;
 
-    const serializableLayers: SerializableMapLayer[] = layerManagerHook.layers
-      .map(layer => {
-        if (layer.type === 'wms' || layer.type === 'wfs' || layer.type === 'gee') {
-          const rawLayerData: Partial<SerializableMapLayer> = {
-            type: layer.type,
+    const serializableLayers: SerializableMapLayer[] = layers
+      .map((layer: MapLayer): SerializableMapLayer | null => {
+        const baseLayerData = {
             name: layer.name,
-            layerName: layer.olLayer.get('gsLayerName') || null,
-            opacity: layer.opacity,
-            visible: layer.visible,
-            wmsStyleEnabled: layer.wmsStyleEnabled || false,
-            url: layer.olLayer.get('serverUrl') || null,
-            styleName: layer.olLayer.get('styleName') || null,
-            geeParams: layer.olLayer.get('geeParams') || null,
-          };
-          // Filter out undefined/null properties before returning
-          return Object.fromEntries(Object.entries(rawLayerData).filter(([_, v]) => v != null)) as SerializableMapLayer;
+        };
+        
+        if (['wms', 'wfs', 'gee'].includes(layer.type)) {
+            const remoteLayer: RemoteSerializableLayer = {
+                ...baseLayerData,
+                type: layer.type as 'wms' | 'wfs' | 'gee',
+                url: layer.olLayer.get('serverUrl') || null,
+                layerName: layer.olLayer.get('gsLayerName') || null,
+                opacity: layer.opacity,
+                visible: layer.visible,
+                wmsStyleEnabled: layer.wmsStyleEnabled ?? false,
+                styleName: layer.olLayer.get('styleName') || null,
+                geeParams: layer.olLayer.get('geeParams') || null,
+            };
+            return remoteLayer;
+        } else if (['vector', 'osm', 'drawing', 'sentinel', 'landsat', 'analysis', 'geotiff'].includes(layer.type)) {
+            return {
+                type: 'local',
+                name: layer.name,
+            };
         }
         return null;
       })
@@ -737,27 +742,11 @@ export default function GeoMapperClient() {
       view: { center, zoom },
       baseLayerId: activeBaseLayerId,
     };
+    
+    // The saveMapState function now handles its own try/catch and error emitting
+    saveMapState(firestore, mapState);
 
-    try {
-      const mapId = await saveMapState(mapState);
-      const shareUrl = `${window.location.origin}/share/${mapId}`;
-      
-      await navigator.clipboard.writeText(shareUrl);
-      toast({
-        title: "¡Enlace copiado!",
-        description: "El enlace para compartir el mapa se ha copiado en tu portapapeles.",
-      });
-
-    } catch (error) {
-      console.error("Failed to share map:", error);
-      toast({
-        title: "Error al compartir",
-        description: "No se pudo guardar el estado del mapa para compartir.",
-        variant: "destructive",
-      });
-    }
-
-  }, [mapRef, layerManagerHook.layers, activeBaseLayerId, toast]);
+  }, [mapRef, activeBaseLayerId, firestore, toast]);
 
   // Effect for right-click tool toggling
   useEffect(() => {
@@ -810,7 +799,7 @@ export default function GeoMapperClient() {
 
   return (
     <div className="flex h-screen w-screen flex-col bg-background text-foreground">
-
+      <FirebaseErrorListener />
       <div className="bg-gray-700/90 backdrop-blur-sm shadow-md p-2 z-20 flex items-center gap-2">
         <DphLogoIcon className="h-8 w-8 flex-shrink-0" />
         <TooltipProvider delayDuration={200}>

@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { collection, addDoc, getDoc, doc, serverTimestamp, type Firestore } from "firebase/firestore";
@@ -33,6 +34,9 @@ export async function debugReadDocument(db: Firestore): Promise<void> {
 }
 
 export function saveMapState(db: Firestore, mapState: Omit<MapState, 'createdAt'>) {
+    // Console log to verify the db object, as requested.
+    console.log("Verificando la instancia 'db' en saveMapState:", db);
+
     if (!db) {
         // This case should be prevented by the UI logic, but it's a good safeguard.
         console.error("Firestore instance not provided to saveMapState.");
@@ -47,8 +51,7 @@ export function saveMapState(db: Firestore, mapState: Omit<MapState, 'createdAt'
         return;
     }
     
-    // --- NUEVO CONSOLE.LOG ---
-    // Mostramos el objeto que vamos a intentar escribir.
+    // Console log to verify the mapState object.
     console.log("Objeto a guardar en Firestore:", mapState);
 
     const mapStateJSON = JSON.stringify(mapState);
