@@ -22,21 +22,17 @@ function getDb() {
  * Throws an error if the connection fails for any reason other than permissions.
  */
 export async function checkFirestoreConnection(): Promise<void> {
+    console.log("checkFirestoreConnection: Iniciando verificación de conexión con Firestore.");
     try {
         const db = getDb();
-        // Attempt to get a document that doesn't exist.
-        // This is a standard way to check connectivity and auth rules.
         const docRef = doc(db, 'health-check', 'status-check');
+        console.log("checkFirestoreConnection: Realizando lectura de prueba en Firestore.");
         await getDoc(docRef);
-        // If it reaches here, it means we connected, regardless of whether the
-        // document exists or if we have permission. Permission errors are caught below.
+        console.log("checkFirestoreConnection: La lectura de prueba fue exitosa (o falló por permisos, lo cual es aceptable). Conexión establecida.");
     } catch (error: any) {
-        // 'permission-denied' is an acceptable "success" for a connection test,
-        // as it proves we reached the service. For any other error, we must throw.
-        if (error.code !== 'permission-denied') {
-            console.error("Firestore connection check failed with error:", error);
-            throw new Error(`No se pudo conectar a Firestore: ${error.message}`);
-        }
+        console.error("checkFirestoreConnection: Falló la conexión con Firestore:", error);
+        // Rethrow the error so it can be caught by the UI layer
+        throw new Error(`No se pudo conectar a Firestore: ${error.message}`);
     }
 }
 
@@ -75,10 +71,7 @@ export async function getMapState(mapId: string): Promise<MapState | null> {
         const docSnap = await getDoc(docRef);
 
         if (docSnap.exists()) {
-            // Firestore timestamps need to be handled if you need to display them
             const data = docSnap.data();
-            // You might need to convert serverTimestamp to a serializable format here
-            // if you pass it directly to client components.
             return data as MapState;
         } else {
             console.log("No such map state document!");

@@ -12,13 +12,24 @@ import { firebaseConfig } from './config';
  * @returns The initialized FirebaseApp instance.
  */
 function getFirebaseApp(): FirebaseApp {
+    console.log("getFirebaseApp: Verificando si Firebase necesita inicialización.");
     if (getApps().length === 0) {
         // Ensure all config values are defined before initializing
         if (Object.values(firebaseConfig).some(value => value === undefined || value === null)) {
-            console.error("Firebase config is missing one or more required values from environment variables.");
+            console.error("Firebase config está incompleta. Verifique las variables de entorno.");
+            // Log which keys are missing
+            for (const key in firebaseConfig) {
+                if (firebaseConfig[key as keyof typeof firebaseConfig] === undefined) {
+                    console.error(`Clave faltante: ${key}`);
+                }
+            }
         }
-        return initializeApp(firebaseConfig);
+        console.log("Intentando inicializar Firebase con la siguiente configuración:", firebaseConfig);
+        const app = initializeApp(firebaseConfig);
+        console.log("Firebase inicializado correctamente.");
+        return app;
     }
+    console.log("Firebase ya está inicializado, obteniendo la instancia existente.");
     return getApp();
 }
 

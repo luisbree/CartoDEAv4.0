@@ -322,6 +322,8 @@ export default function GeoMapperClient() {
   // Effect for automatic GEE and Trello authentication on load
   useEffect(() => {
     const runInitialAuths = async () => {
+        console.log("GeoMapperClient: El mapa está listo, iniciando verificaciones de autenticación.");
+
         // GEE Auth
         setIsGeeAuthenticating(true);
         try {
@@ -357,10 +359,11 @@ export default function GeoMapperClient() {
 
         // Firestore Connection Check
         try {
+            console.log("GeoMapperClient: Intentando verificar la conexión con Firestore.");
             await checkFirestoreConnection();
             toast({ title: "Firestore Conectado", description: "La conexión con la base de datos se ha establecido correctamente." });
         } catch (error: any) {
-            console.error("Error de conexión con Firestore:", error);
+            console.error("GeoMapperClient: Error de conexión con Firestore capturado.", error);
             toast({ title: "Error de Conexión con Firestore", description: error.message, variant: "destructive" });
         }
     };
