@@ -12,16 +12,20 @@ const SHARED_MAPS_COLLECTION = 'sharedMaps';
  * Debug function to read a specific document and log its content or error.
  */
 export async function debugReadDocument(db: Firestore): Promise<void> {
-    console.log("Attempting to read debug document from Firestore...");
+    if (!db) {
+        console.log("DEBUG: Firestore instance not available for debug read.");
+        return;
+    }
+    console.log("DEBUG: Attempting to read debug document from Firestore...");
     try {
         const docId = "dtP6WVCYBmxUHPXbxcxZ"; // ID from the user's screenshot
         const docRef = doc(db, SHARED_MAPS_COLLECTION, docId);
         const docSnap = await getDoc(docRef);
 
         if (docSnap.exists()) {
-            console.log("SUCCESS! Document data:", docSnap.data());
+            console.log("DEBUG SUCCESS! Document data:", docSnap.data());
         } else {
-            console.log("SUCCESS! Document not found, but connection was successful.");
+            console.log("DEBUG SUCCESS! Document not found, but connection was successful.");
         }
     } catch (error: any) {
         console.error("DEBUG READ FAILED:", error);
@@ -30,7 +34,16 @@ export async function debugReadDocument(db: Firestore): Promise<void> {
 
 export function saveMapState(db: Firestore, mapState: Omit<MapState, 'createdAt'>) {
     if (!db) {
-        console.error("Firestore instance not available.");
+        // This case should be prevented by the UI logic, but it's a good safeguard.
+        console.error("Firestore instance not provided to saveMapState.");
+        const err = new Error("Firestore not initialized. Cannot save map state.");
+        const permissionError = new FirestorePermissionError({
+            path: `/${SHARED_MAPS_COLLECTION}/{new_doc_id}`,
+            operation: 'create',
+            requestResourceData: {}, // No data to send
+        });
+        // We can still emit the error to show something is wrong with the connection setup
+        errorEmitter.emit('permission-error', permissionError);
         return;
     }
     
@@ -77,3 +90,5 @@ export async function getMapState(db: Firestore, mapId: string): Promise<MapStat
         throw new Error("Could not retrieve map state.");
     }
 }
+
+    
