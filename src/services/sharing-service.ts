@@ -77,3 +77,22 @@ export async function getMapState(db: Firestore, mapId: string): Promise<MapStat
         throw new Error("Could not retrieve map state.");
     }
 }
+
+/**
+ * Reads a document for debugging purposes.
+ * @param db The Firestore instance.
+ */
+export async function debugReadDocument(db: Firestore) {
+  if (!db) {
+    console.error("Firestore instance not available for debugReadDocument.");
+    return;
+  }
+  try {
+    const docRef = doc(db, 'sharedMaps', 'debug-test');
+    await getDoc(docRef);
+  } catch (error) {
+    // This is expected to fail with a permission error if rules are working.
+    // The rich error will be thrown by the FirestorePermissionError handler.
+    console.log("Debug read initiated. If rules are correct, a permission error is expected.");
+  }
+}

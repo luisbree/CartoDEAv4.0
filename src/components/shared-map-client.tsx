@@ -1,5 +1,4 @@
-
-'use client';
+"use client";
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
@@ -21,6 +20,8 @@ import XYZ from 'ol/source/XYZ';
 import type { Map } from 'ol';
 import { Style } from 'ol/style';
 import type { GeeValueQueryInput } from '@/ai/flows/gee-types';
+import GeoJSON from 'ol/format/GeoJSON';
+import { bbox as bboxStrategy } from 'ol/loadingstrategy';
 
 interface SharedMapClientProps {
     mapId?: string;
@@ -37,7 +38,6 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
     const [error, setError] = useState<string | null>(null);
     const [displayLayers, setDisplayLayers] = useState<Partial<AppMapLayer>[]>([]);
     
-    // This effect fetches the map state from Firestore. It runs only when necessary.
     useEffect(() => {
         if (initialMapState || !mapId || !firestore) {
             if (!mapId && !initialMapState) {
@@ -69,17 +69,12 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
         fetchMapState();
     }, [mapId, firestore, initialMapState]);
     
-    // This effect applies the loaded map state to the OpenLayers map.
-    // It runs only when the map is ready and the mapState data is available.
     useEffect(() => {
-        if (!isMapReady || !mapState || !mapRef.current) {
-            return;
-        }
+        if (!isMapReady || !mapState || !mapRef.current) return;
         
         console.log("Applying map state to the map...");
         const map = mapRef.current;
         
-        // Define helper functions locally to avoid useEffect dependency issues
         const addGeeLayerToMap = (tileUrl: string, layerName: string, geeParams: Omit<GeeValueQueryInput, 'aoi' | 'zoom'>): AppMapLayer => {
             const layerId = `gee-${nanoid()}`;
             const geeSource = new XYZ({ url: tileUrl, crossOrigin: 'anonymous' });
@@ -96,7 +91,15 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
             const cleanedServerUrl = serverUrl.replace(/\/wms\/?$|\/wfs\/?$/i, '');
             const wfsId = `wfs-layer-${layerName}-${nanoid()}`;
             
-            const wfsSource = new VectorSource();
+            const wfsSource = new VectorSource({
+                format: new GeoJSON(),
+                url: (extent) => {
+                    const wfsApiUrl = `${cleanedServerUrl}/wfs?service=WFS&version=1.1.0&request=GetFeature&typename=${layerName}&outputFormat=application/json&srsname=EPSG:3857&bbox=${extent.join(',')},EPSG:3857`;
+                    return `/api/geoserver-proxy?url=${encodeURIComponent(wfsApiUrl)}`;
+                },
+                strategy: bboxStrategy,
+            });
+
             const wfsLayer = new VectorLayer({
                 source: wfsSource,
                 style: new Style(),
@@ -106,8 +109,11 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
             const wmsParams: Record<string, any> = { 'LAYERS': layerName, 'TILED': true, 'VERSION': '1.1.1' };
             if (styleName) wmsParams['STYLES'] = styleName;
         
+            const wmsApiUrl = `${cleanedServerUrl}/wms`;
+            const proxiedWmsUrl = `/api/geoserver-proxy?url=${encodeURIComponent(wmsApiUrl)}`;
+
             const wmsSource = new TileWMS({
-                url: `${cleanedServerUrl}/wms`,
+                url: proxiedWmsUrl,
                 params: wmsParams,
                 serverType: 'geoserver',
                 transition: 0,
@@ -133,10 +139,8 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
             };
         };
 
-        // --- Main Loading Logic ---
         const loadedLayers: Partial<AppMapLayer>[] = [];
 
-        // Apply View
         try {
             const view = map.getView();
             const center3857 = transform(mapState.view.center, 'EPSG:4326', 'EPSG:3857');
@@ -146,7 +150,6 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
             console.error("Error setting map view:", viewError);
         }
         
-        // Apply Layers
         for (const layerState of mapState.layers) {
             try {
                 if (layerState.type === 'local') {
@@ -199,7 +202,6 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
         }));
     }, []);
 
-    // Render logic
     if (isLoading) {
         return (
             <div className="flex flex-col items-center justify-center h-screen bg-gray-800 text-white">
@@ -215,9 +217,6 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
                 <div className="text-center p-8 bg-white rounded-lg shadow-lg">
                     <h1 className="text-2xl font-bold text-gray-800">Error</h1>
                     <p className="mt-2 text-red-600">{error}</p>
-                     <Button asChild variant="link" className="mt-4">
-                        <Link href="/">Volver al Editor Principal</Link>
-                    </Button>
                 </div>
             </div>
         );
@@ -230,14 +229,6 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
                 activeBaseLayerId={mapState?.baseLayerId || 'osm-standard'}
                 baseLayerSettings={{ opacity: 1, brightness: 100, contrast: 100 }}
             />
-             <div className="absolute top-4 right-4 z-10">
-                <Button asChild variant="secondary" className="shadow-lg">
-                    <Link href="/">
-                        <ArrowLeft className="mr-2 h-4 w-4" />
-                        Volver al Editor Principal
-                    </Link>
-                </Button>
-            </div>
             <div className="absolute top-4 left-4 z-10 bg-gray-800/80 backdrop-blur-sm text-white rounded-lg shadow-lg max-w-sm w-full border border-gray-700">
                 <div className="flex items-center p-3 border-b border-gray-700">
                     <ListTree className="h-5 w-5 mr-3 text-primary" />
@@ -280,5 +271,3 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
 };
 
 export default SharedMapClient;
-
-    
