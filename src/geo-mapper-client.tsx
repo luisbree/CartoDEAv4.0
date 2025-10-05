@@ -47,7 +47,6 @@ import TrelloCardNotification from '@/components/trello-integration/TrelloCardNo
 import { DphLogoIcon } from '@/components/icons/DphLogoIcon';
 import Notepad from '@/components/notepad/Notepad';
 import FirebaseErrorListener from '@/components/FirebaseErrorListener';
-import { useFirestore } from '@/firebase';
 
 
 import { useOpenLayersMap } from '@/hooks/map-core/useOpenLayersMap';
@@ -63,6 +62,7 @@ import { useMapCapture } from '@/hooks/map-tools/useMapCapture';
 import { useWfsLibrary } from '@/hooks/wfs-library/useWfsLibrary';
 import { useOsmQuery } from '@/hooks/osm-integration/useOsmQuery';
 import { useToast } from "@/hooks/use-toast";
+import { useFirestore } from '@/firebase';
 import { cn } from '@/lib/utils';
 import { saveMapState, debugReadDocument } from '@/services/sharing-service';
 
@@ -75,52 +75,52 @@ import { checkTrelloCredentials } from '@/ai/flows/trello-actions';
 const osmCategoryConfig: OSMCategoryConfig[] = [
   {
     id: 'watercourses', name: 'OSM Cursos de Agua',
-    overpassQueryFragment: (bboxStr) => `nwr[waterway~"^(river|stream|canal)$"](${bboxStr});`,
+    overpassQueryFragment: (bboxStr) => `nwr[waterway~"^(river|stream|canal)$"](${'\'\'\''}${bboxStr}${'\'\'\''});`,
     style: new Style({ stroke: new Stroke({ color: '#3a86ff', width: 2 }) }),
   },
   {
     id: 'water_bodies', name: 'OSM Cuerpos de Agua',
-    overpassQueryFragment: (bboxStr) => `nwr[natural="water"](${bboxStr});nwr[landuse="reservoir"](${bboxStr});`,
+    overpassQueryFragment: (bboxStr) => `nwr[natural="water"](${'\'\'\''}${bboxStr}${'\'\'\''});nwr[landuse="reservoir"](${'\'\'\''}${bboxStr}${'\'\'\''});`,
     style: new Style({ fill: new Fill({ color: 'rgba(58,134,255,0.4)' }), stroke: new Stroke({ color: '#3a86ff', width: 1 }) }),
   },
   {
     id: 'roads_paths', name: 'OSM Rutas y Caminos',
-    overpassQueryFragment: (bboxStr) => `nwr[highway](${bboxStr});`,
+    overpassQueryFragment: (bboxStr) => `nwr[highway](${'\'\'\''}${bboxStr}${'\'\'\''});`,
     style: new Style({ stroke: new Stroke({ color: '#adb5bd', width: 2 }) }),
   },
   {
     id: 'bridges', name: 'OSM Puentes',
-    overpassQueryFragment: (bboxStr) => `nwr[man_made="bridge"](${bboxStr});`,
+    overpassQueryFragment: (bboxStr) => `nwr[man_made="bridge"](${'\'\'\''}${bboxStr}${'\'\'\''});`,
     style: new Style({ stroke: new Stroke({ color: '#6c757d', width: 4 }) }),
   },
   {
     id: 'admin_boundaries', name: 'OSM Límites Admin.',
-    overpassQueryFragment: (bboxStr) => `nwr[boundary="administrative"](${bboxStr});`,
+    overpassQueryFragment: (bboxStr) => `nwr[boundary="administrative"](${'\'\'\''}${bboxStr}${'\'\'\''});`,
     style: new Style({ stroke: new Stroke({ color: '#ff006e', width: 2, lineDash: [4, 8] }) }),
   },
   {
     id: 'green_areas', name: 'OSM Áreas Verdes',
-    overpassQueryFragment: (bboxStr) => `nwr[leisure~"^(park|garden)$"](${bboxStr});nwr[landuse~"^(forest|meadow|village_green)$"](${bboxStr});nwr[natural="wood"](${bboxStr});`,
+    overpassQueryFragment: (bboxStr) => `nwr[leisure~"^(park|garden)$"](${'\'\'\''}${bboxStr}${'\'\'\''});nwr[landuse~"^(forest|meadow|village_green)$"](${'\'\'\''}${bboxStr}${'\'\'\''});nwr[natural="wood"](${'\'\'\''}${bboxStr}${'\'\'\''});`,
     style: new Style({ fill: new Fill({ color: 'rgba(13,166,75,0.4)' }), stroke: new Stroke({ color: '#0da64b', width: 1 }) }),
   },
   {
     id: 'health_centers', name: 'OSM Centros de Salud',
-    overpassQueryFragment: (bboxStr) => `nwr[healthcare](${bboxStr});`,
+    overpassQueryFragment: (bboxStr) => `nwr[healthcare](${'\'\'\''}${bboxStr}${'\'\'\''});`,
     style: new Style({ image: new CircleStyle({ radius: 6, fill: new Fill({color: '#d90429'}), stroke: new Stroke({color: 'white', width: 1.5})})}),
   },
   {
     id: 'educational', name: 'OSM Educacionales',
-    overpassQueryFragment: (bboxStr) => `nwr[amenity~"^(school|university|college|kindergarten)$"](${bboxStr});`,
+    overpassQueryFragment: (bboxStr) => `nwr[amenity~"^(school|university|college|kindergarten)$"](${'\'\'\''}${bboxStr}${'\'\'\''});`,
     style: new Style({ image: new CircleStyle({ radius: 6, fill: new Fill({color: '#8338ec'}), stroke: new Stroke({color: 'white', width: 1.5})})}),
   },
   {
     id: 'social_institutions', name: 'OSM Instituciones Sociales',
-    overpassQueryFragment: (bboxStr) => `nwr[amenity="community_centre"](${bboxStr});`,
+    overpassQueryFragment: (bboxStr) => `nwr[amenity="community_centre"](${'\'\'\''}${bboxStr}${'\'\'\''});`,
     style: new Style({ image: new CircleStyle({ radius: 6, fill: new Fill({color: '#ff6b6b'}), stroke: new Stroke({color: 'white', width: 1.5})})}),
   },
   {
     id: 'cultural_heritage', name: 'OSM Patrimonio Cultural',
-    overpassQueryFragment: (bboxStr) => `nwr[historic](${bboxStr});nwr[heritage](${bboxStr});`,
+    overpassQueryFragment: (bboxStr) => `nwr[historic](${'\'\'\''}${bboxStr}${'\'\'\''});nwr[heritage](${'\'\'\''}${bboxStr}${'\'\'\''});`,
     style: new Style({ image: new CircleStyle({ radius: 6, fill: new Fill({color: '#8d6e63'}), stroke: new Stroke({color: 'white', width: 1.5})})}),
   },
 ];
@@ -472,7 +472,7 @@ export default function GeoMapperClient() {
             } else {
                 toast({
                     title: "Capa no encontrada",
-                    description: `Drax intentó añadir una capa que no existe: "${layerNameToAdd}"`,
+                    description: `Drax intentó añadir una capa que no existe: "${'\'\'\''}${layerNameToAdd}${'\'\'\''}"`,
                     variant: 'destructive'
                 });
             }
@@ -488,7 +488,7 @@ export default function GeoMapperClient() {
             if (layerToRemove) {
                 layerManagerHook.removeLayer(layerToRemove.id);
             } else {
-                toast({description: `Drax intentó eliminar una capa no encontrada: ${layerNameToRemove}`});
+                toast({description: `Drax intentó eliminar una capa no encontrada: ${'\'\'\''}${layerNameToRemove}${'\'\'\''}`});
             }
         });
     }
@@ -501,7 +501,7 @@ export default function GeoMapperClient() {
        if (layerToZoom) {
         layerManagerHook.zoomToLayerExtent(layerToZoom.id);
       } else {
-        toast({description: `Drax intentó hacer zoom a una capa no encontrada: ${action.zoomToLayer}`});
+        toast({description: `Drax intentó hacer zoom a una capa no encontrada: ${'\'\'\''}${action.zoomToLayer}${'\'\'\''}`});
       }
     }
 
@@ -520,7 +520,7 @@ export default function GeoMapperClient() {
                     pointSize: 5, // Default point size
                 });
             } else {
-                toast({description: `Drax intentó aplicar un estilo a una capa no encontrada: ${styleRequest.layerName}`});
+                toast({description: `Drax intentó aplicar un estilo a una capa no encontrada: ${'\'\'\''}${styleRequest.layerName}${'\'\'\''}`});
             }
         });
     }
@@ -536,7 +536,7 @@ export default function GeoMapperClient() {
               togglePanelMinimize('attributes');
             }
         } else {
-            toast({description: `Drax intentó mostrar la tabla de una capa no encontrada: ${action.showTableForLayer}`});
+            toast({description: `Drax intentó mostrar la tabla de una capa no encontrada: ${'\'\'\''}${action.showTableForLayer}${'\'\'\''}`});
         }
     }
     
@@ -622,7 +622,7 @@ export default function GeoMapperClient() {
     }
     try {
         const [lon, lat] = transform(center, view.getProjection(), 'EPSG:4326');
-        const url = `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${lat},${lon}`;
+        const url = `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${'\'\'\''}${lat},${lon}${'\'\'\''}`;
         const windowFeatures = "popup=true,width=800,height=600,scrollbars=yes,resizable=yes";
         window.open(url, '_blank', windowFeatures);
     } catch (error) {
@@ -669,7 +669,7 @@ export default function GeoMapperClient() {
         const dataUrl = mapCanvas.toDataURL('image/jpeg', 0.95);
         const link = document.createElement('a');
         link.href = dataUrl;
-        link.download = `map_capture_${activeBaseLayerId}.jpeg`;
+        link.download = `map_capture_${'\'\'\''}${activeBaseLayerId}${'\'\'\''}.jpeg`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -679,7 +679,7 @@ export default function GeoMapperClient() {
         console.error('Error capturing map:', e);
         const errorMessage = e instanceof Error ? e.message : String(e);
         toast({
-          description: `Error al generar la captura: ${errorMessage}`,
+          description: `Error al generar la captura: ${'\'\'\''}${errorMessage}${'\'\'\''}`,
           variant: 'destructive',
         });
       } finally {
@@ -978,7 +978,7 @@ export default function GeoMapperClient() {
             isDownloading={osmDataHook.isDownloading}
             onDownloadOSMLayers={osmDataHook.handleDownloadOSMLayers}
             osmQueryHook={osmQueryHook}
-            style={{ top: `${panels.tools.position.y}px`, left: `${panels.tools.position.x}px`, zIndex: panels.tools.zIndex }}
+            style={{ top: `${'\'\'\''}${panels.tools.position.y}${'\'\'\''}}px`, left: `${'\'\'\''}${panels.tools.position.x}${'\'\'\''}}px`, zIndex: panels.tools.zIndex }}
           />
         )}
 
@@ -1019,7 +1019,7 @@ export default function GeoMapperClient() {
             activeTool={featureInspectionHook.activeTool}
             onSetActiveTool={featureInspectionHook.setActiveTool}
             onClearSelection={featureInspectionHook.clearSelection}
-            style={{ top: `${panels.legend.position.y}px`, left: `${panels.legend.position.x}px`, zIndex: panels.legend.zIndex }}
+            style={{ top: `${'\'\'\''}${panels.legend.position.y}${'\'\'\''}}px`, left: `${'\'\'\''}${panels.legend.position.x}${'\'\'\''}}px`, zIndex: panels.legend.zIndex }}
             discoveredDeasLayers={discoveredGeoServerLayers}
             onAddDeasLayer={handleDeasAddLayer}
             isFetchingDeasLayers={isFetchingDeasLayers}
@@ -1043,7 +1043,7 @@ export default function GeoMapperClient() {
             plainFeatureData={featureInspectionHook.inspectedFeatureData}
             layerId={featureInspectionHook.currentInspectedLayerId}
             layerName={featureInspectionHook.currentInspectedLayerName}
-            style={{ top: `${panels.attributes.position.y}px`, left: `${panels.attributes.position.x}px`, zIndex: panels.attributes.zIndex }}
+            style={{ top: `${'\'\'\''}${panels.attributes.position.y}${'\'\'\''}}px`, left: `${'\'\'\''}${panels.attributes.position.x}${'\'\'\''}}px`, zIndex: panels.attributes.zIndex }}
             selectedFeatureIds={featureInspectionHook.selectedFeatures.map(f => f.getId() as string)}
             onFeatureSelect={handleAttributeTableFeatureSelect}
             onAttributeChange={layerManagerHook.updateFeatureAttribute}
@@ -1059,7 +1059,7 @@ export default function GeoMapperClient() {
                 onToggleCollapse={() => togglePanelCollapse('printComposer')}
                 onClosePanel={() => togglePanelMinimize('printComposer')}
                 onMouseDownHeader={(e) => handlePanelMouseDown(e, 'printComposer')}
-                style={{ top: `${panels.printComposer.position.y}px`, left: `${panels.printComposer.position.x}px`, zIndex: panels.printComposer.zIndex }}
+                style={{ top: `${'\'\'\''}${panels.printComposer.position.y}${'\'\'\''}}px`, left: `${'\'\'\''}${panels.printComposer.position.x}${'\'\'\''}}px`, zIndex: panels.printComposer.zIndex }}
             />
         )}
 
@@ -1074,7 +1074,7 @@ export default function GeoMapperClient() {
             mapRef={mapRef}
             isAuthenticating={isGeeAuthenticating}
             isAuthenticated={isGeeAuthenticated}
-            style={{ top: `${panels.gee.position.y}px`, left: `${panels.gee.position.x}px`, zIndex: panels.gee.zIndex }}
+            style={{ top: `${'\'\'\''}${panels.gee.position.y}${'\'\'\''}}px`, left: `${'\'\'\''}${panels.gee.position.x}${'\'\'\''}}px`, zIndex: panels.gee.zIndex }}
           />
         )}
 
@@ -1091,7 +1091,7 @@ export default function GeoMapperClient() {
                     setStatisticsLayer(null);
                 }}
                 onMouseDownHeader={(e) => handlePanelMouseDown(e, 'statistics')}
-                style={{ top: `${panels.statistics.position.y}px`, left: `${panels.statistics.position.x}px`, zIndex: panels.statistics.zIndex }}
+                style={{ top: `${'\'\'\''}${panels.statistics.position.y}${'\'\'\''}}px`, left: `${'\'\'\''}${panels.statistics.position.x}${'\'\'\''}}px`, zIndex: panels.statistics.zIndex }}
                 mapRef={mapRef}
             />
         )}
@@ -1106,7 +1106,7 @@ export default function GeoMapperClient() {
             allLayers={layerManagerHook.layers}
             selectedFeatures={featureInspectionHook.selectedFeatures}
             onAddLayer={(layer: MapLayer, bringToTop?: boolean) => layerManagerHook.addLayer(layer, bringToTop)}
-            style={{ top: `${panels.analysis.position.y}px`, left: `${panels.analysis.position.x}px`, zIndex: panels.analysis.zIndex }}
+            style={{ top: `${'\'\'\''}${panels.analysis.position.y}${'\'\'\''}}px`, left: `${'\'\'\''}${panels.analysis.position.x}${'\'\'\''}}px`, zIndex: panels.analysis.zIndex }}
           />
         )}
 
@@ -1125,7 +1125,7 @@ export default function GeoMapperClient() {
             onLayerAction={handleAiAction}
             messages={chatMessages}
             setMessages={setChatMessages}
-            style={{ top: `${panels.ai.position.y}px`, left: `${panels.ai.position.x}px`, zIndex: panels.ai.zIndex }}
+            style={{ top: `${'\'\'\''}${panels.ai.position.y}${'\'\'\''}}px`, left: `${'\'\'\''}${panels.ai.position.x}${'\'\'\''}}px`, zIndex: panels.ai.zIndex }}
           />
         )}
 
@@ -1137,7 +1137,7 @@ export default function GeoMapperClient() {
             onClosePanel={() => togglePanelMinimize('trello')}
             onMouseDownHeader={(e) => handlePanelMouseDown(e, 'trello')}
             onSetSelectedCard={handleSetTrelloCard}
-            style={{ top: `${panels.trello.position.y}px`, left: `${panels.trello.position.x}px`, zIndex: panels.trello.zIndex }}
+            style={{ top: `${'\'\'\''}${panels.trello.position.y}${'\'\'\''}}px`, left: `${'\'\'\''}${panels.trello.position.x}${'\'\'\''}}px`, zIndex: panels.trello.zIndex }}
           />
         )}
 
@@ -1148,7 +1148,7 @@ export default function GeoMapperClient() {
             onToggleCollapse={() => togglePanelCollapse('wfsLibrary')}
             onClosePanel={() => togglePanelMinimize('wfsLibrary')}
             onMouseDownHeader={(e) => handlePanelMouseDown(e, 'wfsLibrary')}
-            style={{ top: `${panels.wfsLibrary.position.y}px`, left: `${panels.wfsLibrary.position.x}px`, zIndex: panels.wfsLibrary.zIndex }}
+            style={{ top: `${'\'\'\''}${panels.wfsLibrary.position.y}${'\'\'\''}}px`, left: `${'\'\'\''}${panels.wfsLibrary.position.x}${'\'\'\''}}px`, zIndex: panels.wfsLibrary.zIndex }}
             predefinedServers={wfsLibraryHook.PREDEFINED_SERVERS}
             isLoading={wfsLibraryHook.isLoading}
             discoveredLayers={wfsLibraryHook.discoveredLayers}
@@ -1164,7 +1164,7 @@ export default function GeoMapperClient() {
             onToggleCollapse={() => togglePanelCollapse('help')}
             onClosePanel={() => togglePanelMinimize('help')}
             onMouseDownHeader={(e) => handlePanelMouseDown(e, 'help')}
-            style={{ top: `${panels.help.position.y}px`, left: `${panels.help.position.x}px`, zIndex: panels.help.zIndex }}
+            style={{ top: `${'\'\'\''}${panels.help.position.y}${'\'\'\''}}px`, left: `${'\'\'\''}${panels.help.position.x}${'\'\'\''}}px`, zIndex: panels.help.zIndex }}
           />
         )}
       </div>
