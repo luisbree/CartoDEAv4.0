@@ -1,7 +1,7 @@
 
 'use client';
 
-import { collection, addDoc, getDoc, doc, serverTimestamp, Firestore, enableNetwork, disableNetwork } from "firebase/firestore";
+import { collection, addDoc, getDoc, doc, serverTimestamp, Firestore } from "firebase/firestore";
 import { getFirestoreInstance } from '@/firebase/client';
 import type { MapState } from "@/lib/types";
 
@@ -19,27 +19,25 @@ function getDb() {
 
 /**
  * Checks the connection to Firestore by performing a dummy read.
- * Throws an error if the connection fails.
+ * Throws an error if the connection fails for any reason other than permissions.
  */
 export async function checkFirestoreConnection(): Promise<void> {
-    return new Promise(async (resolve, reject) => {
-        try {
-            const db = getDb();
-            // A more reliable way to check connection is to try to get a document,
-            // even a non-existent one. If it fails with a specific network error,
-            // we know the connection is bad. Permission errors mean we connected.
-            await getDoc(doc(db, 'health-check', 'status'));
-            resolve(); // Resolve on success or permission denied (which means we connected)
-        } catch (error: any) {
-             // 'permission-denied' is still a successful connection test for our purposes.
-            if (error.code === 'permission-denied') {
-                resolve();
-            } else {
-                // For all other errors (network, config, etc.), we reject.
-                reject(new Error(`No se pudo conectar a Firestore: ${error.message}`));
-            }
+    try {
+        const db = getDb();
+        // Attempt to get a document that doesn't exist.
+        // This is a standard way to check connectivity and auth rules.
+        const docRef = doc(db, 'health-check', 'status-check');
+        await getDoc(docRef);
+        // If it reaches here, it means we connected, regardless of whether the
+        // document exists or if we have permission. Permission errors are caught below.
+    } catch (error: any) {
+        // 'permission-denied' is an acceptable "success" for a connection test,
+        // as it proves we reached the service. For any other error, we must throw.
+        if (error.code !== 'permission-denied') {
+            console.error("Firestore connection check failed with error:", error);
+            throw new Error(`No se pudo conectar a Firestore: ${error.message}`);
         }
-    });
+    }
 }
 
 

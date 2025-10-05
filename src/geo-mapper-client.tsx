@@ -343,11 +343,10 @@ export default function GeoMapperClient() {
         // Trello Auth
         try {
             const trelloResult = await checkTrelloCredentials();
-            if (trelloResult.configured) { // Only toast if it's configured
+            if (trelloResult.configured) {
               if (trelloResult.success) {
                   toast({ title: "Trello Conectado", description: trelloResult.message });
               } else {
-                  // This case would be handled by the catch block, but for completeness:
                    toast({ title: "Error de Conexión con Trello", description: trelloResult.message, variant: "destructive" });
               }
             }
