@@ -82,7 +82,7 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
 
     // Effect to load layers onto the map from the fetched mapState.
     useEffect(() => {
-        if (!isMapReady || !mapState || !mapRef.current || displayLayers.length > 0) return;
+        if (!isMapReady || !mapState || !mapRef.current) return;
 
         let isMounted = true;
         const { handleAddHybridLayer, addGeeLayerToMap } = layerManagerRef.current;
@@ -159,8 +159,8 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
         return () => {
             isMounted = false;
         };
-    // This effect now depends on stable values and the mapState, running only when the state is populated.
-    }, [isMapReady, mapState, mapRef, toast, displayLayers.length]);
+    // This effect now depends on the map being ready and mapState being populated.
+    }, [isMapReady, mapState]);
 
 
     const handleToggleVisibility = useCallback((layerId: string) => {
