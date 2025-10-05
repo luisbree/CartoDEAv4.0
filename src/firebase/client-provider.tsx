@@ -1,4 +1,3 @@
-
 'use client';
 import { initializeFirebase } from '.';
 import FirebaseProvider, { FirebaseContext } from './provider';
@@ -9,7 +8,10 @@ interface FirebaseClientProviderProps {
 export default function FirebaseClientProvider({
   children,
 }: FirebaseClientProviderProps) {
+  // initializeFirebase() is now called here, ensuring it runs once on the client.
+  const firebaseContextValue = initializeFirebase();
+  
   return (
-    <FirebaseProvider {...initializeFirebase()}>{children}</FirebaseProvider>
+    <FirebaseProvider {...firebaseContextValue}>{children}</FirebaseProvider>
   );
 }

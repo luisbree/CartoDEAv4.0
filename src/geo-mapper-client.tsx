@@ -169,15 +169,6 @@ export default function GeoMapperClient() {
     setIsMounted(true);
   }, []);
   
-  useEffect(() => {
-    if (firestore) {
-      console.log("Instancia de Firestore recibida en GeoMapperClient:", firestore);
-    } else {
-      console.log("GeoMapperClient: Esperando instancia de Firestore...");
-    }
-  }, [firestore]);
-
-
   const { mapRef, mapElementRef, setMapInstanceAndElement, isMapReady, drawingSourceRef } = useOpenLayersMap();
   const { toast } = useToast();
 
