@@ -1,10 +1,14 @@
 
+
 'use client';
 
 import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app';
 import { collection, addDoc, getDoc, doc, serverTimestamp, getFirestore, type Firestore } from "firebase/firestore";
 import { firebaseConfig } from '@/firebase/config';
 import type { MapState } from "@/lib/types";
+import { errorEmitter } from '@/services/error-emitter';
+import { FirestorePermissionError, type SecurityRuleContext } from '@/services/errors';
+
 
 const SHARED_MAPS_COLLECTION = 'sharedMaps';
 
@@ -76,13 +80,27 @@ export async function saveMapState(mapState: Omit<MapState, 'createdAt'>): Promi
         createdAt: serverTimestamp(),
     };
     
-    try {
-        const docRef = await addDoc(collection(db, SHARED_MAPS_COLLECTION), dataToSend);
-        return docRef.id;
-    } catch (error) {
-        console.error("Error writing document to Firestore:", error);
-        throw new Error("Could not save map state due to a database error.");
-    }
+    const collectionRef = collection(db, SHARED_MAPS_COLLECTION);
+    
+    return new Promise((resolve, reject) => {
+        addDoc(collectionRef, dataToSend)
+            .then(docRef => {
+                resolve(docRef.id);
+            })
+            .catch(serverError => {
+                console.error("Error writing document to Firestore:", serverError);
+                
+                const permissionError = new FirestorePermissionError({
+                    path: `/${SHARED_MAPS_COLLECTION}/{new_doc_id}`,
+                    operation: 'create',
+                    requestResourceData: dataToSend,
+                } satisfies SecurityRuleContext);
+
+                errorEmitter.emit('permission-error', permissionError);
+
+                reject(new Error("Could not save map state due to a database error."));
+            });
+    });
 }
 
 
