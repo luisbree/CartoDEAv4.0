@@ -10,7 +10,7 @@ import MapView from '@/components/map-view';
 import { useOpenLayersMap } from '@/hooks/map-core/useOpenLayersMap';
 import { useToast } from '@/hooks/use-toast';
 import { useFirestore } from '@/firebase';
-import { transform, transformExtent } from 'ol/proj';
+import { transform } from 'ol/proj';
 import { Button } from '@/components/ui/button';
 import { nanoid } from 'nanoid';
 import VectorLayer from 'ol/layer/Vector';
@@ -19,9 +19,8 @@ import TileLayer from 'ol/layer/Tile';
 import TileWMS from 'ol/source/TileWMS';
 import XYZ from 'ol/source/XYZ';
 import type { Map } from 'ol';
-import { Style } from 'ol/style'; // Importación añadida
+import { Style } from 'ol/style';
 import type { GeeValueQueryInput } from '@/ai/flows/gee-types';
-
 
 interface SharedMapClientProps {
     mapId?: string;
@@ -38,7 +37,7 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
     const [error, setError] = useState<string | null>(null);
     const [displayLayers, setDisplayLayers] = useState<Partial<AppMapLayer>[]>([]);
     
-    // Effect to fetch data from Firestore
+    // This effect fetches the map state from Firestore. It runs only when necessary.
     useEffect(() => {
         if (initialMapState || !mapId || !firestore) {
             if (!mapId && !initialMapState) {
@@ -49,6 +48,8 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
         }
 
         const fetchMapState = async () => {
+            setIsLoading(true);
+            setError(null);
             console.log("Fetching map state from DB for mapId:", mapId);
             try {
                 const stateFromDb = await getMapState(firestore, mapId);
@@ -68,8 +69,8 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
         fetchMapState();
     }, [mapId, firestore, initialMapState]);
     
-
-    // Effect to apply map state once map is ready and state is loaded
+    // This effect applies the loaded map state to the OpenLayers map.
+    // It runs only when the map is ready and the mapState data is available.
     useEffect(() => {
         if (!isMapReady || !mapState || !mapRef.current) {
             return;
@@ -77,16 +78,15 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
         
         console.log("Applying map state to the map...");
         const map = mapRef.current;
-        const loadedLayers: Partial<AppMapLayer>[] = [];
-
-        // Helper functions defined inside useEffect to capture current scope
+        
+        // Define helper functions locally to avoid useEffect dependency issues
         const addGeeLayerToMap = (tileUrl: string, layerName: string, geeParams: Omit<GeeValueQueryInput, 'aoi' | 'zoom'>): AppMapLayer => {
             const layerId = `gee-${nanoid()}`;
             const geeSource = new XYZ({ url: tileUrl, crossOrigin: 'anonymous' });
             const geeLayer = new TileLayer({
               source: geeSource,
               properties: { id: layerId, name: layerName, type: 'gee', geeParams },
-              zIndex: 5, // Consistent Z-index
+              zIndex: 5,
             });
             map.addLayer(geeLayer);
             return { id: layerId, name: layerName, olLayer: geeLayer, visible: true, opacity: 1, type: 'gee' };
@@ -133,59 +133,54 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
             };
         };
 
-        const loadMap = async () => {
-            // Apply View
-            try {
-                const view = map.getView();
-                const center3857 = transform(mapState.view.center, 'EPSG:4326', 'EPSG:3857');
-                view.setCenter(center3857);
-                view.setZoom(mapState.view.zoom);
-            } catch (viewError) {
-                console.error("Error setting map view:", viewError);
-            }
-            
-            // Apply Layers
-            console.log("Loading layers from mapState...");
-            for (const layerState of mapState.layers) {
-                try {
-                    if (layerState.type === 'local') {
-                        loadedLayers.push({ id: nanoid(), name: layerState.name, type: 'local-placeholder', visible: false });
-                        continue;
-                    }
+        // --- Main Loading Logic ---
+        const loadedLayers: Partial<AppMapLayer>[] = [];
 
-                    const remoteLayer = layerState as RemoteSerializableLayer;
-                    let newLayer: AppMapLayer | null = null;
-                    
-                    if ((remoteLayer.type === 'wms' || remoteLayer.type === 'wfs') && remoteLayer.url && remoteLayer.layerName) {
-                        newLayer = handleAddHybridLayer(remoteLayer.layerName, remoteLayer.name, remoteLayer.url, remoteLayer.styleName || undefined);
-                    } else if (remoteLayer.type === 'gee' && remoteLayer.geeParams?.tileUrl) {
-                        newLayer = addGeeLayerToMap(remoteLayer.geeParams.tileUrl, remoteLayer.name, remoteLayer.geeParams);
-                    }
-
-                    if (newLayer) {
-                        newLayer.olLayer.setVisible(remoteLayer.visible);
-                        newLayer.olLayer.setOpacity(remoteLayer.opacity);
-                        const visualLayer = newLayer.olLayer.get('visualLayer');
-                        if (visualLayer) {
-                            visualLayer.setVisible(remoteLayer.visible && (remoteLayer.wmsStyleEnabled ?? true));
-                            visualLayer.setOpacity(remoteLayer.opacity);
-                        }
-                        loadedLayers.push({ ...newLayer, visible: remoteLayer.visible, opacity: remoteLayer.opacity, wmsStyleEnabled: remoteLayer.wmsStyleEnabled });
-                    }
-                } catch (layerError) {
-                    console.error(`Failed to load layer "${layerState.name}":`, layerError);
-                }
-            }
-            
-            console.log(`Finished loading ${loadedLayers.length} layers.`);
-            setDisplayLayers(loadedLayers.reverse());
-            setIsLoading(false);
-            
-            // Force map to re-render after all layers and view are set
-            map.renderSync();
-        };
+        // Apply View
+        try {
+            const view = map.getView();
+            const center3857 = transform(mapState.view.center, 'EPSG:4326', 'EPSG:3857');
+            view.setCenter(center3857);
+            view.setZoom(mapState.view.zoom);
+        } catch (viewError) {
+            console.error("Error setting map view:", viewError);
+        }
         
-        loadMap();
+        // Apply Layers
+        for (const layerState of mapState.layers) {
+            try {
+                if (layerState.type === 'local') {
+                    loadedLayers.push({ id: nanoid(), name: layerState.name, type: 'local-placeholder', visible: false });
+                    continue;
+                }
+
+                const remoteLayer = layerState as RemoteSerializableLayer;
+                let newLayer: AppMapLayer | null = null;
+                
+                if ((remoteLayer.type === 'wms' || remoteLayer.type === 'wfs') && remoteLayer.url && remoteLayer.layerName) {
+                    newLayer = handleAddHybridLayer(remoteLayer.layerName, remoteLayer.name, remoteLayer.url, remoteLayer.styleName || undefined);
+                } else if (remoteLayer.type === 'gee' && remoteLayer.geeParams?.tileUrl) {
+                    newLayer = addGeeLayerToMap(remoteLayer.geeParams.tileUrl, remoteLayer.name, remoteLayer.geeParams);
+                }
+
+                if (newLayer) {
+                    newLayer.olLayer.setVisible(remoteLayer.visible);
+                    newLayer.olLayer.setOpacity(remoteLayer.opacity);
+                    const visualLayer = newLayer.olLayer.get('visualLayer');
+                    if (visualLayer) {
+                        visualLayer.setVisible(remoteLayer.visible && (remoteLayer.wmsStyleEnabled ?? true));
+                        visualLayer.setOpacity(remoteLayer.opacity);
+                    }
+                    loadedLayers.push({ ...newLayer, visible: remoteLayer.visible, opacity: remoteLayer.opacity, wmsStyleEnabled: remoteLayer.wmsStyleEnabled });
+                }
+            } catch (layerError) {
+                console.error(`Failed to load layer "${layerState.name}":`, layerError);
+            }
+        }
+        
+        console.log(`Finished loading all layers.`);
+        setDisplayLayers(loadedLayers.reverse());
+        setIsLoading(false);
 
     }, [isMapReady, mapState, mapRef]);
 
@@ -285,3 +280,5 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapId, mapState: init
 };
 
 export default SharedMapClient;
+
+    
