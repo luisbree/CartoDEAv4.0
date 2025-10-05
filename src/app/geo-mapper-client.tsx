@@ -819,11 +819,11 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
   // This effect runs only when in shared map mode to load the state
   useEffect(() => {
     if (!initialMapState || !isMapReady || !mapRef.current || !layerManagerHookRef.current) return;
-    
-    const { handleAddHybridLayer, addGeeLayerToMap } = layerManagerHookRef.current;
-    const map = mapRef.current;
 
     const loadSharedMap = async () => {
+        const { handleAddHybridLayer, addGeeLayerToMap } = layerManagerHookRef.current!;
+        const map = mapRef.current!;
+
         console.log("Applying shared map state...", initialMapState);
 
         try {
@@ -831,14 +831,13 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
             const center3857 = transform(initialMapState.view.center, 'EPSG:4326', 'EPSG:3857');
             view.setCenter(center3857);
             view.setZoom(initialMapState.view.zoom);
-            map.renderSync(); // Force a re-render after setting view
         } catch (e) {
             console.error("Error setting shared view", e);
         }
-
+        
         for (const layerState of initialMapState.layers) {
             try {
-                 console.log("Processing shared layer:", layerState);
+                console.log("Processing shared layer:", layerState);
                 if (layerState.type === 'wfs' && layerState.url && layerState.layerName) {
                     const addedLayer = await handleAddHybridLayer(layerState.layerName, layerState.name, layerState.url, undefined, layerState.styleName);
                     if (addedLayer) {
@@ -859,7 +858,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
 
     loadSharedMap();
 
-  }, [initialMapState, isMapReady, mapRef, layerManagerHookRef]);
+  }, [initialMapState, isMapReady, mapRef]);
 
 
   return (
@@ -1246,5 +1245,3 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
     </div>
   );
 }
-
-    
