@@ -1,5 +1,4 @@
 
-
 // Defines the context for a Firestore security rule violation
 export type SecurityRuleContext = {
     path: string;

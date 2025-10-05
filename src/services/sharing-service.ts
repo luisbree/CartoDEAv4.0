@@ -1,77 +1,39 @@
 
 'use client';
 
-import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app';
-import { collection, addDoc, getDoc, doc, serverTimestamp, getFirestore, type Firestore } from "firebase/firestore";
-import { firebaseConfig } from '@/firebase/config';
+import { collection, addDoc, getDoc, doc, serverTimestamp, type Firestore } from "firebase/firestore";
 import type { MapState } from "@/lib/types";
-import { errorEmitter } from './error-emitter';
-import { FirestorePermissionError, type SecurityRuleContext } from './errors';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
 
 const SHARED_MAPS_COLLECTION = 'sharedMaps';
-
-let firestoreInstance: Firestore | null = null;
-let firebaseApp: FirebaseApp | null = null;
-
-function getDb(): Firestore {
-    if (firestoreInstance) {
-        return firestoreInstance;
-    }
-    
-    console.log("Attempting to initialize Firebase with config:", firebaseConfig);
-
-    if (getApps().length === 0) {
-        if (Object.values(firebaseConfig).some(value => !value)) {
-            const errorMessage = "Firebase config is incomplete. Check environment variables.";
-            console.error(errorMessage, firebaseConfig);
-            throw new Error(errorMessage);
-        }
-        firebaseApp = initializeApp(firebaseConfig);
-    } else {
-        firebaseApp = getApp();
-    }
-    
-    firestoreInstance = getFirestore(firebaseApp);
-    return firestoreInstance;
-}
-
-export async function checkFirestoreConnection(): Promise<void> {
-    try {
-        const db = getDb();
-        const docRef = doc(db, 'health-check-collection', 'health-check-doc');
-        await getDoc(docRef);
-    } catch (error: any) {
-        if (error.code !== 'permission-denied') {
-            console.error("Critical Firestore connection error:", error);
-            throw new Error(`Could not connect to Firestore: ${error.message}`);
-        }
-    }
-}
 
 /**
  * Debug function to read a specific document and log its content or error.
  */
-export async function debugReadDocument(): Promise<void> {
+export async function debugReadDocument(db: Firestore): Promise<void> {
     console.log("Attempting to read debug document from Firestore...");
     try {
-        const db = getDb();
-        // ID from the user's screenshot
-        const docId = "dtP6WVCYBmxUHPXbxcxZ"; 
+        const docId = "dtP6WVCYBmxUHPXbxcxZ"; // ID from the user's screenshot
         const docRef = doc(db, SHARED_MAPS_COLLECTION, docId);
         const docSnap = await getDoc(docRef);
 
         if (docSnap.exists()) {
             console.log("SUCCESS! Document data:", docSnap.data());
         } else {
-            console.log("Document not found, but connection was successful.");
+            console.log("SUCCESS! Document not found, but connection was successful.");
         }
     } catch (error: any) {
         console.error("DEBUG READ FAILED:", error);
     }
 }
 
-export function saveMapState(mapState: Omit<MapState, 'createdAt'>) {
-    const db = getDb();
+export function saveMapState(db: Firestore, mapState: Omit<MapState, 'createdAt'>) {
+    if (!db) {
+        console.error("Firestore instance not available.");
+        return;
+    }
+    
     const mapStateJSON = JSON.stringify(mapState);
     const dataToSend = {
         mapStateJSON: mapStateJSON,
@@ -86,14 +48,17 @@ export function saveMapState(mapState: Omit<MapState, 'createdAt'>) {
                 path: `/${SHARED_MAPS_COLLECTION}/{new_doc_id}`,
                 operation: 'create',
                 requestResourceData: dataToSend,
-            } satisfies SecurityRuleContext);
+            });
             errorEmitter.emit('permission-error', permissionError);
         });
 }
 
-export async function getMapState(mapId: string): Promise<MapState | null> {
+export async function getMapState(db: Firestore, mapId: string): Promise<MapState | null> {
+    if (!db) {
+        console.error("Firestore instance not available for getMapState.");
+        return null;
+    }
     try {
-        const db = getDb();
         const docRef = doc(db, SHARED_MAPS_COLLECTION, mapId);
         const docSnap = await getDoc(docRef);
 

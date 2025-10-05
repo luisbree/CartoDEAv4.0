@@ -47,6 +47,7 @@ import TrelloCardNotification from '@/components/trello-integration/TrelloCardNo
 import { DphLogoIcon } from '@/components/icons/DphLogoIcon';
 import Notepad from '@/components/notepad/Notepad';
 import FirebaseErrorListener from '@/components/FirebaseErrorListener';
+import { useFirestore } from '@/firebase';
 
 
 import { useOpenLayersMap } from '@/hooks/map-core/useOpenLayersMap';
@@ -161,6 +162,7 @@ export default function GeoMapperClient() {
   const [isMounted, setIsMounted] = useState(false);
   
   const layerManagerHookRef = useRef<ReturnType<typeof useLayerManager> | null>(null);
+  const firestore = useFirestore();
 
 
   useEffect(() => {
@@ -340,10 +342,12 @@ export default function GeoMapperClient() {
         console.error("Fallo al cargar las capas iniciales de DEAS:", error);
     });
     
-    // Firestore Connection Check (with debug read)
-    debugReadDocument();
+    if (firestore) {
+        debugReadDocument(firestore);
+    }
 
-  }, [isMapReady, toast, handleFetchGeoServerLayers]);
+
+  }, [isMapReady, toast, handleFetchGeoServerLayers, firestore]);
   
   const handleReloadDeasLayers = useCallback(async () => {
     toast({ description: "Recargando capas desde el servidor de DEAS..." });
@@ -687,8 +691,8 @@ export default function GeoMapperClient() {
   }, [mapRef, isCapturing, toast, activeBaseLayerId]);
   
   const handleShareMap = useCallback(async () => {
-    if (!mapRef.current || !layerManagerHookRef.current) {
-        toast({ description: 'El mapa o el gestor de capas no están listos.', variant: 'destructive' });
+    if (!mapRef.current || !layerManagerHookRef.current || !firestore) {
+        toast({ description: 'El mapa o los servicios no están listos para compartir.', variant: 'destructive' });
         return;
     }
     
@@ -733,9 +737,10 @@ export default function GeoMapperClient() {
       baseLayerId: activeBaseLayerId,
     };
     
-    saveMapState(mapState);
+    // The saveMapState function now handles its own try/catch and error emitting
+    saveMapState(firestore, mapState);
 
-  }, [mapRef, activeBaseLayerId, toast]);
+  }, [mapRef, activeBaseLayerId, firestore]);
 
   // Effect for right-click tool toggling
   useEffect(() => {
