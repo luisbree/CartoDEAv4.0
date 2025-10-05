@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
@@ -19,11 +18,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Map as OLMap, View } from 'ol';
-import TileLayer from 'ol/layer/Tile';
 import type Layer from 'ol/layer/Layer';
-import type { Source as TileSource } from 'ol/source';
-import type Feature from 'ol/Feature';
-import type { Geometry } from 'ol/geom';
 
 
 import MapView, { BASE_LAYER_DEFINITIONS } from '@/components/map-view';
@@ -167,14 +162,6 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
   const [isMounted, setIsMounted] = useState(false);
   
   const layerManagerHookRef = useRef<ReturnType<typeof useLayerManager> | null>(null);
-
-  useEffect(() => {
-    // Log the Firestore instance to the console when it's available.
-    if (firestore) {
-      console.log("Firestore instance is now available:", firestore);
-    }
-  }, [firestore]);
-
 
   useEffect(() => {
     setIsMounted(true);
@@ -760,13 +747,9 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
         });
     } catch (error) {
         console.error("Failed to share map:", error);
-        toast({
-            title: "Error al compartir",
-            description: "No se pudo guardar el estado del mapa para compartir.",
-            variant: "destructive",
-        });
+        // Error toast is handled inside saveMapState now via the error emitter
     }
-  }, [mapRef, layerManagerHookRef, activeBaseLayerId, firestore, toast]);
+  }, [mapRef, activeBaseLayerId, firestore, toast]);
 
   // Effect for right-click tool toggling
   useEffect(() => {
@@ -838,12 +821,17 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
         for (const layerState of initialMapState.layers) {
             try {
                 console.log("Processing shared layer:", layerState);
-                if (layerState.type === 'wfs' && layerState.url && layerState.layerName) {
-                    const addedLayer = await handleAddHybridLayer(layerState.layerName, layerState.name, layerState.url, undefined, layerState.styleName);
-                    if (addedLayer) {
-                        addedLayer.olLayer.setOpacity(layerState.opacity);
-                        addedLayer.olLayer.setVisible(layerState.visible);
-                    }
+                 if (layerState.type === 'wfs' && layerState.url && layerState.layerName) {
+                    await handleAddHybridLayer(
+                        layerState.layerName,
+                        layerState.name,
+                        layerState.url,
+                        undefined, // bbox
+                        layerState.styleName,
+                        layerState.visible,
+                        layerState.opacity,
+                        layerState.wmsStyleEnabled
+                    );
                 } else if (layerState.type === 'gee' && layerState.geeParams?.tileUrl && layerState.geeParams.bandCombination) {
                     addGeeLayerToMap(layerState.geeParams.tileUrl, layerState.name, {
                         bandCombination: layerState.geeParams.bandCombination as any,

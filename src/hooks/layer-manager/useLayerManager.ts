@@ -1,5 +1,3 @@
-
-
 "use client";
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
@@ -289,7 +287,8 @@ export const useLayerManager = ({
             // Initially, the vector layer is transparent if WMS style is used.
             style: useWmsStyle ? new Style() : undefined,
             properties: { id: wfsId, name: layerTitle, type: 'wfs', gsLayerName: layerName, serverUrl: cleanedServerUrl, styleName },
-            visible: isInitiallyVisible, // The data layer is visible to be interactive
+            visible: isInitiallyVisible, // The data layer must be "visible" for interactions
+            zIndex: LAYER_START_Z_INDEX // Ensure vector layer is on top for queries
         });
         
         if (bbox) {
@@ -297,10 +296,12 @@ export const useLayerManager = ({
         }
         
         const wmsId = `wms-layer-${layerName}-${nanoid()}`;
-        const wmsParams: Record<string, any> = { 'LAYERS': layerName, 'TILED': true, 'VERSION': '1.1.1' };
+        const wmsParams: Record<string, any> = { 'LAYERS': layerName, 'TILED': true, 'VERSION': '1.1.1', 'TRANSPARENT': 'true' };
         if (styleName && styleName.trim() !== '') {
             wmsParams['STYLES'] = styleName;
         }
+
+        console.log(`Creating WMS layer for ${layerName} with params:`, wmsParams);
 
         const wmsSource = new TileWMS({
             url: `${cleanedServerUrl}/wms`,
@@ -315,7 +316,6 @@ export const useLayerManager = ({
             properties: { id: wmsId, name: `${layerTitle} (Visual)`, isVisualPartner: true, partnerId: wfsId },
             zIndex: WMS_LAYER_Z_INDEX,
             opacity: initialOpacity,
-            // The WMS layer visibility depends on both the general layer visibility and if the WMS style is enabled.
             visible: isInitiallyVisible && useWmsStyle,
         });
         
@@ -334,7 +334,6 @@ export const useLayerManager = ({
 
         addLayer(newLayer, true);
         
-        // Force initial load of the vector data for the current view
         wfsSource.loadFeatures(map.getView().calculateExtent());
 
         updateGeoServerDiscoveredLayerState(layerName, true, 'wfs');
@@ -485,7 +484,7 @@ export const useLayerManager = ({
             // Also toggle the visual partner layer if it exists
             const visualLayer = l.olLayer.get('visualLayer');
             if (visualLayer) {
-                visualLayer.setVisible(newVisibility && (l.wmsStyleEnabled ?? false));
+                visualLayer.setVisible(newVisibility && (l.wmsStyleEnabled ?? true));
             }
             return { ...l, visible: newVisibility };
         }
@@ -1104,8 +1103,3 @@ export const useLayerManager = ({
     addFieldToLayer,
   };
 };
-
-
-    
-
-    
