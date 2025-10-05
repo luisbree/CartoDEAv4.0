@@ -1,20 +1,42 @@
 
 'use client';
 
-import { collection, addDoc, getDoc, doc, serverTimestamp, Firestore } from "firebase/firestore";
-import { getFirestoreInstance } from '@/firebase/client';
+import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app';
+import { collection, addDoc, getDoc, doc, serverTimestamp, getFirestore, type Firestore } from "firebase/firestore";
+import { firebaseConfig } from '@/firebase/config';
 import type { MapState } from "@/lib/types";
 
 const SHARED_MAPS_COLLECTION = 'sharedMaps';
 
-// A memoized instance of Firestore.
-let firestore: Firestore | null = null;
+let firestoreInstance: Firestore | null = null;
+let firebaseApp: FirebaseApp | null = null;
 
-function getDb() {
-    if (!firestore) {
-        firestore = getFirestoreInstance();
+/**
+ * Initializes Firebase if it hasn't been initialized yet and returns the Firestore instance.
+ * This is a robust way to get the Firestore instance, safe for client-side execution.
+ * @returns The initialized Firestore instance.
+ */
+function getDb(): Firestore {
+    if (firestoreInstance) {
+        return firestoreInstance;
     }
-    return firestore;
+
+    if (getApps().length === 0) {
+        // Ensure all config values are defined before initializing
+        if (Object.values(firebaseConfig).some(value => value === undefined || value === null || value === '')) {
+            console.error("Firebase config está incompleta. Verifique las variables de entorno.");
+            throw new Error("Configuración de Firebase incompleta. Verifique las variables de entorno.");
+        }
+        console.log("Firebase no inicializado. Intentando inicializar con la configuración:", firebaseConfig);
+        firebaseApp = initializeApp(firebaseConfig);
+        console.log("Firebase inicializado correctamente.");
+    } else {
+        console.log("Firebase ya está inicializado, obteniendo la instancia existente.");
+        firebaseApp = getApp();
+    }
+    
+    firestoreInstance = getFirestore(firebaseApp);
+    return firestoreInstance;
 }
 
 /**
@@ -24,15 +46,20 @@ function getDb() {
 export async function checkFirestoreConnection(): Promise<void> {
     console.log("checkFirestoreConnection: Iniciando verificación de conexión con Firestore.");
     try {
-        const db = getDb();
-        const docRef = doc(db, 'health-check', 'status-check');
-        console.log("checkFirestoreConnection: Realizando lectura de prueba en Firestore.");
+        const db = getDb(); // This function now handles initialization.
+        // Attempt to read a document that is unlikely to exist.
+        // This is a lightweight operation to check connectivity and auth setup.
+        const docRef = doc(db, 'health-check-collection', 'health-check-doc');
         await getDoc(docRef);
-        console.log("checkFirestoreConnection: La lectura de prueba fue exitosa (o falló por permisos, lo cual es aceptable). Conexión establecida.");
+        console.log("checkFirestoreConnection: La lectura de prueba a Firestore fue exitosa (o falló solo por permisos, lo cual es válido). Conexión verificada.");
     } catch (error: any) {
-        console.error("checkFirestoreConnection: Falló la conexión con Firestore:", error);
-        // Rethrow the error so it can be caught by the UI layer
-        throw new Error(`No se pudo conectar a Firestore: ${error.message}`);
+        console.error("checkFirestoreConnection: La conexión con Firestore falló de manera crítica:", error);
+        // We only rethrow if it's NOT a permission error, as permission errors mean the connection itself worked.
+        if (error.code !== 'permission-denied') {
+            throw new Error(`No se pudo conectar a Firestore: ${error.message}`);
+        }
+        // If it's a permission error, we can consider the connection "verified"
+        console.log("checkFirestoreConnection: Se recibió un error de 'permission-denied', lo cual confirma que la conexión al servicio está funcionando.");
     }
 }
 

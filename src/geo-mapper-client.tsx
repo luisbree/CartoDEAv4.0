@@ -295,35 +295,11 @@ export default function GeoMapperClient() {
 
   const initialGeoServerUrl = 'https://www.minfra.gba.gob.ar/ambientales/geoserver';
 
-  const loadInitialDeasLayers = useCallback(async () => {
-      try {
-          const discovered = await handleFetchGeoServerLayers(initialGeoServerUrl);
-          if (discovered) {
-              setDiscoveredGeoServerLayers(discovered);
-          }
-      } catch (error) {
-          console.error("Failed to load initial DEAS layers:", error);
-      }
-  }, [handleFetchGeoServerLayers]);
-
-  // Effect for initial GeoServer layer loading
+  // Effect for initial authentications and data loading
   useEffect(() => {
-    if (isMapReady) {
-       loadInitialDeasLayers();
-    }
-  }, [isMapReady, loadInitialDeasLayers]);
-  
-  const handleReloadDeasLayers = useCallback(async () => {
-    toast({ description: "Recargando capas desde el servidor de DEAS..." });
-    await loadInitialDeasLayers();
-  }, [loadInitialDeasLayers, toast]);
+    if (!isMapReady) return;
 
-
-  // Effect for automatic GEE and Trello authentication on load
-  useEffect(() => {
-    const runInitialAuths = async () => {
-        console.log("GeoMapperClient: El mapa está listo, iniciando verificaciones de autenticación.");
-
+    const runInitialTasks = async () => {
         // GEE Auth
         setIsGeeAuthenticating(true);
         try {
@@ -336,7 +312,7 @@ export default function GeoMapperClient() {
             }
         } catch (error: any) {
             console.error("Error de autenticación automática con GEE:", error);
-            toast({ title: "Error de Autenticación GEE", description: error.message || "No se pudo autenticar con Google Earth Engine.", variant: "destructive" });
+            toast({ title: "Error de Autenticación GEE", description: error.message, variant: "destructive" });
             setIsGeeAuthenticated(false);
         } finally {
             setIsGeeAuthenticating(false);
@@ -356,23 +332,41 @@ export default function GeoMapperClient() {
             console.error("Error de verificación automática de Trello:", error);
             toast({ title: "Error de Conexión con Trello", description: error.message, variant: "destructive" });
         }
-
+        
+        // GeoServer DEAS Layers
+        try {
+            const discovered = await handleFetchGeoServerLayers(initialGeoServerUrl);
+            if (discovered) {
+                setDiscoveredGeoServerLayers(discovered);
+            }
+        } catch (error: any) {
+            console.error("Fallo al cargar las capas iniciales de DEAS:", error);
+        }
+        
         // Firestore Connection Check
         try {
-            console.log("GeoMapperClient: Intentando verificar la conexión con Firestore.");
             await checkFirestoreConnection();
             toast({ title: "Firestore Conectado", description: "La conexión con la base de datos se ha establecido correctamente." });
         } catch (error: any) {
-            console.error("GeoMapperClient: Error de conexión con Firestore capturado.", error);
+            console.error("Error de conexión con Firestore:", error);
             toast({ title: "Error de Conexión con Firestore", description: error.message, variant: "destructive" });
         }
     };
-    
-    if (isMapReady) {
-        runInitialAuths();
-    }
-  }, [isMapReady, toast]);
+
+    runInitialTasks();
+  }, [isMapReady, toast, handleFetchGeoServerLayers]);
   
+  const handleReloadDeasLayers = useCallback(async () => {
+    toast({ description: "Recargando capas desde el servidor de DEAS..." });
+    try {
+        const discovered = await handleFetchGeoServerLayers(initialGeoServerUrl);
+        if (discovered) {
+            setDiscoveredGeoServerLayers(discovered);
+        }
+    } catch (error: any) {
+        console.error("Fallo al recargar las capas de DEAS:", error);
+    }
+  }, [handleFetchGeoServerLayers, toast]);
 
   const osmDataHook = useOSMData({ 
     mapRef, 
