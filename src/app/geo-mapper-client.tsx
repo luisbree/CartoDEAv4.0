@@ -805,47 +805,46 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
     if (!initialMapState || !isMapReady || !mapRef.current || !layerManagerHookRef.current || !firestore) return;
   
     const loadSharedMap = async () => {
-      const { handleAddHybridLayer, addGeeLayerToMap } = layerManagerHookRef.current!;
-      const map = mapRef.current!;
-  
-      console.log("DEBUG: Applying shared map state...", initialMapState);
-  
-      // 1. Apply View
-      try {
-        const view = map.getView();
-        const center3857 = transform(initialMapState.view.center, 'EPSG:4326', 'EPSG:3857');
-        console.log("DEBUG: Setting map view:", { center: center3857, zoom: initialMapState.view.zoom });
-        view.setCenter(center3857);
-        view.setZoom(initialMapState.view.zoom);
-      } catch (e) {
-        console.error("DEBUG: Error setting shared view", e);
-      }
-      
-      // 2. Load Layers
-      for (const layerState of initialMapState.layers) {
+        const { handleAddHybridLayer, addGeeLayerToMap } = layerManagerHookRef.current!;
+        const map = mapRef.current!;
+    
+        // 1. Apply View
         try {
-          console.log("DEBUG: Processing shared layer:", layerState);
-          if (layerState.type === 'wfs' && layerState.url && layerState.layerName) {
-            await handleAddHybridLayer(
-              layerState.layerName,
-              layerState.name,
-              layerState.url,
-              undefined,
-              layerState.styleName,
-              layerState.visible,
-              layerState.opacity,
-              layerState.wmsStyleEnabled
-            );
-          } else if (layerState.type === 'gee' && layerState.geeParams?.tileUrl && layerState.geeParams.bandCombination) {
-            addGeeLayerToMap(layerState.geeParams.tileUrl, layerState.name, {
-              bandCombination: layerState.geeParams.bandCombination as any,
-            });
-          }
+            const view = map.getView();
+            // Transform the center coordinates from geographic to the map's projection
+            const center3857 = transform(initialMapState.view.center, 'EPSG:4326', 'EPSG:3857');
+            console.log("DEBUG: Setting map view:", { center: center3857, zoom: initialMapState.view.zoom });
+            view.setCenter(center3857);
+            view.setZoom(initialMapState.view.zoom);
         } catch (e) {
-          console.error("DEBUG: Error loading shared layer", layerState, e);
+            console.error("DEBUG: Error setting shared view", e);
         }
-      }
-      console.log("DEBUG: Finished applying shared map state.");
+        
+        // 2. Load Layers
+        for (const layerState of initialMapState.layers) {
+            try {
+                console.log("DEBUG: Processing shared layer:", layerState);
+                if (layerState.type === 'wfs' && layerState.url && layerState.layerName) {
+                    await handleAddHybridLayer(
+                        layerState.layerName,
+                        layerState.name,
+                        layerState.url,
+                        undefined, // Bbox will be fetched by the layer itself or is not needed here
+                        layerState.styleName || undefined,
+                        layerState.visible,
+                        layerState.opacity,
+                        layerState.wmsStyleEnabled
+                    );
+                } else if (layerState.type === 'gee' && layerState.geeParams?.tileUrl && layerState.geeParams.bandCombination) {
+                    addGeeLayerToMap(layerState.geeParams.tileUrl, layerState.name, {
+                        bandCombination: layerState.geeParams.bandCombination as any,
+                    });
+                }
+            } catch (e) {
+                console.error("DEBUG: Error loading shared layer", layerState, e);
+            }
+        }
+        console.log("DEBUG: Finished applying shared map state.");
     };
   
     loadSharedMap();
@@ -1237,3 +1236,5 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
     </div>
   );
 }
+
+    
