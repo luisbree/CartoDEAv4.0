@@ -18,6 +18,9 @@ const GeeAoiSchema = z.object({
     maxLat: z.number(),
 });
 
+export const TasseledCapComponentSchema = z.enum(['BRIGHTNESS', 'GREENNESS', 'WETNESS']);
+export type TasseledCapComponent = z.infer<typeof TasseledCapComponentSchema>;
+
 export const GeeTileLayerInputSchema = z.object({
   aoi: GeeAoiSchema.describe("The Area of Interest as a bounding box."),
   zoom: z.number().describe("The current zoom level of the map."),
@@ -65,6 +68,7 @@ export const GeeGeoTiffDownloadInputSchema = z.object({
   endDate: GeeTileLayerInputSchema.shape.endDate,
   minElevation: GeeTileLayerInputSchema.shape.minElevation,
   maxElevation: GeeTileLayerInputSchema.shape.maxElevation,
+  tasseledCapComponent: TasseledCapComponentSchema.optional().describe("Specifies which Tasseled Cap component to download."),
 });
 export type GeeGeoTiffDownloadInput = z.infer<typeof GeeGeoTiffDownloadInputSchema>;
 

@@ -11,12 +11,18 @@ import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { BrainCircuit, Loader2, Image as ImageIcon, CheckCircle, AlertTriangle, Calendar as CalendarIcon, Shapes, Download, BarChart2 } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { BrainCircuit, Loader2, Image as ImageIcon, CheckCircle, AlertTriangle, Calendar as CalendarIcon, Shapes, Download, BarChart2, ChevronDown } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { getGeeTileLayer, getTasseledCapLayers, getGeeVectorDownloadUrl, getGeeGeoTiffDownloadUrl, getGeeHistogram } from '@/ai/flows/gee-flow';
 import type { Map } from 'ol';
 import { transformExtent } from 'ol/proj';
-import type { GeeTileLayerInput, GeeVectorizationInput, GeeHistogramOutput, TasseledCapInput } from '@/ai/flows/gee-types';
+import type { GeeTileLayerInput, GeeVectorizationInput, GeeHistogramOutput, TasseledCapInput, TasseledCapComponent } from '@/ai/flows/gee-types';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip } from 'recharts';
@@ -186,13 +192,14 @@ const GeeProcessingPanel: React.FC<GeeProcessingPanelProps> = ({
     }
   };
   
-  const handleDownloadGeoTiff = async () => {
+  const handleDownloadGeoTiff = async (tasseledCapComponent?: TasseledCapComponent) => {
     if (!mapRef.current || !isAuthenticated) {
         toast({ description: "Asegúrese de estar autenticado.", variant: "destructive" });
         return;
     }
     setIsDownloadingTiff(true);
-    toast({ description: "Iniciando exportación de GeoTIFF en GEE. Esto puede tardar..." });
+    const componentText = tasseledCapComponent ? ` (${tasseledCapComponent.toLowerCase()})` : '';
+    toast({ description: `Iniciando exportación de GeoTIFF${componentText} en GEE. Esto puede tardar...` });
 
     const view = mapRef.current.getView();
     const extent = view.calculateExtent(mapRef.current.getSize()!);
@@ -206,6 +213,7 @@ const GeeProcessingPanel: React.FC<GeeProcessingPanelProps> = ({
             endDate: date?.to ? format(date.to, 'yyyy-MM-dd') : undefined,
             minElevation: (selectedCombination === 'NASADEM_ELEVATION' || selectedCombination === 'ALOS_DSM') ? elevationRange[0] : undefined,
             maxElevation: (selectedCombination === 'NASADEM_ELEVATION' || selectedCombination === 'ALOS_DSM') ? elevationRange[1] : undefined,
+            tasseledCapComponent: tasseledCapComponent,
         });
         
         if (result && result.downloadUrl) {
@@ -290,6 +298,10 @@ const GeeProcessingPanel: React.FC<GeeProcessingPanelProps> = ({
   const showElevationControls = selectedCombination === 'NASADEM_ELEVATION' || selectedCombination === 'ALOS_DSM';
   const showDynamicWorldLegend = selectedCombination === 'DYNAMIC_WORLD';
   const showVectorizeButton = selectedCombination === 'DYNAMIC_WORLD';
+
+  const commonButtonDisabled = isProcessing || isVectorizing || isAuthenticating || !isAuthenticated || isDownloadingTiff;
+  const tiffButtonDisabled = commonButtonDisabled || (isDateSelectionDisabled ? false : (!date?.from || !date?.to));
+
 
   return (
     <DraggablePanel
@@ -485,7 +497,7 @@ const GeeProcessingPanel: React.FC<GeeProcessingPanelProps> = ({
         <div className="flex flex-col gap-2 pt-2 border-t border-white/10">
           <Button 
              onClick={handleGenerateLayer} 
-             disabled={isProcessing || isVectorizing || isAuthenticating || !isAuthenticated || isDownloadingTiff || (isDateSelectionDisabled ? false : (!date?.from || !date?.to))} 
+             disabled={commonButtonDisabled || (isDateSelectionDisabled ? false : (!date?.from || !date?.to))} 
              className="w-full"
            >
             {isProcessing ? (
@@ -496,26 +508,44 @@ const GeeProcessingPanel: React.FC<GeeProcessingPanelProps> = ({
             Añadir como Capa(s)
           </Button>
 
-            <Button
-              onClick={handleDownloadGeoTiff}
-              disabled={isDownloadingTiff || isProcessing || isAuthenticating || !isAuthenticated || (isDateSelectionDisabled ? false : (!date?.from || !date?.to))}
-              className="w-full"
-              variant="secondary"
-            >
-              {isDownloadingTiff ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Download className="mr-2 h-4 w-4" />
-              )}
-              Descargar Vista (GeoTIFF)
-            </Button>
+          {selectedCombination === 'TASSELED_CAP' ? (
+              <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                      <Button variant="secondary" className="w-full" disabled={tiffButtonDisabled}>
+                          {isDownloadingTiff ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+                          Descargar Vista (GeoTIFF)
+                          <ChevronDown className="ml-auto h-4 w-4" />
+                      </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent className="w-[var(--radix-dropdown-menu-trigger-width)] bg-gray-700 text-white border-gray-600">
+                      <DropdownMenuItem onSelect={() => handleDownloadGeoTiff('BRIGHTNESS')}>Brillo</DropdownMenuItem>
+                      <DropdownMenuItem onSelect={() => handleDownloadGeoTiff('GREENNESS')}>Verdor</DropdownMenuItem>
+                      <DropdownMenuItem onSelect={() => handleDownloadGeoTiff('WETNESS')}>Humedad</DropdownMenuItem>
+                  </DropdownMenuContent>
+              </DropdownMenu>
+          ) : (
+              <Button
+                onClick={() => handleDownloadGeoTiff()}
+                disabled={tiffButtonDisabled}
+                className="w-full"
+                variant="secondary"
+              >
+                {isDownloadingTiff ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Download className="mr-2 h-4 w-4" />
+                )}
+                Descargar Vista (GeoTIFF)
+              </Button>
+          )}
+
         </div>
         
         {showVectorizeButton && (
           <div className="flex items-center gap-2 pt-2 border-t border-white/10">
             <Button 
                onClick={handleVectorizeAndDownload} 
-               disabled={isProcessing || isVectorizing || isAuthenticating || !isAuthenticated || isDownloadingTiff || !date?.from || !date?.to} 
+               disabled={commonButtonDisabled || !date?.from || !date?.to} 
                className="w-full"
                variant="secondary"
              >
@@ -535,8 +565,3 @@ const GeeProcessingPanel: React.FC<GeeProcessingPanelProps> = ({
 
 export default GeeProcessingPanel;
  
-
-    
-
-
-    

@@ -12,7 +12,7 @@
 import { ai } from '@/ai/genkit';
 import ee from '@google/earthengine';
 import { promisify } from 'util';
-import type { GeeTileLayerInput, GeeTileLayerOutput, GeeVectorizationInput, GeeValueQueryInput, GeeGeoTiffDownloadInput, GeeHistogramInput, GeeHistogramOutput, GeeProfileInput, GeeProfileOutput, ProfilePoint, TasseledCapOutput } from './gee-types';
+import type { GeeTileLayerInput, GeeTileLayerOutput, GeeVectorizationInput, GeeValueQueryInput, GeeGeoTiffDownloadInput, GeeHistogramInput, GeeHistogramOutput, GeeProfileInput, GeeProfileOutput, ProfilePoint, TasseledCapOutput, TasseledCapComponent } from './gee-types';
 import { GeeTileLayerInputSchema, GeeTileLayerOutputSchema, GeeVectorizationInputSchema, GeeValueQueryInputSchema, GeeGeoTiffDownloadInputSchema, GeeHistogramInputSchema, GeeHistogramOutputSchema, GeeProfileInputSchema, GeeProfileOutputSchema, TasseledCapInputSchema } from './gee-types';
 import { z } from 'zod';
 
@@ -67,6 +67,7 @@ export async function authenticateWithGee(): Promise<{ success: boolean; message
 const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInput | GeeHistogramInput | GeeProfileInput) => {
     const { bandCombination } = input;
     const aoi = 'aoi' in input ? input.aoi : undefined;
+    const tasseledCapComponent = 'tasseledCapComponent' in input ? input.tasseledCapComponent : undefined;
 
     // For histogram, min/max are not needed for image retrieval, but might be for tile layers
     const minElevation = 'minElevation' in input ? input.minElevation : undefined;
@@ -133,9 +134,17 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
               '(B2 * 0.1509) + (B3 * 0.1973) + (B4 * 0.3279) + (B8 * 0.3406) + (B11 * -0.7112) + (B12 * -0.4572)',
               { B2: bands.select('B2'), B3: bands.select('B3'), B4: bands.select('B4'), B8: bands.select('B8'), B11: bands.select('B11'), B12: bands.select('B12') }
             ).rename('wetness');
-
-            finalImage = ee.Image.cat([brightness, greenness, wetness]);
-            visParams = { bands: ['greenness', 'brightness', 'wetness'], min: [-0.1, 0, -0.1], max: [0.4, 0.5, 0.1] };
+            
+            if (tasseledCapComponent === 'BRIGHTNESS') {
+                finalImage = brightness;
+            } else if (tasseledCapComponent === 'GREENNESS') {
+                finalImage = greenness;
+            } else if (tasseledCapComponent === 'WETNESS') {
+                finalImage = wetness;
+            } else {
+                finalImage = ee.Image.cat([brightness, greenness, wetness]);
+                visParams = { bands: ['greenness', 'brightness', 'wetness'], min: [-0.1, 0, -0.1], max: [0.4, 0.5, 0.1] };
+            }
             break;
           }
           case 'URBAN_FALSE_COLOR':
@@ -346,7 +355,8 @@ const geeGeoTiffDownloadFlow = ai.defineFlow(
         const clippedImage = finalImage.clip(geometry);
 
         return new Promise((resolve, reject) => {
-            const filename = `gee_export_${input.bandCombination.toLowerCase()}`;
+            const componentName = input.tasseledCapComponent ? `_${input.tasseledCapComponent.toLowerCase()}` : '';
+            const filename = `gee_export_${input.bandCombination.toLowerCase()}${componentName}`;
             
             const params = {
                 name: filename,
