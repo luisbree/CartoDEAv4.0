@@ -302,7 +302,7 @@ export const useLayerManager = ({
             wmsParams['STYLES'] = styleName;
         }
 
-        console.log(`Creating WMS layer for ${layerName} with params:`, wmsParams);
+        console.log(`Creating WMS layer for ${layerName} with url ${cleanedServerUrl}/wms and params:`, wmsParams);
 
         const wmsSource = new TileWMS({
             url: `${cleanedServerUrl}/wms`,
@@ -1105,5 +1105,7 @@ export const useLayerManager = ({
   };
 };
 
+
+    
 
     
