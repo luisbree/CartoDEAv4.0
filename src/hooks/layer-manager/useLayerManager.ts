@@ -278,18 +278,17 @@ export const useLayerManager = ({
 
         wfsSource.on('featuresloadstart', () => setIsWfsLoading(true));
         wfsSource.on('featuresloadend', (event) => {
-            console.log(`WFS features loaded for ${layerName}:`, event.features?.length);
+            console.log(`DEBUG: WFS features loaded for ${layerName}:`, event.features?.length);
             setIsWfsLoading(false);
         });
         wfsSource.on('featuresloaderror', () => setIsWfsLoading(false));
 
         const wfsLayer = new VectorLayer({
             source: wfsSource,
-            // Initially, the vector layer is transparent if WMS style is used.
             style: useWmsStyle ? new Style() : undefined,
             properties: { id: wfsId, name: layerTitle, type: 'wfs', gsLayerName: layerName, serverUrl: cleanedServerUrl, styleName },
-            visible: isInitiallyVisible, // The data layer must be "visible" for interactions
-            zIndex: LAYER_START_Z_INDEX // Ensure vector layer is on top for queries
+            visible: isInitiallyVisible,
+            zIndex: LAYER_START_Z_INDEX
         });
         
         if (bbox) {
@@ -297,12 +296,17 @@ export const useLayerManager = ({
         }
         
         const wmsId = `wms-layer-${layerName}-${nanoid()}`;
-        const wmsParams: Record<string, any> = { 'LAYERS': layerName, 'TILED': true, 'VERSION': '1.1.1', TRANSPARENT: true };
+        const wmsParams: Record<string, any> = { 
+            'LAYERS': layerName, 
+            'TILED': true, 
+            'VERSION': '1.1.1', 
+            'TRANSPARENT': true, 
+        };
         if (styleName && styleName.trim() !== '') {
             wmsParams['STYLES'] = styleName;
         }
 
-        console.log(`Creating WMS layer for ${layerName} with url ${cleanedServerUrl}/wms and params:`, wmsParams);
+        console.log(`DEBUG: Creating WMS layer for ${layerName} with URL: ${cleanedServerUrl}/wms and params:`, wmsParams);
 
         const wmsSource = new TileWMS({
             url: `${cleanedServerUrl}/wms`,
@@ -335,6 +339,7 @@ export const useLayerManager = ({
 
         addLayer(newLayer, true);
         
+        // Force initial data load for the current view
         wfsSource.loadFeatures(map.getView().calculateExtent());
 
         updateGeoServerDiscoveredLayerState(layerName, true, 'wfs');

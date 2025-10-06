@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
@@ -801,52 +802,55 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
 
   // This effect runs only when in shared map mode to load the state
   useEffect(() => {
-    if (!initialMapState || !isMapReady || !mapRef.current || !layerManagerHookRef.current) return;
-
+    if (!initialMapState || !isMapReady || !mapRef.current || !layerManagerHookRef.current || !firestore) return;
+  
     const loadSharedMap = async () => {
-        const { handleAddHybridLayer, addGeeLayerToMap } = layerManagerHookRef.current!;
-        const map = mapRef.current!;
-
-        console.log("Applying shared map state...", initialMapState);
-
+      const { handleAddHybridLayer, addGeeLayerToMap } = layerManagerHookRef.current!;
+      const map = mapRef.current!;
+  
+      console.log("DEBUG: Applying shared map state...", initialMapState);
+  
+      // 1. Apply View
+      try {
+        const view = map.getView();
+        const center3857 = transform(initialMapState.view.center, 'EPSG:4326', 'EPSG:3857');
+        console.log("DEBUG: Setting map view:", { center: center3857, zoom: initialMapState.view.zoom });
+        view.setCenter(center3857);
+        view.setZoom(initialMapState.view.zoom);
+      } catch (e) {
+        console.error("DEBUG: Error setting shared view", e);
+      }
+      
+      // 2. Load Layers
+      for (const layerState of initialMapState.layers) {
         try {
-            const view = map.getView();
-            const center3857 = transform(initialMapState.view.center, 'EPSG:4326', 'EPSG:3857');
-            view.setCenter(center3857);
-            view.setZoom(initialMapState.view.zoom);
+          console.log("DEBUG: Processing shared layer:", layerState);
+          if (layerState.type === 'wfs' && layerState.url && layerState.layerName) {
+            await handleAddHybridLayer(
+              layerState.layerName,
+              layerState.name,
+              layerState.url,
+              undefined,
+              layerState.styleName,
+              layerState.visible,
+              layerState.opacity,
+              layerState.wmsStyleEnabled
+            );
+          } else if (layerState.type === 'gee' && layerState.geeParams?.tileUrl && layerState.geeParams.bandCombination) {
+            addGeeLayerToMap(layerState.geeParams.tileUrl, layerState.name, {
+              bandCombination: layerState.geeParams.bandCombination as any,
+            });
+          }
         } catch (e) {
-            console.error("Error setting shared view", e);
+          console.error("DEBUG: Error loading shared layer", layerState, e);
         }
-        
-        for (const layerState of initialMapState.layers) {
-            try {
-                console.log("Processing shared layer:", layerState);
-                 if (layerState.type === 'wfs' && layerState.url && layerState.layerName) {
-                    await handleAddHybridLayer(
-                        layerState.layerName,
-                        layerState.name,
-                        layerState.url,
-                        undefined, // bbox
-                        layerState.styleName,
-                        layerState.visible,
-                        layerState.opacity,
-                        layerState.wmsStyleEnabled
-                    );
-                } else if (layerState.type === 'gee' && layerState.geeParams?.tileUrl && layerState.geeParams.bandCombination) {
-                    addGeeLayerToMap(layerState.geeParams.tileUrl, layerState.name, {
-                        bandCombination: layerState.geeParams.bandCombination as any,
-                    });
-                }
-            } catch (e) {
-                console.error("Error loading shared layer", layerState, e);
-            }
-        }
-        console.log("Finished applying shared map state.");
+      }
+      console.log("DEBUG: Finished applying shared map state.");
     };
-
+  
     loadSharedMap();
-
-  }, [initialMapState, isMapReady, mapRef]);
+  
+  }, [initialMapState, isMapReady, mapRef, firestore]);
 
 
   return (
