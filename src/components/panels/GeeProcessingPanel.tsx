@@ -290,7 +290,6 @@ const GeeProcessingPanel: React.FC<GeeProcessingPanelProps> = ({
   const showElevationControls = selectedCombination === 'NASADEM_ELEVATION' || selectedCombination === 'ALOS_DSM';
   const showDynamicWorldLegend = selectedCombination === 'DYNAMIC_WORLD';
   const showVectorizeButton = selectedCombination === 'DYNAMIC_WORLD';
-  const isSingleBandProduct = ['BSI', 'NDVI', 'JRC_WATER_OCCURRENCE', 'OPENLANDMAP_SOC', 'DYNAMIC_WORLD', 'NASADEM_ELEVATION', 'ALOS_DSM'].includes(selectedCombination);
 
   return (
     <DraggablePanel
@@ -497,7 +496,6 @@ const GeeProcessingPanel: React.FC<GeeProcessingPanelProps> = ({
             Añadir como Capa(s)
           </Button>
 
-          {isSingleBandProduct && (
             <Button
               onClick={handleDownloadGeoTiff}
               disabled={isDownloadingTiff || isProcessing || isAuthenticating || !isAuthenticated || (isDateSelectionDisabled ? false : (!date?.from || !date?.to))}
@@ -511,7 +509,6 @@ const GeeProcessingPanel: React.FC<GeeProcessingPanelProps> = ({
               )}
               Descargar Vista (GeoTIFF)
             </Button>
-          )}
         </div>
         
         {showVectorizeButton && (

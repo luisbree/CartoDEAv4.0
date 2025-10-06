@@ -75,7 +75,7 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
     const geometry = aoi ? ee.Geometry.Rectangle([aoi.minLon, aoi.minLat, aoi.maxLon, aoi.maxLat]) : ('points' in input ? ee.FeatureCollection(ee.Geometry.MultiPoint(input.points.coordinates)) : ee.Geometry.Point([0,0]));
       
     let finalImage;
-    let visParams: { bands?: string[]; min: number; max: number; gamma?: number, palette?: string[] } | null = null;
+    let visParams: { bands?: string[]; min: number | number[]; max: number | number[]; gamma?: number, palette?: string[] } | null = null;
       
     const DYNAMIC_WORLD_PALETTE = [
         '#419BDF', '#397D49', '#88B053', '#7A87C6', '#E49635', 
@@ -120,8 +120,6 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
             visParams = { min: -0.2, max: 1.0, palette: ['#a50026', '#d73027', '#f46d43', '#fdae61', '#fee08b', '#ffffbf', '#d9ef8b', '#a6d96a', '#66bd63', '#1a9850', '#006837'] };
             break;
           case 'TASSELED_CAP': {
-             // This case is now handled by its own dedicated flow, but we keep the logic here
-             // in case it's needed for other image processing combinations.
             const bands = s2Image.select(['B2', 'B3', 'B4', 'B5', 'B6', 'B7', 'B8', 'B8A', 'B11', 'B12']);
             const brightness = bands.expression(
               '(B2 * 0.3037) + (B3 * 0.2793) + (B4 * 0.4743) + (B8 * 0.5585) + (B11 * 0.5082) + (B12 * 0.1863)',
@@ -354,9 +352,9 @@ const geeGeoTiffDownloadFlow = ai.defineFlow(
                 name: filename,
                 format: 'GEO_TIFF',
                 region: geometry,
-                // Scale is important for performance and resolution. 
-                // Using a reasonable default of 30 meters.
-                scale: 30, 
+                // For multi-band images, specify band order. For single band, it's automatic.
+                bands: clippedImage.bandNames().getInfo(),
+                scale: 30, // Use a reasonable default of 30 meters.
             };
 
             clippedImage.getDownloadURL(params, (url, error) => {
