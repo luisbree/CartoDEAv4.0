@@ -104,3 +104,18 @@ export const GeeProfileOutputSchema = z.object({
   profile: z.array(ProfilePointSchema).describe('An array of points representing the profile.'),
 });
 export type GeeProfileOutput = z.infer<typeof GeeProfileOutputSchema>;
+
+// Tasseled Cap Schemas
+export const TasseledCapInputSchema = z.object({
+    aoi: GeeAoiSchema,
+    startDate: z.string().optional(),
+    endDate: z.string().optional(),
+});
+export type TasseledCapInput = z.infer<typeof TasseledCapInputSchema>;
+
+export const TasseledCapOutputSchema = z.object({
+    brightness: z.object({ tileUrl: z.string() }),
+    greenness: z.object({ tileUrl: z.string() }),
+    wetness: z.object({ tileUrl: z.string() }),
+});
+export type TasseledCapOutput = z.infer<typeof TasseledCapOutputSchema>;

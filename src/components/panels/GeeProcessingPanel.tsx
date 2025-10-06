@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState } from 'react';
@@ -12,10 +13,10 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { BrainCircuit, Loader2, Image as ImageIcon, CheckCircle, AlertTriangle, Calendar as CalendarIcon, Shapes, Download, BarChart2 } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
-import { getGeeTileLayer, getGeeVectorDownloadUrl, getGeeGeoTiffDownloadUrl, getGeeHistogram } from '@/ai/flows/gee-flow';
+import { getGeeTileLayer, getTasseledCapLayers, getGeeVectorDownloadUrl, getGeeGeoTiffDownloadUrl, getGeeHistogram } from '@/ai/flows/gee-flow';
 import type { Map } from 'ol';
 import { transformExtent } from 'ol/proj';
-import type { GeeTileLayerInput, GeeVectorizationInput, GeeHistogramOutput } from '@/ai/flows/gee-types';
+import type { GeeTileLayerInput, GeeVectorizationInput, GeeHistogramOutput, TasseledCapInput } from '@/ai/flows/gee-types';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip } from 'recharts';
@@ -82,60 +83,70 @@ const GeeProcessingPanel: React.FC<GeeProcessingPanelProps> = ({
   const { toast } = useToast();
 
   const handleGenerateLayer = async () => {
-    if (!mapRef.current) {
-      toast({ description: "El mapa no está listo.", variant: "destructive" });
-      return;
+    if (!mapRef.current || !isAuthenticated) {
+        toast({ description: "El mapa no está listo o no estás autenticado.", variant: "destructive" });
+        return;
     }
-    if (!isAuthenticated) {
-      toast({ description: "Debe autenticarse con GEE primero.", variant: "destructive" });
-      return;
-    }
-
+    
     setIsProcessing(true);
-    setHistogramData(null); // Clear histogram when generating a new layer
+    setHistogramData(null);
     
     const view = mapRef.current.getView();
     const extent = view.calculateExtent(mapRef.current.getSize()!);
     const zoom = view.getZoom() || 2;
     const extent4326 = transformExtent(extent, view.getProjection(), 'EPSG:4326');
+    const aoi = { minLon: extent4326[0], minLat: extent4326[1], maxLon: extent4326[2], maxLat: extent4326[3] };
+    const geeParamsBase = {
+        startDate: date?.from ? format(date.from, 'yyyy-MM-dd') : undefined,
+        endDate: date?.to ? format(date.to, 'yyyy-MM-dd') : undefined,
+    };
     
     try {
-        const geeParams: Omit<GeeTileLayerInput, 'aoi' | 'zoom'> = {
-            bandCombination: selectedCombination,
-            startDate: date?.from ? format(date.from, 'yyyy-MM-dd') : undefined,
-            endDate: date?.to ? format(date.to, 'yyyy-MM-dd') : undefined,
-            minElevation: (selectedCombination === 'NASADEM_ELEVATION' || selectedCombination === 'ALOS_DSM') ? elevationRange[0] : undefined,
-            maxElevation: (selectedCombination === 'NASADEM_ELEVATION' || selectedCombination === 'ALOS_DSM') ? elevationRange[1] : undefined,
-        };
+        if (selectedCombination === 'TASSELED_CAP') {
+            toast({ description: "Generando las tres capas de Tasseled Cap..." });
+            const result = await getTasseledCapLayers({ aoi, zoom, ...geeParamsBase, bandCombination: selectedCombination });
+            
+            // Add Brightness layer
+            onAddGeeLayer(result.brightness.tileUrl, 'Tasseled Cap: Brillo', { ...geeParamsBase, bandCombination: 'TASSELED_CAP' });
+            // Add Greenness layer
+            onAddGeeLayer(result.greenness.tileUrl, 'Tasseled Cap: Verdor', { ...geeParamsBase, bandCombination: 'TASSELED_CAP' });
+            // Add Wetness layer
+            onAddGeeLayer(result.wetness.tileUrl, 'Tasseled Cap: Humedad', { ...geeParamsBase, bandCombination: 'TASSELED_CAP' });
+            
+            toast({ description: "Se añadieron las 3 capas de Tasseled Cap." });
 
-        const result = await getGeeTileLayer({
-            aoi: { minLon: extent4326[0], minLat: extent4326[1], maxLon: extent4326[2], maxLat: extent4326[3] },
-            zoom: zoom,
-            ...geeParams,
-        });
-        
-        if (result && result.tileUrl) {
-            let layerName;
-            switch(selectedCombination) {
-                case 'URBAN_FALSE_COLOR': layerName = 'Sentinel-2 (Urbano) GEE'; break;
-                case 'SWIR_FALSE_COLOR': layerName = 'Sentinel-2 (SWIR) GEE'; break;
-                case 'BSI': layerName = 'Índice de Suelo Desnudo (BSI) GEE'; break;
-                case 'NDVI': layerName = 'Índice de Vegetación (NDVI) GEE'; break;
-                case 'TASSELED_CAP': layerName = 'Tasseled Cap (S2) GEE'; break;
-                case 'JRC_WATER_OCCURRENCE': layerName = 'Agua Superficial (JRC)'; break;
-                case 'OPENLANDMAP_SOC': layerName = 'Carbono Org. del Suelo (OpenLandMap)'; break;
-                case 'DYNAMIC_WORLD': layerName = 'Dynamic World Land Cover'; break;
-                case 'NASADEM_ELEVATION': layerName = `NASADEM Elevación (${elevationRange[0]}-${elevationRange[1]}m)`; break;
-                case 'ALOS_DSM': layerName = `ALOS DSM (${elevationRange[0]}-${elevationRange[1]}m)`; break;
-                default: layerName = 'Capa GEE';
-            }
-            onAddGeeLayer(result.tileUrl, layerName, geeParams);
         } else {
-            throw new Error("La respuesta del servidor no contenía una URL de teselas.");
-        }
+            // Logic for all other single-layer combinations
+            const geeParams: Omit<GeeTileLayerInput, 'aoi' | 'zoom'> = {
+                ...geeParamsBase,
+                bandCombination: selectedCombination,
+                minElevation: (selectedCombination === 'NASADEM_ELEVATION' || selectedCombination === 'ALOS_DSM') ? elevationRange[0] : undefined,
+                maxElevation: (selectedCombination === 'NASADEM_ELEVATION' || selectedCombination === 'ALOS_DSM') ? elevationRange[1] : undefined,
+            };
 
+            const result = await getGeeTileLayer({ aoi, zoom, ...geeParams });
+            
+            if (result && result.tileUrl) {
+                let layerName;
+                switch(selectedCombination) {
+                    case 'URBAN_FALSE_COLOR': layerName = 'Sentinel-2 (Urbano) GEE'; break;
+                    case 'SWIR_FALSE_COLOR': layerName = 'Sentinel-2 (SWIR) GEE'; break;
+                    case 'BSI': layerName = 'Índice de Suelo Desnudo (BSI) GEE'; break;
+                    case 'NDVI': layerName = 'Índice de Vegetación (NDVI) GEE'; break;
+                    case 'JRC_WATER_OCCURRENCE': layerName = 'Agua Superficial (JRC)'; break;
+                    case 'OPENLANDMAP_SOC': layerName = 'Carbono Org. del Suelo (OpenLandMap)'; break;
+                    case 'DYNAMIC_WORLD': layerName = 'Dynamic World Land Cover'; break;
+                    case 'NASADEM_ELEVATION': layerName = `NASADEM Elevación (${elevationRange[0]}-${elevationRange[1]}m)`; break;
+                    case 'ALOS_DSM': layerName = `ALOS DSM (${elevationRange[0]}-${elevationRange[1]}m)`; break;
+                    default: layerName = 'Capa GEE';
+                }
+                onAddGeeLayer(result.tileUrl, layerName, geeParams);
+            } else {
+                throw new Error("La respuesta del servidor no contenía una URL de teselas.");
+            }
+        }
     } catch (error: any) {
-      console.error("Error generating GEE layer:", error);
+      console.error("Error generating GEE layer(s):", error);
       toast({ title: "Error de GEE", description: error.message || "No se pudo generar la capa de Earth Engine.", variant: "destructive" });
     } finally {
       setIsProcessing(false);
@@ -321,7 +332,7 @@ const GeeProcessingPanel: React.FC<GeeProcessingPanelProps> = ({
               </div>
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="TASSELED_CAP" id="tc-combo" />
-                <Label htmlFor="tc-combo" className="text-xs font-normal">Tasseled Cap (Sentinel-2)</Label>
+                <Label htmlFor="tc-combo" className="text-xs font-normal">Tasseled Cap (Brillo, Verdor, Humedad)</Label>
               </div>
                <div className="flex items-center space-x-2">
                 <RadioGroupItem value="DYNAMIC_WORLD" id="dw-combo" />
@@ -426,7 +437,7 @@ const GeeProcessingPanel: React.FC<GeeProcessingPanelProps> = ({
 
         <div className="pt-2 border-t border-white/10">
           <Label className={cn("text-sm font-semibold text-white mb-2 block", isDateSelectionDisabled && "text-gray-500")}>
-              Rango de Fechas (Sentinel-2 / Dynamic World)
+              Rango de Fechas (Sentinel-2 / Dynamic World / TC)
           </Label>
           <Popover>
             <PopoverTrigger asChild>
@@ -483,7 +494,7 @@ const GeeProcessingPanel: React.FC<GeeProcessingPanelProps> = ({
             ) : (
               <ImageIcon className="mr-2 h-4 w-4" />
             )}
-            Añadir como Capa
+            Añadir como Capa(s)
           </Button>
 
           {isSingleBandProduct && (

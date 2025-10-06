@@ -12,8 +12,8 @@
 import { ai } from '@/ai/genkit';
 import ee from '@google/earthengine';
 import { promisify } from 'util';
-import type { GeeTileLayerInput, GeeTileLayerOutput, GeeVectorizationInput, GeeValueQueryInput, GeeGeoTiffDownloadInput, GeeHistogramInput, GeeHistogramOutput, GeeProfileInput, GeeProfileOutput, ProfilePoint } from './gee-types';
-import { GeeTileLayerInputSchema, GeeTileLayerOutputSchema, GeeVectorizationInputSchema, GeeValueQueryInputSchema, GeeGeoTiffDownloadInputSchema, GeeHistogramInputSchema, GeeHistogramOutputSchema, GeeProfileInputSchema, GeeProfileOutputSchema } from './gee-types';
+import type { GeeTileLayerInput, GeeTileLayerOutput, GeeVectorizationInput, GeeValueQueryInput, GeeGeoTiffDownloadInput, GeeHistogramInput, GeeHistogramOutput, GeeProfileInput, GeeProfileOutput, ProfilePoint, TasseledCapOutput } from './gee-types';
+import { GeeTileLayerInputSchema, GeeTileLayerOutputSchema, GeeVectorizationInputSchema, GeeValueQueryInputSchema, GeeGeoTiffDownloadInputSchema, GeeHistogramInputSchema, GeeHistogramOutputSchema, GeeProfileInputSchema, GeeProfileOutputSchema, TasseledCapInputSchema } from './gee-types';
 import { z } from 'zod';
 
 // Main exported function for the frontend to call
@@ -44,6 +44,11 @@ export async function getGeeHistogram(input: GeeHistogramInput): Promise<GeeHist
 // New exported function for profile generation
 export async function getGeeProfile(input: GeeProfileInput): Promise<GeeProfileOutput> {
     return geeProfileFlow(input);
+}
+
+// New exported function for Tasseled Cap
+export async function getTasseledCapLayers(input: GeeTileLayerInput): Promise<TasseledCapOutput> {
+    return tasseledCapFlow(input);
 }
 
 
@@ -115,6 +120,8 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
             visParams = { min: -0.2, max: 1.0, palette: ['#a50026', '#d73027', '#f46d43', '#fdae61', '#fee08b', '#ffffbf', '#d9ef8b', '#a6d96a', '#66bd63', '#1a9850', '#006837'] };
             break;
           case 'TASSELED_CAP': {
+             // This case is now handled by its own dedicated flow, but we keep the logic here
+             // in case it's needed for other image processing combinations.
             const bands = s2Image.select(['B2', 'B3', 'B4', 'B5', 'B6', 'B7', 'B8', 'B8A', 'B11', 'B12']);
             const brightness = bands.expression(
               '(B2 * 0.3037) + (B3 * 0.2793) + (B4 * 0.4743) + (B8 * 0.5585) + (B11 * 0.5082) + (B12 * 0.1863)',
@@ -130,7 +137,6 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
             ).rename('wetness');
 
             finalImage = ee.Image.cat([brightness, greenness, wetness]);
-            // Visualize with Greenness as Red, Brightness as Green, Wetness as Blue
             visParams = { bands: ['greenness', 'brightness', 'wetness'], min: [-0.1, 0, -0.1], max: [0.4, 0.5, 0.1] };
             break;
           }
@@ -477,6 +483,81 @@ const geeProfileFlow = ai.defineFlow(
     }
 );
 
+// Tasseled Cap Flow
+const tasseledCapFlow = ai.defineFlow(
+    {
+        name: 'tasseledCapFlow',
+        inputSchema: TasseledCapInputSchema,
+        outputSchema: z.object({
+            brightness: z.object({ tileUrl: z.string() }),
+            greenness: z.object({ tileUrl: z.string() }),
+            wetness: z.object({ tileUrl: z.string() }),
+        }),
+    },
+    async (input) => {
+        await initializeEe();
+
+        const { aoi, startDate, endDate } = input;
+        const geometry = ee.Geometry.Rectangle([aoi.minLon, aoi.minLat, aoi.maxLon, aoi.maxLat]);
+        
+        let s2ImageCollection = ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
+          .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 20))
+          .filterBounds(geometry);
+          
+        if (startDate && endDate) {
+            s2ImageCollection = s2ImageCollection.filterDate(startDate, endDate);
+        } else {
+            s2ImageCollection = s2ImageCollection.filterDate(ee.Date(Date.now()).advance(-1, 'year'), ee.Date(Date.now()));
+        }
+        const s2Image = s2ImageCollection.median();
+        const bands = s2Image.select(['B2', 'B3', 'B4', 'B5', 'B6', 'B7', 'B8', 'B8A', 'B11', 'B12']);
+
+        const brightness = bands.expression(
+          '(B2*0.3037)+(B3*0.2793)+(B4*0.4743)+(B8*0.5585)+(B11*0.5082)+(B12*0.1863)',
+          { B2:bands.select('B2'),B3:bands.select('B3'),B4:bands.select('B4'),B8:bands.select('B8'),B11:bands.select('B11'),B12:bands.select('B12') }
+        ).rename('brightness');
+        
+        const greenness = bands.expression(
+          '(B2*-0.2848)+(B3*-0.2435)+(B4*-0.5436)+(B8*0.7243)+(B11*0.0840)+(B12*-0.1800)',
+          { B2:bands.select('B2'),B3:bands.select('B3'),B4:bands.select('B4'),B8:bands.select('B8'),B11:bands.select('B11'),B12:bands.select('B12') }
+        ).rename('greenness');
+
+        const wetness = bands.expression(
+          '(B2*0.1509)+(B3*0.1973)+(B4*0.3279)+(B8*0.3406)+(B11*-0.7112)+(B12*-0.4572)',
+          { B2:bands.select('B2'),B3:bands.select('B3'),B4:bands.select('B4'),B8:bands.select('B8'),B11:bands.select('B11'),B12:bands.select('B12') }
+        ).rename('wetness');
+
+        const visParams = {
+            brightness: { min: 0.1, max: 0.5, palette: ['#a50026', '#d73027', '#f46d43', '#fdae61', '#fee090', '#ffffbf', '#e0f3f8', '#abd9e9', '#74add1', '#4575b4', '#313695'].reverse() },
+            greenness: { min: -0.1, max: 0.4, palette: ['#8c510a', '#bf812d', '#dfc27d', '#f6e8c3', '#f5f5f5', '#c7eae5', '#80cdc1', '#35978f', '#01665e', '#003c30'] },
+            wetness: { min: -0.1, max: 0.1, palette: ['#d7191c', '#fdae61', '#ffffbf', '#abdda4', '#2b83ba'] }
+        };
+
+        const getMapUrl = (image: ee.Image, params: any): Promise<string> => {
+            return new Promise((resolve, reject) => {
+                image.getMap(params, (mapDetails: any, error: string) => {
+                    if (error || !mapDetails?.urlFormat) {
+                        return reject(new Error(`Error de GEE para ${image.bandNames().get(0).getInfo()}: ${error || 'URL no encontrada'}`));
+                    }
+                    resolve(mapDetails.urlFormat.replace('{x}', '{x}').replace('{y}', '{y}').replace('{z}', '{z}'));
+                });
+            });
+        };
+
+        const [brightnessUrl, greennessUrl, wetnessUrl] = await Promise.all([
+            getMapUrl(brightness, visParams.brightness),
+            getMapUrl(greenness, visParams.greenness),
+            getMapUrl(wetness, visParams.wetness),
+        ]);
+
+        return {
+            brightness: { tileUrl: brightnessUrl },
+            greenness: { tileUrl: greennessUrl },
+            wetness: { tileUrl: wetnessUrl },
+        };
+    }
+);
+
 
 // --- Earth Engine Initialization ---
 let eeInitialized: Promise<void> | null = null;
@@ -531,4 +612,5 @@ function initializeEe(): Promise<void> {
     
 
     
+
 
