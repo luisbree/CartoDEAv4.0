@@ -121,6 +121,7 @@ const GeeProcessingPanel: React.FC<GeeProcessingPanelProps> = ({
                 case 'SWIR_FALSE_COLOR': layerName = 'Sentinel-2 (SWIR) GEE'; break;
                 case 'BSI': layerName = 'Índice de Suelo Desnudo (BSI) GEE'; break;
                 case 'NDVI': layerName = 'Índice de Vegetación (NDVI) GEE'; break;
+                case 'TASSELED_CAP': layerName = 'Tasseled Cap (S2) GEE'; break;
                 case 'JRC_WATER_OCCURRENCE': layerName = 'Agua Superficial (JRC)'; break;
                 case 'OPENLANDMAP_SOC': layerName = 'Carbono Org. del Suelo (OpenLandMap)'; break;
                 case 'DYNAMIC_WORLD': layerName = 'Dynamic World Land Cover'; break;
@@ -317,6 +318,10 @@ const GeeProcessingPanel: React.FC<GeeProcessingPanelProps> = ({
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="NDVI" id="ndvi-combo" />
                 <Label htmlFor="ndvi-combo" className="text-xs font-normal">Índice de Vegetación (NDVI)</Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="TASSELED_CAP" id="tc-combo" />
+                <Label htmlFor="tc-combo" className="text-xs font-normal">Tasseled Cap (Sentinel-2)</Label>
               </div>
                <div className="flex items-center space-x-2">
                 <RadioGroupItem value="DYNAMIC_WORLD" id="dw-combo" />

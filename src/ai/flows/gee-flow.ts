@@ -114,6 +114,26 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
             finalImage = s2Image.normalizedDifference(['B8', 'B4']).rename('NDVI');
             visParams = { min: -0.2, max: 1.0, palette: ['#a50026', '#d73027', '#f46d43', '#fdae61', '#fee08b', '#ffffbf', '#d9ef8b', '#a6d96a', '#66bd63', '#1a9850', '#006837'] };
             break;
+          case 'TASSELED_CAP': {
+            const bands = s2Image.select(['B2', 'B3', 'B4', 'B5', 'B6', 'B7', 'B8', 'B8A', 'B11', 'B12']);
+            const brightness = bands.expression(
+              '(B2 * 0.3037) + (B3 * 0.2793) + (B4 * 0.4743) + (B8 * 0.5585) + (B11 * 0.5082) + (B12 * 0.1863)',
+              { B2: bands.select('B2'), B3: bands.select('B3'), B4: bands.select('B4'), B8: bands.select('B8'), B11: bands.select('B11'), B12: bands.select('B12') }
+            ).rename('brightness');
+            const greenness = bands.expression(
+              '(B2 * -0.2848) + (B3 * -0.2435) + (B4 * -0.5436) + (B8 * 0.7243) + (B11 * 0.0840) + (B12 * -0.1800)',
+              { B2: bands.select('B2'), B3: bands.select('B3'), B4: bands.select('B4'), B8: bands.select('B8'), B11: bands.select('B11'), B12: bands.select('B12') }
+            ).rename('greenness');
+            const wetness = bands.expression(
+              '(B2 * 0.1509) + (B3 * 0.1973) + (B4 * 0.3279) + (B8 * 0.3406) + (B11 * -0.7112) + (B12 * -0.4572)',
+              { B2: bands.select('B2'), B3: bands.select('B3'), B4: bands.select('B4'), B8: bands.select('B8'), B11: bands.select('B11'), B12: bands.select('B12') }
+            ).rename('wetness');
+
+            finalImage = ee.Image.cat([brightness, greenness, wetness]);
+            // Visualize with Greenness as Red, Brightness as Green, Wetness as Blue
+            visParams = { bands: ['greenness', 'brightness', 'wetness'], min: [-0.1, 0, -0.1], max: [0.4, 0.5, 0.1] };
+            break;
+          }
           case 'URBAN_FALSE_COLOR':
           default:
             finalImage = s2Image;
@@ -511,3 +531,4 @@ function initializeEe(): Promise<void> {
     
 
     
+
