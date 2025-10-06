@@ -297,7 +297,7 @@ export const useLayerManager = ({
         }
         
         const wmsId = `wms-layer-${layerName}-${nanoid()}`;
-        const wmsParams: Record<string, any> = { 'LAYERS': layerName, 'TILED': true, 'VERSION': '1.1.1', 'TRANSPARENT': 'true' };
+        const wmsParams: Record<string, any> = { 'LAYERS': layerName, 'TILED': true, 'VERSION': '1.1.1', TRANSPARENT: true };
         if (styleName && styleName.trim() !== '') {
             wmsParams['STYLES'] = styleName;
         }
@@ -1104,3 +1104,6 @@ export const useLayerManager = ({
     addFieldToLayer,
   };
 };
+
+
+    
