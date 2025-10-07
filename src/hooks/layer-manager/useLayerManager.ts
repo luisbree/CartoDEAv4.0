@@ -13,7 +13,7 @@ import { Geometry, LineString, Point, Polygon } from 'ol/geom';
 import { useToast } from "@/hooks/use-toast";
 import { findSentinel2Footprints } from '@/services/sentinel';
 import { findLandsatFootprints } from '@/services/landsat';
-import type { MapLayer, VectorMapLayer, PlainFeatureData, LabelOptions, StyleOptions, GraduatedSymbology, CategorizedSymbology, SerializableMapLayer, RemoteSerializableLayer, LocalSerializableLayer } from '@/lib/types';
+import type { MapLayer, VectorMapLayer, PlainFeatureData, LabelOptions, StyleOptions, GraduatedSymbology, CategorizedSymbology } from '@/lib/types';
 import { nanoid } from 'nanoid';
 import { Style, Stroke, Fill, Circle as CircleStyle, Text as TextStyle } from 'ol/style';
 import type { StyleLike } from 'ol/style/Style';
@@ -38,7 +38,6 @@ interface UseLayerManagerProps {
 }
 
 const WMS_LAYER_Z_INDEX = 5;
-const GEE_LAYER_Z_INDEX = 5;
 const LAYER_START_Z_INDEX = 10;
 
 const colorMap: { [key: string]: string } = {
@@ -191,15 +190,15 @@ export const useLayerManager = ({
           const newLayers = typeof updater === 'function' ? updater(prevLayers) : updater;
   
           // --- Start of zIndex logic ---
-          const operationalLayers = newLayers.filter(l => l.type !== 'gee' && l.type !== 'wms');
+          // All layers that are not WMS are "operational" and their zIndex is determined by their order in the list.
+          const operationalLayers = newLayers.filter(l => l.type !== 'wms');
           const layer_count = operationalLayers.length;
   
           newLayers.forEach(layer => {
               const zIndex = layer.olLayer.getZIndex();
               let newZIndex = zIndex;
-              if (layer.type === 'gee') {
-                  newZIndex = GEE_LAYER_Z_INDEX;
-              } else if (layer.type === 'wms') {
+  
+              if (layer.type === 'wms') {
                   newZIndex = WMS_LAYER_Z_INDEX;
               } else {
                   const operationalIndex = operationalLayers.findIndex(opLayer => opLayer.id === layer.id);
@@ -207,6 +206,7 @@ export const useLayerManager = ({
                       newZIndex = LAYER_START_Z_INDEX + (layer_count - 1 - operationalIndex);
                   }
               }
+  
               if (zIndex !== newZIndex) {
                   layer.olLayer.setZIndex(newZIndex);
               }
@@ -373,7 +373,6 @@ export const useLayerManager = ({
         type: 'gee',
         geeParams: geeParams, // Store the params for querying later
       },
-      zIndex: GEE_LAYER_Z_INDEX,
     });
 
     addLayer({
@@ -1104,3 +1103,4 @@ export const useLayerManager = ({
     
 
     
+
