@@ -66,13 +66,19 @@ export async function authenticateWithGee(): Promise<{ success: boolean; message
 const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInput | GeeHistogramInput | GeeProfileInput) => {
     const { bandCombination } = input;
     const aoi = 'aoi' in input ? input.aoi : undefined;
-    const tasseledCapComponent = 'tasseledCapComponent' in input ? input.tasseledCapComponent : undefined;
+    
+    // This logic is now only for profiles, as other tools get their geometry from the input.
+    const geometry = aoi 
+        ? ee.Geometry.Rectangle([aoi.minLon, aoi.minLat, aoi.maxLon, aoi.maxLat]) 
+        : ('points' in input && input.points 
+            ? ee.FeatureCollection(ee.Geometry.MultiPoint(input.points.coordinates)) 
+            : undefined);
 
     // For histogram, min/max are not needed for image retrieval, but might be for tile layers
     const minElevation = 'minElevation' in input ? input.minElevation : undefined;
     const maxElevation = 'maxElevation' in input ? input.maxElevation : undefined;
+    const tasseledCapComponent = 'tasseledCapComponent' in input ? input.tasseledCapComponent : undefined;
 
-    const geometry = aoi ? ee.Geometry.Rectangle([aoi.minLon, aoi.minLat, aoi.maxLon, aoi.maxLat]) : ('points' in input && input.points ? ee.FeatureCollection(ee.Geometry.MultiPoint(input.points.coordinates)) : undefined);
       
     let finalImage;
     let visParams: { bands?: string[]; min: number | number[]; max: number | number[]; gamma?: number, palette?: string[] } | null = null;
@@ -429,25 +435,6 @@ const geeHistogramFlow = ai.defineFlow(
     }
 );
 
-const getInfoPromisified = promisify(
-    (
-      obj: { getInfo: (arg0: (info: any, error?: string) => void) => void; }, 
-      callback: (error: Error | null, info: any) => void
-    ) => {
-        try {
-            obj.getInfo((info, error) => {
-                if (error) {
-                    callback(new Error(error), null);
-                } else {
-                    callback(null, info);
-                }
-            });
-        } catch (e: any) {
-            callback(e, null);
-        }
-    }
-);
-
 // Define the Genkit flow for Profile
 const geeProfileFlow = ai.defineFlow(
     {
@@ -460,7 +447,6 @@ const geeProfileFlow = ai.defineFlow(
 
         const { points, distances, bandCombination } = input;
         
-        // Create an ee.FeatureCollection from the points, including distance as a property.
         const features = points.coordinates.map((coord, index) => 
             ee.Feature(ee.Geometry.Point(coord), { distance: distances[index] })
         );
@@ -477,16 +463,27 @@ const geeProfileFlow = ai.defineFlow(
             bandName = 'DSM';
         }
 
-        // Use sampleRegions, which is the correct method for sampling values at point locations.
         const sampledCollection = finalImage.sampleRegions({
             collection: featureCollection,
-            properties: ['distance'], // Keep the 'distance' property from the input collection
-            scale: 30, // Adjust scale as needed, e.g., 30m for NASADEM
+            properties: ['distance'],
+            scale: 30,
         });
 
-        // Use getInfo() with promisify for robust error handling and async flow
+        // Use a robust promisified getInfo
+        const getInfoAsync = (obj: any): Promise<any> => {
+            return new Promise((resolve, reject) => {
+                obj.getInfo((info: any, error: string) => {
+                    if (error) {
+                        reject(new Error(error));
+                    } else {
+                        resolve(info);
+                    }
+                });
+            });
+        };
+
         try {
-            const result = await getInfoPromisified(sampledCollection);
+            const result = await getInfoAsync(sampledCollection);
 
             console.log("Raw GEE Profile Result:", JSON.stringify(result, null, 2));
 
@@ -511,7 +508,7 @@ const geeProfileFlow = ai.defineFlow(
                         location: feature.geometry.coordinates, // [lon, lat]
                     };
                 })
-                .filter((p: ProfilePoint | null): p is ProfilePoint => p !== null); // Filter out any null results
+                .filter((p: ProfilePoint | null): p is ProfilePoint => p !== null);
             
             if (profileData.length === 0) {
                 throw new Error("No se obtuvieron datos de elevación válidos para los puntos muestreados.");
@@ -644,25 +641,3 @@ function initializeEe(): Promise<void> {
   }
   return eeInitialized;
 }
-
-    
-
-    
-
-
-
-    
-
-    
-
-
-
-
-    
-
-
-
-
-    
-
-    
