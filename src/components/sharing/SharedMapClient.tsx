@@ -145,7 +145,7 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapState }) => {
   return (
     <div className="relative w-full h-full">
         <div ref={mapElementRef} className="w-full h-full" />
-        <div className="absolute top-16 left-2 z-10 bg-gray-800/80 backdrop-blur-sm text-white p-3 rounded-lg shadow-lg w-64 max-h-[calc(100%-8rem)] flex flex-col">
+        <div className="absolute top-16 left-2 z-10 bg-gray-800/80 backdrop-blur-sm text-white p-3 rounded-lg shadow-lg w-72 max-h-[calc(100%-8rem)] flex flex-col">
             <h3 className="text-sm font-semibold mb-2 border-b border-gray-600 pb-2">Capas</h3>
             <div className="flex-grow overflow-y-auto pr-2 -mr-2">
                 <div className="space-y-3">
