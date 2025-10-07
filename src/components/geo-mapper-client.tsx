@@ -18,6 +18,10 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from './ui/alert-dialog';
+import { Label } from './ui/label';
+import { Input } from './ui/input';
+
 import { Map as OLMap, View } from 'ol';
 import TileLayer from 'ol/layer/Tile';
 import type Layer from 'ol/layer/Layer';
@@ -46,6 +50,7 @@ import { StreetViewIcon } from '@/components/icons/StreetViewIcon';
 import TrelloCardNotification from '@/components/trello-integration/TrelloCardNotification';
 import { DphLogoIcon } from '@/components/icons/DphLogoIcon';
 import Notepad from '@/components/notepad/Notepad';
+import FirebaseErrorListener from '@/components/FirebaseErrorListener';
 
 
 import { useOpenLayersMap } from '@/hooks/map-core/useOpenLayersMap';
@@ -61,10 +66,11 @@ import { useMapCapture } from '@/hooks/map-tools/useMapCapture';
 import { useWfsLibrary } from '@/hooks/wfs-library/useWfsLibrary';
 import { useOsmQuery } from '@/hooks/osm-integration/useOsmQuery';
 import { useToast } from "@/hooks/use-toast";
+import { useFirestore } from '@/firebase';
 import { cn } from '@/lib/utils';
-import { saveMapState } from '@/services/sharing-service';
+import { saveMapState, debugReadDocument } from '@/services/sharing-service';
 
-import type { OSMCategoryConfig, GeoServerDiscoveredLayer, BaseLayerOptionForSelect, MapLayer, ChatMessage, BaseLayerSettings, NominatimResult, PlainFeatureData, ActiveTool, TrelloCardInfo, GraduatedSymbology, VectorMapLayer, CategorizedSymbology, SerializableMapLayer } from '@/lib/types';
+import type { MapState, OSMCategoryConfig, GeoServerDiscoveredLayer, BaseLayerOptionForSelect, MapLayer, ChatMessage, BaseLayerSettings, NominatimResult, PlainFeatureData, ActiveTool, TrelloCardInfo, GraduatedSymbology, VectorMapLayer, CategorizedSymbology, SerializableMapLayer, RemoteSerializableLayer } from '@/lib/types';
 import { chatWithMapAssistant, type MapAssistantOutput } from '@/ai/flows/find-layer-flow';
 import { authenticateWithGee } from '@/ai/flows/gee-flow';
 import { checkTrelloCredentials } from '@/ai/flows/trello-actions';
@@ -143,7 +149,12 @@ const panelToggleConfigs = [
 ];
 
 
-export default function GeoMapperClient() {
+interface GeoMapperClientProps {
+    initialMapState?: MapState;
+}
+
+export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
+  const firestore = useFirestore();
   const mapAreaRef = useRef<HTMLDivElement>(null);
   const toolsPanelRef = useRef<HTMLDivElement>(null);
   const legendPanelRef = useRef<HTMLDivElement>(null);
@@ -158,11 +169,15 @@ export default function GeoMapperClient() {
   const analysisPanelRef = useRef<HTMLDivElement>(null);
   const trelloPopupRef = useRef<Window | null>(null);
   const [isMounted, setIsMounted] = useState(false);
+  const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
+  const [mapSubject, setMapSubject] = useState('');
+  
+  const layerManagerHookRef = useRef<ReturnType<typeof useLayerManager> | null>(null);
 
   useEffect(() => {
     setIsMounted(true);
   }, []);
-
+  
   const { mapRef, mapElementRef, setMapInstanceAndElement, isMapReady, drawingSourceRef } = useOpenLayersMap();
   const { toast } = useToast();
 
@@ -186,7 +201,7 @@ export default function GeoMapperClient() {
     panelPadding: PANEL_PADDING,
   });
 
-  const [activeBaseLayerId, setActiveBaseLayerId] = useState<string>(BASE_LAYER_DEFINITIONS[1].id); // Start with OSM Standard
+  const [activeBaseLayerId, setActiveBaseLayerId] = useState<string>(initialMapState?.baseLayerId || BASE_LAYER_DEFINITIONS[1].id);
   const [baseLayerSettings, setBaseLayerSettings] = useState<BaseLayerSettings>({
     opacity: 1,
     brightness: 100,
@@ -261,6 +276,8 @@ export default function GeoMapperClient() {
     updateInspectedFeatureData: featureInspectionHook.updateInspectedFeatureData,
   });
   
+  layerManagerHookRef.current = layerManagerHook;
+  
   const {
     handleFetchGeoServerLayers,
     isFetching: isFetchingDeasLayers,
@@ -290,85 +307,67 @@ export default function GeoMapperClient() {
 
   const initialGeoServerUrl = 'https://www.minfra.gba.gob.ar/ambientales/geoserver';
 
-  const loadInitialDeasLayers = useCallback(async () => {
-      try {
-          const discovered = await handleFetchGeoServerLayers(initialGeoServerUrl);
-          if (discovered) {
-              setDiscoveredGeoServerLayers(discovered);
-          }
-      } catch (error) {
-          console.error("Failed to load initial DEAS layers:", error);
-          // Toast is now handled inside the hook for better error details
-      }
-  }, [handleFetchGeoServerLayers]);
-
-  // Effect for initial GeoServer layer loading
+  // Effect for initial authentications and data loading (if NOT in shared mode)
   useEffect(() => {
-    if (isMapReady) {
-       loadInitialDeasLayers();
-    }
-  }, [isMapReady, loadInitialDeasLayers]);
+    if (initialMapState) return; // Don't run auth checks in shared map view
+    if (!isMapReady || !firestore) return;
+
+    // GEE Auth
+    setIsGeeAuthenticating(true);
+    authenticateWithGee().then(result => {
+        if (result.success) {
+            toast({ title: "GEE Conectado", description: result.message });
+            setIsGeeAuthenticated(true);
+        } else {
+            throw new Error(result.message);
+        }
+    }).catch(error => {
+        console.error("Error de autenticación automática con GEE:", error);
+        toast({ title: "Error de Autenticación GEE", description: error.message, variant: "destructive" });
+        setIsGeeAuthenticated(false);
+    }).finally(() => {
+        setIsGeeAuthenticating(false);
+    });
+
+    // Trello Auth Check
+    checkTrelloCredentials().then(result => {
+        if (result.configured) {
+            if (result.success) {
+                toast({ title: "Trello Conectado", description: result.message });
+            } else {
+                toast({ title: "Error de Conexión con Trello", description: result.message, variant: "destructive" });
+            }
+        }
+    }).catch(error => {
+        console.error("Error de verificación automática de Trello:", error);
+        toast({ title: "Error de Conexión con Trello", description: error.message, variant: "destructive" });
+    });
+    
+    // GeoServer DEAS Layers
+    handleFetchGeoServerLayers(initialGeoServerUrl).then(discovered => {
+        if (discovered) {
+            setDiscoveredGeoServerLayers(discovered);
+        }
+    }).catch(error => {
+        console.error("Fallo al cargar las capas iniciales de DEAS:", error);
+    });
+    
+    debugReadDocument(firestore);
+
+
+  }, [isMapReady, firestore, toast, handleFetchGeoServerLayers, initialMapState]);
   
   const handleReloadDeasLayers = useCallback(async () => {
     toast({ description: "Recargando capas desde el servidor de DEAS..." });
-    await loadInitialDeasLayers();
-  }, [loadInitialDeasLayers, toast]);
-
-
-  // Effect for automatic GEE and Trello authentication on load
-  useEffect(() => {
-    const runGeeAuth = async () => {
-        setIsGeeAuthenticating(true);
-        try {
-            const result = await authenticateWithGee();
-            if (result.success) {
-                toast({
-                    title: "GEE Conectado",
-                    description: result.message,
-                });
-                setIsGeeAuthenticated(true);
-            } else {
-                throw new Error(result.message);
-            }
-        } catch (error: any) {
-            console.error("Error de autenticación automática con GEE:", error);
-            toast({
-                title: "Error de Autenticación GEE",
-                description: error.message || "No se pudo autenticar con Google Earth Engine.",
-                variant: "destructive",
-            });
-            setIsGeeAuthenticated(false);
-        } finally {
-            setIsGeeAuthenticating(false);
+    try {
+        const discovered = await handleFetchGeoServerLayers(initialGeoServerUrl);
+        if (discovered) {
+            setDiscoveredGeoServerLayers(discovered);
         }
-    };
-
-    const runTrelloAuth = async () => {
-        try {
-            const result = await checkTrelloCredentials();
-            if (result.success) {
-                toast({
-                    title: "Trello Conectado",
-                    description: result.message,
-                });
-            }
-            // If not configured, do nothing (no toast).
-        } catch (error: any) {
-            console.error("Error de verificación automática de Trello:", error);
-            toast({
-                title: "Error de Conexión con Trello",
-                description: error.message,
-                variant: "destructive",
-            });
-        }
-    };
-
-    if (isMapReady) {
-        runGeeAuth();
-        runTrelloAuth();
+    } catch (error: any) {
+        console.error("Fallo al recargar las capas de DEAS:", error);
     }
-  }, [isMapReady, toast]);
-  
+  }, [handleFetchGeoServerLayers, toast]);
 
   const osmDataHook = useOSMData({ 
     mapRef, 
@@ -700,62 +699,73 @@ export default function GeoMapperClient() {
   }, [mapRef, isCapturing, toast, activeBaseLayerId]);
   
   const handleShareMap = useCallback(async () => {
-    if (!mapRef.current) return;
+    if (!mapRef.current || !layerManagerHookRef.current || !firestore) {
+      toast({ description: 'El mapa o los servicios no están listos para compartir.', variant: 'destructive' });
+      return;
+    }
+    
+    if (!mapSubject.trim()) {
+        toast({ description: 'Por favor, ingrese un asunto para el mapa.', variant: 'destructive' });
+        return;
+    }
 
+    const { layers } = layerManagerHookRef.current;
     const map = mapRef.current;
     const view = map.getView();
     
-    // 1. Gather map state
     const center = transform(view.getCenter() || [0,0], 'EPSG:3857', 'EPSG:4326');
     const zoom = view.getZoom() || 1;
 
-    const serializableLayers: SerializableMapLayer[] = layerManagerHook.layers
-      .map(layer => {
-        // Only share layers that can be recreated from a URL
+    const serializableLayers: SerializableMapLayer[] = layers
+      .map((layer: MapLayer): SerializableMapLayer | null => {
         if (layer.type === 'wms' || layer.type === 'wfs' || layer.type === 'gee') {
-          return {
-            type: layer.type,
-            name: layer.name,
-            url: layer.olLayer.get('serverUrl'), // Assumes serverUrl is stored on the layer
-            layerName: layer.olLayer.get('gsLayerName'), // Assumes gsLayerName is stored
-            opacity: layer.opacity,
-            visible: layer.visible,
-            wmsStyleEnabled: layer.wmsStyleEnabled,
-            styleName: layer.olLayer.get('styleName'), // WMS style
-            geeParams: layer.olLayer.get('geeParams'), // For GEE layers
-          };
+            const remoteLayer: RemoteSerializableLayer = {
+                type: layer.type as 'wms' | 'wfs' | 'gee',
+                name: layer.name,
+                url: layer.olLayer.get('serverUrl') || null,
+                layerName: layer.olLayer.get('gsLayerName') || null,
+                opacity: layer.opacity,
+                visible: layer.visible,
+                wmsStyleEnabled: layer.wmsStyleEnabled ?? false,
+                styleName: layer.olLayer.get('styleName') || null,
+                geeParams: layer.olLayer.get('geeParams') || null,
+            };
+            return remoteLayer;
+        } else if (['vector', 'osm', 'drawing', 'sentinel', 'landsat', 'analysis', 'geotiff'].includes(layer.type)) {
+            // These layers are local and won't be serialized. We return a placeholder.
+            return {
+                type: 'local-placeholder',
+                name: layer.name,
+            };
         }
         return null;
       })
       .filter((l): l is SerializableMapLayer => l !== null);
 
-    const mapState = {
+    const mapState: MapState = {
+      subject: mapSubject,
       layers: serializableLayers,
       view: { center, zoom },
       baseLayerId: activeBaseLayerId,
     };
 
     try {
-      toast({ description: 'Guardando el estado del mapa...' });
-      const mapId = await saveMapState(mapState);
-      const shareUrl = `${window.location.origin}/share/${mapId}`;
-      
-      await navigator.clipboard.writeText(shareUrl);
-      toast({
-        title: "¡Enlace copiado!",
-        description: "El enlace para compartir el mapa se ha copiado en tu portapapeles.",
-      });
-
+        toast({ description: 'Guardando el estado del mapa...' });
+        const mapId = await saveMapState(firestore, mapState);
+        const shareUrl = `${window.location.origin}/share/${mapId}`;
+        
+        await navigator.clipboard.writeText(shareUrl);
+        toast({
+            title: "¡Enlace copiado!",
+            description: "El enlace para compartir el mapa se ha copiado en tu portapapeles.",
+        });
+        setIsShareDialogOpen(false); // Close dialog on success
+        setMapSubject(''); // Reset subject
     } catch (error) {
-      console.error("Failed to share map:", error);
-      toast({
-        title: "Error al compartir",
-        description: "No se pudo guardar el estado del mapa para compartir.",
-        variant: "destructive",
-      });
+        console.error("Failed to share map:", error);
+        // Error toast is handled inside saveMapState now via the error emitter
     }
-
-  }, [mapRef, layerManagerHook.layers, activeBaseLayerId, toast]);
+  }, [mapRef, activeBaseLayerId, firestore, toast, mapSubject]);
 
   // Effect for right-click tool toggling
   useEffect(() => {
@@ -805,10 +815,63 @@ export default function GeoMapperClient() {
       }
   }, [layerManagerHook.layers, togglePanelMinimize, toast]);
 
+  // Effect for loading the shared map state
+  useEffect(() => {
+    if (!initialMapState || !isMapReady || !mapRef.current || !layerManagerHookRef.current) return;
+  
+    const loadSharedMap = async () => {
+        toast({ description: `Cargando mapa: ${initialMapState.subject}`});
+        const { handleAddHybridLayer, addGeeLayerToMap } = layerManagerHookRef.current!;
+        const map = mapRef.current!;
+    
+        // 1. Apply View
+        try {
+            const view = map.getView();
+            const center3857 = transform(initialMapState.view.center, 'EPSG:4326', 'EPSG:3857');
+            view.setCenter(center3857);
+            view.setZoom(initialMapState.view.zoom);
+        } catch (e) {
+            console.error("Error setting shared view", e);
+        }
+        
+        // 2. Load Layers
+        for (const layerState of initialMapState.layers) {
+            try {
+                if (layerState.type === 'wfs' && layerState.url && layerState.layerName) {
+                    await handleAddHybridLayer(
+                        layerState.layerName,
+                        layerState.name,
+                        layerState.url,
+                        undefined,
+                        layerState.styleName || undefined,
+                        layerState.visible,
+                        layerState.opacity,
+                        layerState.wmsStyleEnabled
+                    );
+                } else if (layerState.type === 'gee' && layerState.geeParams?.tileUrl) {
+                     addGeeLayerToMap(layerState.geeParams.tileUrl, layerState.name, {
+                        bandCombination: layerState.geeParams.bandCombination as any,
+                        // Pass other GEE params if they exist
+                    });
+                } else if (layerState.type === 'local-placeholder') {
+                    console.log(`Skipping local layer: ${layerState.name}`);
+                }
+            } catch (e) {
+                console.error("Error loading shared layer", layerState, e);
+            }
+        }
+    };
+  
+    loadSharedMap();
+  
+  }, [initialMapState, isMapReady, mapRef, toast]);
+
 
   return (
     <div className="flex h-screen w-screen flex-col bg-background text-foreground">
-
+      <FirebaseErrorListener />
+      {/* Hide controls if it's a shared map view */}
+      {!initialMapState && (
       <div className="bg-gray-700/90 backdrop-blur-sm shadow-md p-2 z-20 flex items-center gap-2">
         <DphLogoIcon className="h-8 w-8 flex-shrink-0" />
         <TooltipProvider delayDuration={200}>
@@ -891,15 +954,50 @@ export default function GeoMapperClient() {
             >
               {isCapturing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
             </Button>
-            <Button
-                onClick={handleShareMap}
-                variant="outline"
-                size="icon"
-                className="h-8 w-8 flex-shrink-0 bg-black/20 hover:bg-black/40 border border-white/30 text-white/90"
-                title="Compartir mapa"
-            >
-                <Share2 className="h-4 w-4" />
-            </Button>
+             <AlertDialog open={isShareDialogOpen} onOpenChange={setIsShareDialogOpen}>
+                <TooltipProvider delayDuration={200}>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                             <Button
+                                onClick={() => setIsShareDialogOpen(true)}
+                                variant="outline"
+                                size="icon"
+                                className="h-8 w-8 flex-shrink-0 bg-black/20 hover:bg-black/40 border border-white/30 text-white/90"
+                                title="Compartir mapa"
+                            >
+                                <Share2 className="h-4 w-4" />
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" className="bg-gray-700 text-white border-gray-600">
+                           <p className="text-xs">Compartir Mapa</p>
+                        </TooltipContent>
+                    </Tooltip>
+                </TooltipProvider>
+                <AlertDialogContent onOpenAutoFocus={(e) => e.preventDefault()}>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Compartir Mapa</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Ingrese un asunto o título para identificar este mapa compartido.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <div className="grid gap-2">
+                        <Label htmlFor="map-subject" className="text-left">Asunto</Label>
+                        <Input
+                            id="map-subject"
+                            value={mapSubject}
+                            onChange={(e) => setMapSubject(e.target.value)}
+                            placeholder="Ej: Análisis de cuencas en Buenos Aires"
+                            autoFocus
+                        />
+                    </div>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel onClick={() => setMapSubject('')}>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleShareMap} disabled={!mapSubject.trim()}>
+                            Guardar y Copiar Enlace
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
 
 
@@ -945,6 +1043,7 @@ export default function GeoMapperClient() {
           </TooltipProvider>
         </div>
       </div>
+      )}
 
       <div ref={mapAreaRef} className="relative flex-1 overflow-visible">
         <MapView
@@ -971,7 +1070,7 @@ export default function GeoMapperClient() {
 
         <WfsLoadingIndicator isVisible={layerManagerHook.isWfsLoading || wfsLibraryHook.isLoading} />
         
-        <Notepad />
+        {!initialMapState && <Notepad />}
 
         {isMounted && panels.tools && !panels.tools.isMinimized && (
           <ToolsPanel
@@ -1042,10 +1141,11 @@ export default function GeoMapperClient() {
             canUndoRemove={layerManagerHook.lastRemovedLayers.length > 0}
             onUndoRemove={layerManagerHook.undoRemove}
             selectedFeaturesForSelection={featureInspectionHook.selectedFeatures}
+            isSharedView={!!initialMapState}
           />
         )}
 
-        {isMounted && panels.attributes && !panels.attributes.isMinimized && (
+        {isMounted && !initialMapState && panels.attributes && !panels.attributes.isMinimized && (
           <AttributesPanelComponent
             panelRef={attributesPanelRef}
             isCollapsed={panels.attributes.isCollapsed}
@@ -1066,7 +1166,7 @@ export default function GeoMapperClient() {
           />
         )}
         
-        {isMounted && panels.printComposer && !panels.printComposer.isMinimized && printLayoutImage && (
+        {isMounted && !initialMapState && panels.printComposer && !panels.printComposer.isMinimized && printLayoutImage && (
             <PrintComposerPanel
                 mapImage={printLayoutImage}
                 panelRef={printComposerPanelRef}
@@ -1078,7 +1178,7 @@ export default function GeoMapperClient() {
             />
         )}
 
-        {isMounted && panels.gee && !panels.gee.isMinimized && (
+        {isMounted && !initialMapState && panels.gee && !panels.gee.isMinimized && (
           <GeeProcessingPanel
             panelRef={geePanelRef}
             isCollapsed={panels.gee.isCollapsed}
@@ -1093,12 +1193,11 @@ export default function GeoMapperClient() {
           />
         )}
 
-        {isMounted && panels.statistics && !panels.statistics.isMinimized && statisticsLayer && (
+        {isMounted && !initialMapState && panels.statistics && !panels.statistics.isMinimized && statisticsLayer && (
             <StatisticsPanel
                 layer={statisticsLayer}
                 allLayers={layerManagerHook.layers}
                 selectedFeatures={featureInspectionHook.selectedFeatures}
-                onAddLayer={(layer: MapLayer, bringToTop?: boolean) => layerManagerHook.addLayer(layer, bringToTop)}
                 panelRef={statisticsPanelRef}
                 isCollapsed={panels.statistics.isCollapsed}
                 onToggleCollapse={() => togglePanelCollapse('statistics')}
@@ -1112,7 +1211,7 @@ export default function GeoMapperClient() {
             />
         )}
 
-        {isMounted && panels.analysis && !panels.analysis.isMinimized && (
+        {isMounted && !initialMapState && panels.analysis && !panels.analysis.isMinimized && (
           <AnalysisPanel
             panelRef={analysisPanelRef}
             isCollapsed={panels.analysis.isCollapsed}
@@ -1126,7 +1225,7 @@ export default function GeoMapperClient() {
           />
         )}
 
-        {isMounted && panels.ai && !panels.ai.isMinimized && (
+        {isMounted && !initialMapState && panels.ai && !panels.ai.isMinimized && (
           <AIPanel
             panelRef={aiPanelRef}
             isCollapsed={panels.ai.isCollapsed}
@@ -1145,7 +1244,7 @@ export default function GeoMapperClient() {
           />
         )}
 
-        {isMounted && panels.trello && !panels.trello.isMinimized && (
+        {isMounted && !initialMapState && panels.trello && !panels.trello.isMinimized && (
           <TrelloPanel
             panelRef={trelloPanelRef}
             isCollapsed={panels.trello.isCollapsed}
@@ -1157,7 +1256,7 @@ export default function GeoMapperClient() {
           />
         )}
 
-        {isMounted && panels.wfsLibrary && !panels.wfsLibrary.isMinimized && (
+        {isMounted && !initialMapState && panels.wfsLibrary && !panels.wfsLibrary.isMinimized && (
           <WfsLibraryPanel
             panelRef={wfsLibraryPanelRef}
             isCollapsed={panels.wfsLibrary.isCollapsed}
@@ -1173,7 +1272,7 @@ export default function GeoMapperClient() {
           />
         )}
 
-        {isMounted && panels.help && !panels.help.isMinimized && (
+        {isMounted && !initialMapState && panels.help && !panels.help.isMinimized && (
           <HelpPanel
             panelRef={helpPanelRef}
             isCollapsed={panels.help.isCollapsed}

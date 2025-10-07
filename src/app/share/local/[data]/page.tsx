@@ -2,7 +2,7 @@
 'use client';
 
 import React, { useMemo } from 'react';
-import SharedMapClient from '@/components/shared-map-client';
+import { GeoMapperClient } from '@/components/geo-mapper-client';
 import type { MapState } from '@/lib/types';
 
 interface SharedMapLocalPageProps {
@@ -39,5 +39,5 @@ export default function SharedMapLocalPage({ params }: SharedMapLocalPageProps) 
         );
     }
 
-    return <SharedMapClient mapState={mapState} />;
+    return <GeoMapperClient initialMapState={mapState} />;
 }

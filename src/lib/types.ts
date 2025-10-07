@@ -1,3 +1,4 @@
+
 import type { default as Layer } from 'ol/layer/Layer';
 import type VectorLayer from 'ol/layer/Vector';
 import type VectorSource from 'ol/source/Vector';
@@ -173,13 +174,13 @@ export interface RemoteSerializableLayer {
     styleName: string | null;
     geeParams: {
         bandCombination: string | null;
-        tileUrl: string | null;
+        // Add other GEE params as needed
     } | null;
 }
 
-// Represents a layer that was local and cannot be recreated
+// Represents a layer that was local and cannot be recreated, but we note its presence
 export interface LocalSerializableLayer {
-    type: 'local';
+    type: 'local-placeholder';
     name: string;
 }
 

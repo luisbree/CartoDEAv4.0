@@ -1,11 +1,13 @@
+
 "use client";
 
 import React from 'react';
-import SharedMapClient from '@/components/shared-map-client';
+import { GeoMapperClient } from '@/components/geo-mapper-client';
 import type { MapState } from '@/lib/types';
 
 // Define a hardcoded map state for demonstration purposes
 const exampleMapState: MapState = {
+    subject: "Mapa de Ejemplo - Humedales y Ejes de Canal",
     view: {
         center: [-60.0, -36.5], // Center of Buenos Aires Province
         zoom: 7,
@@ -13,25 +15,25 @@ const exampleMapState: MapState = {
     baseLayerId: 'carto-light', // Use a light base map
     layers: [
         {
-            type: 'wms',
-            name: 'Límites de Partidos (DEAS)',
-            layerName: 'deas:rpm001_partidos',
+            type: 'wfs',
+            name: 'Humedales Propuestos (Ejemplo)',
+            layerName: 'deas:rsa024_espacio_humedales_propuesto',
             url: 'https://www.minfra.gba.gob.ar/ambientales/geoserver/',
             visible: true,
             opacity: 0.8,
             wmsStyleEnabled: true,
-            styleName: 'deas:rpm001_partidos_style',
+            styleName: 'deas:humedales',
             geeParams: null,
         },
         {
-            type: 'wms',
-            name: 'Cursos de Agua (DEAS)',
-            layerName: 'deas:sudestada_cursos_de_agua',
+            type: 'wfs',
+            name: 'Eje de Canal (Ejemplo)',
+            layerName: 'deas:rsa024_eje',
             url: 'https://www.minfra.gba.gob.ar/ambientales/geoserver/',
             visible: true,
             opacity: 0.9,
             wmsStyleEnabled: true,
-            styleName: 'deas:sudestada_cursos_de_agua_style',
+            styleName: 'deas:eje_canal',
             geeParams: null,
         }
     ],
@@ -44,5 +46,5 @@ const exampleMapState: MapState = {
  * without needing a valid map ID from Firestore.
  */
 export default function SharedMapExamplePage() {
-    return <SharedMapClient mapState={exampleMapState} />;
+    return <GeoMapperClient initialMapState={exampleMapState} />;
 }
