@@ -1,4 +1,3 @@
-
 'use server';
 /**
  * @fileOverview A flow for generating Google Earth Engine tile layers, vector data, and histograms.
@@ -38,11 +37,6 @@ export async function getGeeGeoTiffDownloadUrl(input: GeeGeoTiffDownloadInput): 
 // New exported function for histogram
 export async function getGeeHistogram(input: GeeHistogramInput): Promise<GeeHistogramOutput> {
     return geeHistogramFlow(input);
-}
-
-// New exported function for profile generation
-export async function getGeeProfile(input: GeeProfileInput): Promise<GeeProfileOutput> {
-    return geeProfileFlow(input);
 }
 
 // New exported function for Tasseled Cap
@@ -432,93 +426,6 @@ const geeHistogramFlow = ai.defineFlow(
                 resolve({ histogram: histogramData });
              });
         });
-    }
-);
-
-// Define the Genkit flow for Profile
-const geeProfileFlow = ai.defineFlow(
-    {
-        name: 'geeProfileFlow',
-        inputSchema: GeeProfileInputSchema,
-        outputSchema: GeeProfileOutputSchema,
-    },
-    async (input) => {
-        await initializeEe();
-
-        const { points, distances, bandCombination } = input;
-        
-        const features = points.coordinates.map((coord, index) => 
-            ee.Feature(ee.Geometry.Point(coord), { distance: distances[index] })
-        );
-        const featureCollection = ee.FeatureCollection(features);
-
-        let finalImage;
-        let bandName: string;
-
-        if (bandCombination === 'NASADEM_ELEVATION') {
-            finalImage = ee.Image('NASA/NASADEM_HGT/001').select('elevation');
-            bandName = 'elevation';
-        } else { // ALOS_DSM
-            finalImage = ee.ImageCollection('JAXA/ALOS/AW3D30/V3_2').select('DSM').mosaic();
-            bandName = 'DSM';
-        }
-
-        const sampledCollection = finalImage.sampleRegions({
-            collection: featureCollection,
-            properties: ['distance'],
-            scale: 30,
-        });
-
-        // Use a robust promisified getInfo
-        const getInfoAsync = (obj: any): Promise<any> => {
-            return new Promise((resolve, reject) => {
-                obj.getInfo((info: any, error: string) => {
-                    if (error) {
-                        reject(new Error(error));
-                    } else {
-                        resolve(info);
-                    }
-                });
-            });
-        };
-
-        try {
-            const result = await getInfoAsync(sampledCollection);
-
-            console.log("Raw GEE Profile Result:", JSON.stringify(result, null, 2));
-
-            if (!result || !result.features) {
-                throw new Error("La respuesta de GEE no contiene 'features'.");
-            }
-            
-            const profileData: ProfilePoint[] = result.features
-                .map((feature: any) => {
-                    if (!feature.geometry || !feature.properties) return null;
-                    
-                    const elevation = feature.properties[bandName];
-                    const distance = feature.properties.distance;
-                    
-                     if (elevation === null || elevation === undefined || distance === null || distance === undefined) {
-                        return null;
-                    }
-
-                    return {
-                        distance: Math.round(distance),
-                        elevation: parseFloat(elevation.toFixed(2)),
-                        location: feature.geometry.coordinates, // [lon, lat]
-                    };
-                })
-                .filter((p: ProfilePoint | null): p is ProfilePoint => p !== null);
-            
-            if (profileData.length === 0) {
-                throw new Error("No se obtuvieron datos de elevación válidos para los puntos muestreados.");
-            }
-
-            return { profile: profileData };
-        } catch (error: any) {
-            console.error("Error processing GEE profile results:", error);
-            throw new Error(`Error al generar el perfil de GEE: ${error.message}`);
-        }
     }
 );
 

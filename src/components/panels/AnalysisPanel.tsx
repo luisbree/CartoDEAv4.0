@@ -1,6 +1,4 @@
-
-
-"use client";
+'use client';
 
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import DraggablePanel from './DraggablePanel';
@@ -23,12 +21,9 @@ import Feature from 'ol/Feature';
 import { type Geometry, type LineString as OlLineString, Point } from 'ol/geom';
 import { getLength as olGetLength } from 'ol/sphere';
 import { performBufferAnalysis, performConvexHull, performConcaveHull, calculateOptimalConcavity, projectPopulationGeometric, generateCrossSections, dissolveFeatures } from '@/services/spatial-analysis';
-import { getGeeProfile } from '@/ai/flows/gee-flow';
-import type { GeeProfileOutput, ProfilePoint } from '@/ai/flows/gee-types';
 import { ScrollArea } from '../ui/scroll-area';
 import { Checkbox } from '../ui/checkbox';
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
-import { XAxis, YAxis, Tooltip as ChartTooltip, CartesianGrid, Line, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import { Style, Text as TextStyle, Fill, Stroke } from 'ol/style';
 
 
@@ -50,18 +45,6 @@ const SectionHeader: React.FC<{ icon: React.ElementType; title: string; }> = ({ 
         <span className="text-sm font-semibold">{title}</span>
     </div>
 );
-
-const CustomChartTooltip: React.FC<any> = ({ active, payload, label }) => {
-    if (active && payload && payload.length) {
-      return (
-        <div className="bg-gray-800/80 text-white p-2 rounded-md border border-gray-600 shadow-lg text-xs">
-          <p className="font-bold">{`Distancia: ${payload[0].payload.distance.toLocaleString()} m`}</p>
-          <p className="text-cyan-300">{`Elevación: ${payload[0].value.toFixed(2)} m`}</p>
-        </div>
-      );
-    }
-    return null;
-};
 
 
 const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
@@ -124,12 +107,6 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   const [crossSectionUnits, setCrossSectionUnits] = useState<'meters' | 'kilometers'>('meters');
   const [isGeneratingCrossSections, setIsGeneratingCrossSections] = useState(false);
   
-  // State for Profile tool
-  const [profileInputLayerId, setProfileInputLayerId] = useState<string>('');
-  const [profileDemLayer, setProfileDemLayer] = useState<'NASADEM_ELEVATION' | 'ALOS_DSM'>('NASADEM_ELEVATION');
-  const [isGeneratingProfile, setIsGeneratingProfile] = useState(false);
-  const [profileData, setProfileData] = useState<ProfilePoint[] | null>(null);
-
   const { toast } = useToast();
 
   const vectorLayers = useMemo(() => {
@@ -159,75 +136,6 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     });
   }, [vectorLayers]);
   
- const handleRunProfile = useCallback(async () => {
-    if (!profileInputLayerId) {
-        toast({ description: "Por favor, seleccione una capa de línea para generar el perfil.", variant: "destructive" });
-        return;
-    }
-    const lineLayer = lineLayers.find(l => l.id === profileInputLayerId);
-    if (!lineLayer) return;
-
-    const source = lineLayer.olLayer.getSource();
-    if (!source || source.getFeatures().length === 0) {
-        toast({ description: "La capa de línea seleccionada no tiene entidades.", variant: "destructive" });
-        return;
-    }
-
-    const safeSelectedFeatures = selectedFeatures || [];
-    let featureToProfile = safeSelectedFeatures.find(f => source.getFeatureById(f.getId() as string | number));
-    
-    if (!featureToProfile) {
-        const layerFeatures = source.getFeatures();
-        if (layerFeatures.length > 1) {
-            toast({ description: "Múltiples líneas en la capa. Por favor, seleccione una para generar el perfil.", variant: "default" });
-            return;
-        }
-        featureToProfile = layerFeatures[0];
-    }
-    
-    setIsGeneratingProfile(true);
-    setProfileData(null);
-    toast({ description: "Generando perfil..." });
-    
-    const geojsonFormat = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
-    const lineGeoJSON = geojsonFormat.writeFeatureObject(featureToProfile) as TurfFeature<TurfLineString>;
-    
-    const lineLength = turfLength(lineGeoJSON, { units: 'meters' });
-    const numPoints = Math.min(Math.max(Math.floor(lineLength / 10), 20), 500); // Sample every 10m, but cap at 500 points
-    const interval = lineLength / (numPoints - 1);
-    
-    const points: number[][] = [];
-    const distances: number[] = [];
-    for (let i = 0; i < numPoints; i++) {
-        const distance = i * interval;
-        const point = turfAlong(lineGeoJSON, distance, { units: 'meters' });
-        points.push(point.geometry.coordinates);
-        distances.push(distance);
-    }
-    
-    const pointsGeoJSON = { type: 'MultiPoint', coordinates: points };
-
-    try {
-        const result = await getGeeProfile({
-            points: pointsGeoJSON as { type: 'MultiPoint'; coordinates: number[][]; },
-            bandCombination: profileDemLayer,
-            distances: distances,
-        });
-
-        if (result && result.profile.length > 0) {
-            setProfileData(result.profile);
-            toast({ description: "Perfil topográfico generado con éxito." });
-        } else {
-            throw new Error("No se recibieron datos del perfil desde el servidor.");
-        }
-
-    } catch (error: any) {
-        console.error("Error generating GEE profile:", error);
-        toast({ title: "Error de Perfil GEE", description: error.message, variant: "destructive" });
-    } finally {
-        setIsGeneratingProfile(false);
-    }
-}, [profileInputLayerId, profileDemLayer, lineLayers, toast, selectedFeatures]);
 
   const handleRunClip = () => {
     const inputLayer = vectorLayers.find(l => l.id === clipInputLayerId);
@@ -1083,77 +991,6 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                 </AccordionContent>
             </AccordionItem>
             
-            <AccordionItem value="topographic-profile" className="border-b-0 bg-white/5 rounded-md">
-                <AccordionTrigger className="p-3 hover:no-underline hover:bg-white/10 rounded-t-md data-[state=open]:rounded-b-none">
-                    <SectionHeader icon={LineChart} title="Perfil Topográfico" />
-                </AccordionTrigger>
-                <AccordionContent className="p-3 pt-2 space-y-3 border-t border-white/10 bg-transparent rounded-b-md">
-                    <div className="space-y-1">
-                      <Label className="text-xs font-semibold">Perfil Topográfico desde Línea</Label>
-                      <div className="space-y-2 p-2 border border-white/10 rounded-md">
-                          <div>
-                              <Label htmlFor="profile-input-layer" className="text-xs">Capa de Perfil (Línea)</Label>
-                              <Select value={profileInputLayerId} onValueChange={(value) => { setProfileInputLayerId(value); }}>
-                                <SelectTrigger id="profile-input-layer" className="h-8 text-xs bg-black/20"><SelectValue placeholder="Seleccionar capa de línea..." /></SelectTrigger>
-                                <SelectContent className="bg-gray-700 text-white border-gray-600">
-                                  {lineLayers.map(l => <SelectItem key={l.id} value={l.id} className="text-xs">{l.name}</SelectItem>)}
-                                </SelectContent>
-                              </Select>
-                              <p className="text-xs text-gray-400 mt-1">Se usará la línea seleccionada o la única en la capa.</p>
-                          </div>
-                          <div>
-                              <Label htmlFor="profile-dem-layer" className="text-xs">Modelo de Elevación (DEM)</Label>
-                               <Select value={profileDemLayer} onValueChange={(v) => setProfileDemLayer(v as any)}>
-                                    <SelectTrigger id="profile-dem-layer" className="h-8 text-xs bg-black/20 w-full"><SelectValue /></SelectTrigger>
-                                    <SelectContent className="bg-gray-700 text-white border-gray-600">
-                                      <SelectItem value="NASADEM_ELEVATION" className="text-xs">NASADEM (30m)</SelectItem>
-                                      <SelectItem value="ALOS_DSM" className="text-xs">ALOS DSM (30m)</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                          </div>
-                          <Button onClick={handleRunProfile} size="sm" className="w-full h-8 text-xs" disabled={!profileInputLayerId || isGeneratingProfile}>
-                              {isGeneratingProfile ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <LineChart className="mr-2 h-3.5 w-3.5" />}
-                              Generar Perfil
-                          </Button>
-                           {profileData && (
-                            <div className="pt-3 border-t border-white/20 mt-3">
-                                <Label className="text-xs font-semibold text-white">Resultado del Perfil</Label>
-                                <div className="h-48 w-full mt-2">
-                                     <ResponsiveContainer width="100%" height="100%">
-                                        <AreaChart data={profileData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
-                                            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-                                            <XAxis 
-                                                dataKey="distance" 
-                                                stroke="#9ca3af" 
-                                                fontSize={10} 
-                                                tickFormatter={(val) => `${(val / 1000).toFixed(1)}km`}
-                                                label={{ value: 'Distancia', position: 'insideBottom', offset: -5, fill: '#9ca3af', fontSize: 10 }}
-                                            />
-                                            <YAxis 
-                                                stroke="#9ca3af" 
-                                                fontSize={10}
-                                                domain={['dataMin - 10', 'dataMax + 10']}
-                                                tickFormatter={(val) => `${val}m`}
-                                                label={{ value: 'Elevación', angle: -90, position: 'insideLeft', offset: 10, fill: '#9ca3af', fontSize: 10 }}
-                                            />
-                                            <ChartTooltip content={<CustomChartTooltip />} />
-                                            <defs>
-                                                <linearGradient id="colorUv" x1="0" y1="0" x2="0" y2="1">
-                                                    <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.6}/>
-                                                    <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0.1}/>
-                                                </linearGradient>
-                                            </defs>
-                                            <Area type="monotone" dataKey="elevation" stroke="hsl(var(--primary))" fillOpacity={1} fill="url(#colorUv)" />
-                                        </AreaChart>
-                                    </ResponsiveContainer>
-                                </div>
-                            </div>
-                          )}
-                      </div>
-                    </div>
-                </AccordionContent>
-            </AccordionItem>
-
             <AccordionItem value="demographic-projection" className="border-b-0 bg-white/5 rounded-md">
                 <AccordionTrigger className="p-3 hover:no-underline hover:bg-white/10 rounded-t-md data-[state=open]:rounded-b-none">
                     <SectionHeader icon={TrendingUp} title="Proyección Demográfica" />
@@ -1216,4 +1053,5 @@ export default AnalysisPanel;
     
 
     
+
 
