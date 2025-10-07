@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import GeoMapperClientWrapper from '@/app/geo-mapper-client';
+import { GeoMapperClient } from '@/components/geo-mapper-client';
 import { getMapState } from '@/services/sharing-service';
 import type { MapState } from '@/lib/types';
 import { useFirestore } from '@/firebase';
@@ -73,7 +73,7 @@ export default function SharedMapPage({ params }: SharedMapPageProps) {
 
     if (mapState) {
         // Pass the loaded map state to the client wrapper
-        return <GeoMapperClientWrapper initialMapState={mapState} />;
+        return <GeoMapperClient initialMapState={mapState} />;
     }
 
     // This state should ideally not be reached if error handling is correct
