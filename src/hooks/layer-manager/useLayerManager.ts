@@ -24,6 +24,7 @@ import { download as downloadShp } from 'shpjs';
 import { bbox as bboxStrategy } from 'ol/loadingstrategy';
 import type { GeeValueQueryInput } from '@/ai/flows/gee-types';
 import { ToastAction } from '@/components/ui/toast';
+import { saveFileWithPicker } from '@/services/download-service';
 
 
 interface UseLayerManagerProps {
@@ -869,55 +870,44 @@ export const useLayerManager = ({
     const layerName = layer.name.replace(/ /g, '_').replace(/[^a-zA-Z0-9_]/g, '');
 
     try {
-      let textData: string;
-      let mimeType: string;
-      let extension: string;
+        const writeOptions = {
+            dataProjection: 'EPSG:4326',
+            featureProjection: 'EPSG:3857',
+            decimals: 7,
+        };
 
-      const writeOptions = {
-          dataProjection: 'EPSG:4326',
-          featureProjection: 'EPSG:3857',
-          decimals: 7,
-      };
+        if (format === 'geojson' || format === 'kml') {
+            const textData = format === 'geojson'
+                ? new GeoJSON().writeFeatures(features, writeOptions)
+                : new KML({ extractStyles: true, showPointNames: true }).writeFeatures(features, writeOptions);
+            
+            await saveFileWithPicker({
+                fileContent: textData,
+                suggestedName: `${layerName}.${format}`,
+                fileType: format,
+            });
 
-      if (format === 'geojson' || format === 'kml') {
-          if (format === 'geojson') {
-              textData = new GeoJSON().writeFeatures(features, writeOptions);
-              mimeType = 'application/geo+json';
-              extension = 'geojson';
-          } else { // kml
-              textData = new KML({ extractStyles: true, showPointNames: true }).writeFeatures(features, writeOptions);
-              mimeType = 'application/vnd.google-earth.kml+xml';
-              extension = 'kml';
-          }
-
-          const blob = new Blob([textData], { type: mimeType });
-          const link = document.createElement('a');
-          link.href = URL.createObjectURL(blob);
-          link.download = `${layerName}.${extension}`;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          URL.revokeObjectURL(link.href);
-
-      } else if (format === 'shp') {
-          const geojson = new GeoJSON().writeFeaturesObject(features, writeOptions);
-          const options = {
-              folder: layerName,
-              types: {
-                  point: layerName + '_puntos',
-                  polygon: layerName + '_poligonos',
-                  line: layerName + '_lineas',
-              }
-          };
-          downloadShp(geojson, options);
-      } else {
-        return;
-      }
+        } else if (format === 'shp') {
+            const geojson = new GeoJSON().writeFeaturesObject(features, writeOptions);
+            const options = {
+                folder: layerName,
+                types: {
+                    point: layerName + '_puntos',
+                    polygon: layerName + '_poligonos',
+                    line: layerName + '_lineas',
+                }
+            };
+            downloadShp(geojson, options); // shpjs handles its own download
+        } else {
+            return;
+        }
       
-      setTimeout(() => toast({ description: `Capa "${layer.name}" exportada como ${format.toUpperCase()}.` }), 0);
-    } catch (error) {
+      setTimeout(() => toast({ description: `Preparando descarga de "${layer.name}" como ${format.toUpperCase()}.` }), 0);
+    } catch (error: any) {
       console.error(`Error exporting as ${format}:`, error);
-      setTimeout(() => toast({ description: `Error al exportar la capa como ${format.toUpperCase()}.`, variant: "destructive" }), 0);
+      if (error.name !== 'AbortError') {
+        setTimeout(() => toast({ description: `Error al exportar la capa como ${format.toUpperCase()}.`, variant: "destructive" }), 0);
+      }
     }
   }, [layers, toast]);
 
