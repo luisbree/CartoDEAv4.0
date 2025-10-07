@@ -9,6 +9,8 @@ interface GeoMapperClientWrapperProps {
 }
 
 export default function GeoMapperClientWrapper({ initialMapState }: GeoMapperClientWrapperProps) {
+  // The wrapper now decides whether to pass the initialMapState to the actual client component.
+  // This keeps the main client component clean while allowing shared map data to be injected.
   return (
       <GeoMapperClient initialMapState={initialMapState} />
   );

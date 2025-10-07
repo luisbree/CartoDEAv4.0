@@ -1,11 +1,13 @@
 
 'use client';
 
-import { useRef, useState, useCallback } from 'react';
-import type { Map } from 'ol';
+import { useRef, useState, useCallback, useEffect } from 'react';
+import { Map, View } from 'ol';
 import VectorLayer from 'ol/layer/Vector';
 import VectorSource from 'ol/source/Vector';
 import { Style, Stroke, Fill, Circle as CircleStyle } from 'ol/style';
+import { fromLonLat } from 'ol/proj';
+import { defaults as defaultControls } from 'ol/control';
 
 // Default style for drawn features
 const defaultDrawingStyle = new Style({
@@ -24,7 +26,12 @@ const defaultDrawingStyle = new Style({
   }),
 });
 
-export const useOpenLayersMap = () => {
+interface UseOpenLayersMapOptions {
+  initialCenter?: number[]; // [lon, lat]
+  initialZoom?: number;
+}
+
+export const useOpenLayersMap = (options: UseOpenLayersMapOptions = {}) => {
   const mapRef = useRef<Map | null>(null);
   const mapElementRef = useRef<HTMLDivElement | null>(null);
   const [isMapReady, setIsMapReady] = useState(false);
@@ -47,11 +54,43 @@ export const useOpenLayersMap = () => {
       mapRef.current = mapInstance;
       mapElementRef.current = mapDivElement;
       
+      // The drawing layer is always added, regardless of mode.
       mapInstance.addLayer(drawingLayerRef.current);
       
       setIsMapReady(true);
     }
   }, []);
+
+  // Effect to initialize the map view
+  useEffect(() => {
+    if (mapElementRef.current && !mapRef.current) {
+      const center = options.initialCenter 
+        ? fromLonLat(options.initialCenter, 'EPSG:3857') 
+        : fromLonLat([-60.0, -36.5], 'EPSG:3857');
+      
+      const zoom = options.initialZoom ?? 7;
+
+      const map = new Map({
+        target: mapElementRef.current,
+        layers: [], // Layers will be added by the MapView component
+        view: new View({
+          center: center,
+          zoom: zoom,
+          projection: 'EPSG:3857',
+          constrainResolution: true,
+        }),
+        controls: defaultControls({
+          attributionOptions: { collapsible: false },
+          zoom: true,
+          rotate: false,
+        }),
+      });
+      
+      // Call the callback to set the instance refs
+      setMapInstanceAndElement(map, mapElementRef.current);
+    }
+  }, [options.initialCenter, options.initialZoom, setMapInstanceAndElement]);
+
 
   return {
     mapRef,

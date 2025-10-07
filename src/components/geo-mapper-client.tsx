@@ -178,7 +178,12 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
     setIsMounted(true);
   }, []);
   
-  const { mapRef, mapElementRef, setMapInstanceAndElement, isMapReady, drawingSourceRef } = useOpenLayersMap();
+  const { mapRef, mapElementRef, setMapInstanceAndElement, isMapReady, drawingSourceRef } = useOpenLayersMap({
+    // Pass initial view state if available from shared map
+    initialCenter: initialMapState?.view.center,
+    initialZoom: initialMapState?.view.zoom,
+  });
+
   const { toast } = useToast();
 
   const [activeTool, setActiveTool] = useState<ActiveTool>({ type: null, id: null });
@@ -824,15 +829,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
         const { handleAddHybridLayer, addGeeLayerToMap } = layerManagerHookRef.current!;
         const map = mapRef.current!;
     
-        // 1. Apply View
-        try {
-            const view = map.getView();
-            const center3857 = transform(initialMapState.view.center, 'EPSG:4326', 'EPSG:3857');
-            view.setCenter(center3857);
-            view.setZoom(initialMapState.view.zoom);
-        } catch (e) {
-            console.error("Error setting shared view", e);
-        }
+        // 1. Apply View - THIS IS HANDLED BY THE useOpenLayersMap HOOK NOW
         
         // 2. Load Layers
         for (const layerState of initialMapState.layers) {
@@ -848,8 +845,8 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
                         layerState.opacity,
                         layerState.wmsStyleEnabled
                     );
-                } else if (layerState.type === 'gee' && layerState.geeParams?.tileUrl) {
-                     addGeeLayerToMap(layerState.geeParams.tileUrl, layerState.name, {
+                } else if (layerState.type === 'gee' && layerState.geeParams?.bandCombination) {
+                     addGeeLayerToMap(layerState.geeParams.tileUrl!, layerState.name, {
                         bandCombination: layerState.geeParams.bandCombination as any,
                         // Pass other GEE params if they exist
                     });
@@ -1072,7 +1069,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
         
         {!initialMapState && <Notepad />}
 
-        {isMounted && panels.tools && !panels.tools.isMinimized && (
+        {isMounted && !initialMapState && panels.tools && !panels.tools.isMinimized && (
           <ToolsPanel
             panelRef={toolsPanelRef}
             isCollapsed={panels.tools.isCollapsed}

@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -73,6 +72,7 @@ export default function SharedMapPage({ params }: SharedMapPageProps) {
     }
 
     if (mapState) {
+        // Pass the loaded map state to the client wrapper
         return <GeoMapperClientWrapper initialMapState={mapState} />;
     }
 
