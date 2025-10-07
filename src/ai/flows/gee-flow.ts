@@ -430,6 +430,25 @@ const geeHistogramFlow = ai.defineFlow(
     }
 );
 
+const getInfoPromisified = promisify(
+    (
+      obj: { getInfo: (arg0: (info: any, error?: string) => void) => void; }, 
+      callback: (error: Error | null, info: any) => void
+    ) => {
+        try {
+            obj.getInfo((info, error) => {
+                if (error) {
+                    callback(new Error(error), null);
+                } else {
+                    callback(null, info);
+                }
+            });
+        } catch (e: any) {
+            callback(e, null);
+        }
+    }
+);
+
 // Define the Genkit flow for Profile
 const geeProfileFlow = ai.defineFlow(
     {
@@ -449,7 +468,7 @@ const geeProfileFlow = ai.defineFlow(
         const featureCollection = ee.FeatureCollection(features);
 
         const { finalImage } = getImageForProcessing({ bandCombination } as any); // Cast as any to satisfy type checker
-        const bandName = finalImage.bandNames().get(0);
+        const bandName = await getInfoPromisified(finalImage.bandNames().get(0));
 
         // Use sampleRegions, which is the correct method for sampling values at point locations.
         const sampledCollection = finalImage.sampleRegions({
@@ -458,51 +477,44 @@ const geeProfileFlow = ai.defineFlow(
             scale: 30, // Adjust scale as needed, e.g., 30m for NASADEM
         });
 
-        // Use evaluate() for more robust error handling and async flow
-        return new Promise<GeeProfileOutput>((resolve, reject) => {
-            sampledCollection.evaluate((result, error) => {
-                if (error) {
-                    console.error("GEE Profile Error:", error);
-                    return reject(new Error(`Error al generar el perfil en GEE: ${error}`));
-                }
-                
-                // Add console.log to inspect the raw result from GEE
-                console.log("Raw GEE Profile Result:", JSON.stringify(result, null, 2));
+        // Use getInfo() with promisify for robust error handling and async flow
+        try {
+            const result = await getInfoPromisified(sampledCollection);
 
-                try {
-                    if (!result || !result.features) {
-                        throw new Error("La respuesta de GEE no contiene 'features'.");
-                    }
-                    const profileData: ProfilePoint[] = result.features
-                        .map((feature: any) => {
-                            if (!feature.geometry || !feature.properties) return null; // Add safety check
-                            
-                            const elevation = feature.properties[bandName.getInfo()];
-                            const distance = feature.properties.distance;
-                            
-                             if (elevation === null || elevation === undefined || distance === null || distance === undefined) {
-                                return null;
-                            }
+            console.log("Raw GEE Profile Result:", JSON.stringify(result, null, 2));
 
-                            return {
-                                distance: Math.round(distance),
-                                elevation: parseFloat(elevation.toFixed(2)),
-                                location: feature.geometry.coordinates, // [lon, lat]
-                            };
-                        })
-                        .filter((p: ProfilePoint | null): p is ProfilePoint => p !== null); // Filter out any null results
+            if (!result || !result.features) {
+                throw new Error("La respuesta de GEE no contiene 'features'.");
+            }
+            
+            const profileData: ProfilePoint[] = result.features
+                .map((feature: any) => {
+                    if (!feature.geometry || !feature.properties) return null;
                     
-                    if (profileData.length === 0) {
-                        throw new Error("No se obtuvieron datos de elevación válidos para los puntos muestreados.");
+                    const elevation = feature.properties[bandName];
+                    const distance = feature.properties.distance;
+                    
+                     if (elevation === null || elevation === undefined || distance === null || distance === undefined) {
+                        return null;
                     }
 
-                    resolve({ profile: profileData });
-                } catch (processingError: any) {
-                    console.error("Error processing GEE profile results:", processingError);
-                    reject(new Error(`Error al procesar la respuesta del perfil de GEE: ${processingError.message}`));
-                }
-            });
-        });
+                    return {
+                        distance: Math.round(distance),
+                        elevation: parseFloat(elevation.toFixed(2)),
+                        location: feature.geometry.coordinates, // [lon, lat]
+                    };
+                })
+                .filter((p: ProfilePoint | null): p is ProfilePoint => p !== null); // Filter out any null results
+            
+            if (profileData.length === 0) {
+                throw new Error("No se obtuvieron datos de elevación válidos para los puntos muestreados.");
+            }
+
+            return { profile: profileData };
+        } catch (error: any) {
+            console.error("Error processing GEE profile results:", error);
+            throw new Error(`Error al generar el perfil de GEE: ${error.message}`);
+        }
     }
 );
 
@@ -642,3 +654,6 @@ function initializeEe(): Promise<void> {
     
 
 
+
+
+    
