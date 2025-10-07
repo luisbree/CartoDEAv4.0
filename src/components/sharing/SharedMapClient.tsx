@@ -150,7 +150,7 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapState }) => {
             <div className="flex-grow overflow-y-auto pr-2 -mr-2">
                 <div className="space-y-4">
                 {uiLayers.map(layer => (
-                    <div key={layer.uiId} className="text-xs">
+                    <div key={layer.uiId} className="text-xs pb-2">
                         {layer.type === 'local-placeholder' ? (
                              <div className="flex items-center space-x-2 p-1 bg-black/20 rounded-md border border-dashed border-gray-600">
                                 <EyeOff className="h-4 w-4 text-gray-500 flex-shrink-0"/>
