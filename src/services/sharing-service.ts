@@ -11,10 +11,10 @@ const SHARED_MAPS_COLLECTION = 'sharedMaps';
 /**
  * Saves the current map state to Firestore and returns the new document's ID.
  * @param db The Firestore instance.
- * @param mapState The map state object to save.
+ * @param mapState The map state object to save, including the subject.
  * @returns A promise that resolves to the new document ID, or rejects on error.
  */
-export function saveMapState(db: Firestore, mapState: Omit<MapState, 'createdAt'>): Promise<string> {
+export function saveMapState(db: Firestore, mapState: MapState): Promise<string> {
     return new Promise((resolve, reject) => {
         if (!db) {
             console.error("Firestore instance not provided to saveMapState.");
@@ -93,6 +93,6 @@ export async function debugReadDocument(db: Firestore) {
   } catch (error) {
     // This is expected to fail with a permission error if rules are working.
     // The rich error will be thrown by the FirestorePermissionError handler.
-    console.log("Debug read initiated. If rules are correct, a permission error is expected.");
+    console.log("Debug read initiated. If a permission error is expected, this is normal.");
   }
 }

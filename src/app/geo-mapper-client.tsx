@@ -18,6 +18,18 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Map as OLMap, View } from 'ol';
 import type Layer from 'ol/layer/Layer';
 
@@ -161,6 +173,8 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
   const analysisPanelRef = useRef<HTMLDivElement>(null);
   const trelloPopupRef = useRef<Window | null>(null);
   const [isMounted, setIsMounted] = useState(false);
+  const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
+  const [mapSubject, setMapSubject] = useState('');
   
   const layerManagerHookRef = useRef<ReturnType<typeof useLayerManager> | null>(null);
 
@@ -693,6 +707,11 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
       toast({ description: 'El mapa o los servicios no están listos para compartir.', variant: 'destructive' });
       return;
     }
+    
+    if (!mapSubject.trim()) {
+        toast({ description: 'Por favor, ingrese un asunto para el mapa.', variant: 'destructive' });
+        return;
+    }
 
     const { layers } = layerManagerHookRef.current;
     const map = mapRef.current;
@@ -730,7 +749,8 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
       })
       .filter((l): l is SerializableMapLayer => l !== null);
 
-    const mapState = {
+    const mapState: MapState = {
+      subject: mapSubject,
       layers: serializableLayers,
       view: { center, zoom },
       baseLayerId: activeBaseLayerId,
@@ -746,11 +766,13 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
             title: "¡Enlace copiado!",
             description: "El enlace para compartir el mapa se ha copiado en tu portapapeles.",
         });
+        setIsShareDialogOpen(false); // Close dialog on success
+        setMapSubject(''); // Reset subject
     } catch (error) {
         console.error("Failed to share map:", error);
         // Error toast is handled inside saveMapState now via the error emitter
     }
-  }, [mapRef, activeBaseLayerId, firestore, toast]);
+  }, [mapRef, activeBaseLayerId, firestore, toast, mapSubject]);
 
   // Effect for right-click tool toggling
   useEffect(() => {
@@ -939,15 +961,50 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
             >
               {isCapturing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
             </Button>
-            <Button
-                onClick={handleShareMap}
-                variant="outline"
-                size="icon"
-                className="h-8 w-8 flex-shrink-0 bg-black/20 hover:bg-black/40 border border-white/30 text-white/90"
-                title="Compartir mapa"
-            >
-                <Share2 className="h-4 w-4" />
-            </Button>
+             <AlertDialog open={isShareDialogOpen} onOpenChange={setIsShareDialogOpen}>
+                <TooltipProvider delayDuration={200}>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                             <Button
+                                onClick={() => setIsShareDialogOpen(true)}
+                                variant="outline"
+                                size="icon"
+                                className="h-8 w-8 flex-shrink-0 bg-black/20 hover:bg-black/40 border border-white/30 text-white/90"
+                                title="Compartir mapa"
+                            >
+                                <Share2 className="h-4 w-4" />
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" className="bg-gray-700 text-white border-gray-600">
+                           <p className="text-xs">Compartir Mapa</p>
+                        </TooltipContent>
+                    </Tooltip>
+                </TooltipProvider>
+                <AlertDialogContent onOpenAutoFocus={(e) => e.preventDefault()}>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Compartir Mapa</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Ingrese un asunto o título para identificar este mapa compartido.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <div className="grid gap-2">
+                        <Label htmlFor="map-subject" className="text-left">Asunto</Label>
+                        <Input
+                            id="map-subject"
+                            value={mapSubject}
+                            onChange={(e) => setMapSubject(e.target.value)}
+                            placeholder="Ej: Análisis de cuencas en Buenos Aires"
+                            autoFocus
+                        />
+                    </div>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel onClick={() => setMapSubject('')}>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleShareMap} disabled={!mapSubject.trim()}>
+                            Guardar y Copiar Enlace
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
 
 
@@ -1237,4 +1294,3 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
   );
 }
 
-    

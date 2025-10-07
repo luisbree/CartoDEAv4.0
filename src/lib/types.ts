@@ -187,6 +187,7 @@ export type SerializableMapLayer = RemoteSerializableLayer | LocalSerializableLa
 
 
 export interface MapState {
+    subject: string; // The title or subject of the shared map
     layers: SerializableMapLayer[];
     view: {
         center: number[]; // [lon, lat]

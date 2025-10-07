@@ -6,6 +6,10 @@
       "description": "Represents the serializable state of a map view for sharing.",
       "type": "object",
       "properties": {
+        "subject": {
+          "type": "string",
+          "description": "The user-defined subject or title of the shared map."
+        },
         "layers": {
           "type": "array",
           "description": "List of active layers.",
@@ -50,17 +54,13 @@
           "description": "Timestamp of when the map was shared. This will be a server timestamp object."
         }
       },
-      "required": ["layers", "view", "baseLayerId", "createdAt"]
+      "required": ["subject", "layers", "view", "baseLayerId", "createdAt"]
     }
   },
   "auth": {
     "providers": []
   },
   "firestore": {
-    "rules": "firestore.rules",
-    "/sharedMaps/{mapId}": {
-        "schema": { "$ref": "#/entities/SharedMap" },
-        "description": "Stores the state of shared maps. Anyone can read/create."
-    }
+    "rules": "firestore.rules"
   }
 }
