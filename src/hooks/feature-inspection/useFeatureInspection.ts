@@ -361,13 +361,22 @@ export const useFeatureInspection = ({
                                 if (data.features && data.features.length > 0) {
                                     const properties = data.features[0].properties;
                                     let resultText = '';
-                                    for (const key in properties) {
-                                        // Simple heuristic to find a value-like property
-                                        if (typeof properties[key] === 'number' || (typeof properties[key] === 'string' && !isNaN(parseFloat(properties[key])))) {
-                                            resultText = `${parseFloat(properties[key]).toFixed(2)}`;
-                                            break;
+                                    // Try to find a property that looks like a pixel value
+                                    const valueKeys = ['GRAY_INDEX', 'PALETTE_INDEX', 'RED', 'GREEN', 'BLUE'];
+                                    const foundKey = valueKeys.find(key => key in properties);
+                                    
+                                    if (foundKey) {
+                                        resultText = `${parseFloat(properties[foundKey]).toFixed(2)}`;
+                                    } else {
+                                        // Fallback: find the first numeric property
+                                        for (const key in properties) {
+                                            if (typeof properties[key] === 'number') {
+                                                resultText = `${properties[key].toFixed(2)}`;
+                                                break;
+                                            }
                                         }
                                     }
+
                                     if (resultText) {
                                       createAndAddVisuals(resultText);
                                     }
@@ -679,5 +688,6 @@ export const useFeatureInspection = ({
     
 
     
+
 
 
