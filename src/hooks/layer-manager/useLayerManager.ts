@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
@@ -355,7 +354,7 @@ export const useLayerManager = ({
     }
 }, [isMapReady, mapRef, addLayer, updateGeoServerDiscoveredLayerState, toast]);
 
-  const addGeeLayerToMap = useCallback((tileUrl: string, layerName: string, geeParams: Omit<GeeValueQueryInput, 'aoi' | 'zoom'>) => {
+  const addGeeLayerToMap = useCallback((tileUrl: string, layerName: string, geeParams: Omit<GeeTileLayerInput, 'aoi' | 'zoom'>) => {
     if (!mapRef.current) return;
 
     const layerId = `gee-${nanoid()}`;
@@ -371,7 +370,7 @@ export const useLayerManager = ({
         id: layerId,
         name: layerName,
         type: 'gee',
-        geeParams: geeParams, // Store the params for querying later
+        geeParams: { ...geeParams, tileUrl }, // Store the tileUrl in geeParams for sharing
       },
     });
 
@@ -1103,4 +1102,5 @@ export const useLayerManager = ({
     
 
     
+
 

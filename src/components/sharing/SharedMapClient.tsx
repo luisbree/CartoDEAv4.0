@@ -12,29 +12,29 @@ import { fromLonLat } from 'ol/proj';
 import { defaults as defaultControls } from 'ol/control';
 import GeoJSON from 'ol/format/GeoJSON';
 import { bbox as bboxStrategy } from 'ol/loadingstrategy';
-import type { MapState } from '@/lib/types';
+import type { MapState, SerializableMapLayer } from '@/lib/types';
 import { BASE_LAYER_DEFINITIONS } from '../map-view';
 import { Style, Fill, Stroke, Circle as CircleStyle } from 'ol/style';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Slider } from '@/components/ui/slider';
 import { Label } from '@/components/ui/label';
+import { EyeOff } from 'lucide-react';
+import { cn } from '@/lib/utils';
+
 
 interface SharedMapClientProps {
   mapState: MapState;
 }
 
-// Simple state for managing layer properties in the UI
-interface UILayerState {
-  id: string;
-  name: string;
-  visible: boolean;
-  opacity: number;
+// Combine layer data from mapState with a unique ID for the UI
+interface UILayerState extends SerializableMapLayer {
+  uiId: string;
+  olLayer?: TileLayer<any> | VectorLayer<any>;
 }
 
 const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapState }) => {
   const mapElementRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<Map | null>(null);
-  const layerRefs = useRef<Record<string, TileLayer<any> | VectorLayer<any>>>({});
   const [uiLayers, setUiLayers] = useState<UILayerState[]>([]);
 
   useEffect(() => {
@@ -44,22 +44,13 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapState }) => {
 
     const baseLayerDef = BASE_LAYER_DEFINITIONS.find(def => def.id === mapState.baseLayerId) || BASE_LAYER_DEFINITIONS[1];
     const baseLayer = baseLayerDef.createLayer ? baseLayerDef.createLayer() : null;
-    const initialLayersForMap = baseLayer ? [baseLayer] : [];
+    const initialLayersForMap: (TileLayer<any> | VectorLayer<any>)[] = baseLayer ? [baseLayer] : [];
     
-    const initialUiLayers: UILayerState[] = [];
-    if (baseLayer) {
-        const baseLayerId = `base-${baseLayerDef.id}`;
-        layerRefs.current[baseLayerId] = baseLayer;
-        initialUiLayers.push({
-            id: baseLayerId,
-            name: baseLayerDef.name,
-            visible: true,
-            opacity: 1,
-        });
-    }
+    const allLayersForUI: UILayerState[] = [];
 
+    // Process operational layers from mapState
     mapState.layers.forEach((layerData, index) => {
-        const layerId = `layer-${index}`;
+        const uiId = `layer-${index}`;
         let olLayer: TileLayer<any> | VectorLayer<any> | null = null;
 
         if (layerData.type === 'wms' && layerData.url && layerData.layerName) {
@@ -103,14 +94,9 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapState }) => {
 
         if (olLayer) {
             initialLayersForMap.push(olLayer);
-            layerRefs.current[layerId] = olLayer;
-            initialUiLayers.push({
-                id: layerId,
-                name: layerData.name,
-                visible: layerData.visible,
-                opacity: layerData.opacity,
-            });
         }
+        
+        allLayersForUI.push({ ...layerData, uiId, olLayer: olLayer || undefined });
     });
 
     const map = new Map({
@@ -125,7 +111,7 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapState }) => {
     });
 
     mapRef.current = map;
-    setUiLayers(initialUiLayers);
+    setUiLayers(allLayersForUI);
 
     return () => {
       if (mapRef.current) {
@@ -135,20 +121,25 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapState }) => {
     };
   }, [mapState]);
 
-  const handleVisibilityChange = (layerId: string, isVisible: boolean) => {
-    const olLayer = layerRefs.current[layerId];
-    if (olLayer) {
-      olLayer.setVisible(isVisible);
-      setUiLayers(prev => prev.map(l => l.id === layerId ? { ...l, visible: isVisible } : l));
-    }
+  const handleVisibilityChange = (uiId: string, isVisible: boolean) => {
+    setUiLayers(prev => prev.map(l => {
+        if (l.uiId === uiId && l.olLayer) {
+            l.olLayer.setVisible(isVisible);
+            // This is a mutable change on the layer object, but we trigger a state update to be safe
+            return { ...l, visible: isVisible };
+        }
+        return l;
+    }));
   };
 
-  const handleOpacityChange = (layerId: string, opacity: number) => {
-    const olLayer = layerRefs.current[layerId];
-    if (olLayer) {
-      olLayer.setOpacity(opacity);
-      setUiLayers(prev => prev.map(l => l.id === layerId ? { ...l, opacity } : l));
-    }
+  const handleOpacityChange = (uiId: string, opacity: number) => {
+      setUiLayers(prev => prev.map(l => {
+        if (l.uiId === uiId && l.olLayer) {
+            l.olLayer.setOpacity(opacity);
+            return { ...l, opacity };
+        }
+        return l;
+    }));
   };
 
   return (
@@ -159,25 +150,36 @@ const SharedMapClient: React.FC<SharedMapClientProps> = ({ mapState }) => {
             <div className="flex-grow overflow-y-auto pr-2 -mr-2">
                 <div className="space-y-3">
                 {uiLayers.map(layer => (
-                    <div key={layer.id} className="text-xs">
-                        <div className="flex items-center space-x-2">
-                            <Checkbox
-                                id={`vis-${layer.id}`}
-                                checked={layer.visible}
-                                onCheckedChange={(checked) => handleVisibilityChange(layer.id, !!checked)}
-                                className="border-gray-400 data-[state=checked]:bg-primary"
-                            />
-                            <Label htmlFor={`vis-${layer.id}`} className="flex-1 truncate" title={layer.name}>
-                                {layer.name}
-                            </Label>
-                        </div>
-                        <div className="mt-1.5 pl-1">
-                            <Slider
-                                value={[layer.opacity * 100]}
-                                onValueChange={(value) => handleOpacityChange(layer.id, value[0] / 100)}
-                                className="w-full h-2"
-                            />
-                        </div>
+                    <div key={layer.uiId} className="text-xs">
+                        {layer.type === 'local-placeholder' ? (
+                             <div className="flex items-center space-x-2 p-1 bg-black/20 rounded-md border border-dashed border-gray-600">
+                                <EyeOff className="h-4 w-4 text-gray-500 flex-shrink-0"/>
+                                <Label className="flex-1 truncate text-gray-500 italic" title={`${layer.name} (no disponible en modo compartido)`}>
+                                    {layer.name}
+                                </Label>
+                            </div>
+                        ) : (
+                            <>
+                                <div className="flex items-center space-x-2">
+                                    <Checkbox
+                                        id={`vis-${layer.uiId}`}
+                                        checked={layer.visible}
+                                        onCheckedChange={(checked) => handleVisibilityChange(layer.uiId, !!checked)}
+                                        className="border-gray-400 data-[state=checked]:bg-primary"
+                                    />
+                                    <Label htmlFor={`vis-${layer.uiId}`} className="flex-1 truncate" title={layer.name}>
+                                        {layer.name}
+                                    </Label>
+                                </div>
+                                <div className="mt-1.5 pl-1">
+                                    <Slider
+                                        value={[layer.opacity * 100]}
+                                        onValueChange={(value) => handleOpacityChange(layer.uiId, value[0] / 100)}
+                                        className="w-full h-2"
+                                    />
+                                </div>
+                            </>
+                        )}
                     </div>
                 ))}
                 </div>

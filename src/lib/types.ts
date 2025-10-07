@@ -1,4 +1,3 @@
-
 import type { default as Layer } from 'ol/layer/Layer';
 import type VectorLayer from 'ol/layer/Vector';
 import type VectorSource from 'ol/source/Vector';
@@ -40,7 +39,7 @@ export interface MapLayer {
   olLayer: Layer<Source, any>;
   visible: boolean;
   opacity: number;
-  type: 'wms' | 'wfs' | 'vector' | 'osm' | 'drawing' | 'sentinel' | 'landsat' | 'gee' | 'geotiff' | 'analysis' | 'local-placeholder';
+  type: 'wms' | 'wfs' | 'vector' | 'osm' | 'drawing' | 'sentinel' | 'landsat' | 'gee' | 'geotiff' | 'analysis';
   isDeas?: boolean;
   graduatedSymbology?: GraduatedSymbology;
   categorizedSymbology?: CategorizedSymbology;
@@ -174,7 +173,7 @@ export interface RemoteSerializableLayer {
     styleName: string | null;
     geeParams: {
         bandCombination: string | null;
-        // Add other GEE params as needed
+        tileUrl: string | null;
     } | null;
 }
 
