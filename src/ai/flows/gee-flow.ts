@@ -1,5 +1,4 @@
 
-
 'use server';
 /**
  * @fileOverview A flow for generating Google Earth Engine tile layers, vector data, and histograms.
@@ -73,7 +72,7 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
     const minElevation = 'minElevation' in input ? input.minElevation : undefined;
     const maxElevation = 'maxElevation' in input ? input.maxElevation : undefined;
 
-    const geometry = aoi ? ee.Geometry.Rectangle([aoi.minLon, aoi.minLat, aoi.maxLon, aoi.maxLat]) : ('points' in input ? ee.FeatureCollection(ee.Geometry.MultiPoint(input.points.coordinates)) : ee.Geometry.Point([0,0]));
+    const geometry = aoi ? ee.Geometry.Rectangle([aoi.minLon, aoi.minLat, aoi.maxLon, aoi.maxLat]) : ('points' in input && input.points ? ee.FeatureCollection(ee.Geometry.MultiPoint(input.points.coordinates)) : undefined);
       
     let finalImage;
     let visParams: { bands?: string[]; min: number | number[]; max: number | number[]; gamma?: number, palette?: string[] } | null = null;
@@ -90,7 +89,7 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
         let s2ImageCollection = ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
           .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 20));
         
-        if (geometry && !('points' in input)) {
+        if (geometry) {
             s2ImageCollection = s2ImageCollection.filterBounds(geometry);
         }
 
@@ -157,7 +156,7 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
         const startDate = 'startDate' in input ? input.startDate : undefined;
         const endDate = 'endDate' in input ? input.endDate : undefined;
         const dwCollection = ee.ImageCollection('GOOGLE/DYNAMICWORLD/V1').filterDate(startDate!, endDate!);
-        if (geometry && !('points' in input)) {
+        if (geometry) {
             dwCollection.filterBounds(geometry);
         }
         finalImage = ee.Image(dwCollection.mode()).select('label');
@@ -352,7 +351,7 @@ const geeGeoTiffDownloadFlow = ai.defineFlow(
         const { finalImage, geometry } = getImageForProcessing(input);
 
         // Clip the image to the specified Area of Interest (AOI)
-        const clippedImage = finalImage.clip(geometry);
+        const clippedImage = finalImage.clip(geometry!);
 
         return new Promise((resolve, reject) => {
             const componentName = input.tasseledCapComponent ? `_${input.tasseledCapComponent.toLowerCase()}` : '';
@@ -467,8 +466,16 @@ const geeProfileFlow = ai.defineFlow(
         );
         const featureCollection = ee.FeatureCollection(features);
 
-        const { finalImage } = getImageForProcessing({ bandCombination } as any); // Cast as any to satisfy type checker
-        const bandName = await getInfoPromisified(finalImage.bandNames().get(0));
+        let finalImage;
+        let bandName: string;
+
+        if (bandCombination === 'NASADEM_ELEVATION') {
+            finalImage = ee.Image('NASA/NASADEM_HGT/001').select('elevation');
+            bandName = 'elevation';
+        } else { // ALOS_DSM
+            finalImage = ee.ImageCollection('JAXA/ALOS/AW3D30/V3_2').select('DSM').mosaic();
+            bandName = 'DSM';
+        }
 
         // Use sampleRegions, which is the correct method for sampling values at point locations.
         const sampledCollection = finalImage.sampleRegions({
@@ -655,5 +662,7 @@ function initializeEe(): Promise<void> {
 
 
 
+
+    
 
     
