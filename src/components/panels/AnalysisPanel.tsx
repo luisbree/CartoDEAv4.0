@@ -16,7 +16,7 @@ import { nanoid } from 'nanoid';
 import GeoJSON from 'ol/format/GeoJSON';
 import VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
-import { intersect, featureCollection, difference, cleanCoords } from '@turf/turf';
+import { intersect, featureCollection, difference, cleanCoords, length as turfLength, along as turfAlong } from '@turf/turf';
 import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as TurfMultiPolygon, FeatureCollection as TurfFeatureCollection, Geometry as TurfGeometry, LineString as TurfLineString, Point as TurfPoint } from 'geojson';
 import { multiPolygon } from '@turf/helpers';
 import Feature from 'ol/Feature';
@@ -50,6 +50,18 @@ const SectionHeader: React.FC<{ icon: React.ElementType; title: string; }> = ({ 
         <span className="text-sm font-semibold">{title}</span>
     </div>
 );
+
+const CustomChartTooltip: React.FC<any> = ({ active, payload, label }) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="bg-gray-800/80 text-white p-2 rounded-md border border-gray-600 shadow-lg text-xs">
+          <p className="font-bold">{`Distancia: ${payload[0].payload.distance.toLocaleString()} m`}</p>
+          <p className="text-cyan-300">{`Elevación: ${payload[0].value.toFixed(2)} m`}</p>
+        </div>
+      );
+    }
+    return null;
+};
 
 
 const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
@@ -116,6 +128,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   const [profileInputLayerId, setProfileInputLayerId] = useState<string>('');
   const [profileDemLayer, setProfileDemLayer] = useState<'NASADEM_ELEVATION' | 'ALOS_DSM'>('NASADEM_ELEVATION');
   const [isGeneratingProfile, setIsGeneratingProfile] = useState(false);
+  const [profileData, setProfileData] = useState<ProfilePoint[] | null>(null);
 
   const { toast } = useToast();
 
@@ -146,18 +159,18 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     });
   }, [vectorLayers]);
   
-  const handleRunProfile = useCallback(async () => {
+ const handleRunProfile = useCallback(async () => {
     if (!profileInputLayerId) {
-      toast({ description: "Por favor, seleccione una capa de línea para generar el perfil.", variant: "destructive" });
-      return;
+        toast({ description: "Por favor, seleccione una capa de línea para generar el perfil.", variant: "destructive" });
+        return;
     }
     const lineLayer = lineLayers.find(l => l.id === profileInputLayerId);
     if (!lineLayer) return;
 
     const source = lineLayer.olLayer.getSource();
     if (!source || source.getFeatures().length === 0) {
-      toast({ description: "La capa de línea seleccionada no tiene entidades.", variant: "destructive" });
-      return;
+        toast({ description: "La capa de línea seleccionada no tiene entidades.", variant: "destructive" });
+        return;
     }
 
     const safeSelectedFeatures = selectedFeatures || [];
@@ -172,83 +185,49 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         featureToProfile = layerFeatures[0];
     }
     
-    const geometry = featureToProfile.getGeometry() as OlLineString;
-    const lineCoords = geometry.getCoordinates();
-    if (lineCoords.length < 2) {
-      toast({ description: "La línea seleccionada no tiene suficientes puntos.", variant: "destructive" });
-      return;
-    }
-
-    const startPoint = lineCoords[0];
-    const endPoint = lineCoords[lineCoords.length - 1];
-
-    const coordinates = [startPoint, endPoint];
-    const distances = [0, olGetLength(geometry, { projection: 'EPSG:3857' })];
-    
-    const pointsGeoJSON = {
-        type: 'MultiPoint',
-        coordinates: coordinates.map(coord => new GeoJSON().writeGeometryObject(new Point(coord), {featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326'}).coordinates),
-    };
-
     setIsGeneratingProfile(true);
-    toast({ description: "Generando perfil para puntos de inicio y fin..." });
+    setProfileData(null);
+    toast({ description: "Generando perfil..." });
+    
+    const geojsonFormat = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
+    const lineGeoJSON = geojsonFormat.writeFeatureObject(featureToProfile) as TurfFeature<TurfLineString>;
+    
+    const lineLength = turfLength(lineGeoJSON, { units: 'meters' });
+    const numPoints = Math.min(Math.max(Math.floor(lineLength / 10), 20), 500); // Sample every 10m, but cap at 500 points
+    const interval = lineLength / (numPoints - 1);
+    
+    const points: number[][] = [];
+    const distances: number[] = [];
+    for (let i = 0; i < numPoints; i++) {
+        const distance = i * interval;
+        const point = turfAlong(lineGeoJSON, distance, { units: 'meters' });
+        points.push(point.geometry.coordinates);
+        distances.push(distance);
+    }
+    
+    const pointsGeoJSON = { type: 'MultiPoint', coordinates: points };
 
     try {
-      const result = await getGeeProfile({
-        points: pointsGeoJSON as { type: 'MultiPoint'; coordinates: number[][]; },
-        bandCombination: profileDemLayer,
-        distances: distances,
-      });
+        const result = await getGeeProfile({
+            points: pointsGeoJSON as { type: 'MultiPoint'; coordinates: number[][]; },
+            bandCombination: profileDemLayer,
+            distances: distances,
+        });
 
-      if (result && result.profile.length > 0) {
-          const pointFeatures = result.profile.map(pointData => {
-              const olPoint = new GeoJSON().readFeature({
-                  type: 'Feature',
-                  geometry: { type: 'Point', coordinates: pointData.location },
-                  properties: { elevation: pointData.elevation }
-              }, { featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
-              
-              olPoint.setStyle(new Style({
-                text: new TextStyle({
-                  text: `${Math.round(pointData.elevation)}m`,
-                  font: '12px Calibri,sans-serif',
-                  fill: new Fill({ color: '#000' }),
-                  stroke: new Stroke({ color: '#fff', width: 3 }),
-                  offsetY: -15,
-                })
-              }));
-              
-              return olPoint;
-          });
-
-          const newLayerId = `profile-points-${nanoid()}`;
-          const newSource = new VectorSource({ features: pointFeatures });
-          const newOlLayer = new VectorLayer({
-              source: newSource,
-              properties: { id: newLayerId, name: `Elevación Perfil ${lineLayer.name}`, type: 'analysis' },
-          });
-
-          onAddLayer({
-              id: newLayerId,
-              name: `Elevación Perfil ${lineLayer.name}`,
-              olLayer: newOlLayer,
-              visible: true,
-              opacity: 1,
-              type: 'analysis',
-          }, true);
-        
-        toast({ description: "Valores de elevación de inicio y fin añadidos al mapa." });
-      } else {
-        throw new Error("No se recibieron datos de elevación del perfil.");
-      }
+        if (result && result.profile.length > 0) {
+            setProfileData(result.profile);
+            toast({ description: "Perfil topográfico generado con éxito." });
+        } else {
+            throw new Error("No se recibieron datos del perfil desde el servidor.");
+        }
 
     } catch (error: any) {
-      console.error("Error generating GEE profile:", error);
-      toast({ title: "Error de Perfil GEE", description: error.message, variant: "destructive" });
+        console.error("Error generating GEE profile:", error);
+        toast({ title: "Error de Perfil GEE", description: error.message, variant: "destructive" });
     } finally {
-      setIsGeneratingProfile(false);
+        setIsGeneratingProfile(false);
     }
-  }, [profileInputLayerId, profileDemLayer, lineLayers, toast, selectedFeatures, onAddLayer]);
+}, [profileInputLayerId, profileDemLayer, lineLayers, toast, selectedFeatures]);
 
   const handleRunClip = () => {
     const inputLayer = vectorLayers.find(l => l.id === clipInputLayerId);
@@ -1120,6 +1099,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                   {lineLayers.map(l => <SelectItem key={l.id} value={l.id} className="text-xs">{l.name}</SelectItem>)}
                                 </SelectContent>
                               </Select>
+                              <p className="text-xs text-gray-400 mt-1">Se usará la línea seleccionada o la única en la capa.</p>
                           </div>
                           <div>
                               <Label htmlFor="profile-dem-layer" className="text-xs">Modelo de Elevación (DEM)</Label>
@@ -1135,6 +1115,40 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                               {isGeneratingProfile ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <LineChart className="mr-2 h-3.5 w-3.5" />}
                               Generar Perfil
                           </Button>
+                           {profileData && (
+                            <div className="pt-3 border-t border-white/20 mt-3">
+                                <Label className="text-xs font-semibold text-white">Resultado del Perfil</Label>
+                                <div className="h-48 w-full mt-2">
+                                     <ResponsiveContainer width="100%" height="100%">
+                                        <AreaChart data={profileData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                                            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                                            <XAxis 
+                                                dataKey="distance" 
+                                                stroke="#9ca3af" 
+                                                fontSize={10} 
+                                                tickFormatter={(val) => `${(val / 1000).toFixed(1)}km`}
+                                                label={{ value: 'Distancia', position: 'insideBottom', offset: -5, fill: '#9ca3af', fontSize: 10 }}
+                                            />
+                                            <YAxis 
+                                                stroke="#9ca3af" 
+                                                fontSize={10}
+                                                domain={['dataMin - 10', 'dataMax + 10']}
+                                                tickFormatter={(val) => `${val}m`}
+                                                label={{ value: 'Elevación', angle: -90, position: 'insideLeft', offset: 10, fill: '#9ca3af', fontSize: 10 }}
+                                            />
+                                            <ChartTooltip content={<CustomChartTooltip />} />
+                                            <defs>
+                                                <linearGradient id="colorUv" x1="0" y1="0" x2="0" y2="1">
+                                                    <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.6}/>
+                                                    <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0.1}/>
+                                                </linearGradient>
+                                            </defs>
+                                            <Area type="monotone" dataKey="elevation" stroke="hsl(var(--primary))" fillOpacity={1} fill="url(#colorUv)" />
+                                        </AreaChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            </div>
+                          )}
                       </div>
                     </div>
                 </AccordionContent>
@@ -1202,3 +1216,4 @@ export default AnalysisPanel;
     
 
     
+

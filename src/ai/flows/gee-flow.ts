@@ -448,7 +448,7 @@ const geeProfileFlow = ai.defineFlow(
         );
         const featureCollection = ee.FeatureCollection(features);
 
-        const { finalImage } = getImageForProcessing({ bandCombination });
+        const { finalImage } = getImageForProcessing({ bandCombination } as any); // Cast as any to satisfy type checker
         const bandName = finalImage.bandNames().get(0);
 
         // Use sampleRegions, which is the correct method for sampling values at point locations.
@@ -467,20 +467,32 @@ const geeProfileFlow = ai.defineFlow(
                 }
 
                 try {
+                    if (!result || !result.features) {
+                        throw new Error("La respuesta de GEE no contiene 'features'.");
+                    }
                     const profileData: ProfilePoint[] = result.features
                         .map((feature: any) => {
-                            if (!feature.geometry) return null; // Add safety check
+                            if (!feature.geometry || !feature.properties) return null; // Add safety check
                             
                             const elevation = feature.properties[bandName.getInfo()];
                             const distance = feature.properties.distance;
+                            
+                             if (elevation === null || elevation === undefined || distance === null || distance === undefined) {
+                                return null;
+                            }
+
                             return {
                                 distance: Math.round(distance),
-                                elevation: elevation ? parseFloat(elevation.toFixed(2)) : 0,
+                                elevation: parseFloat(elevation.toFixed(2)),
                                 location: feature.geometry.coordinates, // [lon, lat]
                             };
                         })
-                        .filter(Boolean); // Filter out any null results
+                        .filter((p: ProfilePoint | null): p is ProfilePoint => p !== null); // Filter out any null results
                     
+                    if (profileData.length === 0) {
+                        throw new Error("No se obtuvieron datos de elevación válidos para los puntos muestreados.");
+                    }
+
                     resolve({ profile: profileData });
                 } catch (processingError: any) {
                     console.error("Error processing GEE profile results:", processingError);
@@ -625,3 +637,4 @@ function initializeEe(): Promise<void> {
 
 
     
+
