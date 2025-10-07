@@ -465,6 +465,9 @@ const geeProfileFlow = ai.defineFlow(
                     console.error("GEE Profile Error:", error);
                     return reject(new Error(`Error al generar el perfil en GEE: ${error}`));
                 }
+                
+                // Add console.log to inspect the raw result from GEE
+                console.log("Raw GEE Profile Result:", JSON.stringify(result, null, 2));
 
                 try {
                     if (!result || !result.features) {
@@ -637,4 +640,5 @@ function initializeEe(): Promise<void> {
 
 
     
+
 
