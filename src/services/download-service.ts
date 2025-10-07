@@ -37,51 +37,36 @@ export async function saveFileWithPicker({ fileContent, suggestedName, fileType 
         geojson: {
             description: 'GeoJSON File',
             accept: { 'application/geo+json': ['.geojson'] },
+            mime: 'application/geo+json',
         },
         kml: {
             description: 'KML File',
             accept: { 'application/vnd.google-earth.kml+xml': ['.kml'] },
+            mime: 'application/vnd.google-earth.kml+xml',
         },
         shp: {
             description: 'Shapefile ZIP',
             accept: { 'application/zip': ['.zip'] },
+            mime: 'application/zip',
         }
     };
     
-    // Modern method: showSaveFilePicker
-    if ('showSaveFilePicker' in window) {
-        try {
-            const handle = await window.showSaveFilePicker({
-                suggestedName,
-                types: [fileTypesConfig[fileType]],
-            });
-            const writable = await handle.createWritable();
-            await writable.write(fileContent);
-            await writable.close();
-        } catch (error: any) {
-            // AbortError is expected if the user cancels the dialog.
-            if (error.name !== 'AbortError') {
-                console.error('Error saving file with picker:', error);
-                throw error;
-            }
-        }
-    } else {
-        // Fallback method for older browsers
-        try {
-            const blob = fileContent instanceof Blob
-                ? fileContent
-                : new Blob([fileContent], { type: fileTypesConfig[fileType].accept[Object.keys(fileTypesConfig[fileType].accept)[0]][0] });
+    // The modern 'showSaveFilePicker' API is blocked in this cross-origin iframe environment.
+    // We will directly use the fallback method which works reliably.
+    try {
+        const blob = fileContent instanceof Blob
+            ? fileContent
+            : new Blob([fileContent], { type: fileTypesConfig[fileType].mime });
 
-            const link = document.createElement('a');
-            link.href = URL.createObjectURL(blob);
-            link.download = suggestedName;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(link.href);
-        } catch (error) {
-            console.error('Error saving file with fallback method:', error);
-            throw error;
-        }
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = suggestedName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(link.href);
+    } catch (error) {
+        console.error('Error saving file with fallback method:', error);
+        throw error;
     }
 }
