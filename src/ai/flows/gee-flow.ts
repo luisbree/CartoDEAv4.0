@@ -67,14 +67,14 @@ export async function authenticateWithGee(): Promise<{ success: boolean; message
 }
 
 
-const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInput | GeeHistogramInput | GeeProfileInput) => {
+const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInput | GeeHistogramInput) => {
     const { bandCombination } = input;
     const aoi = 'aoi' in input ? input.aoi : undefined;
     
     // This logic is now only for profiles, as other tools get their geometry from the input.
     const geometry = aoi 
         ? ee.Geometry.Rectangle([aoi.minLon, aoi.minLat, aoi.maxLon, aoi.maxLat]) 
-        : ('line' in input ? ee.Geometry.LineString(input.line.geometry.coordinates) : undefined);
+        : undefined;
 
     // For histogram, min/max are not needed for image retrieval, but might be for tile layers
     const minElevation = 'minElevation' in input ? input.minElevation : undefined;
@@ -462,13 +462,14 @@ const geeProfileFlow = ai.defineFlow(
     const { line, bandCombination } = input;
     const SAMPLES = 100; // Number of points to sample along the line
     
-    const lineLength = turfLength(line, { units: 'meters' });
-    const points = [];
-    for (let i = 0; i <= SAMPLES; i++) {
-        const distance = (i / SAMPLES) * lineLength;
-        const point = turfAlong(line, distance, { units: 'meters' });
-        points.push(ee.Feature(ee.Geometry.Point(point.geometry.coordinates), { distance: distance }));
-    }
+    // Create an ee.Geometry from the GeoJSON LineString
+    const eeLine = ee.Geometry.LineString(line.geometry.coordinates);
+
+    // Create a feature collection with points along the line
+    const distances = ee.List.sequence(0, eeLine.length(), null, SAMPLES);
+    const points = eeLine.cutLines(distances, 1).geometries().map((g: ee.Geometry) => {
+        return ee.Feature(g.centroid(), { 'distance': g.length() });
+    });
     const featureCollection = ee.FeatureCollection(points);
     
     // Simplified image retrieval just for elevation
@@ -478,13 +479,16 @@ const geeProfileFlow = ai.defineFlow(
 
     const bandName = bandCombination === 'ALOS_DSM' ? 'DSM' : 'elevation';
 
-    const sampledData = elevationImage.sampleRegions({
+    const sampledData = elevationImage.reduceRegions({
         collection: featureCollection,
-        properties: ['distance'],
+        reducer: ee.Reducer.first(), // Use 'first' reducer to sample the pixel value
         scale: 30, // Native resolution of NASADEM/ALOS
     });
     
     const resultFeatures = await getInfoPromisified(sampledData) as ee.FeatureCollection;
+    
+    // MOVING CONSOLE LOG HERE FOR BETTER DEBUGGING
+    console.log('GEE Sampled Data Response:', JSON.stringify(resultFeatures, null, 2));
     
     if (!resultFeatures || !resultFeatures.features || resultFeatures.features.length === 0) {
         throw new Error("No se obtuvieron datos de elevación válidos de GEE.");
@@ -494,7 +498,7 @@ const geeProfileFlow = ai.defineFlow(
         .map(f => {
             // Add a check to ensure f.properties and f.geometry are not null
             if (f && f.properties && f.geometry) {
-                const elevation = f.properties[bandName];
+                const elevation = f.properties[bandName]; // The value is now under the band name
                 const distance = f.properties.distance;
                 if (typeof elevation === 'number' && typeof distance === 'number') {
                     return {
@@ -508,8 +512,15 @@ const geeProfileFlow = ai.defineFlow(
         })
         .filter((p): p is ProfilePoint => p !== null)
         .sort((a, b) => a.distance - b.distance);
+    
+    // Accumulate distances
+    let accumulatedDistance = 0;
+    const finalProfile = profile.map(p => {
+        accumulatedDistance += p.distance;
+        return { ...p, distance: accumulatedDistance };
+    });
 
-    return { profile };
+    return { profile: finalProfile };
   }
 );
 
