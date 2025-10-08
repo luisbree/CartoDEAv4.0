@@ -123,7 +123,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   const [profileData, setProfileData] = useState<ProfilePoint[] | null>(null);
   const [isDrawingProfile, setIsDrawingProfile] = useState(false);
   const [isGeneratingProfile, setIsGeneratingProfile] = useState(false);
-  const [profileLayerId, setProfileLayerId] = useState('');
+  const [profileDataset, setProfileDataset] = useState<'NASADEM_ELEVATION' | 'ALOS_DSM'>('NASADEM_ELEVATION');
   const analysisLayerRef = useRef<VectorLayer<VectorSource<Feature<Geometry>>> | null>(null);
   const drawInteractionRef = useRef<Draw | null>(null);
 
@@ -193,16 +193,11 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   }, [mapRef, isDrawingProfile, stopDrawing, clearAnalysisGeometries, toast]);
 
   const handleRunProfile = async () => {
-    if (!profileLine || !profileLayerId) {
-        toast({ description: "Dibuja una línea y selecciona una capa de elevación.", variant: "destructive" });
+    if (!profileLine || !profileDataset) {
+        toast({ description: "Dibuja una línea y selecciona un dataset de elevación.", variant: "destructive" });
         return;
     }
-    const elevationLayer = allLayers.find(l => l.id === profileLayerId);
-    if (!elevationLayer || !elevationLayer.olLayer.get('geeParams')?.bandCombination) {
-        toast({ description: "La capa seleccionada no es una capa de elevación GEE válida.", variant: "destructive" });
-        return;
-    }
-
+    
     setIsGeneratingProfile(true);
     setProfileData(null);
     toast({ description: "Generando perfil topográfico..." });
@@ -213,7 +208,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         
         const result = await getGeeProfile({
             line: lineGeoJSON,
-            bandCombination: elevationLayer.olLayer.get('geeParams').bandCombination,
+            bandCombination: profileDataset,
         });
         
         if (result && result.profile.length > 0) {
@@ -258,11 +253,6 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         return geomType === 'LineString' || geomType === 'MultiLineString';
     });
   }, [vectorLayers]);
-
-  const elevationLayers = useMemo(() => {
-    return allLayers.filter(l => l.olLayer.get('geeParams')?.bandCombination.includes('ELEVATION') || l.olLayer.get('geeParams')?.bandCombination.includes('DSM'));
-  }, [allLayers]);
-  
 
   const handleRunClip = () => {
     const inputLayer = vectorLayers.find(l => l.id === clipInputLayerId);
@@ -843,15 +833,18 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                             </Button>
                         </div>
                          <div>
-                            <Label htmlFor="profile-layer-select" className="text-xs">Capa de Elevación (GEE)</Label>
-                            <Select value={profileLayerId} onValueChange={setProfileLayerId} disabled={elevationLayers.length === 0}>
-                                <SelectTrigger id="profile-layer-select" className="h-8 text-xs bg-black/20"><SelectValue placeholder="Seleccionar capa de elevación..." /></SelectTrigger>
+                            <Label htmlFor="profile-layer-select" className="text-xs">Dataset de Elevación (GEE)</Label>
+                            <Select value={profileDataset} onValueChange={(v: 'NASADEM_ELEVATION' | 'ALOS_DSM') => setProfileDataset(v)}>
+                                <SelectTrigger id="profile-layer-select" className="h-8 text-xs bg-black/20">
+                                    <SelectValue placeholder="Seleccionar dataset de elevación..." />
+                                </SelectTrigger>
                                 <SelectContent className="bg-gray-700 text-white border-gray-600">
-                                  {elevationLayers.map(l => <SelectItem key={l.id} value={l.id} className="text-xs">{l.name}</SelectItem>)}
+                                  <SelectItem value="NASADEM_ELEVATION" className="text-xs">NASADEM (Elevación)</SelectItem>
+                                  <SelectItem value="ALOS_DSM" className="text-xs">ALOS (Superficie)</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
-                        <Button onClick={handleRunProfile} size="sm" className="w-full h-8 text-xs" disabled={!profileLine || !profileLayerId || isGeneratingProfile}>
+                        <Button onClick={handleRunProfile} size="sm" className="w-full h-8 text-xs" disabled={!profileLine || !profileDataset || isGeneratingProfile}>
                             {isGeneratingProfile ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <LineChart className="mr-2 h-3.5 w-3.5" />}
                             Generar Perfil
                         </Button>
