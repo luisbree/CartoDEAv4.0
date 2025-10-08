@@ -3,7 +3,7 @@
 
 import React, { useRef, useState } from 'react';
 import LayerItem from './LayerItem';
-import type { CategorizedSymbology, GraduatedSymbology, InteractionToolId, LabelOptions, MapLayer } from '@/lib/types';
+import type { CategorizedSymbology, GeoTiffStyle, GraduatedSymbology, InteractionToolId, LabelOptions, MapLayer } from '@/lib/types';
 import { Layers } from 'lucide-react';
 import type { StyleOptions } from './StyleEditorDialog';
 
@@ -27,6 +27,7 @@ interface LayerListProps {
   onChangeLayerLabels: (layerId: string, labelOptions: LabelOptions) => void;
   onApplyGraduatedSymbology: (layerId: string, symbology: GraduatedSymbology) => void;
   onApplyCategorizedSymbology: (layerId: string, symbology: CategorizedSymbology) => void;
+  onApplyGeoTiffStyle: (layerId: string, style: GeoTiffStyle) => void;
   onToggleWmsStyle: (layerId: string) => void;
 
   // Selection props
@@ -60,6 +61,7 @@ const LayerList: React.FC<LayerListProps> = ({
   onChangeLayerLabels,
   onApplyGraduatedSymbology,
   onApplyCategorizedSymbology,
+  onApplyGeoTiffStyle,
   onToggleWmsStyle,
   selectedLayerIds,
   onLayerClick,
@@ -146,6 +148,7 @@ const LayerList: React.FC<LayerListProps> = ({
           onChangeLayerLabels={onChangeLayerLabels}
           onApplyGraduatedSymbology={onApplyGraduatedSymbology}
           onApplyCategorizedSymbology={onApplyCategorizedSymbology}
+          onApplyGeoTiffStyle={onApplyGeoTiffStyle}
           onToggleWmsStyle={onToggleWmsStyle}
           isDrawingSourceEmptyOrNotPolygon={isDrawingSourceEmptyOrNotPolygon}
           isSelectionEmpty={isSelectionEmpty}
@@ -172,4 +175,5 @@ const LayerList: React.FC<LayerListProps> = ({
 
 export default LayerList;
 
+    
     

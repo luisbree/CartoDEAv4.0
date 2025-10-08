@@ -72,7 +72,7 @@ import { saveMapState, debugReadDocument } from '@/services/sharing-service';
 
 import type { MapState, OSMCategoryConfig, GeoServerDiscoveredLayer, BaseLayerOptionForSelect, MapLayer, ChatMessage, BaseLayerSettings, NominatimResult, PlainFeatureData, ActiveTool, TrelloCardInfo, GraduatedSymbology, VectorMapLayer, CategorizedSymbology, SerializableMapLayer, RemoteSerializableLayer } from '@/lib/types';
 import { chatWithMapAssistant, type MapAssistantOutput } from '@/ai/flows/find-layer-flow';
-import { authenticateWithGee } from '@/ai/flows/gee-flow';
+import { authenticateWithGee, getElevationForPoints } from '@/ai/flows/gee-flow';
 import { checkTrelloCredentials } from '@/ai/flows/trello-actions';
 
 
@@ -1121,6 +1121,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
             onChangeLayerLabels={layerManagerHook.changeLayerLabels}
             onApplyGraduatedSymbology={layerManagerHook.applyGraduatedSymbology}
             onApplyCategorizedSymbology={layerManagerHook.applyCategorizedSymbology}
+            onApplyGeoTiffStyle={layerManagerHook.applyGeoTiffStyle}
             onToggleWmsStyle={layerManagerHook.toggleWmsStyle}
             isDrawingSourceEmptyOrNotPolygon={layerManagerHook.isDrawingSourceEmptyOrNotPolygon}
             isSelectionEmpty={featureInspectionHook.selectedFeatures.length === 0}
@@ -1284,3 +1285,5 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
     </div>
   );
 }
+
+    
