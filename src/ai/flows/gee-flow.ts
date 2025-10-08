@@ -67,7 +67,7 @@ export async function authenticateWithGee(): Promise<{ success: boolean; message
 }
 
 
-const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInput | GeeHistogramInput) => {
+const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInput | GeeHistogramInput | GeeProfileInput) => {
     const { bandCombination } = input;
     const aoi = 'aoi' in input ? input.aoi : undefined;
     
@@ -468,7 +468,7 @@ const geeProfileFlow = ai.defineFlow(
     // Create a feature collection with points along the line
     const distances = ee.List.sequence(0, eeLine.length(), null, SAMPLES);
     const points = eeLine.cutLines(distances, 1).geometries().map((g: ee.Geometry) => {
-        return ee.Feature(g.centroid(), { 'distance': g.length() });
+        return ee.Feature(ee.Geometry(g).centroid(), { 'distance': ee.Geometry(g).length() });
     });
     const featureCollection = ee.FeatureCollection(points);
     
