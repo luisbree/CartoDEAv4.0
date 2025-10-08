@@ -385,7 +385,7 @@ export const useLayerManager = ({
     }
 }, [isMapReady, mapRef, addLayer, updateGeoServerDiscoveredLayerState, toast]);
 
-  const addGeeLayerToMap = useCallback((tileUrl: string, layerName: string, geeParams: Omit<GeeTileLayerInput, 'aoi' | 'zoom'>) => {
+  const addGeeLayerToMap = useCallback((tileUrl: string, layerName: string, geeParams: Omit<GeeValueQueryInput, 'aoi' | 'zoom'>) => {
     if (!mapRef.current) return;
 
     const layerId = `gee-${nanoid()}`;
@@ -699,7 +699,7 @@ export const useLayerManager = ({
     if (!layer || !(layer.olLayer instanceof WebGLTileLayer)) return;
     
     const olLayer = layer.olLayer as WebGLTileLayer;
-
+    
     let startColor = '#ffffff', endColor = '#000000';
     if (style.colorRamp === 'custom' && style.customColors) {
         startColor = style.customColors.start;
@@ -709,18 +709,23 @@ export const useLayerManager = ({
         endColor = COLOR_RAMP_DEFINITIONS[style.colorRamp].end;
     }
     
-    const ramp = generateColorRamp(startColor, endColor);
-    
-    olLayer.setStyle({
-        color: [
+    const colorExpression = [
+        'case',
+        ['==', ['band', style.band], 0], // Check for nodata value (assuming it's 0)
+        [0, 0, 0, 0], // Output transparent if nodata
+        [   // Else, apply the color ramp
             'interpolate',
             ['linear'],
             ['band', style.band],
             style.min,
-            ['color', ...hexToRgb(startColor)],
+            hexToRgb(startColor),
             style.max,
-            ['color', ...hexToRgb(endColor)],
-        ],
+            hexToRgb(endColor),
+        ]
+    ];
+
+    olLayer.setStyle({
+        color: colorExpression,
     });
 
     setLayers(prev => prev.map(l => l.id === layerId ? { ...l, geoTiffStyle: style } : l));
@@ -1167,6 +1172,7 @@ export const useLayerManager = ({
     
 
     
+
 
 
 
