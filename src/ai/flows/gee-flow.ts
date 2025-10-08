@@ -5,11 +5,14 @@
  * - getGeeTileLayer - Generates a tile layer URL for a given Area of Interest.
  * - getGeeVectorDownloadUrl - Generates a download URL for vectorized GEE data.
  * - getGeeHistogram - Calculates a histogram for a given dataset and AOI.
+ * - getGeeProfile - Generates a topographic profile from a line and elevation data.
  */
 
 import { ai } from '@/ai/genkit';
 import ee from '@google/earthengine';
 import { promisify } from 'util';
+import type { Feature as TurfFeature, LineString as TurfLineString } from 'geojson';
+import { length as turfLength, along as turfAlong } from '@turf/turf';
 import type { GeeTileLayerInput, GeeTileLayerOutput, GeeVectorizationInput, GeeValueQueryInput, GeeGeoTiffDownloadInput, GeeHistogramInput, GeeHistogramOutput, GeeProfileInput, GeeProfileOutput, ProfilePoint, TasseledCapOutput, TasseledCapComponent } from './gee-types';
 import { GeeTileLayerInputSchema, GeeTileLayerOutputSchema, GeeVectorizationInputSchema, GeeValueQueryInputSchema, GeeGeoTiffDownloadInputSchema, GeeHistogramInputSchema, GeeHistogramOutputSchema, GeeProfileInputSchema, GeeProfileOutputSchema, TasseledCapInputSchema } from './gee-types';
 import { z } from 'zod';
@@ -39,6 +42,12 @@ export async function getGeeHistogram(input: GeeHistogramInput): Promise<GeeHist
     return geeHistogramFlow(input);
 }
 
+// New exported function for profile
+export async function getGeeProfile(input: GeeProfileInput): Promise<GeeProfileOutput> {
+    return geeProfileFlow(input);
+}
+
+
 // New exported function for Tasseled Cap
 export async function getTasseledCapLayers(input: GeeTileLayerInput): Promise<TasseledCapOutput> {
     return tasseledCapFlow(input);
@@ -64,9 +73,7 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
     // This logic is now only for profiles, as other tools get their geometry from the input.
     const geometry = aoi 
         ? ee.Geometry.Rectangle([aoi.minLon, aoi.minLat, aoi.maxLon, aoi.maxLat]) 
-        : ('points' in input && input.points 
-            ? ee.FeatureCollection(ee.Geometry.MultiPoint(input.points.coordinates)) 
-            : undefined);
+        : ('line' in input ? ee.Geometry.LineString(input.line.geometry.coordinates) : undefined);
 
     // For histogram, min/max are not needed for image retrieval, but might be for tile layers
     const minElevation = 'minElevation' in input ? input.minElevation : undefined;
@@ -428,6 +435,77 @@ const geeHistogramFlow = ai.defineFlow(
         });
     }
 );
+
+// Robuster promisify for ee.Image.getInfo
+const getInfoPromisified = (eeObject: any): Promise<any> => {
+    return new Promise((resolve, reject) => {
+        eeObject.getInfo((result: any, error: string) => {
+            if (error) {
+                return reject(new Error(`Error de Google Earth Engine: ${error}`));
+            }
+            resolve(result);
+        });
+    });
+};
+
+
+// Define the Genkit flow for Profile
+const geeProfileFlow = ai.defineFlow(
+    {
+        name: 'geeProfileFlow',
+        inputSchema: GeeProfileInputSchema,
+        outputSchema: GeeProfileOutputSchema,
+    },
+    async (input) => {
+        await initializeEe();
+        const { line, bandCombination } = input;
+        const SAMPLES = 100; // Number of points to sample along the line
+        
+        const lineLength = turfLength(line, { units: 'meters' });
+        const points = [];
+        for (let i = 0; i <= SAMPLES; i++) {
+            const distance = (i / SAMPLES) * lineLength;
+            const point = turfAlong(line, distance, { units: 'meters' });
+            points.push(ee.Feature(ee.Geometry.Point(point.geometry.coordinates), { distance: distance }));
+        }
+        const featureCollection = ee.FeatureCollection(points);
+        
+        const { finalImage } = getImageForProcessing({ ...input, aoi: undefined }); // We use the line geometry, not AOI
+        const bandName = (await getInfoPromisified(finalImage.bandNames()))[0];
+
+        const sampledData = finalImage.sampleRegions({
+            collection: featureCollection,
+            properties: ['distance'],
+            scale: 30, // Native resolution of NASADEM/ALOS
+        });
+        
+        const resultFeatures = await getInfoPromisified(sampledData) as ee.FeatureCollection;
+        console.log('Respuesta de GEE (sampleRegions):', JSON.stringify(resultFeatures, null, 2));
+
+        if (!resultFeatures || !resultFeatures.features || resultFeatures.features.length === 0) {
+            throw new Error("No se obtuvieron datos de elevación válidos de GEE.");
+        }
+
+        const profile: ProfilePoint[] = resultFeatures.features
+            .map(f => {
+                const elevation = f.properties?.[bandName];
+                const distance = f.properties?.distance;
+                if (typeof elevation === 'number' && typeof distance === 'number') {
+                    return {
+                        distance: Math.round(distance),
+                        elevation: parseFloat(elevation.toFixed(2)),
+                        location: f.geometry.coordinates,
+                    };
+                }
+                return null;
+            })
+            .filter((p): p is ProfilePoint => p !== null)
+            .sort((a, b) => a.distance - b.distance);
+
+        return { profile };
+    }
+);
+
 
 // Tasseled Cap Flow
 const tasseledCapFlow = ai.defineFlow(

@@ -7,8 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DraftingCompass, Scissors, Layers, CircleDotDashed, MinusSquare, BoxSelect, Droplet, Sparkles, Loader2, Combine, Minus, Plus, TrendingUp, Waypoints as CrosshairIcon, Merge, LineChart } from 'lucide-react';
-import type { MapLayer, VectorMapLayer } from '@/lib/types';
+import { DraftingCompass, Scissors, Layers, CircleDotDashed, MinusSquare, BoxSelect, Droplet, Sparkles, Loader2, Combine, Minus, Plus, TrendingUp, Waypoints as CrosshairIcon, Merge, LineChart, PenLine, Eraser } from 'lucide-react';
+import type { MapLayer, VectorMapLayer, ProfilePoint } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { nanoid } from 'nanoid';
 import GeoJSON from 'ol/format/GeoJSON';
@@ -21,10 +21,15 @@ import Feature from 'ol/Feature';
 import { type Geometry, type LineString as OlLineString, Point } from 'ol/geom';
 import { getLength as olGetLength } from 'ol/sphere';
 import { performBufferAnalysis, performConvexHull, performConcaveHull, calculateOptimalConcavity, projectPopulationGeometric, generateCrossSections, dissolveFeatures } from '@/services/spatial-analysis';
+import { getGeeProfile } from '@/ai/flows/gee-flow';
 import { ScrollArea } from '../ui/scroll-area';
 import { Checkbox } from '../ui/checkbox';
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 import { Style, Text as TextStyle, Fill, Stroke } from 'ol/style';
+import type { Map } from 'ol';
+import Draw from 'ol/interaction/Draw';
+import { ResponsiveContainer, XAxis, YAxis, Tooltip, AreaChart, Area, CartesianGrid } from 'recharts';
+import { cn } from '@/lib/utils';
 
 
 interface AnalysisPanelProps {
@@ -37,6 +42,7 @@ interface AnalysisPanelProps {
   selectedFeatures: Feature<Geometry>[];
   onAddLayer: (layer: MapLayer, bringToTop?: boolean) => void;
   style?: React.CSSProperties;
+  mapRef: React.RefObject<Map | null>;
 }
 
 const SectionHeader: React.FC<{ icon: React.ElementType; title: string; }> = ({ icon: Icon, title }) => (
@@ -45,6 +51,11 @@ const SectionHeader: React.FC<{ icon: React.ElementType; title: string; }> = ({ 
         <span className="text-sm font-semibold">{title}</span>
     </div>
 );
+
+const analysisLayerStyle = new Style({
+    stroke: new Stroke({ color: 'rgba(255, 107, 107, 1)', width: 3, lineDash: [8, 8] }),
+    fill: new Fill({ color: 'rgba(255, 107, 107, 0.2)' }),
+});
 
 
 const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
@@ -57,6 +68,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   selectedFeatures,
   onAddLayer,
   style,
+  mapRef
 }) => {
   const [activeAccordionItem, setActiveAccordionItem] = useState<string | undefined>(undefined);
   
@@ -83,7 +95,6 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   const [isCalculatingConcavity, setIsCalculatingConcavity] = useState(false);
   const [concavityStats, setConcavityStats] = useState<{ mean: number, stdDev: number } | null>(null);
 
-
   // State for Union tool
   const [unionLayerIds, setUnionLayerIds] = useState<string[]>([]);
   const [unionOutputName, setUnionOutputName] = useState('');
@@ -106,8 +117,120 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   const [crossSectionLength, setCrossSectionLength] = useState<number>(50);
   const [crossSectionUnits, setCrossSectionUnits] = useState<'meters' | 'kilometers'>('meters');
   const [isGeneratingCrossSections, setIsGeneratingCrossSections] = useState(false);
-  
+
+  // State for Topographic Profile
+  const [profileLine, setProfileLine] = useState<Feature<OlLineString> | null>(null);
+  const [profileData, setProfileData] = useState<ProfilePoint[] | null>(null);
+  const [isDrawingProfile, setIsDrawingProfile] = useState(false);
+  const [isGeneratingProfile, setIsGeneratingProfile] = useState(false);
+  const [profileLayerId, setProfileLayerId] = useState('');
+  const analysisLayerRef = useRef<VectorLayer<VectorSource<Feature<Geometry>>> | null>(null);
+  const drawInteractionRef = useRef<Draw | null>(null);
+
   const { toast } = useToast();
+  
+  // --- START Profile Logic ---
+  const stopDrawing = useCallback(() => {
+    if (drawInteractionRef.current && mapRef.current) {
+        mapRef.current.removeInteraction(drawInteractionRef.current);
+        drawInteractionRef.current = null;
+        setIsDrawingProfile(false);
+    }
+  }, [mapRef]);
+
+  const clearAnalysisGeometries = useCallback(() => {
+      if (analysisLayerRef.current) {
+        analysisLayerRef.current.getSource()?.clear();
+      }
+      setProfileLine(null);
+      setProfileData(null);
+      stopDrawing();
+      toast({ description: "Línea de perfil eliminada." });
+  }, [stopDrawing, toast]);
+
+  useEffect(() => {
+    // Ensure analysis layer exists on mount
+    if (mapRef.current && !analysisLayerRef.current) {
+        const source = new VectorSource();
+        const layer = new VectorLayer({
+            source,
+            style: analysisLayerStyle,
+            properties: { id: 'internal-analysis-profile-layer' },
+        });
+        analysisLayerRef.current = layer;
+        mapRef.current.addLayer(layer);
+    }
+    // Cleanup on unmount
+    return () => {
+        if (mapRef.current && analysisLayerRef.current) {
+            mapRef.current.removeLayer(analysisLayerRef.current);
+            analysisLayerRef.current = null;
+        }
+        stopDrawing();
+    };
+  }, [mapRef, stopDrawing]);
+  
+  const handleToggleDrawProfile = useCallback(() => {
+    if (!mapRef.current) return;
+    if (isDrawingProfile) {
+        stopDrawing();
+        return;
+    }
+
+    clearAnalysisGeometries();
+    setIsDrawingProfile(true);
+    toast({ description: "Dibuja una línea en el mapa para generar el perfil." });
+
+    const draw = new Draw({ source: analysisLayerRef.current!.getSource()!, type: 'LineString' });
+    drawInteractionRef.current = draw;
+    mapRef.current.addInteraction(draw);
+
+    draw.once('drawend', (event) => {
+        setProfileLine(event.feature as Feature<OlLineString>);
+        stopDrawing();
+        toast({ description: "Línea de perfil dibujada. Ahora selecciona una capa de elevación y genera el perfil." });
+    });
+  }, [mapRef, isDrawingProfile, stopDrawing, clearAnalysisGeometries, toast]);
+
+  const handleRunProfile = async () => {
+    if (!profileLine || !profileLayerId) {
+        toast({ description: "Dibuja una línea y selecciona una capa de elevación.", variant: "destructive" });
+        return;
+    }
+    const elevationLayer = allLayers.find(l => l.id === profileLayerId);
+    if (!elevationLayer || !elevationLayer.olLayer.get('geeParams')?.bandCombination) {
+        toast({ description: "La capa seleccionada no es una capa de elevación GEE válida.", variant: "destructive" });
+        return;
+    }
+
+    setIsGeneratingProfile(true);
+    setProfileData(null);
+    toast({ description: "Generando perfil topográfico..." });
+
+    try {
+        const format = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
+        const lineGeoJSON = format.writeFeatureObject(profileLine) as TurfFeature<TurfLineString>;
+        
+        const result = await getGeeProfile({
+            line: lineGeoJSON,
+            bandCombination: elevationLayer.olLayer.get('geeParams').bandCombination,
+        });
+        
+        if (result && result.profile.length > 0) {
+            setProfileData(result.profile);
+            toast({ description: "Perfil generado con éxito." });
+        } else {
+            throw new Error("No se obtuvieron datos de elevación válidos del servidor.");
+        }
+    } catch (error: any) {
+        console.error("Error generating GEE profile:", error);
+        toast({ title: "Error de Perfil", description: error.message, variant: "destructive" });
+    } finally {
+        setIsGeneratingProfile(false);
+    }
+  };
+  // --- END Profile Logic ---
+
 
   const vectorLayers = useMemo(() => {
     return allLayers.filter((l): l is VectorMapLayer => l.type !== 'wms' && l.type !== 'gee' && l.type !== 'geotiff');
@@ -135,6 +258,10 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         return geomType === 'LineString' || geomType === 'MultiLineString';
     });
   }, [vectorLayers]);
+
+  const elevationLayers = useMemo(() => {
+    return allLayers.filter(l => l.olLayer.get('geeParams')?.bandCombination.includes('ELEVATION') || l.olLayer.get('geeParams')?.bandCombination.includes('DSM'));
+  }, [allLayers]);
   
 
   const handleRunClip = () => {
@@ -700,6 +827,54 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
           onValueChange={setActiveAccordionItem}
           className="w-full space-y-1"
         >
+            <AccordionItem value="profile-tool" className="border-b-0 bg-white/5 rounded-md">
+                <AccordionTrigger className="p-3 hover:no-underline hover:bg-white/10 rounded-t-md data-[state=open]:rounded-b-none">
+                    <SectionHeader icon={LineChart} title="Perfil Topográfico" />
+                </AccordionTrigger>
+                <AccordionContent className="p-3 pt-2 space-y-3 border-t border-white/10 bg-transparent rounded-b-md">
+                    <div className="space-y-2 p-2 border border-white/10 rounded-md">
+                        <div className="flex items-center gap-2">
+                             <Button onClick={handleToggleDrawProfile} size="sm" className={cn("h-8 text-xs flex-grow", isDrawingProfile && "bg-yellow-600 hover:bg-yellow-700")}>
+                                <PenLine className="mr-2 h-3.5 w-3.5" />
+                                {isDrawingProfile ? "Cancelar Dibujo" : "Dibujar Línea de Perfil"}
+                            </Button>
+                             <Button onClick={clearAnalysisGeometries} size="icon" variant="destructive" className="h-8 w-8 flex-shrink-0">
+                                <Eraser className="h-4 w-4" />
+                            </Button>
+                        </div>
+                         <div>
+                            <Label htmlFor="profile-layer-select" className="text-xs">Capa de Elevación (GEE)</Label>
+                            <Select value={profileLayerId} onValueChange={setProfileLayerId} disabled={elevationLayers.length === 0}>
+                                <SelectTrigger id="profile-layer-select" className="h-8 text-xs bg-black/20"><SelectValue placeholder="Seleccionar capa de elevación..." /></SelectTrigger>
+                                <SelectContent className="bg-gray-700 text-white border-gray-600">
+                                  {elevationLayers.map(l => <SelectItem key={l.id} value={l.id} className="text-xs">{l.name}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <Button onClick={handleRunProfile} size="sm" className="w-full h-8 text-xs" disabled={!profileLine || !profileLayerId || isGeneratingProfile}>
+                            {isGeneratingProfile ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <LineChart className="mr-2 h-3.5 w-3.5" />}
+                            Generar Perfil
+                        </Button>
+                    </div>
+                    {profileData && (
+                        <div className="h-48 w-full mt-2">
+                           <ResponsiveContainer>
+                                <AreaChart data={profileData} margin={{ top: 5, right: 20, left: -25, bottom: 5 }}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                                    <XAxis dataKey="distance" unit="m" stroke="hsl(var(--foreground))" fontSize={10} tickFormatter={(val) => val.toLocaleString()} />
+                                    <YAxis stroke="hsl(var(--foreground))" fontSize={10} domain={['dataMin - 10', 'dataMax + 10']} />
+                                    <Tooltip
+                                        contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', fontSize: '12px' }}
+                                        labelFormatter={(label) => `Distancia: ${label.toLocaleString()} m`}
+                                        formatter={(value: number) => [`${value.toFixed(2)} m`, 'Elevación']}
+                                    />
+                                    <Area type="monotone" dataKey="elevation" stroke="hsl(var(--primary))" fill="hsla(var(--primary), 0.3)" />
+                                </AreaChart>
+                            </ResponsiveContainer>
+                        </div>
+                    )}
+                </AccordionContent>
+            </AccordionItem>
             <AccordionItem value="overlay-tools" className="border-b-0 bg-white/5 rounded-md">
               <AccordionTrigger className="p-3 hover:no-underline hover:bg-white/10 rounded-t-md data-[state=open]:rounded-b-none">
                 <SectionHeader icon={Layers} title="Herramientas de Superposición" />
@@ -1048,10 +1223,3 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
-
-
-    
-
-    
-
-

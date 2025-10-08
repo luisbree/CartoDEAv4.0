@@ -10,6 +10,9 @@
  */
 
 import { z } from 'zod';
+import { feature, lineString } from '@turf/helpers';
+import type { Feature as TurfFeature, LineString as TurfLineString } from 'geojson';
+
 
 const GeeAoiSchema = z.object({
     minLon: z.number(),
@@ -85,13 +88,27 @@ export const GeeHistogramOutputSchema = z.object({
 export type GeeHistogramOutput = z.infer<typeof GeeHistogramOutputSchema>;
 
 
+// Zod schema for a GeoJSON LineString feature
+const TurfLineStringFeatureSchema = z.custom<TurfFeature<TurfLineString>>(
+  (val) => {
+    const f = val as TurfFeature<TurfLineString>;
+    return (
+      f &&
+      f.type === 'Feature' &&
+      f.geometry &&
+      f.geometry.type === 'LineString' &&
+      Array.isArray(f.geometry.coordinates)
+    );
+  },
+  {
+    message: 'Must be a valid GeoJSON LineString Feature.',
+  }
+);
+
+
 // New schemas for profile generation
 export const GeeProfileInputSchema = z.object({
-  points: z.object({
-    type: z.literal('MultiPoint'),
-    coordinates: z.array(z.array(z.number())),
-  }).describe('A GeoJSON MultiPoint object for the profile.'),
-  distances: z.array(z.number()).describe('An array of distances corresponding to each point.'),
+  line: TurfLineStringFeatureSchema.describe('A GeoJSON LineString feature for the profile.'),
   bandCombination: z.enum(['NASADEM_ELEVATION', 'ALOS_DSM']).describe('The elevation dataset to sample.'),
 });
 export type GeeProfileInput = z.infer<typeof GeeProfileInputSchema>;
@@ -123,5 +140,3 @@ export const TasseledCapOutputSchema = z.object({
     wetness: z.object({ tileUrl: z.string() }),
 });
 export type TasseledCapOutput = z.infer<typeof TasseledCapOutputSchema>;
-
-    
