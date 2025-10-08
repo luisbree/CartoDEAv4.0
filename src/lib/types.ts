@@ -11,6 +11,14 @@ import type { GeeTileLayerInput } from '@/ai/flows/gee-types';
 export type ColorRampId = 'reds' | 'blues' | 'greens' | 'viridis' | 'pinks' | 'custom';
 export type ClassificationMethod = 'quantiles' | 'natural-breaks';
 
+export interface GeoTiffStyle {
+  band: number;
+  colorRamp: ColorRampId;
+  min: number;
+  max: number;
+  customColors?: { start: string; end: string };
+}
+
 export interface GraduatedSymbology {
   field: string;
   method: ClassificationMethod;
@@ -43,6 +51,7 @@ export interface MapLayer {
   isDeas?: boolean;
   graduatedSymbology?: GraduatedSymbology;
   categorizedSymbology?: CategorizedSymbology;
+  geoTiffStyle?: GeoTiffStyle;
   wmsStyleEnabled?: boolean; // For hybrid WFS/WMS layers
 }
 
