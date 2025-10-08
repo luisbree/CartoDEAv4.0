@@ -1,3 +1,4 @@
+
 'use server';
 /**
  * @fileOverview A flow for generating Google Earth Engine tile layers, vector data, and histograms.
@@ -491,14 +492,17 @@ const geeProfileFlow = ai.defineFlow(
 
     const profile: ProfilePoint[] = resultFeatures.features
         .map(f => {
-            const elevation = f.properties?.[bandName];
-            const distance = f.properties?.distance;
-            if (typeof elevation === 'number' && typeof distance === 'number') {
-                return {
-                    distance: Math.round(distance),
-                    elevation: parseFloat(elevation.toFixed(2)),
-                    location: f.geometry.coordinates,
-                };
+            // Add a check to ensure f.properties and f.geometry are not null
+            if (f && f.properties && f.geometry) {
+                const elevation = f.properties[bandName];
+                const distance = f.properties.distance;
+                if (typeof elevation === 'number' && typeof distance === 'number') {
+                    return {
+                        distance: Math.round(distance),
+                        elevation: parseFloat(elevation.toFixed(2)),
+                        location: f.geometry.coordinates,
+                    };
+                }
             }
             return null;
         })
