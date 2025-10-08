@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
@@ -5,6 +6,7 @@ import type { Map } from 'ol';
 import VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
 import TileLayer from 'ol/layer/Tile';
+import WebGLTileLayer from 'ol/layer/WebGLTile';
 import TileWMS from 'ol/source/TileWMS';
 import XYZ from 'ol/source/XYZ';
 import type Feature from 'ol/Feature';
@@ -12,7 +14,7 @@ import { Geometry, LineString, Point, Polygon } from 'ol/geom';
 import { useToast } from "@/hooks/use-toast";
 import { findSentinel2Footprints } from '@/services/sentinel';
 import { findLandsatFootprints } from '@/services/landsat';
-import type { MapLayer, VectorMapLayer, PlainFeatureData, LabelOptions, StyleOptions, GraduatedSymbology, CategorizedSymbology } from '@/lib/types';
+import type { MapLayer, VectorMapLayer, PlainFeatureData, LabelOptions, StyleOptions, GraduatedSymbology, CategorizedSymbology, GeoTiffStyle } from '@/lib/types';
 import { nanoid } from 'nanoid';
 import { Style, Stroke, Fill, Circle as CircleStyle, Text as TextStyle } from 'ol/style';
 import type { StyleLike } from 'ol/style/Style';
@@ -55,6 +57,35 @@ const colorMap: { [key: string]: string } = {
 };
 
 const isValidHex = (color: string) => /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/.test(color);
+
+// --- Color Interpolation Helpers (for GeoTIFF) ---
+function hexToRgb(hex: string): [number, number, number] {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result
+        ? [parseInt(result[1], 16), parseInt(result[2], 16), parseInt(result[3], 16)]
+        : [0, 0, 0];
+}
+
+function generateColorRamp(startHex: string, endHex: string): (string | number)[] {
+    const startRgb = hexToRgb(startHex);
+    const endRgb = hexToRgb(endHex);
+    
+    // Format for ol/style/expressions: ['interpolate', ['linear'], ['band', 1], min, [r,g,b], max, [r,g,b]]
+    // We just need the color arrays
+    return [
+      ...startRgb, 1,
+      ...endRgb, 1,
+    ];
+}
+
+const COLOR_RAMP_DEFINITIONS: Record<Exclude<any, 'custom'>, { start: string, end: string }> = {
+  reds: { start: '#fee5d9', end: '#a50f15' },
+  blues: { start: '#eff3ff', end: '#08519c' },
+  greens: { start: '#edf8e9', end: '#006d2c' },
+  viridis: { start: '#440154', end: '#fde725' },
+  pinks: { start: '#ffcce1', end: '#c70063'},
+};
+
 
 // Centralized function to create the final style for a layer
 const createStyleFunction = (
@@ -663,6 +694,39 @@ export const useLayerManager = ({
       setTimeout(() => toast({ description: `Simbología por categorías aplicada a "${layer.name}".` }), 0);
   }, [layers, toast, setLayers]);
 
+  const applyGeoTiffStyle = useCallback((layerId: string, style: GeoTiffStyle) => {
+    const layer = layers.find(l => l.id === layerId);
+    if (!layer || !(layer.olLayer instanceof WebGLTileLayer)) return;
+    
+    const olLayer = layer.olLayer as WebGLTileLayer;
+
+    let startColor = '#ffffff', endColor = '#000000';
+    if (style.colorRamp === 'custom' && style.customColors) {
+        startColor = style.customColors.start;
+        endColor = style.customColors.end;
+    } else if (style.colorRamp !== 'custom') {
+        startColor = COLOR_RAMP_DEFINITIONS[style.colorRamp].start;
+        endColor = COLOR_RAMP_DEFINITIONS[style.colorRamp].end;
+    }
+    
+    const ramp = generateColorRamp(startColor, endColor);
+    
+    olLayer.setStyle({
+        color: [
+            'interpolate',
+            ['linear'],
+            ['band', style.band],
+            style.min,
+            ['color', ...hexToRgb(startColor)],
+            style.max,
+            ['color', ...hexToRgb(endColor)],
+        ],
+    });
+
+    setLayers(prev => prev.map(l => l.id === layerId ? { ...l, geoTiffStyle: style } : l));
+    toast({ description: `Estilo aplicado a la capa "${layer.name}".` });
+  }, [layers, toast, setLayers]);
+
   const zoomToLayerExtent = useCallback((layerId: string) => {
     if (!mapRef.current) return;
     const layer = layers.find(l => l.id === layerId);
@@ -1079,6 +1143,7 @@ export const useLayerManager = ({
     changeLayerLabels,
     applyGraduatedSymbology,
     applyCategorizedSymbology,
+    applyGeoTiffStyle,
     zoomToLayerExtent,
     handleShowLayerTable,
     renameLayer,
@@ -1102,5 +1167,6 @@ export const useLayerManager = ({
     
 
     
+
 
 

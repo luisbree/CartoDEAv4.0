@@ -17,15 +17,17 @@ import {
   DropdownMenuCheckboxItem,
 } from "@/components/ui/dropdown-menu";
 import { Slider } from "@/components/ui/slider"; 
-import { Eye, EyeOff, Settings2, ZoomIn, Table2, Trash2, Scissors, Percent, GripVertical, CopyPlus, Download, Edit, Palette, Tags, Waypoints, AppWindow, BarChartHorizontal, Target } from 'lucide-react';
-import type { CategorizedSymbology, GraduatedSymbology, InteractionToolId, LabelOptions, MapLayer, VectorMapLayer } from '@/lib/types';
+import { Eye, EyeOff, Settings2, ZoomIn, Table2, Trash2, Scissors, Percent, GripVertical, CopyPlus, Download, Edit, Palette, Tags, Waypoints, AppWindow, BarChartHorizontal, Target, Image as ImageIcon } from 'lucide-react';
+import type { CategorizedSymbology, GeoTiffStyle, GraduatedSymbology, InteractionToolId, LabelOptions, MapLayer, VectorMapLayer } from '@/lib/types';
 import VectorLayer from 'ol/layer/Vector'; 
+import WebGLTileLayer from 'ol/layer/WebGLTile';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import StyleEditorDialog, { type StyleOptions } from './StyleEditorDialog';
 import LabelEditorDialog from './LabelEditorDialog';
 import GraduatedSymbologyDialog from './GraduatedSymbologyDialog';
 import CategorizedSymbologyDialog from './CategorizedSymbologyDialog';
+import GeoTiffStyleEditorDialog from './GeoTiffStyleEditorDialog';
 
 
 interface LayerItemProps {
@@ -48,6 +50,7 @@ interface LayerItemProps {
   onChangeLayerLabels: (layerId: string, labelOptions: LabelOptions) => void;
   onApplyGraduatedSymbology: (layerId: string, symbology: GraduatedSymbology) => void;
   onApplyCategorizedSymbology: (layerId: string, symbology: CategorizedSymbology) => void;
+  onApplyGeoTiffStyle: (layerId: string, style: GeoTiffStyle) => void;
   onToggleWmsStyle: (layerId: string) => void;
   
   // Drag and Drop props
@@ -92,6 +95,7 @@ const LayerItem: React.FC<LayerItemProps> = ({
   onChangeLayerLabels,
   onApplyGraduatedSymbology,
   onApplyCategorizedSymbology,
+  onApplyGeoTiffStyle,
   onToggleWmsStyle,
   isDraggable,
   onDragStart,
@@ -110,6 +114,7 @@ const LayerItem: React.FC<LayerItemProps> = ({
 }) => {
   const isVectorLayer = layer.olLayer instanceof VectorLayer;
   const isWfsLayer = layer.type === 'wfs';
+  const isGeoTiffLayer = layer.type === 'geotiff';
   const currentOpacityPercentage = Math.round(layer.opacity * 100);
 
   const [isEditing, setIsEditing] = useState(false);
@@ -118,6 +123,7 @@ const LayerItem: React.FC<LayerItemProps> = ({
   const [isLabelEditorOpen, setIsLabelEditorOpen] = useState(false);
   const [isGraduatedEditorOpen, setIsGraduatedEditorOpen] = useState(false);
   const [isCategorizedEditorOpen, setIsCategorizedEditorOpen] = useState(false);
+  const [isGeoTiffStyleEditorOpen, setIsGeoTiffStyleEditorOpen] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   
@@ -193,6 +199,12 @@ const LayerItem: React.FC<LayerItemProps> = ({
   const handleCategorizedSymbologyApply = (symbology: CategorizedSymbology) => {
     onApplyCategorizedSymbology(layer.id, symbology);
     setIsCategorizedEditorOpen(false);
+    setIsDropdownOpen(false);
+  };
+
+  const handleGeoTiffStyleApply = (style: GeoTiffStyle) => {
+    onApplyGeoTiffStyle(layer.id, style);
+    setIsGeoTiffStyleEditorOpen(false);
     setIsDropdownOpen(false);
   };
 
@@ -296,6 +308,16 @@ const LayerItem: React.FC<LayerItemProps> = ({
                       >
                         <Edit className="mr-2 h-3.5 w-3.5" />
                         {activeTool === 'modify' ? 'Dejar de Editar Geometría' : 'Editar Geometría'}
+                      </DropdownMenuItem>
+                  )}
+
+                  {isGeoTiffLayer && (
+                     <DropdownMenuItem
+                        className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer"
+                        onSelect={(e) => { e.preventDefault(); setIsGeoTiffStyleEditorOpen(true); }}
+                      >
+                        <ImageIcon className="mr-2 h-3.5 w-3.5" />
+                        Estilo Ráster
                       </DropdownMenuItem>
                   )}
 
@@ -485,6 +507,14 @@ const LayerItem: React.FC<LayerItemProps> = ({
               layer={layer as any}
           />
         </>
+      )}
+      {!isSharedView && isGeoTiffLayer && (
+         <GeoTiffStyleEditorDialog
+            isOpen={isGeoTiffStyleEditorOpen}
+            onClose={() => setIsGeoTiffStyleEditorOpen(false)}
+            onApply={handleGeoTiffStyleApply}
+            layer={layer}
+          />
       )}
     </>
   );
