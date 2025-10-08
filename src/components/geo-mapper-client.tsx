@@ -1219,6 +1219,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
             selectedFeatures={featureInspectionHook.selectedFeatures}
             onAddLayer={(layer: MapLayer, bringToTop?: boolean) => layerManagerHook.addLayer(layer, bringToTop)}
             style={{ top: `${panels.analysis.position.y}px`, left: `${panels.analysis.position.x}px`, zIndex: panels.analysis.zIndex }}
+            mapRef={mapRef}
           />
         )}
 
