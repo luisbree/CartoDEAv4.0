@@ -143,7 +143,9 @@ export const handleFileUpload = async ({
                         sources: [{
                             blob: blob,
                         }],
-                        normalize: false, 
+                        normalize: false,
+                        // This tells the renderer to treat pixels with value 0 as transparent
+                        nodata: 0,
                     });
                     onAddLayer(createGeoTiffLayer(source, nameForLayer));
                     toast({ description: `Capa GeoTIFF "${nameForLayer}" cargada.` });
