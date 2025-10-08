@@ -154,6 +154,12 @@ export interface ProfilePoint {
     location: number[]; // [lon, lat]
 }
 
+export interface ElevationPoint {
+  lon: number;
+  lat: number;
+  distance: number;
+}
+
 export interface GeeProfileOutput {
     profile: ProfilePoint[];
 }

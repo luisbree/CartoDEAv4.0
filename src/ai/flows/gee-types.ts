@@ -109,7 +109,7 @@ const TurfLineStringFeatureSchema = z.custom<TurfFeature<TurfLineString>>(
 // New schemas for profile generation
 export const GeeProfileInputSchema = z.object({
   line: TurfLineStringFeatureSchema.describe('A GeoJSON LineString feature for the profile.'),
-  bandCombination: z.enum(['NASADEM_ELEVATION', 'ALOS_DSM']).describe('The elevation dataset to sample.'),
+  dataset: z.enum(['NASADEM_ELEVATION', 'ALOS_DSM']).describe('The elevation dataset to sample.'),
 });
 export type GeeProfileInput = z.infer<typeof GeeProfileInputSchema>;
 
@@ -125,6 +125,15 @@ export const GeeProfileOutputSchema = z.object({
   profile: z.array(ProfilePointSchema).describe('An array of points representing the profile.'),
 });
 export type GeeProfileOutput = z.infer<typeof GeeProfileOutputSchema>;
+
+// New type for point-based elevation query
+export const ElevationPointSchema = z.object({
+  lon: z.number(),
+  lat: z.number(),
+  distance: z.number(),
+});
+export type ElevationPoint = z.infer<typeof ElevationPointSchema>;
+
 
 // Tasseled Cap Schemas
 export const TasseledCapInputSchema = z.object({

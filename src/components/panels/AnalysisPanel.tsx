@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
@@ -8,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DraftingCompass, Scissors, Layers, CircleDotDashed, MinusSquare, BoxSelect, Droplet, Sparkles, Loader2, Combine, Minus, Plus, TrendingUp, Waypoints as CrosshairIcon, Merge, LineChart, PenLine, Eraser } from 'lucide-react';
-import type { MapLayer, VectorMapLayer, ProfilePoint } from '@/lib/types';
+import type { MapLayer, VectorMapLayer, ProfilePoint, ElevationPoint } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { nanoid } from 'nanoid';
 import GeoJSON from 'ol/format/GeoJSON';
@@ -21,7 +22,7 @@ import Feature from 'ol/Feature';
 import { type Geometry, type LineString as OlLineString, Point } from 'ol/geom';
 import { getLength as olGetLength } from 'ol/sphere';
 import { performBufferAnalysis, performConvexHull, performConcaveHull, calculateOptimalConcavity, projectPopulationGeometric, generateCrossSections, dissolveFeatures } from '@/services/spatial-analysis';
-import { getGeeProfile } from '@/ai/flows/gee-flow';
+import { getElevationForPoints } from '@/ai/flows/gee-flow';
 import { ScrollArea } from '../ui/scroll-area';
 import { Checkbox } from '../ui/checkbox';
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
@@ -30,6 +31,7 @@ import type { Map } from 'ol';
 import Draw from 'ol/interaction/Draw';
 import { ResponsiveContainer, XAxis, YAxis, Tooltip, AreaChart, Area, CartesianGrid } from 'recharts';
 import { cn } from '@/lib/utils';
+import { transform } from 'ol/proj';
 
 
 interface AnalysisPanelProps {
@@ -188,7 +190,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     draw.once('drawend', (event) => {
         setProfileLine(event.feature as Feature<OlLineString>);
         stopDrawing();
-        toast({ description: "Línea de perfil dibujada. Ahora selecciona una capa de elevación y genera el perfil." });
+        toast({ description: "Línea de perfil dibujada. Ahora selecciona un dataset de elevación y genera el perfil." });
     });
   }, [mapRef, isDrawingProfile, stopDrawing, clearAnalysisGeometries, toast]);
 
@@ -203,23 +205,47 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     toast({ description: "Generando perfil topográfico..." });
 
     try {
-        const format = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
-        const lineGeoJSON = format.writeFeatureObject(profileLine) as TurfFeature<TurfLineString>;
-        
-        const result = await getGeeProfile({
-            line: lineGeoJSON,
-            bandCombination: profileDataset,
-        });
-        
-        if (result && result.profile.length > 0) {
-            setProfileData(result.profile);
-            toast({ description: "Perfil generado con éxito." });
-        } else {
+        const geometry = profileLine.getGeometry();
+        if (!geometry) throw new Error("La geometría de la línea de perfil no es válida.");
+
+        const lineLength = olGetLength(geometry, { projection: 'EPSG:3857' });
+        const SAMPLES = 100;
+        const pointsToQuery: ElevationPoint[] = [];
+        const distances: number[] = [];
+
+        for (let i = 0; i <= SAMPLES; i++) {
+            const fraction = i / SAMPLES;
+            const coordinate = geometry.getCoordinateAt(fraction);
+            const [lon, lat] = transform(coordinate, 'EPSG:3857', 'EPSG:4326');
+            const distance = lineLength * fraction;
+            pointsToQuery.push({ lon, lat, distance });
+            distances.push(distance);
+        }
+
+        const elevationValues = await getElevationForPoints(pointsToQuery, profileDataset);
+        console.log('[AnalysisPanel] Received elevations from server:', elevationValues);
+
+        if (!elevationValues || elevationValues.length !== pointsToQuery.length) {
             throw new Error("No se obtuvieron datos de elevación válidos del servidor.");
         }
+        
+        const finalProfileData: ProfilePoint[] = elevationValues.map((elevation, index) => ({
+            distance: Math.round(distances[index]),
+            elevation: elevation === -9999 ? 0 : parseFloat(elevation.toFixed(2)),
+            location: [pointsToQuery[index].lon, pointsToQuery[index].lat],
+        })).filter(p => p.elevation !== -9999);
+
+        if (finalProfileData.length > 0) {
+            setProfileData(finalProfileData);
+            toast({ description: "Perfil generado con éxito." });
+        } else {
+             throw new Error("No se obtuvieron puntos de elevación válidos a lo largo de la línea.");
+        }
+
     } catch (error: any) {
-        console.error("Error generating GEE profile:", error);
+        console.error("Error generating profile:", error);
         toast({ title: "Error de Perfil", description: error.message, variant: "destructive" });
+        setProfileData(null);
     } finally {
         setIsGeneratingProfile(false);
     }
@@ -836,7 +862,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                             <Label htmlFor="profile-layer-select" className="text-xs">Dataset de Elevación (GEE)</Label>
                             <Select value={profileDataset} onValueChange={(v: 'NASADEM_ELEVATION' | 'ALOS_DSM') => setProfileDataset(v)}>
                                 <SelectTrigger id="profile-layer-select" className="h-8 text-xs bg-black/20">
-                                    <SelectValue placeholder="Seleccionar dataset de elevación..." />
+                                    <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent className="bg-gray-700 text-white border-gray-600">
                                   <SelectItem value="NASADEM_ELEVATION" className="text-xs">NASADEM (Elevación)</SelectItem>

@@ -6,7 +6,7 @@
  * - getGeeTileLayer - Generates a tile layer URL for a given Area of Interest.
  * - getGeeVectorDownloadUrl - Generates a download URL for vectorized GEE data.
  * - getGeeHistogram - Calculates a histogram for a given dataset and AOI.
- * - getGeeProfile - Generates a topographic profile from a line and elevation data.
+ * - getElevationForPoints - Generates an elevation profile from a list of points.
  */
 
 import { ai } from '@/ai/genkit';
@@ -14,8 +14,8 @@ import ee from '@google/earthengine';
 import { promisify } from 'util';
 import type { Feature as TurfFeature, LineString as TurfLineString } from 'geojson';
 import { length as turfLength, along as turfAlong } from '@turf/turf';
-import type { GeeTileLayerInput, GeeTileLayerOutput, GeeVectorizationInput, GeeValueQueryInput, GeeGeoTiffDownloadInput, GeeHistogramInput, GeeHistogramOutput, GeeProfileInput, GeeProfileOutput, ProfilePoint, TasseledCapOutput, TasseledCapComponent } from './gee-types';
-import { GeeTileLayerInputSchema, GeeTileLayerOutputSchema, GeeVectorizationInputSchema, GeeValueQueryInputSchema, GeeGeoTiffDownloadInputSchema, GeeHistogramInputSchema, GeeHistogramOutputSchema, GeeProfileInputSchema, GeeProfileOutputSchema, TasseledCapInputSchema } from './gee-types';
+import type { GeeTileLayerInput, GeeTileLayerOutput, GeeVectorizationInput, GeeValueQueryInput, GeeGeoTiffDownloadInput, GeeHistogramInput, GeeHistogramOutput, GeeProfileInput, GeeProfileOutput, ProfilePoint, TasseledCapOutput, TasseledCapComponent, ElevationPoint } from './gee-types';
+import { GeeTileLayerInputSchema, GeeTileLayerOutputSchema, GeeVectorizationInputSchema, GeeValueQueryInputSchema, GeeGeoTiffDownloadInputSchema, GeeHistogramInputSchema, GeeHistogramOutputSchema, GeeProfileInputSchema, GeeProfileOutputSchema, TasseledCapInputSchema, ElevationPointSchema } from './gee-types';
 import { z } from 'zod';
 
 // Main exported function for the frontend to call
@@ -43,12 +43,6 @@ export async function getGeeHistogram(input: GeeHistogramInput): Promise<GeeHist
     return geeHistogramFlow(input);
 }
 
-// New exported function for profile
-export async function getGeeProfile(input: GeeProfileInput): Promise<GeeProfileOutput> {
-    return geeProfileFlow(input);
-}
-
-
 // New exported function for Tasseled Cap
 export async function getTasseledCapLayers(input: GeeTileLayerInput): Promise<TasseledCapOutput> {
     return tasseledCapFlow(input);
@@ -66,17 +60,59 @@ export async function authenticateWithGee(): Promise<{ success: boolean; message
     }
 }
 
+// --- NEW PROFILE FUNCTION ---
+export async function getElevationForPoints(points: ElevationPoint[], dataset: 'NASADEM_ELEVATION' | 'ALOS_DSM'): Promise<number[]> {
+    await initializeEe();
+
+    const bandName = dataset === 'ALOS_DSM' ? 'DSM' : 'elevation';
+    const image = dataset === 'ALOS_DSM' 
+        ? ee.ImageCollection('JAXA/ALOS/AW3D30/V3_2').select('DSM').mosaic()
+        : ee.Image('NASA/NASADEM_HGT/001').select('elevation');
+    
+    const results: (number | null)[] = [];
+
+    for (const point of points) {
+        try {
+            const eePoint = ee.Geometry.Point([point.lon, point.lat]);
+            const dictionary = image.reduceRegion({
+                reducer: ee.Reducer.first(),
+                geometry: eePoint,
+                scale: 30, // Native resolution is appropriate here
+            });
+
+            // Promisify the evaluate call to use async/await
+            const value = await new Promise<any>((resolve, reject) => {
+                dictionary.evaluate((result: any, error?: string) => {
+                    if (error) {
+                        reject(new Error(error));
+                    } else {
+                        resolve(result);
+                    }
+                });
+            });
+            
+            results.push(value ? value[bandName] : null);
+
+        } catch (error) {
+            console.warn(`Could not get elevation for point ${point.lon}, ${point.lat}:`, error);
+            results.push(null); // Push null on error to maintain array order
+        }
+    }
+    
+    console.log('[GEE-FLOW] Server returning elevation results:', results);
+    return results.map(r => r === null ? -9999 : r); // Return a placeholder for nulls
+}
+
+
 
 const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInput | GeeHistogramInput | GeeProfileInput) => {
     const { bandCombination } = input;
     const aoi = 'aoi' in input ? input.aoi : undefined;
     
-    // This logic is now only for profiles, as other tools get their geometry from the input.
     const geometry = aoi 
         ? ee.Geometry.Rectangle([aoi.minLon, aoi.minLat, aoi.maxLon, aoi.maxLat]) 
         : undefined;
 
-    // For histogram, min/max are not needed for image retrieval, but might be for tile layers
     const minElevation = 'minElevation' in input ? input.minElevation : undefined;
     const maxElevation = 'maxElevation' in input ? input.maxElevation : undefined;
     const tasseledCapComponent = 'tasseledCapComponent' in input ? input.tasseledCapComponent : undefined;
@@ -435,93 +471,6 @@ const geeHistogramFlow = ai.defineFlow(
              });
         });
     }
-);
-
-const getInfoPromisified = (eeObject: any): Promise<any> => {
-    return new Promise((resolve, reject) => {
-        eeObject.getInfo((result: any, error?: string) => {
-            if (error) {
-                // This will now properly reject the promise on GEE errors
-                return reject(new Error(`Error de Google Earth Engine: ${error}`));
-            }
-            resolve(result);
-        });
-    });
-};
-
-
-// Define the Genkit flow for Profile
-const geeProfileFlow = ai.defineFlow(
-  {
-    name: 'geeProfileFlow',
-    inputSchema: GeeProfileInputSchema,
-    outputSchema: GeeProfileOutputSchema,
-  },
-  async (input) => {
-    await initializeEe();
-    const { line, bandCombination } = input;
-    const SAMPLES = 100; // Number of points to sample along the line
-    
-    // Create an ee.Geometry from the GeoJSON LineString
-    const eeLine = ee.Geometry.LineString(line.geometry.coordinates);
-
-    // Create a feature collection with points along the line
-    const distances = ee.List.sequence(0, eeLine.length(), null, SAMPLES);
-    const points = eeLine.cutLines(distances, 1).geometries().map((g: ee.Geometry) => {
-        return ee.Feature(ee.Geometry(g).centroid(), { 'distance': ee.Geometry(g).length() });
-    });
-    const featureCollection = ee.FeatureCollection(points);
-    
-    // Simplified image retrieval just for elevation
-    const elevationImage = bandCombination === 'ALOS_DSM' 
-        ? ee.ImageCollection('JAXA/ALOS/AW3D30/V3_2').select('DSM').mosaic()
-        : ee.Image('NASA/NASADEM_HGT/001').select('elevation');
-
-    const bandName = bandCombination === 'ALOS_DSM' ? 'DSM' : 'elevation';
-
-    const sampledData = elevationImage.reduceRegions({
-        collection: featureCollection,
-        reducer: ee.Reducer.first(), // Use 'first' reducer to sample the pixel value
-        scale: 30, // Native resolution of NASADEM/ALOS
-    });
-    
-    const resultFeatures = await getInfoPromisified(sampledData) as ee.FeatureCollection;
-    
-    // MOVING CONSOLE LOG HERE FOR BETTER DEBUGGING
-    console.log('GEE Sampled Data Response:', JSON.stringify(resultFeatures, null, 2));
-    
-    if (!resultFeatures || !resultFeatures.features || resultFeatures.features.length === 0) {
-        throw new Error("No se obtuvieron datos de elevación válidos de GEE.");
-    }
-
-    const profile: ProfilePoint[] = resultFeatures.features
-        .map(f => {
-            // Add a check to ensure f.properties and f.geometry are not null
-            if (f && f.properties && f.geometry) {
-                const elevation = f.properties[bandName]; // The value is now under the band name
-                const distance = f.properties.distance;
-                if (typeof elevation === 'number' && typeof distance === 'number') {
-                    return {
-                        distance: Math.round(distance),
-                        elevation: parseFloat(elevation.toFixed(2)),
-                        location: f.geometry.coordinates,
-                    };
-                }
-            }
-            return null;
-        })
-        .filter((p): p is ProfilePoint => p !== null)
-        .sort((a, b) => a.distance - b.distance);
-    
-    // Accumulate distances
-    let accumulatedDistance = 0;
-    const finalProfile = profile.map(p => {
-        accumulatedDistance += p.distance;
-        return { ...p, distance: accumulatedDistance };
-    });
-
-    return { profile: finalProfile };
-  }
 );
 
 
