@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DraftingCompass, Scissors, Layers, CircleDotDashed, MinusSquare, BoxSelect, Droplet, Sparkles, Loader2, Combine, Minus, Plus, TrendingUp, Waypoints as CrosshairIcon, Merge, LineChart, PenLine, Eraser } from 'lucide-react';
+import { DraftingCompass, Scissors, Layers, CircleDotDashed, MinusSquare, BoxSelect, Droplet, Sparkles, Loader2, Combine, Minus, Plus, TrendingUp, Waypoints as CrosshairIcon, Merge, LineChart, PenLine, Eraser, Brush } from 'lucide-react';
 import type { MapLayer, VectorMapLayer, ProfilePoint, ElevationPoint } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { nanoid } from 'nanoid';
@@ -28,7 +28,7 @@ import { Checkbox } from '../ui/checkbox';
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 import { Style, Text as TextStyle, Fill, Stroke } from 'ol/style';
 import type { Map } from 'ol';
-import Draw from 'ol/interaction/Draw';
+import Draw, { createBox } from 'ol/interaction/Draw';
 import { ResponsiveContainer, XAxis, YAxis, Tooltip, AreaChart, Area, CartesianGrid } from 'recharts';
 import { cn } from '@/lib/utils';
 import { transform } from 'ol/proj';
@@ -55,7 +55,7 @@ const SectionHeader: React.FC<{ icon: React.ElementType; title: string; }> = ({ 
 );
 
 const analysisLayerStyle = new Style({
-    stroke: new Stroke({ color: 'rgba(0, 255, 255, 1)', width: 3, lineDash: [8, 8] }),
+    stroke: new Stroke({ color: 'rgba(0, 255, 255, 1)', width: 2.5, lineDash: [8, 8] }),
     fill: new Fill({ color: 'rgba(0, 255, 255, 0.2)' }),
 });
 
@@ -123,7 +123,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   // State for Topographic Profile
   const [profileLine, setProfileLine] = useState<Feature<OlLineString> | null>(null);
   const [profileData, setProfileData] = useState<ProfilePoint[] | null>(null);
-  const [isDrawingProfile, setIsDrawingProfile] = useState(false);
+  const [activeProfileDrawTool, setActiveProfileDrawTool] = useState<'LineString' | 'FreehandLine' | null>(null);
   const [isGeneratingProfile, setIsGeneratingProfile] = useState(false);
   const [profileDataset, setProfileDataset] = useState<'NASADEM_ELEVATION' | 'ALOS_DSM'>('NASADEM_ELEVATION');
   const [profileLayerId, setProfileLayerId] = useState<string>('');
@@ -137,7 +137,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     if (drawInteractionRef.current && mapRef.current) {
         mapRef.current.removeInteraction(drawInteractionRef.current);
         drawInteractionRef.current = null;
-        setIsDrawingProfile(false);
+        setActiveProfileDrawTool(null);
     }
   }, [mapRef]);
 
@@ -174,29 +174,40 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     };
   }, [mapRef, stopDrawing]);
   
-  const handleToggleDrawProfile = useCallback(() => {
+  const handleToggleDrawProfile = useCallback((tool: 'LineString' | 'FreehandLine') => {
     if (!mapRef.current) return;
-    if (isDrawingProfile) {
-        stopDrawing();
+    
+    const isDeactivating = activeProfileDrawTool === tool;
+    stopDrawing(); // Stop any current drawing first
+
+    if (isDeactivating) {
+        setActiveProfileDrawTool(null);
         return;
     }
 
     clearAnalysisGeometries();
-    setIsDrawingProfile(true);
-    toast({ description: "Dibuja una línea en el mapa para generar el perfil." });
+    setProfileLayerId(''); // Clear layer selection
+    setActiveProfileDrawTool(tool);
 
-    const draw = new Draw({ source: analysisLayerRef.current!.getSource()!, type: 'LineString' });
+    const toastMessage = tool === 'LineString' ? "Dibuja una línea en el mapa para generar el perfil." : "Dibuja a mano alzada para generar el perfil.";
+    toast({ description: toastMessage });
+
+    const draw = new Draw({
+        source: analysisLayerRef.current!.getSource()!,
+        type: 'LineString',
+        freehand: tool === 'FreehandLine',
+    });
     drawInteractionRef.current = draw;
     mapRef.current.addInteraction(draw);
 
     draw.once('drawend', (event) => {
         const feature = event.feature as Feature<OlLineString>;
-        feature.setStyle(analysisLayerStyle); // Ensure it's visible
+        feature.setStyle(analysisLayerStyle);
         setProfileLine(feature);
         stopDrawing();
         toast({ description: "Línea de perfil dibujada. Ahora selecciona un dataset y genera el perfil." });
     });
-  }, [mapRef, isDrawingProfile, stopDrawing, clearAnalysisGeometries, toast]);
+  }, [mapRef, activeProfileDrawTool, stopDrawing, clearAnalysisGeometries, toast]);
 
   const handleSelectProfileLayer = useCallback((layerId: string) => {
     setProfileLayerId(layerId);
@@ -236,8 +247,8 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 
 
   const handleRunProfile = async () => {
-    if (!profileLine || !profileDataset) {
-        toast({ description: "Dibuja una línea y selecciona un dataset de elevación.", variant: "destructive" });
+    if (!profileLine) {
+        toast({ description: "Dibuja una línea o selecciona una capa de línea.", variant: "destructive" });
         return;
     }
     
@@ -252,7 +263,6 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         const lineLength = olGetLength(geometry, { projection: 'EPSG:3857' });
         const SAMPLES = 100;
         const pointsToQuery: ElevationPoint[] = [];
-        const distances: number[] = [];
 
         for (let i = 0; i <= SAMPLES; i++) {
             const fraction = i / SAMPLES;
@@ -260,19 +270,18 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
             const [lon, lat] = transform(coordinate, 'EPSG:3857', 'EPSG:4326');
             const distance = lineLength * fraction;
             pointsToQuery.push({ lon, lat, distance });
-            distances.push(distance);
         }
 
         const elevationValues = await getElevationForPoints(pointsToQuery, profileDataset);
-
+        
         if (!elevationValues || elevationValues.length !== pointsToQuery.length) {
             throw new Error("No se obtuvieron datos de elevación válidos del servidor.");
         }
         
-        const finalProfileData: ProfilePoint[] = elevationValues.map((elevation, index) => ({
-            distance: Math.round(distances[index]),
-            elevation: elevation === null || elevation === -9999 ? 0 : parseFloat(elevation.toFixed(2)),
-            location: [pointsToQuery[index].lon, pointsToQuery[index].lat],
+        const finalProfileData: ProfilePoint[] = pointsToQuery.map((point, index) => ({
+            distance: Math.round(point.distance),
+            elevation: elevationValues[index] === null || elevationValues[index] === -9999 ? 0 : parseFloat(elevationValues[index].toFixed(2)),
+            location: [point.lon, point.lat],
         }));
 
         if (finalProfileData.length > 0) {
@@ -890,11 +899,13 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                 <AccordionContent className="p-3 pt-2 space-y-3 border-t border-white/10 bg-transparent rounded-b-md">
                     <div className="space-y-2 p-2 border border-white/10 rounded-md">
                         <div className="flex items-center gap-2">
-                             <Button onClick={handleToggleDrawProfile} size="sm" className={cn("h-8 text-xs flex-grow", isDrawingProfile && "bg-yellow-600 hover:bg-yellow-700")}>
-                                <PenLine className="mr-2 h-3.5 w-3.5" />
-                                {isDrawingProfile ? "Cancelar Dibujo" : "Dibujar Línea"}
+                            <Button onClick={() => handleToggleDrawProfile('LineString')} size="icon" className={cn("h-8 w-8 text-xs border-white/30 bg-black/20", activeProfileDrawTool === 'LineString' && "bg-primary hover:bg-primary/90")} title="Dibujar Línea">
+                                <PenLine className="h-4 w-4" />
                             </Button>
-                             <Button onClick={() => clearAnalysisGeometries()} size="icon" variant="destructive" className="h-8 w-8 flex-shrink-0">
+                            <Button onClick={() => handleToggleDrawProfile('FreehandLine')} size="icon" className={cn("h-8 w-8 text-xs border-white/30 bg-black/20", activeProfileDrawTool === 'FreehandLine' && "bg-primary hover:bg-primary/90")} title="Dibujar a Mano Alzada">
+                                <Brush className="h-4 w-4" />
+                            </Button>
+                            <Button onClick={() => clearAnalysisGeometries()} size="icon" variant="destructive" className="h-8 w-8 flex-shrink-0">
                                 <Eraser className="h-4 w-4" />
                             </Button>
                         </div>
@@ -912,9 +923,9 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                     </div>
                      <div className="space-y-2 p-2 border border-white/10 rounded-md">
                          <div>
-                            <Label htmlFor="profile-layer-select" className="text-xs">Dataset de Elevación (GEE)</Label>
+                            <Label htmlFor="profile-dataset-select" className="text-xs">Dataset de Elevación (GEE)</Label>
                             <Select value={profileDataset} onValueChange={(v: 'NASADEM_ELEVATION' | 'ALOS_DSM') => setProfileDataset(v)}>
-                                <SelectTrigger id="profile-layer-select" className="h-8 text-xs bg-black/20">
+                                <SelectTrigger id="profile-dataset-select" className="h-8 text-xs bg-black/20">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent className="bg-gray-700 text-white border-gray-600">
@@ -923,7 +934,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                 </SelectContent>
                             </Select>
                         </div>
-                        <Button onClick={handleRunProfile} size="sm" className="w-full h-8 text-xs" disabled={!profileLine || !profileDataset || isGeneratingProfile}>
+                        <Button onClick={handleRunProfile} size="sm" className="w-full h-8 text-xs" disabled={!profileLine || isGeneratingProfile}>
                             {isGeneratingProfile ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <LineChart className="mr-2 h-3.5 w-3.5" />}
                             Generar Perfil
                         </Button>
@@ -1295,4 +1306,5 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
 
