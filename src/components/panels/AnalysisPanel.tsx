@@ -55,8 +55,8 @@ const SectionHeader: React.FC<{ icon: React.ElementType; title: string; }> = ({ 
 );
 
 const analysisLayerStyle = new Style({
-    stroke: new Stroke({ color: 'rgba(255, 107, 107, 1)', width: 3, lineDash: [8, 8] }),
-    fill: new Fill({ color: 'rgba(255, 107, 107, 0.2)' }),
+    stroke: new Stroke({ color: 'rgba(0, 255, 255, 1)', width: 3, lineDash: [8, 8] }),
+    fill: new Fill({ color: 'rgba(0, 255, 255, 0.2)' }),
 });
 
 
@@ -126,6 +126,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   const [isDrawingProfile, setIsDrawingProfile] = useState(false);
   const [isGeneratingProfile, setIsGeneratingProfile] = useState(false);
   const [profileDataset, setProfileDataset] = useState<'NASADEM_ELEVATION' | 'ALOS_DSM'>('NASADEM_ELEVATION');
+  const [profileLayerId, setProfileLayerId] = useState<string>('');
   const analysisLayerRef = useRef<VectorLayer<VectorSource<Feature<Geometry>>> | null>(null);
   const drawInteractionRef = useRef<Draw | null>(null);
 
@@ -146,6 +147,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
       }
       setProfileLine(null);
       setProfileData(null);
+      setProfileLayerId('');
       stopDrawing();
       toast({ description: "Línea de perfil eliminada." });
   }, [stopDrawing, toast]);
@@ -188,11 +190,50 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     mapRef.current.addInteraction(draw);
 
     draw.once('drawend', (event) => {
-        setProfileLine(event.feature as Feature<OlLineString>);
+        const feature = event.feature as Feature<OlLineString>;
+        feature.setStyle(analysisLayerStyle); // Ensure it's visible
+        setProfileLine(feature);
         stopDrawing();
-        toast({ description: "Línea de perfil dibujada. Ahora selecciona un dataset de elevación y genera el perfil." });
+        toast({ description: "Línea de perfil dibujada. Ahora selecciona un dataset y genera el perfil." });
     });
   }, [mapRef, isDrawingProfile, stopDrawing, clearAnalysisGeometries, toast]);
+
+  const handleSelectProfileLayer = useCallback((layerId: string) => {
+    setProfileLayerId(layerId);
+    clearAnalysisGeometries(); // Clear any drawn line
+
+    if (!layerId) {
+        setProfileLine(null);
+        return;
+    }
+
+    const layer = allLayers.find(l => l.id === layerId) as VectorMapLayer | undefined;
+    const source = layer?.olLayer.getSource();
+    if (!source) return;
+    
+    const features = source.getFeatures();
+    if (features.length === 0) {
+        toast({ description: "La capa seleccionada no contiene entidades.", variant: "destructive" });
+        setProfileLine(null);
+        return;
+    }
+
+    if (features.length > 1) {
+        toast({ description: "La capa seleccionada tiene múltiples líneas. Elige una capa con una sola entidad.", variant: "destructive" });
+        setProfileLine(null);
+        return;
+    }
+    
+    const feature = features[0] as Feature<OlLineString>;
+    if (feature.getGeometry()?.getType().includes('LineString')) {
+        setProfileLine(feature);
+        toast({ description: `Línea de la capa "${layer.name}" seleccionada para el perfil.`});
+    } else {
+        toast({ description: "La entidad de la capa no es una línea.", variant: "destructive"});
+        setProfileLine(null);
+    }
+  }, [allLayers, clearAnalysisGeometries, toast]);
+
 
   const handleRunProfile = async () => {
     if (!profileLine || !profileDataset) {
@@ -223,7 +264,6 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         }
 
         const elevationValues = await getElevationForPoints(pointsToQuery, profileDataset);
-        console.log('[AnalysisPanel] Received elevations from server:', elevationValues);
 
         if (!elevationValues || elevationValues.length !== pointsToQuery.length) {
             throw new Error("No se obtuvieron datos de elevación válidos del servidor.");
@@ -231,9 +271,9 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         
         const finalProfileData: ProfilePoint[] = elevationValues.map((elevation, index) => ({
             distance: Math.round(distances[index]),
-            elevation: elevation === -9999 ? 0 : parseFloat(elevation.toFixed(2)),
+            elevation: elevation === null || elevation === -9999 ? 0 : parseFloat(elevation.toFixed(2)),
             location: [pointsToQuery[index].lon, pointsToQuery[index].lat],
-        })).filter(p => p.elevation !== -9999);
+        }));
 
         if (finalProfileData.length > 0) {
             setProfileData(finalProfileData);
@@ -604,7 +644,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     try {
         const { suggestedConcavity, meanDistance, stdDev } = await calculateOptimalConcavity({ features: featuresToProcess });
         setConcavity(suggestedConcavity);
-        setConcavityStats({ mean: meanDistance, stdDev });
+        setConcavityStats({ mean: meanDistance, stdDev: stdDev });
         toast({ description: `Valor de concavidad sugerido: ${suggestedConcavity.toFixed(2)} km` });
     } catch (error: any) {
         console.error("Error calculating optimal concavity:", error);
@@ -852,12 +892,25 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                         <div className="flex items-center gap-2">
                              <Button onClick={handleToggleDrawProfile} size="sm" className={cn("h-8 text-xs flex-grow", isDrawingProfile && "bg-yellow-600 hover:bg-yellow-700")}>
                                 <PenLine className="mr-2 h-3.5 w-3.5" />
-                                {isDrawingProfile ? "Cancelar Dibujo" : "Dibujar Línea de Perfil"}
+                                {isDrawingProfile ? "Cancelar Dibujo" : "Dibujar Línea"}
                             </Button>
-                             <Button onClick={clearAnalysisGeometries} size="icon" variant="destructive" className="h-8 w-8 flex-shrink-0">
+                             <Button onClick={() => clearAnalysisGeometries()} size="icon" variant="destructive" className="h-8 w-8 flex-shrink-0">
                                 <Eraser className="h-4 w-4" />
                             </Button>
                         </div>
+                        <div className="flex items-center gap-2">
+                            <div className="flex-grow border-t border-dashed border-gray-600"></div><span className="text-xs text-gray-400">o</span><div className="flex-grow border-t border-dashed border-gray-600"></div>
+                        </div>
+                        <div>
+                           <Select value={profileLayerId} onValueChange={handleSelectProfileLayer}>
+                              <SelectTrigger className="h-8 text-xs bg-black/20"><SelectValue placeholder="Seleccionar capa de línea..." /></SelectTrigger>
+                              <SelectContent className="bg-gray-700 text-white border-gray-600">
+                                {lineLayers.map(l => <SelectItem key={l.id} value={l.id} className="text-xs">{l.name}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
+                     <div className="space-y-2 p-2 border border-white/10 rounded-md">
                          <div>
                             <Label htmlFor="profile-layer-select" className="text-xs">Dataset de Elevación (GEE)</Label>
                             <Select value={profileDataset} onValueChange={(v: 'NASADEM_ELEVATION' | 'ALOS_DSM') => setProfileDataset(v)}>
@@ -1242,3 +1295,4 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
