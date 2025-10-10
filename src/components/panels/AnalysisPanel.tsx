@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DraftingCompass, Scissors, Layers, CircleDotDashed, MinusSquare, BoxSelect, Droplet, Sparkles, Loader2, Combine, Minus, Plus, TrendingUp, Waypoints as CrosshairIcon, Merge, LineChart, PenLine, Eraser, Brush } from 'lucide-react';
+import { DraftingCompass, Scissors, Layers, CircleDotDashed, MinusSquare, BoxSelect, Droplet, Sparkles, Loader2, Combine, Minus, Plus, TrendingUp, Waypoints as CrosshairIcon, Merge, LineChart, PenLine, Eraser, Brush, ZoomIn } from 'lucide-react';
 import type { MapLayer, VectorMapLayer, ProfilePoint, ElevationPoint } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { nanoid } from 'nanoid';
@@ -33,6 +33,7 @@ import Draw, { createBox } from 'ol/interaction/Draw';
 import { ResponsiveContainer, XAxis, YAxis, Tooltip, AreaChart, Area, CartesianGrid, ReferenceLine } from 'recharts';
 import { cn } from '@/lib/utils';
 import { transform } from 'ol/proj';
+import { Slider } from '../ui/slider';
 
 
 interface AnalysisPanelProps {
@@ -193,6 +194,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   const [isGeneratingProfile, setIsGeneratingProfile] = useState(false);
   const [profileDataset, setProfileDataset] = useState<'NASADEM_ELEVATION' | 'ALOS_DSM'>('NASADEM_ELEVATION');
   const [profileLayerId, setProfileLayerId] = useState<string>('');
+  const [verticalExaggeration, setVerticalExaggeration] = useState<number>(1);
   const analysisLayerRef = useRef<VectorLayer<VectorSource<Feature<Geometry>>> | null>(null);
   const drawInteractionRef = useRef<Draw | null>(null);
 
@@ -385,6 +387,15 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         setIsGeneratingProfile(false);
     }
   };
+  
+  const exaggeratedProfileData = useMemo(() => {
+    if (!profileData) return null;
+    return profileData.map(p => ({
+        ...p,
+        exaggeratedElevation: p.elevation * verticalExaggeration,
+    }));
+  }, [profileData, verticalExaggeration]);
+  
   // --- END Profile Logic ---
 
 
@@ -1025,23 +1036,39 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                             Generar Perfil
                         </Button>
                     </div>
-                    {profileData && (
-                        <div className="h-48 w-full mt-2">
-                           <ResponsiveContainer>
-                                <AreaChart data={profileData} margin={{ top: 5, right: 20, left: -25, bottom: 5 }}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                                    <XAxis dataKey="distance" unit="m" stroke="hsl(var(--muted-foreground))" fontSize={10} tickFormatter={(val) => val.toLocaleString()} />
-                                    <YAxis stroke="hsl(var(--muted-foreground))" fontSize={10} domain={['dataMin - 10', 'dataMax + 10']} />
-                                    <Tooltip
-                                        contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', fontSize: '12px' }}
-                                        labelFormatter={(label) => `Distancia: ${label.toLocaleString()} m`}
-                                        formatter={(value: number) => [`${value.toFixed(2)} m`, 'Elevación']}
-                                    />
-                                    <Area type="monotone" dataKey="elevation" stroke="hsl(var(--primary))" fill="hsla(var(--primary), 0.3)" />
-                                    {profileStats?.jenksBreaks[0] && <ReferenceLine y={profileStats.jenksBreaks[0]} stroke="hsl(var(--border))" strokeWidth={1} />}
-                                    {profileStats?.jenksBreaks[1] && <ReferenceLine y={profileStats.jenksBreaks[1]} stroke="hsl(var(--border))" strokeWidth={1} />}
-                                </AreaChart>
-                            </ResponsiveContainer>
+                    {exaggeratedProfileData && (
+                        <div className="space-y-2 pt-2 border-t border-white/10">
+                            <div className="space-y-1">
+                                <Label htmlFor="vertical-exaggeration" className="text-xs flex items-center justify-between">
+                                    <span>Exageración Vertical</span>
+                                    <span className="font-mono text-primary">{verticalExaggeration}x</span>
+                                </Label>
+                                <Slider
+                                    id="vertical-exaggeration"
+                                    min={1}
+                                    max={10}
+                                    step={0.5}
+                                    value={[verticalExaggeration]}
+                                    onValueChange={(val) => setVerticalExaggeration(val[0])}
+                                />
+                            </div>
+                            <div className="h-48 w-full mt-2">
+                               <ResponsiveContainer>
+                                    <AreaChart data={exaggeratedProfileData} margin={{ top: 5, right: 20, left: -25, bottom: 5 }}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted-foreground), 0.3)" />
+                                        <XAxis dataKey="distance" unit="m" stroke="hsl(var(--muted-foreground))" fontSize={10} tickFormatter={(val) => val.toLocaleString()} />
+                                        <YAxis stroke="hsl(var(--muted-foreground))" fontSize={10} domain={['dataMin', 'dataMax']} />
+                                        <Tooltip
+                                            contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', fontSize: '12px' }}
+                                            labelFormatter={(label) => `Distancia: ${label.toLocaleString()} m`}
+                                            formatter={(value: number, name: string, props) => [`${props.payload.elevation.toFixed(2)} m`, 'Elevación Real']}
+                                        />
+                                        <Area type="monotone" dataKey="exaggeratedElevation" name="Elevación" stroke="hsl(var(--primary))" fill="hsla(var(--primary), 0.3)" />
+                                        {profileStats?.jenksBreaks[0] && <ReferenceLine y={profileStats.jenksBreaks[0] * verticalExaggeration} stroke="hsl(var(--muted-foreground), 0.7)" strokeWidth={1} />}
+                                        {profileStats?.jenksBreaks[1] && <ReferenceLine y={profileStats.jenksBreaks[1] * verticalExaggeration} stroke="hsl(var(--muted-foreground), 0.7)" strokeWidth={1} />}
+                                    </AreaChart>
+                                </ResponsiveContainer>
+                            </div>
                         </div>
                     )}
                     {profileStats && (
@@ -1407,6 +1434,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
 
 
 
