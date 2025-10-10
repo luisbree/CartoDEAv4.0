@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
@@ -58,6 +59,70 @@ const analysisLayerStyle = new Style({
     stroke: new Stroke({ color: 'rgba(0, 255, 255, 1)', width: 2.5, lineDash: [8, 8] }),
     fill: new Fill({ color: 'rgba(0, 255, 255, 0.2)' }),
 });
+
+// --- Jenks Natural Breaks Algorithm (copied for profile stats) ---
+function jenks(data: number[], n_classes: number): number[] {
+  if (n_classes > data.length) return [];
+
+  data = data.slice().sort((a, b) => a - b);
+
+  const matrices = (() => {
+    const mat1 = Array(data.length + 1).fill(0).map(() => Array(n_classes + 1).fill(0));
+    const mat2 = Array(data.length + 1).fill(0).map(() => Array(n_classes + 1).fill(0));
+    
+    for (let i = 1; i <= n_classes; i++) {
+        mat1[1][i] = 1;
+        mat2[1][i] = 0;
+        for (let j = 2; j <= data.length; j++) {
+            mat2[j][i] = Infinity;
+        }
+    }
+
+    let v = 0.0;
+    for (let l = 2; l <= data.length; l++) {
+        let s1 = 0.0, s2 = 0.0, w = 0.0;
+        for (let m = 1; m <= l; m++) {
+            const i4 = l - m + 1;
+            const val = data[i4 - 1];
+            w++;
+            s1 += val;
+            s2 += val * val;
+            v = s2 - (s1 * s1) / w;
+            const i3 = i4 - 1;
+            if (i3 !== 0) {
+                for (let j = 2; j <= n_classes; j++) {
+                    if (mat2[l][j] >= (v + mat2[i3][j - 1])) {
+                        mat1[l][j] = i4;
+                        mat2[l][j] = v + mat2[i3][j - 1];
+                    }
+                }
+            }
+        }
+        mat1[l][1] = 1;
+        mat2[l][1] = v;
+    }
+    return { backlinkMatrix: mat1 };
+  })();
+
+  const { backlinkMatrix } = matrices;
+  const breaks: number[] = [];
+  let k = data.length;
+  for (let i = n_classes; i > 1; i--) {
+    breaks.push(data[backlinkMatrix[k][i] - 2]);
+    k = backlinkMatrix[k][i] - 1;
+  }
+  
+  return breaks.reverse();
+}
+
+
+interface ProfileStats {
+    min: number;
+    max: number;
+    mean: number;
+    stdDev: number;
+    jenksBreaks: number[]; // For 3 classes, it will have 2 values
+}
 
 
 const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
@@ -123,6 +188,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   // State for Topographic Profile
   const [profileLine, setProfileLine] = useState<Feature<OlLineString> | null>(null);
   const [profileData, setProfileData] = useState<ProfilePoint[] | null>(null);
+  const [profileStats, setProfileStats] = useState<ProfileStats | null>(null);
   const [activeProfileDrawTool, setActiveProfileDrawTool] = useState<'LineString' | 'FreehandLine' | null>(null);
   const [isGeneratingProfile, setIsGeneratingProfile] = useState(false);
   const [profileDataset, setProfileDataset] = useState<'NASADEM_ELEVATION' | 'ALOS_DSM'>('NASADEM_ELEVATION');
@@ -147,6 +213,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
       }
       setProfileLine(null);
       setProfileData(null);
+      setProfileStats(null);
       setProfileLayerId('');
       stopDrawing();
       toast({ description: "Línea de perfil eliminada." });
@@ -254,6 +321,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     
     setIsGeneratingProfile(true);
     setProfileData(null);
+    setProfileStats(null);
     toast({ description: "Generando perfil topográfico..." });
 
     try {
@@ -271,8 +339,10 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
             const distance = lineLength * fraction;
             pointsToQuery.push({ lon, lat, distance });
         }
-
+        
+        console.log('[CLIENT] Sending points to server:', pointsToQuery);
         const elevationValues = await getElevationForPoints(pointsToQuery, profileDataset);
+        console.log('[CLIENT] Received elevations from server:', elevationValues);
         
         if (!elevationValues || elevationValues.length !== pointsToQuery.length) {
             throw new Error("No se obtuvieron datos de elevación válidos del servidor.");
@@ -286,6 +356,21 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 
         if (finalProfileData.length > 0) {
             setProfileData(finalProfileData);
+            
+            // --- NEW: Calculate statistics ---
+            const elevations = finalProfileData.map(p => p.elevation).filter(e => e !== 0); // Exclude 0/null values
+            if (elevations.length > 0) {
+                const sum = elevations.reduce((a, b) => a + b, 0);
+                const mean = sum / elevations.length;
+                const min = Math.min(...elevations);
+                const max = Math.max(...elevations);
+                const variance = elevations.reduce((sq, n) => sq + Math.pow(n - mean, 2), 0) / elevations.length;
+                const stdDev = Math.sqrt(variance);
+                const jenksBreaks = jenks(elevations, 3);
+                setProfileStats({ min, max, mean, stdDev, jenksBreaks });
+            }
+            // --- END: Calculate statistics ---
+
             toast({ description: "Perfil generado con éxito." });
         } else {
              throw new Error("No se obtuvieron puntos de elevación válidos a lo largo de la línea.");
@@ -295,6 +380,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         console.error("Error generating profile:", error);
         toast({ title: "Error de Perfil", description: error.message, variant: "destructive" });
         setProfileData(null);
+        setProfileStats(null);
     } finally {
         setIsGeneratingProfile(false);
     }
@@ -956,6 +1042,19 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                             </ResponsiveContainer>
                         </div>
                     )}
+                    {profileStats && (
+                        <div className="pt-2 border-t border-white/10">
+                            <Table>
+                                <TableBody>
+                                    <TableRow><TableCell className="text-xs text-gray-300 p-1.5">Mín / Máx</TableCell><TableCell className="text-xs text-white p-1.5 text-right font-mono">{profileStats.min.toFixed(2)} / {profileStats.max.toFixed(2)} m</TableCell></TableRow>
+                                    <TableRow><TableCell className="text-xs text-gray-300 p-1.5">Promedio</TableCell><TableCell className="text-xs text-white p-1.5 text-right font-mono">{profileStats.mean.toFixed(2)} m</TableCell></TableRow>
+                                    <TableRow><TableCell className="text-xs text-gray-300 p-1.5">Desv. Estándar</TableCell><TableCell className="text-xs text-white p-1.5 text-right font-mono">{profileStats.stdDev.toFixed(2)} m</TableCell></TableRow>
+                                    <TableRow><TableCell className="text-xs text-gray-300 p-1.5">Jenks (Clase 1-2)</TableCell><TableCell className="text-xs text-white p-1.5 text-right font-mono">{profileStats.jenksBreaks[0]?.toFixed(2) ?? 'N/A'}</TableCell></TableRow>
+                                    <TableRow><TableCell className="text-xs text-gray-300 p-1.5">Jenks (Clase 2-3)</TableCell><TableCell className="text-xs text-white p-1.5 text-right font-mono">{profileStats.jenksBreaks[1]?.toFixed(2) ?? 'N/A'}</TableCell></TableRow>
+                                </TableBody>
+                            </Table>
+                        </div>
+                    )}
                 </AccordionContent>
             </AccordionItem>
             <AccordionItem value="overlay-tools" className="border-b-0 bg-white/5 rounded-md">
@@ -1306,5 +1405,6 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
 
 
