@@ -30,7 +30,7 @@ import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 import { Style, Text as TextStyle, Fill, Stroke } from 'ol/style';
 import type { Map } from 'ol';
 import Draw, { createBox } from 'ol/interaction/Draw';
-import { ResponsiveContainer, XAxis, YAxis, Tooltip, AreaChart, Area, CartesianGrid } from 'recharts';
+import { ResponsiveContainer, XAxis, YAxis, Tooltip, AreaChart, Area, CartesianGrid, ReferenceLine } from 'recharts';
 import { cn } from '@/lib/utils';
 import { transform } from 'ol/proj';
 
@@ -1030,14 +1030,16 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                            <ResponsiveContainer>
                                 <AreaChart data={profileData} margin={{ top: 5, right: 20, left: -25, bottom: 5 }}>
                                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                                    <XAxis dataKey="distance" unit="m" stroke="hsl(var(--foreground))" fontSize={10} tickFormatter={(val) => val.toLocaleString()} />
-                                    <YAxis stroke="hsl(var(--foreground))" fontSize={10} domain={['dataMin - 10', 'dataMax + 10']} />
+                                    <XAxis dataKey="distance" unit="m" stroke="hsl(var(--muted-foreground))" fontSize={10} tickFormatter={(val) => val.toLocaleString()} />
+                                    <YAxis stroke="hsl(var(--muted-foreground))" fontSize={10} domain={['dataMin - 10', 'dataMax + 10']} />
                                     <Tooltip
                                         contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', fontSize: '12px' }}
                                         labelFormatter={(label) => `Distancia: ${label.toLocaleString()} m`}
                                         formatter={(value: number) => [`${value.toFixed(2)} m`, 'Elevación']}
                                     />
                                     <Area type="monotone" dataKey="elevation" stroke="hsl(var(--primary))" fill="hsla(var(--primary), 0.3)" />
+                                    {profileStats?.jenksBreaks[0] && <ReferenceLine y={profileStats.jenksBreaks[0]} stroke="hsl(var(--border))" strokeWidth={1} />}
+                                    {profileStats?.jenksBreaks[1] && <ReferenceLine y={profileStats.jenksBreaks[1]} stroke="hsl(var(--border))" strokeWidth={1} />}
                                 </AreaChart>
                             </ResponsiveContainer>
                         </div>
@@ -1405,6 +1407,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
 
 
 
