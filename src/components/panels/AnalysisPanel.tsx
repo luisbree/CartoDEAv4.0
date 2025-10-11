@@ -396,6 +396,12 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     }));
   }, [profileData, verticalExaggeration]);
   
+  const handleExaggerationStep = (direction: 'inc' | 'dec') => {
+    setVerticalExaggeration(prev => {
+        const newValue = direction === 'inc' ? prev + 1 : prev - 1;
+        return Math.max(1, newValue);
+    });
+  };
   // --- END Profile Logic ---
 
 
@@ -1038,26 +1044,30 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                     </div>
                     {exaggeratedProfileData && (
                         <div className="space-y-2 pt-2 border-t border-white/10">
-                            <div className="space-y-1">
+                             <div className="space-y-1">
                                 <Label htmlFor="vertical-exaggeration" className="text-xs flex items-center justify-between">
                                     <span>Exageración Vertical</span>
-                                    <span className="font-mono text-primary">{verticalExaggeration}x</span>
                                 </Label>
-                                <Slider
-                                    id="vertical-exaggeration"
-                                    min={1}
-                                    max={10}
-                                    step={0.5}
-                                    value={[verticalExaggeration]}
-                                    onValueChange={(val) => setVerticalExaggeration(val[0])}
-                                />
+                                <div className="flex items-center gap-1">
+                                    <Button onClick={() => handleExaggerationStep('dec')} variant="outline" size="icon" className="h-8 w-8 flex-shrink-0 bg-black/20 hover:bg-black/40 border-white/30 text-white/90"><Minus className="h-4 w-4"/></Button>
+                                    <Input
+                                        id="vertical-exaggeration"
+                                        type="number"
+                                        min="1"
+                                        step="1"
+                                        value={verticalExaggeration}
+                                        onChange={(e) => setVerticalExaggeration(Math.max(1, Number(e.target.value)))}
+                                        className="h-8 text-xs bg-black/20 text-center"
+                                    />
+                                    <Button onClick={() => handleExaggerationStep('inc')} variant="outline" size="icon" className="h-8 w-8 flex-shrink-0 bg-black/20 hover:bg-black/40 border-white/30 text-white/90"><Plus className="h-4 w-4"/></Button>
+                                </div>
                             </div>
                             <div className="h-48 w-full mt-2">
                                <ResponsiveContainer>
                                     <AreaChart data={exaggeratedProfileData} margin={{ top: 5, right: 20, left: -25, bottom: 5 }}>
                                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted-foreground), 0.3)" />
-                                        <XAxis dataKey="distance" unit="m" stroke="hsl(var(--muted-foreground))" fontSize={10} tickFormatter={(val) => val.toLocaleString()} />
-                                        <YAxis stroke="hsl(var(--muted-foreground))" fontSize={10} domain={['dataMin', 'dataMax']} />
+                                        <XAxis dataKey="distance" unit="m" stroke="hsl(var(--foreground))" fontSize={10} tickFormatter={(val) => val.toLocaleString()} />
+                                        <YAxis stroke="hsl(var(--foreground))" fontSize={10} domain={['dataMin', 'dataMax']} />
                                         <Tooltip
                                             contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', fontSize: '12px' }}
                                             labelFormatter={(label) => `Distancia: ${label.toLocaleString()} m`}
@@ -1434,6 +1444,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
 
 
 
