@@ -17,6 +17,9 @@ import { length as turfLength, along as turfAlong } from '@turf/turf';
 import type { GeeTileLayerInput, GeeTileLayerOutput, GeeVectorizationInput, GeeValueQueryInput, GeeGeoTiffDownloadInput, GeeHistogramInput, GeeHistogramOutput, GeeProfileInput, GeeProfileOutput, ProfilePoint, TasseledCapOutput, TasseledCapComponent, ElevationPoint } from './gee-types';
 import { GeeTileLayerInputSchema, GeeTileLayerOutputSchema, GeeVectorizationInputSchema, GeeValueQueryInputSchema, GeeGeoTiffDownloadInputSchema, GeeHistogramInputSchema, GeeHistogramOutputSchema, GeeProfileInputSchema, GeeProfileOutputSchema, TasseledCapInputSchema, ElevationPointSchema } from './gee-types';
 import { z } from 'zod';
+import type { Feature, FeatureCollection } from 'ol';
+import type { Point } from 'ol/geom';
+
 
 // Main exported function for the frontend to call
 export async function getGeeTileLayer(input: GeeTileLayerInput): Promise<GeeTileLayerOutput> {
@@ -60,47 +63,58 @@ export async function authenticateWithGee(): Promise<{ success: boolean; message
     }
 }
 
-// --- NEW PROFILE FUNCTION ---
-export async function getElevationForPoints(points: ElevationPoint[], dataset: 'NASADEM_ELEVATION' | 'ALOS_DSM'): Promise<number[]> {
+// --- REFACTORED PROFILE FUNCTION ---
+export async function getElevationForPoints(points: ElevationPoint[], dataset: 'NASADEM_ELEVATION' | 'ALOS_DSM'): Promise<(number | null)[]> {
     await initializeEe();
 
     const bandName = dataset === 'ALOS_DSM' ? 'DSM' : 'elevation';
-    const image = dataset === 'ALOS_DSM' 
+    const image = dataset === 'ALOS_DSM'
         ? ee.ImageCollection('JAXA/ALOS/AW3D30/V3_2').select('DSM').mosaic()
         : ee.Image('NASA/NASADEM_HGT/001').select('elevation');
-    
-    const results: (number | null)[] = [];
 
-    for (const point of points) {
-        try {
-            const eePoint = ee.Geometry.Point([point.lon, point.lat]);
-            const dictionary = image.reduceRegion({
-                reducer: ee.Reducer.first(),
-                geometry: eePoint,
-                scale: 30, // Native resolution is appropriate here
-            });
+    // Convert the array of points into an ee.FeatureCollection
+    const features = points.map((point, index) => {
+        const eePoint = ee.Geometry.Point([point.lon, point.lat]);
+        // Store the original index to sort the results later
+        return ee.Feature(eePoint, { original_index: index });
+    });
+    const featureCollection = ee.FeatureCollection(features);
 
-            // Promisify the evaluate call to use async/await
-            const value = await new Promise<any>((resolve, reject) => {
-                dictionary.evaluate((result: any, error?: string) => {
-                    if (error) {
-                        reject(new Error(error));
-                    } else {
-                        resolve(result);
-                    }
-                });
-            });
-            
-            results.push(value ? value[bandName] : null);
+    // Use reduceRegions to get the elevation for all points in a single request
+    const elevations = image.reduceRegions({
+        collection: featureCollection,
+        reducer: ee.Reducer.first(),
+        scale: 30, // Native resolution is appropriate here
+    });
 
-        } catch (error) {
-            console.warn(`Could not get elevation for point ${point.lon}, ${point.lat}:`, error);
-            results.push(null); // Push null on error to maintain array order
+    // Promisify the evaluate call to use async/await
+    const resultCollection = await new Promise<any>((resolve, reject) => {
+        elevations.evaluate((result: any, error?: string) => {
+            if (error) {
+                console.error("GEE reduceRegions Error:", error);
+                reject(new Error(`Error al consultar las elevaciones en GEE: ${error}`));
+            } else {
+                resolve(result);
+            }
+        });
+    });
+
+    // Process the results from the single request
+    const elevationArray: (number | null)[] = new Array(points.length).fill(null);
+
+    if (resultCollection && resultCollection.features) {
+        for (const feature of resultCollection.features) {
+            const index = feature.properties.original_index;
+            const value = feature.properties[bandName];
+            if (index !== undefined && value !== undefined) {
+                elevationArray[index] = value;
+            }
         }
     }
     
-    console.log('[GEE-FLOW] Server returning elevation results:', results);
-    return results.map(r => r === null ? -9999 : r); // Return a placeholder for nulls
+    console.log('[GEE-FLOW] Server returning elevation results:', elevationArray);
+    // Replace any remaining nulls with -9999 for the client
+    return elevationArray.map(r => r === null ? -9999 : r);
 }
 
 
