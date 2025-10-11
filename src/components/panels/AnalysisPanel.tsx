@@ -351,7 +351,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         }
         
         const finalProfileData: ProfilePoint[] = pointsToQuery.map((point, index) => ({
-            distance: Math.round(point.distance),
+            distance: point.distance, // Keep distance in meters
             elevation: elevationValues[index] === null || elevationValues[index] === -9999 ? 0 : parseFloat(elevationValues[index]!.toFixed(2)),
             location: [point.lon, point.lat],
         }));
@@ -1066,11 +1066,11 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                <ResponsiveContainer>
                                     <AreaChart data={exaggeratedProfileData} margin={{ top: 5, right: 20, left: -25, bottom: 5 }}>
                                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted-foreground), 0.3)" />
-                                        <XAxis dataKey="distance" unit="m" stroke="hsl(var(--muted-foreground))" fontSize={10} tickFormatter={(val) => val.toLocaleString()} />
+                                        <XAxis dataKey="distance" unit="km" stroke="hsl(var(--muted-foreground))" fontSize={10} tickFormatter={(val) => (val / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 }) + 'km'} />
                                         <YAxis stroke="hsl(var(--muted-foreground))" fontSize={10} domain={['dataMin', 'dataMax']} />
                                         <Tooltip
                                             contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', fontSize: '12px' }}
-                                            labelFormatter={(label) => `Distancia: ${label.toLocaleString()} m`}
+                                            labelFormatter={(label) => `Distancia: ${(label / 1000).toFixed(2)} km`}
                                             formatter={(value: number, name: string, props) => [`${props.payload.elevation.toFixed(2)} m`, 'Elevación Real']}
                                         />
                                         <Area type="monotone" dataKey="exaggeratedElevation" name="Elevación" stroke="hsl(var(--primary))" fill="hsla(var(--primary), 0.3)" />
@@ -1444,11 +1444,4 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
-
-
-
-
-
-
-
 
