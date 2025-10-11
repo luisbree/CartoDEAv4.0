@@ -105,7 +105,8 @@ export async function getElevationForPoints(points: ElevationPoint[], dataset: '
     if (resultCollection && resultCollection.features) {
         for (const feature of resultCollection.features) {
             const index = feature.properties.original_index;
-            const value = feature.properties[bandName];
+            // CORRECTED: The reducer 'first' outputs its result to a property named 'first'
+            const value = feature.properties['first']; 
             if (index !== undefined && value !== undefined) {
                 elevationArray[index] = value;
             }
