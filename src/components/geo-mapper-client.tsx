@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { MapPin, Database, Wrench, ListTree, ListChecks, Sparkles, ClipboardCheck, Library, LifeBuoy, Printer, Server, BrainCircuit, Camera, Loader2, SlidersHorizontal, ZoomIn, Undo2, BarChartHorizontal, DraftingCompass, Target, Share2 } from 'lucide-react';
 import { Style, Fill, Stroke, Circle as CircleStyle, Text as TextStyle } from 'ol/style';
 import { transform, transformExtent } from 'ol/proj';
@@ -260,6 +260,32 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
   const [isCapturing, setIsCapturing] = useState(false);
   const [trelloCardNotification, setTrelloCardInfo] = useState<TrelloCardInfo | null>(null);
   const [statisticsLayer, setStatisticsLayer] = useState<VectorMapLayer | null>(null);
+  const [tableSortConfig, setTableSortConfig] = useState<{ key: string; direction: 'ascending' | 'descending' } | null>(null);
+
+
+  const sortedInspectedFeatureData = useMemo(() => {
+    const featureData = featureInspectionHook.inspectedFeatureData || [];
+    let sortableItems = [...featureData];
+    if (tableSortConfig !== null) {
+      sortableItems.sort((a, b) => {
+        const valA = a.attributes[tableSortConfig.key];
+        const valB = b.attributes[tableSortConfig.key];
+        
+        if (valA === null || valA === undefined) return 1;
+        if (valB === null || valB === undefined) return -1;
+        
+        let comparison = 0;
+        if (typeof valA === 'number' && typeof valB === 'number') {
+          comparison = valA - valB;
+        } else {
+          comparison = String(valA).localeCompare(String(valB));
+        }
+        
+        return tableSortConfig.direction === 'ascending' ? comparison : -comparison;
+      });
+    }
+    return sortableItems;
+  }, [featureInspectionHook.inspectedFeatureData, tableSortConfig]);
 
 
   const updateDiscoveredLayerState = useCallback((layerName: string, added: boolean, type: 'wms' | 'wfs') => {
@@ -276,7 +302,10 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
     mapRef,
     isMapReady,
     drawingSourceRef,
-    onShowTableRequest: featureInspectionHook.processAndDisplayFeatures,
+    onShowTableRequest: (data, name, id) => {
+        featureInspectionHook.processAndDisplayFeatures(data, name, id);
+        setTableSortConfig(null); // Reset sort when new data arrives
+    },
     updateGeoServerDiscoveredLayerState: updateDiscoveredLayerState,
     clearSelectionAfterExtraction: featureInspectionHook.clearSelection,
     updateInspectedFeatureData: featureInspectionHook.updateInspectedFeatureData,
@@ -612,7 +641,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
   const handleAttributeTableFeatureSelect = useCallback((featureId: string, isCtrlOrMeta: boolean, isShift: boolean) => {
       const currentSelectedIds = featureInspectionHook.selectedFeatures.map(f => f.getId() as string);
       
-      const allFeatureIds = featureInspectionHook.inspectedFeatureData?.map(f => f.id) || [];
+      const allFeatureIds = sortedInspectedFeatureData.map(f => f.id) || []; // Use the sorted data
       const clickedIndex = allFeatureIds.indexOf(featureId);
   
       let newSelectedIds: string[];
@@ -637,7 +666,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
         setLastClickedTableFeatureIndex(clickedIndex);
       }
 
-  }, [featureInspectionHook, lastClickedTableFeatureIndex]);
+  }, [featureInspectionHook, lastClickedTableFeatureIndex, sortedInspectedFeatureData]);
 
   const handleOpenStreetView = useCallback(() => {
     if (!mapRef.current) {
@@ -1170,7 +1199,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
               featureInspectionHook.clearSelection(); 
             }}
             onMouseDownHeader={(e) => handlePanelMouseDown(e, 'attributes')}
-            plainFeatureData={featureInspectionHook.inspectedFeatureData}
+            plainFeatureData={sortedInspectedFeatureData}
             layerId={featureInspectionHook.currentInspectedLayerId}
             layerName={featureInspectionHook.currentInspectedLayerName}
             style={{ top: `${panels.attributes.position.y}px`, left: `${panels.attributes.position.x}px`, zIndex: panels.attributes.zIndex }}
@@ -1178,6 +1207,8 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
             onFeatureSelect={handleAttributeTableFeatureSelect}
             onAttributeChange={layerManagerHook.updateFeatureAttribute}
             onAddField={layerManagerHook.addFieldToLayer}
+            sortConfig={tableSortConfig}
+            onSortChange={setTableSortConfig}
           />
         )}
         

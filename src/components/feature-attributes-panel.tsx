@@ -43,6 +43,10 @@ interface AttributesPanelComponentProps {
   // Editing props
   onAttributeChange: (featureId: string, key: string, value: any) => void;
   onAddField: (layerId: string, fieldName: string, defaultValue: any) => void;
+  
+  // Sorting props
+  sortConfig: { key: string; direction: 'ascending' | 'descending' } | null;
+  onSortChange: (config: { key: string; direction: 'ascending' | 'descending' } | null) => void;
 }
 
 const ITEMS_PER_PAGE = 50;
@@ -62,9 +66,10 @@ const AttributesPanelComponent: React.FC<AttributesPanelComponentProps> = ({
   onFeatureSelect,
   onAttributeChange,
   onAddField,
+  sortConfig,
+  onSortChange,
 }) => {
   const [currentPage, setCurrentPage] = useState(1);
-  const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'ascending' | 'descending' } | null>(null);
   const [editingCell, setEditingCell] = useState<{ featureId: string; key: string } | null>(null);
   const [editingValue, setEditingValue] = useState<any>('');
   const [newFieldName, setNewFieldName] = useState('');
@@ -77,7 +82,7 @@ const AttributesPanelComponent: React.FC<AttributesPanelComponentProps> = ({
   useEffect(() => {
     if (featureData.length > 0) {
       setCurrentPage(1);
-      setSortConfig(null);
+      // Sort config is now managed by the parent
     }
   }, [featureData]);
 
@@ -88,35 +93,12 @@ const AttributesPanelComponent: React.FC<AttributesPanelComponentProps> = ({
   }, [editingCell]);
 
 
-  const sortedFeatures = useMemo(() => {
-    let sortableItems = [...featureData];
-    if (sortConfig !== null) {
-      sortableItems.sort((a, b) => {
-        const valA = a.attributes[sortConfig.key];
-        const valB = b.attributes[sortConfig.key];
-        
-        if (valA === null || valA === undefined) return 1;
-        if (valB === null || valB === undefined) return -1;
-        
-        let comparison = 0;
-        if (typeof valA === 'number' && typeof valB === 'number') {
-          comparison = valA - valB;
-        } else {
-          comparison = String(valA).localeCompare(String(valB));
-        }
-        
-        return sortConfig.direction === 'ascending' ? comparison : -comparison;
-      });
-    }
-    return sortableItems;
-  }, [featureData, sortConfig]);
-
   const requestSort = (key: string) => {
     let direction: 'ascending' | 'descending' = 'ascending';
     if (sortConfig && sortConfig.key === key && sortConfig.direction === 'ascending') {
       direction = 'descending';
     }
-    setSortConfig({ key, direction });
+    onSortChange({ key, direction });
   };
   
   const handleNextPage = () => setCurrentPage((prev) => Math.min(prev + 1, totalPages));
@@ -166,10 +148,10 @@ const AttributesPanelComponent: React.FC<AttributesPanelComponentProps> = ({
   };
 
   const hasFeatures = featureData && featureData.length > 0;
-  const totalPages = Math.ceil((sortedFeatures?.length || 0) / ITEMS_PER_PAGE);
+  const totalPages = Math.ceil((featureData?.length || 0) / ITEMS_PER_PAGE);
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
   const endIndex = startIndex + ITEMS_PER_PAGE;
-  const currentVisibleFeatures = sortedFeatures?.slice(startIndex, endIndex) || [];
+  const currentVisibleFeatures = featureData?.slice(startIndex, endIndex) || [];
 
   const allKeys = useMemo(() => Array.from(
     new Set(currentVisibleFeatures.flatMap(item => (item.attributes ? Object.keys(item.attributes) : [])))
