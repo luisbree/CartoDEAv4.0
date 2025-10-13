@@ -38,7 +38,7 @@ interface AttributesPanelComponentProps {
 
   // Selection props
   selectedFeatureIds: string[];
-  onFeatureSelect: (featureId: string, isCtrlOrMeta: boolean) => void;
+  onFeatureSelect: (featureId: string, isCtrlOrMeta: boolean, isShift: boolean) => void;
 
   // Editing props
   onAttributeChange: (featureId: string, key: string, value: any) => void;
@@ -123,7 +123,7 @@ const AttributesPanelComponent: React.FC<AttributesPanelComponentProps> = ({
   const handlePrevPage = () => setCurrentPage((prev) => Math.max(prev - 1, 1));
   
   const handleRowClick = useCallback((featureId: string, event: React.MouseEvent) => {
-      onFeatureSelect(featureId, event.ctrlKey || event.metaKey);
+      onFeatureSelect(featureId, event.ctrlKey || event.metaKey, event.shiftKey);
   }, [onFeatureSelect]);
 
   const handleCellDoubleClick = (featureId: string, key: string, value: any) => {

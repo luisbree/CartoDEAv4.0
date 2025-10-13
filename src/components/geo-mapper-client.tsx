@@ -171,6 +171,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
   const [isMounted, setIsMounted] = useState(false);
   const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
   const [mapSubject, setMapSubject] = useState('');
+  const [lastClickedTableFeatureIndex, setLastClickedTableFeatureIndex] = useState<number | null>(null);
   
   const layerManagerHookRef = useRef<ReturnType<typeof useLayerManager> | null>(null);
 
@@ -608,19 +609,35 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
     layerManagerHook.handleAddHybridLayer(layer.name, layer.title, initialGeoServerUrl, layer.bbox, layer.styleName);
   }, [layerManagerHook, initialGeoServerUrl]);
 
-  const handleAttributeTableFeatureSelect = useCallback((featureId: string, isCtrlOrMeta: boolean) => {
+  const handleAttributeTableFeatureSelect = useCallback((featureId: string, isCtrlOrMeta: boolean, isShift: boolean) => {
       const currentSelectedIds = featureInspectionHook.selectedFeatures.map(f => f.getId() as string);
+      
+      const allFeatureIds = featureInspectionHook.inspectedFeatureData?.map(f => f.id) || [];
+      const clickedIndex = allFeatureIds.indexOf(featureId);
+  
       let newSelectedIds: string[];
-
-      if (isCtrlOrMeta) {
+  
+      if (isShift && lastClickedTableFeatureIndex !== null && clickedIndex !== -1) {
+          const start = Math.min(lastClickedTableFeatureIndex, clickedIndex);
+          const end = Math.max(lastClickedTableFeatureIndex, clickedIndex);
+          const rangeIds = allFeatureIds.slice(start, end + 1);
+          // Combine with current selection without duplicates
+          newSelectedIds = Array.from(new Set([...currentSelectedIds, ...rangeIds]));
+      } else if (isCtrlOrMeta) {
           newSelectedIds = currentSelectedIds.includes(featureId)
               ? currentSelectedIds.filter(id => id !== featureId)
               : [...currentSelectedIds, featureId];
       } else {
           newSelectedIds = [featureId];
       }
+  
       featureInspectionHook.selectFeaturesById(newSelectedIds);
-  }, [featureInspectionHook]);
+      // Update the last clicked index for the next shift-click
+      if (clickedIndex !== -1) {
+        setLastClickedTableFeatureIndex(clickedIndex);
+      }
+
+  }, [featureInspectionHook, lastClickedTableFeatureIndex]);
 
   const handleOpenStreetView = useCallback(() => {
     if (!mapRef.current) {
@@ -845,7 +862,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
                         layerState.opacity,
                         layerState.wmsStyleEnabled
                     );
-                } else if (layerState.type === 'gee' && layerState.geeParams?.bandCombination) {
+                } else if (layerState.type === 'gee' && layerState.geeParams?.tileUrl) {
                      addGeeLayerToMap(layerState.geeParams.tileUrl!, layerState.name, {
                         bandCombination: layerState.geeParams.bandCombination as any,
                         // Pass other GEE params if they exist
