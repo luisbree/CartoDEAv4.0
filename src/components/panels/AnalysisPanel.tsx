@@ -195,6 +195,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   const [profileDataset, setProfileDataset] = useState<'NASADEM_ELEVATION' | 'ALOS_DSM'>('NASADEM_ELEVATION');
   const [profileLayerId, setProfileLayerId] = useState<string>('');
   const [verticalExaggeration, setVerticalExaggeration] = useState<number>(1);
+  const [yAxisDomain, setYAxisDomain] = useState<{min: number | string; max: number | string}>({min: 'auto', max: 'auto'});
   const analysisLayerRef = useRef<VectorLayer<VectorSource<Feature<Geometry>>> | null>(null);
   const drawInteractionRef = useRef<Draw | null>(null);
 
@@ -338,7 +339,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
             const fraction = i / SAMPLES;
             const coordinate = geometry.getCoordinateAt(fraction);
             const [lon, lat] = transform(coordinate, 'EPSG:3857', 'EPSG:4326');
-            const distance = lineLength * fraction;
+            const distance = lineLength * fraction; // Distance in METERS
             pointsToQuery.push({ lon, lat, distance });
         }
         
@@ -359,8 +360,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         if (finalProfileData.length > 0) {
             setProfileData(finalProfileData);
             
-            // --- NEW: Calculate statistics ---
-            const elevations = finalProfileData.map(p => p.elevation).filter(e => e !== 0); // Exclude 0/null values
+            const elevations = finalProfileData.map(p => p.elevation).filter(e => e !== 0); 
             if (elevations.length > 0) {
                 const sum = elevations.reduce((a, b) => a + b, 0);
                 const mean = sum / elevations.length;
@@ -370,8 +370,9 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                 const stdDev = Math.sqrt(variance);
                 const jenksBreaks = jenks(elevations, 3);
                 setProfileStats({ min, max, mean, stdDev, jenksBreaks });
+                // Set default Y-axis domain
+                setYAxisDomain({ min: Math.floor(min), max: Math.ceil(max) });
             }
-            // --- END: Calculate statistics ---
 
             toast({ description: "Perfil generado con éxito." });
         } else {
@@ -390,16 +391,29 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   
   const exaggeratedProfileData = useMemo(() => {
     if (!profileData) return null;
+    const {min: domainMin, max: domainMax} = yAxisDomain;
+    const minElev = typeof domainMin === 'number' ? domainMin : profileStats?.min ?? 0;
+
     return profileData.map(p => ({
         ...p,
-        exaggeratedElevation: p.elevation * verticalExaggeration,
+        // The exaggeration is now applied to the difference from the min elevation
+        // This makes the exaggeration relative to the visible portion of the graph
+        exaggeratedElevation: minElev + ((p.elevation - minElev) * verticalExaggeration),
     }));
-  }, [profileData, verticalExaggeration]);
+  }, [profileData, verticalExaggeration, yAxisDomain, profileStats]);
   
   const handleExaggerationStep = (direction: 'inc' | 'dec') => {
     setVerticalExaggeration(prev => {
         const newValue = direction === 'inc' ? prev + 1 : prev - 1;
         return Math.max(1, newValue);
+    });
+  };
+  
+  const handleYAxisDomainChange = (key: 'min' | 'max', value: string) => {
+    setYAxisDomain(prev => {
+        const numValue = value === '' ? 'auto' : parseFloat(value);
+        if (value !== '' && isNaN(numValue as number)) return prev; // Ignore invalid numbers
+        return { ...prev, [key]: numValue };
     });
   };
   // --- END Profile Logic ---
@@ -1044,38 +1058,37 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                     </div>
                     {exaggeratedProfileData && (
                         <div className="space-y-2 pt-2 border-t border-white/10">
-                             <div className="space-y-1">
-                                <Label htmlFor="vertical-exaggeration" className="text-xs flex items-center justify-between">
-                                    <span>Exageración Vertical</span>
-                                </Label>
-                                <div className="flex items-center gap-1">
-                                    <Button onClick={() => handleExaggerationStep('dec')} variant="outline" size="icon" className="h-8 w-8 flex-shrink-0 bg-black/20 hover:bg-black/40 border-white/30 text-white/90"><Minus className="h-4 w-4"/></Button>
-                                    <Input
-                                        id="vertical-exaggeration"
-                                        type="number"
-                                        min="1"
-                                        step="1"
-                                        value={verticalExaggeration}
-                                        onChange={(e) => setVerticalExaggeration(Math.max(1, Number(e.target.value)))}
-                                        className="h-8 text-xs bg-black/20 text-center"
-                                    />
-                                    <Button onClick={() => handleExaggerationStep('inc')} variant="outline" size="icon" className="h-8 w-8 flex-shrink-0 bg-black/20 hover:bg-black/40 border-white/30 text-white/90"><Plus className="h-4 w-4"/></Button>
+                             <div className="grid grid-cols-2 gap-2">
+                                <div className="space-y-1">
+                                    <Label className="text-xs">Rango Eje Y (m)</Label>
+                                    <div className="flex items-center gap-1">
+                                        <Input type="number" placeholder="Mín" value={yAxisDomain.min} onChange={(e) => handleYAxisDomainChange('min', e.target.value)} className="h-8 text-xs bg-black/20 text-center"/>
+                                        <Input type="number" placeholder="Máx" value={yAxisDomain.max} onChange={(e) => handleYAxisDomainChange('max', e.target.value)} className="h-8 text-xs bg-black/20 text-center"/>
+                                    </div>
+                                </div>
+                                <div className="space-y-1">
+                                  <Label className="text-xs">Exageración Vertical</Label>
+                                  <div className="flex items-center gap-1">
+                                      <Button onClick={() => handleExaggerationStep('dec')} variant="outline" size="icon" className="h-8 w-8 flex-shrink-0 bg-black/20 hover:bg-black/40 border-white/30 text-white/90"><Minus className="h-4 w-4"/></Button>
+                                      <Input type="number" min="1" step="1" value={verticalExaggeration} onChange={(e) => setVerticalExaggeration(Math.max(1, Number(e.target.value)))} className="h-8 text-xs bg-black/20 text-center" />
+                                      <Button onClick={() => handleExaggerationStep('inc')} variant="outline" size="icon" className="h-8 w-8 flex-shrink-0 bg-black/20 hover:bg-black/40 border-white/30 text-white/90"><Plus className="h-4 w-4"/></Button>
+                                  </div>
                                 </div>
                             </div>
                             <div className="h-48 w-full mt-2">
                                <ResponsiveContainer>
                                     <AreaChart data={exaggeratedProfileData} margin={{ top: 5, right: 20, left: -25, bottom: 5 }}>
                                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted-foreground), 0.3)" />
-                                        <XAxis dataKey="distance" unit="m" stroke="hsl(var(--muted-foreground))" fontSize={10} tickFormatter={(val) => val.toLocaleString(undefined, { maximumFractionDigits: 0 }) + 'm'} />
-                                        <YAxis stroke="hsl(var(--muted-foreground))" fontSize={10} domain={['dataMin', 'dataMax']} />
+                                        <XAxis dataKey="distance" type="number" stroke="hsl(var(--muted-foreground))" fontSize={10} tickFormatter={(val) => `${(val / 1000).toFixed(1)}km`} domain={['dataMin', 'dataMax']} />
+                                        <YAxis stroke="hsl(var(--muted-foreground))" fontSize={10} domain={[yAxisDomain.min, yAxisDomain.max]} tickFormatter={(val) => `${val}m`} />
                                         <Tooltip
                                             contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', fontSize: '12px' }}
-                                            labelFormatter={(label) => `Distancia: ${Number(label).toFixed(2)} m`}
-                                            formatter={(value: number, name: string, props) => [`${props.payload.elevation.toFixed(2)} m`, 'Elevación Real']}
+                                            labelFormatter={(label) => `Distancia: ${(Number(label)/1000).toFixed(2)} km`}
+                                            formatter={(value, name, props) => [`${props.payload.elevation.toFixed(2)} m`, 'Elevación Real']}
                                         />
                                         <Area type="monotone" dataKey="exaggeratedElevation" name="Elevación" stroke="hsl(var(--primary))" fill="hsla(var(--primary), 0.3)" />
-                                        {profileStats?.jenksBreaks[0] && <ReferenceLine y={profileStats.jenksBreaks[0] * verticalExaggeration} stroke="hsl(var(--muted-foreground), 0.7)" strokeWidth={1} />}
-                                        {profileStats?.jenksBreaks[1] && <ReferenceLine y={profileStats.jenksBreaks[1] * verticalExaggeration} stroke="hsl(var(--muted-foreground), 0.7)" strokeWidth={1} />}
+                                        {profileStats?.jenksBreaks[0] && <ReferenceLine y={yAxisDomain.min + ((profileStats.jenksBreaks[0] - yAxisDomain.min) * verticalExaggeration)} stroke="hsl(var(--muted-foreground), 0.7)" strokeWidth={1} />}
+                                        {profileStats?.jenksBreaks[1] && <ReferenceLine y={yAxisDomain.min + ((profileStats.jenksBreaks[1] - yAxisDomain.min) * verticalExaggeration)} stroke="hsl(var(--muted-foreground), 0.7)" strokeWidth={1} />}
                                     </AreaChart>
                                 </ResponsiveContainer>
                             </div>
@@ -1444,5 +1457,6 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
 
 
