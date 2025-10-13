@@ -34,6 +34,7 @@ import { ResponsiveContainer, XAxis, YAxis, Tooltip, AreaChart, Area, CartesianG
 import { cn } from '@/lib/utils';
 import { transform } from 'ol/proj';
 import { Slider } from '../ui/slider';
+import Overlay from 'ol/Overlay';
 
 
 interface AnalysisPanelProps {
@@ -198,6 +199,8 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   const [yAxisDomain, setYAxisDomain] = useState<{min: number | 'auto'; max: number | 'auto'}>({min: 'auto', max: 'auto'});
   const analysisLayerRef = useRef<VectorLayer<VectorSource<Feature<Geometry>>> | null>(null);
   const drawInteractionRef = useRef<Draw | null>(null);
+  const liveTooltipRef = useRef<Overlay | null>(null);
+  const liveTooltipElementRef = useRef<HTMLDivElement | null>(null);
 
   const { toast } = useToast();
   
@@ -207,6 +210,11 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         mapRef.current.removeInteraction(drawInteractionRef.current);
         drawInteractionRef.current = null;
         setActiveProfileDrawTool(null);
+    }
+     // Clean up live tooltip
+     if (liveTooltipRef.current && mapRef.current) {
+        mapRef.current.removeOverlay(liveTooltipRef.current);
+        liveTooltipRef.current = null;
     }
   }, [mapRef]);
 
@@ -230,6 +238,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
             source,
             style: analysisLayerStyle,
             properties: { id: 'internal-analysis-profile-layer' },
+            zIndex: 9999, // High z-index to draw on top
         });
         analysisLayerRef.current = layer;
         mapRef.current.addLayer(layer);
@@ -270,7 +279,32 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     drawInteractionRef.current = draw;
     mapRef.current.addInteraction(draw);
 
+     draw.on('drawstart', (event) => {
+        const feature = event.feature;
+        if (!liveTooltipElementRef.current) {
+            liveTooltipElementRef.current = document.createElement('div');
+            liveTooltipElementRef.current.className = 'ol-tooltip ol-tooltip-measure';
+        }
+        liveTooltipRef.current = new Overlay({
+            element: liveTooltipElementRef.current,
+            offset: [0, -15],
+            positioning: 'bottom-center',
+        });
+        mapRef.current?.addOverlay(liveTooltipRef.current);
+    
+        feature.getGeometry()?.on('change', (e) => {
+            const geom = e.target as OlLineString;
+            const length = olGetLength(geom, { projection: 'EPSG:3857' });
+            const output = length > 1000 ? `${(length / 1000).toFixed(2)} km` : `${length.toFixed(2)} m`;
+            liveTooltipElementRef.current!.innerHTML = output;
+            liveTooltipRef.current!.setPosition(geom.getLastCoordinate());
+        });
+    });
+
     draw.once('drawend', (event) => {
+        if (liveTooltipRef.current) {
+            liveTooltipRef.current.setPosition(undefined);
+        }
         const feature = event.feature as Feature<OlLineString>;
         feature.setStyle(analysisLayerStyle);
         setProfileLine(feature);
@@ -1073,10 +1107,13 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                <ResponsiveContainer>
                                     <AreaChart data={exaggeratedProfileData} margin={{ top: 5, right: 20, left: -25, bottom: 5 }}>
                                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted-foreground), 0.3)" />
-                                        <XAxis dataKey="distance" type="number" stroke="hsl(var(--muted-foreground))" fontSize={10} tickFormatter={(val) => `${val.toFixed(0)}m`} domain={['dataMin', 'dataMax']} />
+                                        <XAxis dataKey="distance" type="number" stroke="hsl(var(--muted-foreground))" fontSize={10} tickFormatter={(val) => `${(val / 1000).toFixed(1)} km`} domain={['dataMin', 'dataMax']} />
                                         <YAxis stroke="hsl(var(--muted-foreground))" fontSize={10} domain={[yAxisDomain.min, yAxisDomain.max]} tickFormatter={(val) => `${val}m`} />
                                         <Tooltip
-                                            contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', fontSize: '12px' }}
+                                            contentStyle={{ backgroundColor: 'transparent', border: 'none', color: '#fff', textShadow: '0 0 3px #000' }}
+                                            itemStyle={{ color: '#fff', fontSize: '12px' }}
+                                            labelStyle={{ color: '#ccc', fontSize: '11px' }}
+                                            cursor={{ stroke: 'hsl(var(--primary))', strokeWidth: 1 }}
                                             labelFormatter={(label) => `Distancia: ${Number(label).toFixed(2)} m`}
                                             formatter={(value, name, props) => [`${props.payload.elevation.toFixed(2)} m`, 'Elevación Real']}
                                         />
@@ -1451,6 +1488,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
 
 
 
