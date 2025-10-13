@@ -195,7 +195,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   const [profileDataset, setProfileDataset] = useState<'NASADEM_ELEVATION' | 'ALOS_DSM'>('NASADEM_ELEVATION');
   const [profileLayerId, setProfileLayerId] = useState<string>('');
   const [verticalExaggeration, setVerticalExaggeration] = useState<number>(1);
-  const [yAxisDomain, setYAxisDomain] = useState<{min: number | string; max: number | string}>({min: 'auto', max: 'auto'});
+  const [yAxisDomain, setYAxisDomain] = useState<{min: number | 'auto'; max: number | 'auto'}>({min: 'auto', max: 'auto'});
   const analysisLayerRef = useRef<VectorLayer<VectorSource<Feature<Geometry>>> | null>(null);
   const drawInteractionRef = useRef<Draw | null>(null);
 
@@ -343,9 +343,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
             pointsToQuery.push({ lon, lat, distance });
         }
         
-        console.log('[CLIENT] Sending points to server:', pointsToQuery);
         const elevationValues = await getElevationForPoints(pointsToQuery, profileDataset);
-        console.log('[CLIENT] Received elevations from server:', elevationValues);
         
         if (!elevationValues || elevationValues.length !== pointsToQuery.length) {
             throw new Error("No se obtuvieron datos de elevación válidos del servidor.");
@@ -390,13 +388,13 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   };
   
   const exaggeratedProfileData = useMemo(() => {
-    if (!profileData) return null;
-    const {min: domainMin, max: domainMax} = yAxisDomain;
-    const minElev = typeof domainMin === 'number' ? domainMin : profileStats?.min ?? 0;
+    if (!profileData || !profileStats) return null;
+
+    const minElev = typeof yAxisDomain.min === 'number' ? yAxisDomain.min : profileStats.min;
 
     return profileData.map(p => ({
         ...p,
-        // The exaggeration is now applied to the difference from the min elevation
+        // The exaggeration is applied to the difference from the min elevation
         // This makes the exaggeration relative to the visible portion of the graph
         exaggeratedElevation: minElev + ((p.elevation - minElev) * verticalExaggeration),
     }));
@@ -410,11 +408,9 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   };
   
   const handleYAxisDomainChange = (key: 'min' | 'max', value: string) => {
-    setYAxisDomain(prev => {
-        const numValue = value === '' ? 'auto' : parseFloat(value);
-        if (value !== '' && isNaN(numValue as number)) return prev; // Ignore invalid numbers
-        return { ...prev, [key]: numValue };
-    });
+    const numValue = value === '' ? 'auto' : parseFloat(value);
+    if (value !== '' && isNaN(numValue as number)) return; // Ignore invalid numbers
+    setYAxisDomain(prev => ({ ...prev, [key]: numValue }));
   };
   // --- END Profile Logic ---
 
@@ -1087,8 +1083,8 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                             formatter={(value, name, props) => [`${props.payload.elevation.toFixed(2)} m`, 'Elevación Real']}
                                         />
                                         <Area type="monotone" dataKey="exaggeratedElevation" name="Elevación" stroke="hsl(var(--primary))" fill="hsla(var(--primary), 0.3)" />
-                                        {profileStats?.jenksBreaks[0] && <ReferenceLine y={yAxisDomain.min + ((profileStats.jenksBreaks[0] - yAxisDomain.min) * verticalExaggeration)} stroke="hsl(var(--muted-foreground), 0.7)" strokeWidth={1} />}
-                                        {profileStats?.jenksBreaks[1] && <ReferenceLine y={yAxisDomain.min + ((profileStats.jenksBreaks[1] - yAxisDomain.min) * verticalExaggeration)} stroke="hsl(var(--muted-foreground), 0.7)" strokeWidth={1} />}
+                                        {profileStats?.jenksBreaks[0] && <ReferenceLine y={yAxisDomain.min + ((profileStats.jenksBreaks[0] - (typeof yAxisDomain.min === 'number' ? yAxisDomain.min : profileStats.min)) * verticalExaggeration)} stroke="hsl(var(--muted-foreground), 0.7)" strokeWidth={1} />}
+                                        {profileStats?.jenksBreaks[1] && <ReferenceLine y={yAxisDomain.min + ((profileStats.jenksBreaks[1] - (typeof yAxisDomain.min === 'number' ? yAxisDomain.min : profileStats.min)) * verticalExaggeration)} stroke="hsl(var(--muted-foreground), 0.7)" strokeWidth={1} />}
                                     </AreaChart>
                                 </ResponsiveContainer>
                             </div>
@@ -1457,6 +1453,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
 
 
 
