@@ -350,7 +350,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         }
         
         const finalProfileData: ProfilePoint[] = pointsToQuery.map((point, index) => ({
-            distance: point.distance, // Keep distance in meters
+            distance: point.distance, 
             elevation: elevationValues[index] === null || elevationValues[index] === -9999 ? 0 : parseFloat(elevationValues[index]!.toFixed(2)),
             location: [point.lon, point.lat],
         }));
@@ -394,8 +394,6 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 
     return profileData.map(p => ({
         ...p,
-        // The exaggeration is applied to the difference from the min elevation
-        // This makes the exaggeration relative to the visible portion of the graph
         exaggeratedElevation: minElev + ((p.elevation - minElev) * verticalExaggeration),
     }));
   }, [profileData, verticalExaggeration, yAxisDomain, profileStats]);
@@ -1075,11 +1073,11 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                <ResponsiveContainer>
                                     <AreaChart data={exaggeratedProfileData} margin={{ top: 5, right: 20, left: -25, bottom: 5 }}>
                                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted-foreground), 0.3)" />
-                                        <XAxis dataKey="distance" type="number" stroke="hsl(var(--muted-foreground))" fontSize={10} tickFormatter={(val) => `${(val / 1000).toFixed(1)}km`} domain={['dataMin', 'dataMax']} />
+                                        <XAxis dataKey="distance" type="number" stroke="hsl(var(--muted-foreground))" fontSize={10} tickFormatter={(val) => `${val.toFixed(0)}m`} domain={['dataMin', 'dataMax']} />
                                         <YAxis stroke="hsl(var(--muted-foreground))" fontSize={10} domain={[yAxisDomain.min, yAxisDomain.max]} tickFormatter={(val) => `${val}m`} />
                                         <Tooltip
                                             contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', fontSize: '12px' }}
-                                            labelFormatter={(label) => `Distancia: ${(Number(label)/1000).toFixed(2)} km`}
+                                            labelFormatter={(label) => `Distancia: ${Number(label).toFixed(2)} m`}
                                             formatter={(value, name, props) => [`${props.payload.elevation.toFixed(2)} m`, 'Elevación Real']}
                                         />
                                         <Area type="monotone" dataKey="exaggeratedElevation" name="Elevación" stroke="hsl(var(--primary))" fill="hsla(var(--primary), 0.3)" />
@@ -1453,6 +1451,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
 
 
 
