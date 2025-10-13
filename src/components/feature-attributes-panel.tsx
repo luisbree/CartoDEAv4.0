@@ -390,3 +390,5 @@ const AttributesPanelComponent: React.FC<AttributesPanelComponentProps> = ({
 };
 
 export default AttributesPanelComponent;
+
+    
