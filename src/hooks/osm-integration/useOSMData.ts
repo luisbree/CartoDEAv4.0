@@ -84,24 +84,31 @@ export const useOSMData = ({ mapRef, drawingSourceRef, addLayer, osmCategoryConf
     }
   }, [toast]);
 
-  const getBboxFromDrawing = useCallback(() => {
+  const getBbox = useCallback(() => {
     const drawingSource = drawingSourceRef.current;
     const map = mapRef.current;
-    if (!map || !drawingSource) {
-      toast({ description: 'El mapa o la capa de dibujo no están disponibles.' });
+    if (!map) {
+      toast({ description: 'El mapa no está disponible.', variant: 'destructive' });
       return null;
     }
+
+    const mapProjection = map.getView().getProjection();
+    const dataProjection = getProjection('EPSG:4326');
+    let extent;
+
+    // Prioritize drawn polygon
+    const polygonFeature = drawingSource?.getFeatures().find(f => f.getGeometry()?.getType() === 'Polygon');
     
-    const polygonFeature = drawingSource.getFeatures().find(f => f.getGeometry()?.getType() === 'Polygon');
-    if (!polygonFeature) {
-        toast({ description: 'Por favor, dibuje un polígono para definir el área de búsqueda.' });
-        return null;
+    if (polygonFeature) {
+        extent = polygonFeature.getGeometry()!.getExtent();
+        toast({ description: 'Buscando OSM en el área dibujada.' });
+    } else {
+        // Fallback to map view
+        extent = map.getView().calculateExtent(map.getSize()!);
+        toast({ description: 'Buscando OSM en la vista actual del mapa.' });
     }
 
-    const mapProjection = getProjection('EPSG:3857');
-    const dataProjection = getProjection('EPSG:4326');
-    const extent = polygonFeature.getGeometry()!.getExtent();
-    const transformedExtent = transformExtent(extent, mapProjection!, dataProjection!);
+    const transformedExtent = transformExtent(extent, mapProjection, dataProjection!);
     return `${transformedExtent[1]},${transformedExtent[0]},${transformedExtent[3]},${transformedExtent[2]}`;
   }, [drawingSourceRef, mapRef, toast]);
 
@@ -113,9 +120,8 @@ export const useOSMData = ({ mapRef, drawingSourceRef, addLayer, osmCategoryConf
     }
     
     setIsFetchingOSM(true);
-    toast({ description: `Buscando ${selectedOSMCategoryIds.length} categoría(s) de OSM...` });
     
-    const bboxStr = getBboxFromDrawing();
+    const bboxStr = getBbox();
     if (!bboxStr) {
       setIsFetchingOSM(false);
       return;
@@ -148,14 +154,13 @@ export const useOSMData = ({ mapRef, drawingSourceRef, addLayer, osmCategoryConf
     } finally {
       setIsFetchingOSM(false);
     }
-  }, [selectedOSMCategoryIds, getBboxFromDrawing, osmCategoryConfigs, executeQuery, addLayer, toast]);
+  }, [selectedOSMCategoryIds, getBbox, osmCategoryConfigs, executeQuery, addLayer, toast]);
   
   const fetchCustomOSMData = useCallback(async (key: string, value: string) => {
     setIsFetchingOSM(true); // Reuse the same loading state
     const queryDescription = value ? `${key}="${value}"` : key;
-    toast({ description: `Buscando entidades OSM para: ${queryDescription}...` });
     
-    const bboxStr = getBboxFromDrawing();
+    const bboxStr = getBbox();
     if (!bboxStr) {
         setIsFetchingOSM(false);
         return;
@@ -186,7 +191,7 @@ export const useOSMData = ({ mapRef, drawingSourceRef, addLayer, osmCategoryConf
     } finally {
         setIsFetchingOSM(false);
     }
-  }, [getBboxFromDrawing, executeQuery, addLayer, toast]);
+  }, [getBbox, executeQuery, addLayer, toast]);
 
 
  const handleDownloadOSMLayers = useCallback(async (format: 'geojson' | 'kml' | 'shp') => {
@@ -220,3 +225,6 @@ export const useOSMData = ({ mapRef, drawingSourceRef, addLayer, osmCategoryConf
     handleDownloadOSMLayers,
   };
 };
+
+
+    
