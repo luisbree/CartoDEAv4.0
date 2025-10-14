@@ -171,7 +171,6 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
   const [isMounted, setIsMounted] = useState(false);
   const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
   const [mapSubject, setMapSubject] = useState('');
-  const [lastClickedTableFeatureIndex, setLastClickedTableFeatureIndex] = useState<number | null>(null);
   
   const layerManagerHookRef = useRef<ReturnType<typeof useLayerManager> | null>(null);
 
@@ -244,9 +243,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
     activeTool: activeTool.type === 'interaction' ? activeTool.id : null,
     setActiveTool: (id) => handleSetActiveTool({ type: 'interaction', id }),
     onNewSelection: () => {
-      if (panels.attributes.isMinimized) {
-        togglePanelMinimize('attributes');
-      }
+      // This is now handled by the function that initiates the table display
     }
   });
 
@@ -260,32 +257,6 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
   const [isCapturing, setIsCapturing] = useState(false);
   const [trelloCardNotification, setTrelloCardInfo] = useState<TrelloCardInfo | null>(null);
   const [statisticsLayer, setStatisticsLayer] = useState<VectorMapLayer | null>(null);
-  const [tableSortConfig, setTableSortConfig] = useState<{ key: string; direction: 'ascending' | 'descending' } | null>(null);
-
-
-  const sortedInspectedFeatureData = useMemo(() => {
-    const featureData = featureInspectionHook.inspectedFeatureData || [];
-    let sortableItems = [...featureData];
-    if (tableSortConfig !== null) {
-      sortableItems.sort((a, b) => {
-        const valA = a.attributes[tableSortConfig.key];
-        const valB = b.attributes[tableSortConfig.key];
-        
-        if (valA === null || valA === undefined) return 1;
-        if (valB === null || valB === undefined) return -1;
-        
-        let comparison = 0;
-        if (typeof valA === 'number' && typeof valB === 'number') {
-          comparison = valA - valB;
-        } else {
-          comparison = String(valA).localeCompare(String(valB));
-        }
-        
-        return tableSortConfig.direction === 'ascending' ? comparison : -comparison;
-      });
-    }
-    return sortableItems;
-  }, [featureInspectionHook.inspectedFeatureData, tableSortConfig]);
 
 
   const updateDiscoveredLayerState = useCallback((layerName: string, added: boolean, type: 'wms' | 'wfs') => {
@@ -297,15 +268,20 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
       return l;
     }));
   }, []);
+  
+  const handleShowTableRequest = useCallback((data: PlainFeatureData[], name: string, id: string) => {
+    featureInspectionHook.processAndDisplayFeatures(data, name, id);
+    if (panels.attributes.isMinimized) {
+      togglePanelMinimize('attributes');
+    }
+  }, [featureInspectionHook, panels.attributes.isMinimized, togglePanelMinimize]);
+
 
   const layerManagerHook = useLayerManager({
     mapRef,
     isMapReady,
     drawingSourceRef,
-    onShowTableRequest: (data, name, id) => {
-        featureInspectionHook.processAndDisplayFeatures(data, name, id);
-        setTableSortConfig(null); // Reset sort when new data arrives
-    },
+    onShowTableRequest: handleShowTableRequest,
     updateGeoServerDiscoveredLayerState: updateDiscoveredLayerState,
     clearSelectionAfterExtraction: featureInspectionHook.clearSelection,
     updateInspectedFeatureData: featureInspectionHook.updateInspectedFeatureData,
@@ -575,9 +551,6 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
         });
         if (layerToShowTable) {
             layerManagerHook.handleShowLayerTable(layerToShowTable.id);
-            if (panels.attributes.isMinimized) {
-              togglePanelMinimize('attributes');
-            }
         } else {
             toast({description: `Drax intentó mostrar la tabla de una capa no encontrada: ${action.showTableForLayer}`});
         }
@@ -640,33 +613,17 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
 
   const handleAttributeTableFeatureSelect = useCallback((featureId: string, isCtrlOrMeta: boolean, isShift: boolean) => {
       const currentSelectedIds = featureInspectionHook.selectedFeatures.map(f => f.getId() as string);
-      
-      const allFeatureIds = sortedInspectedFeatureData.map(f => f.id) || []; // Use the sorted data
-      const clickedIndex = allFeatureIds.indexOf(featureId);
-  
       let newSelectedIds: string[];
-  
-      if (isShift && lastClickedTableFeatureIndex !== null && clickedIndex !== -1) {
-          const start = Math.min(lastClickedTableFeatureIndex, clickedIndex);
-          const end = Math.max(lastClickedTableFeatureIndex, clickedIndex);
-          const rangeIds = allFeatureIds.slice(start, end + 1);
-          // Combine with current selection without duplicates
-          newSelectedIds = Array.from(new Set([...currentSelectedIds, ...rangeIds]));
-      } else if (isCtrlOrMeta) {
+
+      if (isCtrlOrMeta) {
           newSelectedIds = currentSelectedIds.includes(featureId)
               ? currentSelectedIds.filter(id => id !== featureId)
               : [...currentSelectedIds, featureId];
       } else {
           newSelectedIds = [featureId];
       }
-  
       featureInspectionHook.selectFeaturesById(newSelectedIds);
-      // Update the last clicked index for the next shift-click
-      if (clickedIndex !== -1) {
-        setLastClickedTableFeatureIndex(clickedIndex);
-      }
-
-  }, [featureInspectionHook, lastClickedTableFeatureIndex, sortedInspectedFeatureData]);
+  }, [featureInspectionHook]);
 
   const handleOpenStreetView = useCallback(() => {
     if (!mapRef.current) {
@@ -1152,12 +1109,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
             onRemoveLayer={layerManagerHook.removeLayer}
             onRemoveLayers={layerManagerHook.removeLayers}
             onZoomToLayerExtent={layerManagerHook.zoomToLayerExtent}
-            onShowLayerTable={(layerId) => {
-              layerManagerHook.handleShowLayerTable(layerId);
-              if (panels.attributes.isMinimized) {
-                  togglePanelMinimize('attributes');
-              }
-            }}
+            onShowLayerTable={layerManagerHook.handleShowLayerTable}
             onShowStatistics={handleShowStatistics}
             onExtractByPolygon={layerManagerHook.handleExtractByPolygon}
             onExtractBySelection={() => layerManagerHook.handleExtractBySelection(featureInspectionHook.selectedFeatures)}
@@ -1200,7 +1152,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
               featureInspectionHook.clearSelection(); 
             }}
             onMouseDownHeader={(e) => handlePanelMouseDown(e, 'attributes')}
-            plainFeatureData={sortedInspectedFeatureData}
+            plainFeatureData={featureInspectionHook.inspectedFeatureData}
             layerId={featureInspectionHook.currentInspectedLayerId}
             layerName={featureInspectionHook.currentInspectedLayerName}
             style={{ top: `${panels.attributes.position.y}px`, left: `${panels.attributes.position.x}px`, zIndex: panels.attributes.zIndex }}
@@ -1208,8 +1160,6 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
             onFeatureSelect={handleAttributeTableFeatureSelect}
             onAttributeChange={layerManagerHook.updateFeatureAttribute}
             onAddField={layerManagerHook.addFieldToLayer}
-            sortConfig={tableSortConfig}
-            onSortChange={setTableSortConfig}
           />
         )}
         
