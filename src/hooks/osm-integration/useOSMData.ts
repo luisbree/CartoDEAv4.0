@@ -45,17 +45,28 @@ export const useOSMData = ({ mapRef, drawingSourceRef, addLayer, osmCategoryConf
             body: `data=${encodeURIComponent(overpassQuery)}`,
         });
 
+        // Handle non-OK responses first
         if (!response.ok) {
+            const errorText = await response.text();
             if (response.status === 504 && retries > 0) {
                 console.warn(`Overpass API timeout/overload, retrying... (${retries} retries left)`);
                 toast({ description: `El servidor de OSM está ocupado, reintentando...` });
                 await new Promise(res => setTimeout(res, 3000));
                 return executeQuery(queryFragment, retries - 1);
             }
-            const errorText = await response.text();
-            throw new Error(`Overpass API error: ${response.status} ${errorText}`);
+            throw new Error(`Error de la API de Overpass: ${response.status}. ${errorText}`);
         }
 
+        // Check content type before parsing
+        const contentType = response.headers.get("content-type");
+        if (!contentType || !contentType.includes("application/json")) {
+            const errorText = await response.text();
+            // Try to find a meaningful message in the HTML/XML error response
+            const remarkMatch = errorText.match(/<p><strong>remark:<\/strong>(.*?)<\/p>/);
+            const detailedMessage = remarkMatch ? remarkMatch[1].trim() : "La respuesta no fue un JSON válido.";
+            throw new Error(`Error del servidor de Overpass: ${detailedMessage}`);
+        }
+        
         const osmData = await response.json();
         const geojsonData = osmtogeojson(osmData);
         
