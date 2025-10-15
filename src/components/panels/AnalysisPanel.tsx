@@ -9,8 +9,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DraftingCompass, Scissors, Layers, CircleDotDashed, MinusSquare, BoxSelect, Droplet, Sparkles, Loader2, Combine, Minus, Plus, TrendingUp, Waypoints as CrosshairIcon, Merge, LineChart, PenLine, Eraser, Brush, ZoomIn, Download, FileImage, FileText } from 'lucide-react';
-import type { MapLayer, VectorMapLayer, ProfilePoint, ElevationPoint } from '@/lib/types';
+import { DraftingCompass, Scissors, Layers, CircleDotDashed, MinusSquare, BoxSelect, Droplet, Sparkles, Loader2, Combine, Minus, Plus, TrendingUp, Waypoints as CrosshairIcon, Merge, LineChart, PenLine, Eraser, Brush, ZoomIn, Download, FileImage, FileText, CheckCircle } from 'lucide-react';
+import type { MapLayer, VectorMapLayer, ProfilePoint } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { nanoid } from 'nanoid';
 import GeoJSON from 'ol/format/GeoJSON';
@@ -30,7 +30,7 @@ import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 import { Style, Text as TextStyle, Fill, Stroke } from 'ol/style';
 import type { Map } from 'ol';
 import Draw, { createBox } from 'ol/interaction/Draw';
-import { ResponsiveContainer, XAxis, YAxis, Tooltip, AreaChart, Area, CartesianGrid, ReferenceLine } from 'recharts';
+import { ResponsiveContainer, XAxis, YAxis, Tooltip, AreaChart, Area, CartesianGrid, ReferenceLine, Legend, ScatterChart, Scatter, Line } from 'recharts';
 import { cn } from '@/lib/utils';
 import { transform } from 'ol/proj';
 import { Slider } from '../ui/slider';
@@ -119,6 +119,21 @@ function jenks(data: number[], n_classes: number): number[] {
   return breaks.reverse();
 }
 
+type DatasetId = 'NASADEM_ELEVATION' | 'ALOS_DSM' | 'JRC_WATER_OCCURRENCE';
+
+const DATASET_DEFINITIONS: Record<DatasetId, { id: string; band: string; name: string; color: string; }> = {
+    'NASADEM_ELEVATION': { id: 'NASA/NASADEM_HGT/001', band: 'elevation', name: 'Elevación (NASADEM)', color: '#8884d8' },
+    'ALOS_DSM': { id: 'JAXA/ALOS/AW3D30/V3_2', band: 'DSM', name: 'Superficie (ALOS)', color: '#82ca9d' },
+    'JRC_WATER_OCCURRENCE': { id: 'JRC/GSW1_4/GlobalSurfaceWater', band: 'occurrence', name: 'Agua Superficial (JRC)', color: '#3a86ff' },
+};
+
+interface ProfileDataSeries {
+    datasetId: DatasetId;
+    name: string;
+    color: string;
+    points: ProfilePoint[];
+    stats: ProfileStats;
+}
 
 interface ProfileStats {
     min: number;
@@ -126,6 +141,14 @@ interface ProfileStats {
     mean: number;
     stdDev: number;
     jenksBreaks: number[]; // For 3 classes, it will have 2 values
+}
+
+interface CorrelationResult {
+    coefficient: number;
+    trendline: { slope: number; intercept: number };
+    scatterData: { x: number, y: number }[];
+    xDataset: DatasetId;
+    yDataset: DatasetId;
 }
 
 
@@ -191,11 +214,10 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 
   // State for Topographic Profile
   const [profileLine, setProfileLine] = useState<Feature<OlLineString> | null>(null);
-  const [profileData, setProfileData] = useState<ProfilePoint[] | null>(null);
-  const [profileStats, setProfileStats] = useState<ProfileStats | null>(null);
+  const [profileData, setProfileData] = useState<ProfileDataSeries[] | null>(null);
   const [activeProfileDrawTool, setActiveProfileDrawTool] = useState<'LineString' | 'FreehandLine' | null>(null);
   const [isGeneratingProfile, setIsGeneratingProfile] = useState(false);
-  const [profileDataset, setProfileDataset] = useState<'NASADEM_ELEVATION' | 'ALOS_DSM' | 'JRC_WATER_OCCURRENCE'>('NASADEM_ELEVATION');
+  const [selectedProfileDatasets, setSelectedProfileDatasets] = useState<DatasetId[]>(['NASADEM_ELEVATION']);
   const [profileLayerId, setProfileLayerId] = useState<string>('');
   const [verticalExaggeration, setVerticalExaggeration] = useState<number>(1);
   const [yAxisDomain, setYAxisDomain] = useState<{min: number | 'auto'; max: number | 'auto'}>({min: 'auto', max: 'auto'});
@@ -204,6 +226,9 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   const liveTooltipRef = useRef<Overlay | null>(null);
   const liveTooltipElementRef = useRef<HTMLDivElement | null>(null);
   const chartContainerRef = useRef<HTMLDivElement>(null);
+  const [correlationResult, setCorrelationResult] = useState<CorrelationResult | null>(null);
+  const [corrAxisX, setCorrAxisX] = useState<DatasetId | ''>('');
+  const [corrAxisY, setCorrAxisY] = useState<DatasetId | ''>('');
 
 
   const { toast } = useToast();
@@ -228,7 +253,9 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
       }
       setProfileLine(null);
       setProfileData(null);
-      setProfileStats(null);
+      setCorrelationResult(null);
+      setCorrAxisX('');
+      setCorrAxisY('');
       setProfileLayerId('');
       stopDrawing();
       toast({ description: "Línea de perfil eliminada." });
@@ -359,11 +386,17 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         toast({ description: "Dibuja una línea o selecciona una capa de línea.", variant: "destructive" });
         return;
     }
+    if (selectedProfileDatasets.length === 0) {
+        toast({ description: "Selecciona al menos un dataset de GEE.", variant: "destructive" });
+        return;
+    }
     
     setIsGeneratingProfile(true);
     setProfileData(null);
-    setProfileStats(null);
-    toast({ description: "Generando perfil topográfico..." });
+    setCorrelationResult(null);
+    setCorrAxisX('');
+    setCorrAxisY('');
+    toast({ description: `Generando perfil para ${selectedProfileDatasets.length} dataset(s)...` });
 
     try {
         const geometry = profileLine.getGeometry();
@@ -371,7 +404,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 
         const lineLength = olGetLength(geometry, { projection: 'EPSG:3857' });
         const SAMPLES = 100;
-        const pointsToQuery: ElevationPoint[] = [];
+        const pointsToQuery: { lon: number; lat: number; distance: number }[] = [];
 
         for (let i = 0; i <= SAMPLES; i++) {
             const fraction = i / SAMPLES;
@@ -381,74 +414,114 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
             pointsToQuery.push({ lon, lat, distance });
         }
         
-        let datasetId = '';
-        let bandName = '';
+        const allProfileData: ProfileDataSeries[] = [];
         
-        if (profileDataset === 'NASADEM_ELEVATION') {
-            datasetId = 'NASA/NASADEM_HGT/001';
-            bandName = 'elevation';
-        } else if (profileDataset === 'ALOS_DSM') {
-            datasetId = 'JAXA/ALOS/AW3D30/V3_2';
-            bandName = 'DSM';
-        } else if (profileDataset === 'JRC_WATER_OCCURRENCE') {
-            datasetId = 'JRC/GSW1_4/GlobalSurfaceWater';
-            bandName = 'occurrence';
-        }
-
-        const elevationValues = await getValuesForPoints({ points: pointsToQuery, datasetId, bandName });
-        
-        if (!elevationValues || elevationValues.length !== pointsToQuery.length) {
-            throw new Error("No se obtuvieron datos de elevación válidos del servidor.");
-        }
-        
-        const finalProfileData: ProfilePoint[] = pointsToQuery.map((point, index) => ({
-            distance: point.distance, 
-            elevation: elevationValues[index] === null || elevationValues[index] === -9999 ? 0 : parseFloat(elevationValues[index]!.toFixed(2)),
-            location: [point.lon, point.lat],
-        }));
-
-        if (finalProfileData.length > 0) {
-            setProfileData(finalProfileData);
+        for (const datasetId of selectedProfileDatasets) {
+            const def = DATASET_DEFINITIONS[datasetId];
+            const values = await getValuesForPoints({ points: pointsToQuery, datasetId: def.id, bandName: def.band });
             
-            const elevations = finalProfileData.map(p => p.elevation).filter(e => e !== 0); 
-            if (elevations.length > 0) {
-                const sum = elevations.reduce((a, b) => a + b, 0);
-                const mean = sum / elevations.length;
-                const min = Math.min(...elevations);
-                const max = Math.max(...elevations);
-                const variance = elevations.reduce((sq, n) => sq + Math.pow(n - mean, 2), 0) / elevations.length;
-                const stdDev = Math.sqrt(variance);
-                const jenksBreaks = jenks(elevations, 3);
-                setProfileStats({ min, max, mean, stdDev, jenksBreaks });
-                // Set default Y-axis domain
-                setYAxisDomain({ min: Math.floor(min), max: Math.ceil(max) });
+            if (!values || values.length !== pointsToQuery.length) {
+                throw new Error(`No se obtuvieron datos válidos para ${def.name}.`);
             }
+            
+            const points: ProfilePoint[] = pointsToQuery.map((point, index) => ({
+                distance: point.distance, 
+                value: values[index] === null || values[index] === -9999 ? 0 : parseFloat(values[index]!.toFixed(2)),
+                location: [point.lon, point.lat],
+            }));
+            
+            const validValues = points.map(p => p.value).filter(e => e !== 0); 
+            let stats: ProfileStats = { min: 0, max: 0, mean: 0, stdDev: 0, jenksBreaks: [] };
+            if (validValues.length > 0) {
+                const sum = validValues.reduce((a, b) => a + b, 0);
+                stats.mean = sum / validValues.length;
+                stats.min = Math.min(...validValues);
+                stats.max = Math.max(...validValues);
+                const variance = validValues.reduce((sq, n) => sq + Math.pow(n - stats.mean, 2), 0) / validValues.length;
+                stats.stdDev = Math.sqrt(variance);
+                stats.jenksBreaks = jenks(validValues, 3);
+            }
+            
+            allProfileData.push({ datasetId, name: def.name, color: def.color, points, stats });
+        }
 
-            toast({ description: "Perfil generado con éxito." });
+        if (allProfileData.length > 0) {
+            setProfileData(allProfileData);
+            const firstStat = allProfileData[0].stats;
+            setYAxisDomain({ min: Math.floor(firstStat.min), max: Math.ceil(firstStat.max) });
+            toast({ description: "Perfil(es) generado(s) con éxito." });
         } else {
-             throw new Error("No se obtuvieron puntos de elevación válidos a lo largo de la línea.");
+             throw new Error("No se obtuvieron puntos válidos a lo largo de la línea.");
         }
 
     } catch (error: any) {
         console.error("Error generating profile:", error);
         toast({ title: "Error de Perfil", description: error.message, variant: "destructive" });
         setProfileData(null);
-        setProfileStats(null);
     } finally {
         setIsGeneratingProfile(false);
     }
   };
   
+  const handleCalculateCorrelation = () => {
+    if (!profileData || !corrAxisX || !corrAxisY || corrAxisX === corrAxisY) {
+        toast({ description: "Selecciona dos datasets diferentes para correlacionar.", variant: "destructive" });
+        return;
+    }
+    
+    const dataX = profileData.find(d => d.datasetId === corrAxisX);
+    const dataY = profileData.find(d => d.datasetId === corrAxisY);
+
+    if (!dataX || !dataY) {
+        toast({ description: "No se encontraron los datos para la correlación.", variant: "destructive" });
+        return;
+    }
+
+    const n = dataX.points.length;
+    const valuesX = dataX.points.map(p => p.value);
+    const valuesY = dataY.points.map(p => p.value);
+
+    const sumX = valuesX.reduce((a, b) => a + b, 0);
+    const sumY = valuesY.reduce((a, b) => a + b, 0);
+    const sumXY = valuesX.reduce((sum, x, i) => sum + x * valuesY[i], 0);
+    const sumX2 = valuesX.reduce((sum, x) => sum + x * x, 0);
+    const sumY2 = valuesY.reduce((sum, y) => sum + y * y, 0);
+
+    const numerator = n * sumXY - sumX * sumY;
+    const denominator = Math.sqrt((n * sumX2 - sumX * sumX) * (n * sumY2 - sumY * sumY));
+    
+    const coefficient = denominator === 0 ? 0 : numerator / denominator;
+    
+    const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+    const intercept = (sumY - slope * sumX) / n;
+
+    const scatterData = valuesX.map((x, i) => ({ x, y: valuesY[i] }));
+    
+    setCorrelationResult({ coefficient, trendline: { slope, intercept }, scatterData, xDataset: dataX.datasetId, yDataset: dataY.datasetId });
+    toast({ description: `Correlación calculada: r = ${coefficient.toFixed(4)}` });
+  };
+  
   const exaggeratedProfileData = useMemo(() => {
-    if (!profileData || !profileStats) return null;
+    if (!profileData) return null;
+    
+    const firstSeries = profileData[0];
+    const minElev = typeof yAxisDomain.min === 'number' ? yAxisDomain.min : firstSeries.stats.min;
 
-    const minElev = typeof yAxisDomain.min === 'number' ? yAxisDomain.min : profileStats.min;
+    // Combine data points from all series based on distance
+    const combinedPoints: { [distance: number]: any } = {};
+    
+    profileData.forEach(series => {
+        series.points.forEach(point => {
+            if (!combinedPoints[point.distance]) {
+                combinedPoints[point.distance] = { distance: point.distance };
+            }
+            combinedPoints[point.distance][series.datasetId] = minElev + ((point.value - minElev) * verticalExaggeration);
+            combinedPoints[point.distance][`${series.datasetId}_raw`] = point.value;
+        });
+    });
 
-    return profileData.map(p => ({
-        ...p,
-        exaggeratedElevation: minElev + ((p.elevation - minElev) * verticalExaggeration),
-    }));
-  }, [profileData, verticalExaggeration, yAxisDomain, profileStats]);
+    return Object.values(combinedPoints);
+  }, [profileData, verticalExaggeration, yAxisDomain]);
   
   const handleExaggerationStep = (direction: 'inc' | 'dec') => {
     setVerticalExaggeration(prev => {
@@ -469,9 +542,16 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
             toast({ description: "No hay datos de perfil para descargar.", variant: "destructive" });
             return;
         }
-        const csvHeader = "x,y,z\n";
-        const csvRows = profileData.map(p => `${p.location[0]},${p.location[1]},${p.elevation}`).join("\n");
-        const csvContent = csvHeader + csvRows;
+        const headers = ["distance", "lon", "lat", ...profileData.map(d => d.datasetId)].join(",");
+        const dataRows = profileData[0].points.map((_, i) => {
+            const distance = profileData[0].points[i].distance.toFixed(2);
+            const lon = profileData[0].points[i].location[0].toFixed(6);
+            const lat = profileData[0].points[i].location[1].toFixed(6);
+            const values = profileData.map(d => d.points[i].value.toFixed(2));
+            return [distance, lon, lat, ...values].join(",");
+        });
+
+        const csvContent = `${headers}\n${dataRows.join("\n")}`;
 
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement('a');
@@ -485,13 +565,14 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         document.body.removeChild(link);
         toast({ description: "Descarga de perfil CSV iniciada." });
     } else {
-        if (!chartContainerRef.current) {
+        const chartElement = document.getElementById('profile-chart-to-export');
+        if (!chartElement) {
             toast({ description: "El contenedor del gráfico no está listo.", variant: "destructive" });
             return;
         }
         toast({ description: `Exportando como ${format.toUpperCase()}...` });
         if (format === 'jpg') {
-            htmlToImage.toJpeg(chartContainerRef.current, { quality: 0.95, backgroundColor: '#ffffff' })
+            htmlToImage.toJpeg(chartElement, { quality: 0.95, backgroundColor: '#1f2937' })
                 .then(function (dataUrl) {
                     const link = document.createElement('a');
                     link.download = 'perfil_topografico.jpg';
@@ -499,11 +580,11 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                     link.click();
                 })
                 .catch(function (error) {
-                    console.error('oops, something went wrong!', error);
+                    console.error('Error al generar JPG:', error);
                     toast({ description: "Error al generar JPG.", variant: "destructive" });
                 });
         } else if (format === 'pdf') {
-            htmlToImage.toCanvas(chartContainerRef.current, { backgroundColor: '#ffffff' })
+            htmlToImage.toCanvas(chartElement, { backgroundColor: '#1f2937' })
                 .then(function (canvas) {
                     const imgData = canvas.toDataURL('image/png');
                     const pdf = new jsPDF({
@@ -515,7 +596,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                     pdf.save("perfil_topografico.pdf");
                 })
                 .catch(function (error) {
-                    console.error('oops, something went wrong!', error);
+                    console.error('Error al generar PDF:', error);
                     toast({ description: "Error al generar PDF.", variant: "destructive" });
                 });
         }
@@ -1090,6 +1171,17 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     }
   };
 
+  const trendlineData = useMemo(() => {
+    if (!correlationResult) return [];
+    const { slope, intercept, scatterData } = correlationResult;
+    const minX = Math.min(...scatterData.map(d => d.x));
+    const maxX = Math.max(...scatterData.map(d => d.x));
+    return [
+      { x: minX, y: slope * minX + intercept },
+      { x: maxX, y: slope * maxX + intercept },
+    ];
+  }, [correlationResult]);
+
 
   return (
     <DraggablePanel
@@ -1104,8 +1196,8 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
       showCloseButton={true}
       style={style}
       zIndex={style?.zIndex as number | undefined}
-      initialSize={{ width: 350, height: "auto" }}
-      minSize={{ width: 300, height: 250 }}
+      initialSize={{ width: 380, height: "auto" }}
+      minSize={{ width: 350, height: 300 }}
     >
        <Accordion
           type="single"
@@ -1144,26 +1236,61 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                         </div>
                     </div>
                      <div className="space-y-2 p-2 border border-white/10 rounded-md">
-                         <div>
-                            <Label htmlFor="profile-dataset-select" className="text-xs">Dataset de GEE</Label>
-                            <Select value={profileDataset} onValueChange={(v: any) => setProfileDataset(v)}>
-                                <SelectTrigger id="profile-dataset-select" className="h-8 text-xs bg-black/20">
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent className="bg-gray-700 text-white border-gray-600">
-                                  <SelectItem value="NASADEM_ELEVATION" className="text-xs">NASADEM (Elevación)</SelectItem>
-                                  <SelectItem value="ALOS_DSM" className="text-xs">ALOS (Superficie)</SelectItem>
-                                  <SelectItem value="JRC_WATER_OCCURRENCE" className="text-xs">Agua Superficial (JRC)</SelectItem>
-                                </SelectContent>
-                            </Select>
+                         <div className="space-y-2">
+                            <Label className="text-xs">Datasets de GEE a Perfilar</Label>
+                            {Object.entries(DATASET_DEFINITIONS).map(([id, def]) => (
+                                <div key={id} className="flex items-center space-x-2">
+                                    <Checkbox
+                                        id={`profile-ds-${id}`}
+                                        checked={selectedProfileDatasets.includes(id as DatasetId)}
+                                        onCheckedChange={(checked) => {
+                                            setSelectedProfileDatasets(prev => 
+                                                checked ? [...prev, id as DatasetId] : prev.filter(item => item !== id)
+                                            );
+                                        }}
+                                    />
+                                    <Label htmlFor={`profile-ds-${id}`} className="text-xs font-normal">{def.name}</Label>
+                                </div>
+                            ))}
                         </div>
-                        <Button onClick={handleRunProfile} size="sm" className="w-full h-8 text-xs" disabled={!profileLine || isGeneratingProfile}>
+                        <Button onClick={handleRunProfile} size="sm" className="w-full h-8 text-xs" disabled={!profileLine || selectedProfileDatasets.length === 0 || isGeneratingProfile}>
                             {isGeneratingProfile ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <LineChart className="mr-2 h-3.5 w-3.5" />}
-                            Generar Perfil
+                            Generar Perfil(es)
                         </Button>
                     </div>
-                    {exaggeratedProfileData && (
-                        <div className="space-y-2 pt-2 border-t border-white/10">
+                    {profileData && (
+                        <div id="profile-chart-to-export" className="bg-gray-800/50 p-2 rounded-md">
+                            <div className="space-y-2 pt-2 border-t border-white/10">
+                                <div className="h-[250px] w-full mt-2" ref={chartContainerRef}>
+                                <ResponsiveContainer>
+                                        <AreaChart data={exaggeratedProfileData} margin={{ top: 5, right: 20, left: -25, bottom: 5 }}>
+                                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted-foreground), 0.3)" />
+                                            <XAxis dataKey="distance" type="number" stroke="hsl(var(--muted-foreground))" fontSize={10} tickFormatter={(val) => `${(val / 1000).toFixed(1)} km`} domain={['dataMin', 'dataMax']} />
+                                            <YAxis stroke="hsl(var(--muted-foreground))" fontSize={10} domain={[yAxisDomain.min, yAxisDomain.max]} tickFormatter={(val) => `${val.toFixed(0)}m`} />
+                                            <Tooltip
+                                                contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', color: 'hsl(var(--foreground))' }}
+                                                itemStyle={{ fontSize: '12px' }}
+                                                labelStyle={{ color: 'hsl(var(--muted-foreground))', fontSize: '11px' }}
+                                                cursor={{ stroke: 'hsl(var(--primary))', strokeWidth: 1 }}
+                                                labelFormatter={(label) => `Distancia: ${Number(label).toFixed(2)} m`}
+                                                formatter={(value, name, props) => {
+                                                    const rawValue = props.payload[`${name}_raw`];
+                                                    const series = profileData.find(d => d.datasetId === name);
+                                                    return [`${rawValue.toFixed(2)}`, series?.name];
+                                                }}
+                                            />
+                                            <Legend wrapperStyle={{fontSize: "10px"}} />
+                                            {profileData.map((series) => (
+                                                <Area key={series.datasetId} type="monotone" dataKey={series.datasetId} name={series.name} stroke={series.color} fill={series.color} fillOpacity={0.2} />
+                                            ))}
+                                        </AreaChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                    {profileData && profileData.length > 0 && (
+                        <div className="pt-2 border-t border-white/10 flex flex-col gap-1">
                              <div className="grid grid-cols-2 gap-2">
                                 <div className="space-y-1">
                                     <Label className="text-xs">Rango Eje Y</Label>
@@ -1181,54 +1308,75 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                   </div>
                                 </div>
                             </div>
-                            <div className="h-48 w-full mt-2" ref={chartContainerRef}>
-                               <ResponsiveContainer>
-                                    <AreaChart data={exaggeratedProfileData} margin={{ top: 5, right: 20, left: -25, bottom: 5 }}>
-                                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted-foreground), 0.3)" />
-                                        <XAxis dataKey="distance" type="number" stroke="hsl(var(--muted-foreground))" fontSize={10} tickFormatter={(val) => `${(val / 1000).toFixed(1)} km`} domain={['dataMin', 'dataMax']} />
-                                        <YAxis stroke="hsl(var(--muted-foreground))" fontSize={10} domain={[yAxisDomain.min, yAxisDomain.max]} tickFormatter={(val) => `${val}m`} />
-                                        <Tooltip
-                                            contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', color: 'hsl(var(--foreground))' }}
-                                            itemStyle={{ color: 'hsl(var(--foreground))', fontSize: '12px' }}
-                                            labelStyle={{ color: 'hsl(var(--muted-foreground))', fontSize: '11px' }}
-                                            cursor={{ stroke: 'hsl(var(--primary))', strokeWidth: 1 }}
-                                            labelFormatter={(label) => `Distancia: ${Number(label).toFixed(2)} m`}
-                                            formatter={(value, name, props) => [`${props.payload.elevation.toFixed(2)} m`, 'Elevación Real']}
-                                        />
-                                        <Area type="monotone" dataKey="exaggeratedElevation" name="Elevación" stroke="hsl(var(--primary))" fill="hsla(var(--primary), 0.3)" />
-                                        {profileStats?.jenksBreaks[0] && <ReferenceLine y={yAxisDomain.min + ((profileStats.jenksBreaks[0] - (typeof yAxisDomain.min === 'number' ? yAxisDomain.min : profileStats.min)) * verticalExaggeration)} stroke="hsl(var(--muted-foreground), 0.7)" strokeWidth={1} />}
-                                        {profileStats?.jenksBreaks[1] && <ReferenceLine y={yAxisDomain.min + ((profileStats.jenksBreaks[1] - (typeof yAxisDomain.min === 'number' ? yAxisDomain.min : profileStats.min)) * verticalExaggeration)} stroke="hsl(var(--muted-foreground), 0.7)" strokeWidth={1} />}
-                                    </AreaChart>
-                                </ResponsiveContainer>
+                            <ScrollArea className="max-h-32 mt-2">
+                                <Table>
+                                    <TableBody>
+                                        {profileData.map(series => (
+                                            <React.Fragment key={series.datasetId}>
+                                                <TableRow className="bg-gray-700/50 hover:bg-gray-700/70"><TableCell colSpan={2} className="text-xs text-white p-1.5 font-bold">{series.name}</TableCell></TableRow>
+                                                <TableRow><TableCell className="text-xs text-gray-300 p-1.5">Mín / Máx</TableCell><TableCell className="text-xs text-white p-1.5 text-right font-mono">{series.stats.min.toFixed(2)} / {series.stats.max.toFixed(2)}</TableCell></TableRow>
+                                                <TableRow><TableCell className="text-xs text-gray-300 p-1.5">Promedio</TableCell><TableCell className="text-xs text-white p-1.5 text-right font-mono">{series.stats.mean.toFixed(2)}</TableCell></TableRow>
+                                                <TableRow><TableCell className="text-xs text-gray-300 p-1.5">Desv. Estándar</TableCell><TableCell className="text-xs text-white p-1.5 text-right font-mono">{series.stats.stdDev.toFixed(2)}</TableCell></TableRow>
+                                            </React.Fragment>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </ScrollArea>
+                            <div className="flex items-center gap-2 mt-2">
+                                <Button onClick={() => handleDownloadProfile('csv')} size="sm" className="w-full h-8 text-xs" variant="secondary" disabled={!profileData}>
+                                    <Download className="mr-2 h-3.5 w-3.5" /> CSV
+                                </Button>
+                                <Button onClick={() => handleDownloadProfile('jpg')} size="sm" className="w-full h-8 text-xs" variant="secondary" disabled={!profileData}>
+                                    <FileImage className="mr-2 h-3.5 w-3.5" /> JPG
+                                </Button>
+                                <Button onClick={() => handleDownloadProfile('pdf')} size="sm" className="w-full h-8 text-xs" variant="secondary" disabled={!profileData}>
+                                    <FileText className="mr-2 h-3.5 w-3.5" /> PDF
+                                </Button>
                             </div>
                         </div>
                     )}
-                    {profileStats && (
-                        <div className="pt-2 border-t border-white/10 flex flex-col gap-1">
-                            <Table>
-                                <TableBody>
-                                    <TableRow><TableCell className="text-xs text-gray-300 p-1.5">Mín / Máx</TableCell><TableCell className="text-xs text-white p-1.5 text-right font-mono">{profileStats.min.toFixed(2)} / {profileStats.max.toFixed(2)} m</TableCell></TableRow>
-                                    <TableRow><TableCell className="text-xs text-gray-300 p-1.5">Promedio</TableCell><TableCell className="text-xs text-white p-1.5 text-right font-mono">{profileStats.mean.toFixed(2)} m</TableCell></TableRow>
-                                    <TableRow><TableCell className="text-xs text-gray-300 p-1.5">Desv. Estándar</TableCell><TableCell className="text-xs text-white p-1.5 text-right font-mono">{profileStats.stdDev.toFixed(2)} m</TableCell></TableRow>
-                                    <TableRow><TableCell className="text-xs text-gray-300 p-1.5">Jenks (Clase 1-2)</TableCell><TableCell className="text-xs text-white p-1.5 text-right font-mono">{profileStats.jenksBreaks[0]?.toFixed(2) ?? 'N/A'}</TableCell></TableRow>
-                                    <TableRow><TableCell className="text-xs text-gray-300 p-1.5">Jenks (Clase 2-3)</TableCell><TableCell className="text-xs text-white p-1.5 text-right font-mono">{profileStats.jenksBreaks[1]?.toFixed(2) ?? 'N/A'}</TableCell></TableRow>
-                                </TableBody>
-                            </Table>
-                            <div className="flex items-center gap-2 mt-2">
-                                <Button onClick={() => handleDownloadProfile('csv')} size="sm" className="w-full h-8 text-xs" variant="secondary" disabled={!profileData}>
-                                    <Download className="mr-2 h-3.5 w-3.5" />
-                                    CSV
-                                </Button>
-                                <Button onClick={() => handleDownloadProfile('jpg')} size="sm" className="w-full h-8 text-xs" variant="secondary" disabled={!profileData}>
-                                    <FileImage className="mr-2 h-3.5 w-3.5" />
-                                    JPG
-                                </Button>
-                                <Button onClick={() => handleDownloadProfile('pdf')} size="sm" className="w-full h-8 text-xs" variant="secondary" disabled={!profileData}>
-                                    <FileText className="mr-2 h-3.5 w-3.5" />
-                                    PDF
-                                </Button>
+                    {profileData && profileData.length >= 2 && (
+                         <div className="space-y-3 pt-3 border-t border-white/10">
+                            <Label className="text-xs font-semibold">Análisis de Correlación</Label>
+                             <div className="grid grid-cols-2 gap-2">
+                                <Select value={corrAxisX} onValueChange={(v) => setCorrAxisX(v as DatasetId)}>
+                                    <SelectTrigger className="h-8 text-xs bg-black/20"><SelectValue placeholder="Eje X..." /></SelectTrigger>
+                                    <SelectContent className="bg-gray-700 text-white border-gray-600">
+                                        {profileData.map(d => <SelectItem key={d.datasetId} value={d.datasetId} className="text-xs">{d.name}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
+                                <Select value={corrAxisY} onValueChange={(v) => setCorrAxisY(v as DatasetId)}>
+                                    <SelectTrigger className="h-8 text-xs bg-black/20"><SelectValue placeholder="Eje Y..." /></SelectTrigger>
+                                    <SelectContent className="bg-gray-700 text-white border-gray-600">
+                                        {profileData.map(d => <SelectItem key={d.datasetId} value={d.datasetId} className="text-xs">{d.name}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
                             </div>
-                        </div>
+                            <Button onClick={handleCalculateCorrelation} size="sm" className="w-full h-8 text-xs" disabled={!corrAxisX || !corrAxisY || corrAxisX === corrAxisY}>
+                                <CheckCircle className="mr-2 h-3.5 w-3.5" />
+                                Calcular Correlación
+                            </Button>
+                            {correlationResult && (
+                                <div className="space-y-2">
+                                    <div className="text-center text-sm p-2 bg-black/20 rounded-md">
+                                        <span>Coeficiente de Correlación (r): </span>
+                                        <span className="font-bold font-mono">{correlationResult.coefficient.toFixed(4)}</span>
+                                    </div>
+                                    <div className="h-48 w-full mt-2">
+                                        <ResponsiveContainer>
+                                            <ScatterChart margin={{ top: 5, right: 20, left: -25, bottom: 5 }}>
+                                                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted-foreground), 0.3)" />
+                                                <XAxis type="number" dataKey="x" name={DATASET_DEFINITIONS[correlationResult.xDataset].name} stroke="hsl(var(--muted-foreground))" fontSize={10} domain={['dataMin', 'dataMax']} tickFormatter={(v) => v.toFixed(1)} />
+                                                <YAxis type="number" dataKey="y" name={DATASET_DEFINITIONS[correlationResult.yDataset].name} stroke="hsl(var(--muted-foreground))" fontSize={10} domain={['dataMin', 'dataMax']} tickFormatter={(v) => v.toFixed(1)} />
+                                                <Tooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', fontSize: '11px' }} />
+                                                <Scatter data={correlationResult.scatterData} fill="#8884d8" shape="circle" fillOpacity={0.5} />
+                                                <Line dataKey="y" data={trendlineData} stroke="#e63946" dot={false} strokeWidth={2} name="Línea de Tendencia" />
+                                            </ScatterChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                </div>
+                            )}
+                         </div>
                     )}
                 </AccordionContent>
             </AccordionItem>
@@ -1580,6 +1728,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
 
 
 

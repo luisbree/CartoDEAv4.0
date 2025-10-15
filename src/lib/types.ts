@@ -159,15 +159,16 @@ export interface StyleOptions {
 // --- GEE Profile Types ---
 export interface ProfilePoint {
     distance: number;
-    elevation: number;
+    value: number; // Changed from 'elevation' to 'value'
     location: number[]; // [lon, lat]
 }
 
-export interface ElevationPoint {
-  lon: number;
-  lat: number;
-  distance: number;
-}
+export type ElevationPoint = {
+    lon: number;
+    lat: number;
+    distance: number;
+};
+
 
 export interface GeeProfileOutput {
     profile: ProfilePoint[];

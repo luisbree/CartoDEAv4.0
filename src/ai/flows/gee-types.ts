@@ -116,7 +116,7 @@ export type GeeProfileInput = z.infer<typeof GeeProfileInputSchema>;
 // Stricter type for a single point in the profile result
 export const ProfilePointSchema = z.object({
     distance: z.number().describe('Distance from the start of the line in meters.'),
-    elevation: z.number().describe('Elevation value at the point.'),
+    value: z.number().describe('Data value at the point.'),
     location: z.array(z.number()).length(2).describe('The [lon, lat] coordinates of the point.'),
 });
 export type ProfilePoint = z.infer<typeof ProfilePointSchema>;
