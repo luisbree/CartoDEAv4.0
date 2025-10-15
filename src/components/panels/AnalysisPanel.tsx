@@ -477,7 +477,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         }
         toast({ description: `Exportando como ${format.toUpperCase()}...` });
         if (format === 'jpg') {
-            htmlToImage.toJpeg(chartContainerRef.current, { quality: 0.95, backgroundColor: 'hsl(var(--background))' })
+            htmlToImage.toJpeg(chartContainerRef.current, { quality: 0.95, backgroundColor: '#18181b' }) // Hardcoded dark background
                 .then(function (dataUrl) {
                     const link = document.createElement('a');
                     link.download = 'perfil_topografico.jpg';
@@ -489,7 +489,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                     toast({ description: "Error al generar JPG.", variant: "destructive" });
                 });
         } else if (format === 'pdf') {
-            htmlToImage.toCanvas(chartContainerRef.current)
+            htmlToImage.toCanvas(chartContainerRef.current, { backgroundColor: '#18181b' }) // Hardcoded dark background
                 .then(function (canvas) {
                     const imgData = canvas.toDataURL('image/png');
                     const pdf = new jsPDF({
@@ -1565,4 +1565,5 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
 
