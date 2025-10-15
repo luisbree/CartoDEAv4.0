@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DraftingCompass, Scissors, Layers, CircleDotDashed, MinusSquare, BoxSelect, Droplet, Sparkles, Loader2, Combine, Minus, Plus, TrendingUp, Waypoints as CrosshairIcon, Merge, LineChart, PenLine, Eraser, Brush, ZoomIn, Download } from 'lucide-react';
+import { DraftingCompass, Scissors, Layers, CircleDotDashed, MinusSquare, BoxSelect, Droplet, Sparkles, Loader2, Combine, Minus, Plus, TrendingUp, Waypoints as CrosshairIcon, Merge, LineChart, PenLine, Eraser, Brush, ZoomIn, Download, FileImage, FileText } from 'lucide-react';
 import type { MapLayer, VectorMapLayer, ProfilePoint, ElevationPoint } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { nanoid } from 'nanoid';
@@ -35,6 +35,8 @@ import { cn } from '@/lib/utils';
 import { transform } from 'ol/proj';
 import { Slider } from '../ui/slider';
 import Overlay from 'ol/Overlay';
+import * as htmlToImage from 'html-to-image';
+import jsPDF from 'jspdf';
 
 
 interface AnalysisPanelProps {
@@ -201,6 +203,8 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   const drawInteractionRef = useRef<Draw | null>(null);
   const liveTooltipRef = useRef<Overlay | null>(null);
   const liveTooltipElementRef = useRef<HTMLDivElement | null>(null);
+  const chartContainerRef = useRef<HTMLDivElement>(null);
+
 
   const { toast } = useToast();
   
@@ -445,26 +449,63 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     setYAxisDomain(prev => ({ ...prev, [key]: numValue }));
   };
 
-  const handleDownloadProfile = () => {
-    if (!profileData) {
-        toast({ description: "No hay datos de perfil para descargar.", variant: "destructive" });
-        return;
-    }
-    const csvHeader = "x,y,z\n";
-    const csvRows = profileData.map(p => `${p.location[0]},${p.location[1]},${p.elevation}`).join("\n");
-    const csvContent = csvHeader + csvRows;
+  const handleDownloadProfile = (format: 'csv' | 'jpg' | 'pdf') => {
+    if (format === 'csv') {
+        if (!profileData) {
+            toast({ description: "No hay datos de perfil para descargar.", variant: "destructive" });
+            return;
+        }
+        const csvHeader = "x,y,z\n";
+        const csvRows = profileData.map(p => `${p.location[0]},${p.location[1]},${p.elevation}`).join("\n");
+        const csvContent = csvHeader + csvRows;
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    if (link.href) {
-        URL.revokeObjectURL(link.href);
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        if (link.href) {
+            URL.revokeObjectURL(link.href);
+        }
+        link.href = URL.createObjectURL(blob);
+        link.download = "perfil_topografico.csv";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        toast({ description: "Descarga de perfil CSV iniciada." });
+    } else {
+        if (!chartContainerRef.current) {
+            toast({ description: "El contenedor del gráfico no está listo.", variant: "destructive" });
+            return;
+        }
+        toast({ description: `Exportando como ${format.toUpperCase()}...` });
+        if (format === 'jpg') {
+            htmlToImage.toJpeg(chartContainerRef.current, { quality: 0.95, backgroundColor: 'hsl(var(--background))' })
+                .then(function (dataUrl) {
+                    const link = document.createElement('a');
+                    link.download = 'perfil_topografico.jpg';
+                    link.href = dataUrl;
+                    link.click();
+                })
+                .catch(function (error) {
+                    console.error('oops, something went wrong!', error);
+                    toast({ description: "Error al generar JPG.", variant: "destructive" });
+                });
+        } else if (format === 'pdf') {
+            htmlToImage.toCanvas(chartContainerRef.current)
+                .then(function (canvas) {
+                    const imgData = canvas.toDataURL('image/png');
+                    const pdf = new jsPDF({
+                        orientation: 'landscape',
+                        unit: 'px',
+                        format: [canvas.width, canvas.height]
+                    });
+                    pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+                    pdf.save("perfil_topografico.pdf");
+                })
+                .catch(function (error) {
+                    console.error('oops, something went wrong!', error);
+                    toast({ description: "Error al generar PDF.", variant: "destructive" });
+                });
+        }
     }
-    link.href = URL.createObjectURL(blob);
-    link.download = "perfil_topografico.csv";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    toast({ description: "Descarga de perfil CSV iniciada." });
   };
   // --- END Profile Logic ---
 
@@ -1125,7 +1166,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                   </div>
                                 </div>
                             </div>
-                            <div className="h-48 w-full mt-2">
+                            <div className="h-48 w-full mt-2" ref={chartContainerRef}>
                                <ResponsiveContainer>
                                     <AreaChart data={exaggeratedProfileData} margin={{ top: 5, right: 20, left: -25, bottom: 5 }}>
                                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted-foreground), 0.3)" />
@@ -1158,10 +1199,20 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                     <TableRow><TableCell className="text-xs text-gray-300 p-1.5">Jenks (Clase 2-3)</TableCell><TableCell className="text-xs text-white p-1.5 text-right font-mono">{profileStats.jenksBreaks[1]?.toFixed(2) ?? 'N/A'}</TableCell></TableRow>
                                 </TableBody>
                             </Table>
-                            <Button onClick={handleDownloadProfile} size="sm" className="w-full h-8 text-xs mt-2" variant="secondary" disabled={!profileData}>
-                                <Download className="mr-2 h-3.5 w-3.5" />
-                                Descargar Perfil (CSV)
-                            </Button>
+                            <div className="flex items-center gap-2 mt-2">
+                                <Button onClick={() => handleDownloadProfile('csv')} size="sm" className="w-full h-8 text-xs" variant="secondary" disabled={!profileData}>
+                                    <Download className="mr-2 h-3.5 w-3.5" />
+                                    CSV
+                                </Button>
+                                <Button onClick={() => handleDownloadProfile('jpg')} size="sm" className="w-full h-8 text-xs" variant="secondary" disabled={!profileData}>
+                                    <FileImage className="mr-2 h-3.5 w-3.5" />
+                                    JPG
+                                </Button>
+                                <Button onClick={() => handleDownloadProfile('pdf')} size="sm" className="w-full h-8 text-xs" variant="secondary" disabled={!profileData}>
+                                    <FileText className="mr-2 h-3.5 w-3.5" />
+                                    PDF
+                                </Button>
+                            </div>
                         </div>
                     )}
                 </AccordionContent>
@@ -1514,10 +1565,4 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
-
-
-
-
-
-
 

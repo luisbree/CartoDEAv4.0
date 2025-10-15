@@ -47,6 +47,7 @@
     "firebase": "^10.12.2",
     "genkit": "^1.14.1",
     "html-to-image": "^1.11.11",
+    "jspdf": "^2.5.1",
     "jszip": "^3.10.1",
     "lucide-react": "^0.475.0",
     "nanoid": "^5.0.7",
