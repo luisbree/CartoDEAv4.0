@@ -477,7 +477,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         }
         toast({ description: `Exportando como ${format.toUpperCase()}...` });
         if (format === 'jpg') {
-            htmlToImage.toJpeg(chartContainerRef.current, { quality: 0.95, backgroundColor: '#18181b' }) // Hardcoded dark background
+            htmlToImage.toJpeg(chartContainerRef.current, { quality: 0.95, backgroundColor: '#ffffff' })
                 .then(function (dataUrl) {
                     const link = document.createElement('a');
                     link.download = 'perfil_topografico.jpg';
@@ -489,7 +489,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                     toast({ description: "Error al generar JPG.", variant: "destructive" });
                 });
         } else if (format === 'pdf') {
-            htmlToImage.toCanvas(chartContainerRef.current, { backgroundColor: '#18181b' }) // Hardcoded dark background
+            htmlToImage.toCanvas(chartContainerRef.current, { backgroundColor: '#ffffff' })
                 .then(function (canvas) {
                     const imgData = canvas.toDataURL('image/png');
                     const pdf = new jsPDF({
@@ -1173,9 +1173,9 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                         <XAxis dataKey="distance" type="number" stroke="hsl(var(--muted-foreground))" fontSize={10} tickFormatter={(val) => `${(val / 1000).toFixed(1)} km`} domain={['dataMin', 'dataMax']} />
                                         <YAxis stroke="hsl(var(--muted-foreground))" fontSize={10} domain={[yAxisDomain.min, yAxisDomain.max]} tickFormatter={(val) => `${val}m`} />
                                         <Tooltip
-                                            contentStyle={{ backgroundColor: 'transparent', border: 'none', color: '#fff', textShadow: '0 0 3px #000' }}
-                                            itemStyle={{ color: '#fff', fontSize: '12px' }}
-                                            labelStyle={{ color: '#ccc', fontSize: '11px' }}
+                                            contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', color: 'hsl(var(--foreground))' }}
+                                            itemStyle={{ color: 'hsl(var(--foreground))', fontSize: '12px' }}
+                                            labelStyle={{ color: 'hsl(var(--muted-foreground))', fontSize: '11px' }}
                                             cursor={{ stroke: 'hsl(var(--primary))', strokeWidth: 1 }}
                                             labelFormatter={(label) => `Distancia: ${Number(label).toFixed(2)} m`}
                                             formatter={(value, name, props) => [`${props.payload.elevation.toFixed(2)} m`, 'Elevación Real']}
@@ -1565,5 +1565,6 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
 
 
