@@ -9,34 +9,34 @@ body {
 
 @layer base {
   :root {
-    --background: 208 100% 97%; /* Very light, desaturated blue (#F0F8FF) */
-    --foreground: 210 30% 20%; /* Dark grayish blue for text */
+    --background: 210 40% 98%; /* Lighter, almost white blue */
+    --foreground: 210 25% 25%; /* Dark cool gray */
 
-    --muted: 210 40% 90%; /* Lighter, desaturated blue */
-    --muted-foreground: 210 30% 45%; /* Mid-tone grayish blue */
+    --muted: 210 40% 90%; /* Light gray-blue */
+    --muted-foreground: 210 30% 55%; /* Mid-tone gray */
 
-    --popover: 208 100% 99%; /* Slightly off-background */
-    --popover-foreground: 210 30% 20%; /* Dark grayish blue for popover text */
+    --popover: 210 40% 100%; /* Pure white */
+    --popover-foreground: 210 25% 25%; /* Dark cool gray */
 
-    --card: 208 100% 99%; /* Slightly off-background */
-    --card-foreground: 210 30% 20%; /* Dark grayish blue for card text */
+    --card: 210 40% 100%; /* Pure white */
+    --card-foreground: 210 25% 25%; /* Dark cool gray */
 
-    --border: 210 30% 85%; /* Light grayish blue border */
-    --input: 210 30% 92%; /* Light input background */
+    --border: 210 30% 88%; /* Light cool gray border */
+    --input: 210 30% 94%; /* Very light gray for input background */
 
-    --primary: 200 44% 35%; /* Azul petróleo #316781 */
-    --primary-foreground: 0 0% 98%; /* White/very light for text on primary */
+    --primary: 205 55% 45%; /* A slightly brighter, more saturated blue */
+    --primary-foreground: 210 40% 98%; /* White for text on primary */
 
-    --secondary: 210 50% 85%; /* Lighter shade of original primary */
-    --secondary-foreground: 210 50% 30%; /* Darker shade of original primary for text on secondary */
+    --secondary: 210 40% 90%; /* Light gray-blue */
+    --secondary-foreground: 205 55% 30%; /* Darker primary for text on secondary */
 
-    --accent: 280 26% 65%; /* Pale violet (#B08BBF) */
-    --accent-foreground: 0 0% 98%; /* White/very light for text on accent */
+    --accent: 205 50% 55%; /* A slightly lighter shade of primary */
+    --accent-foreground: 210 40% 98%; /* White for text on accent */
 
     --destructive: 0 72% 51%; /* A standard red for destructive actions */
     --destructive-foreground: 0 0% 98%; /* White/very light for text on destructive */
 
-    --ring: 200 44% 38%; /* Based on new petroleum blue primary for rings */
+    --ring: 205 55% 50%; /* Based on new primary for rings */
 
     --radius: 0.5rem;
 
