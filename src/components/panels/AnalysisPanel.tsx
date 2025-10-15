@@ -23,7 +23,7 @@ import Feature from 'ol/Feature';
 import { type Geometry, type LineString as OlLineString, Point } from 'ol/geom';
 import { getLength as olGetLength } from 'ol/sphere';
 import { performBufferAnalysis, performConvexHull, performConcaveHull, calculateOptimalConcavity, projectPopulationGeometric, generateCrossSections, dissolveFeatures } from '@/services/spatial-analysis';
-import { getElevationForPoints } from '@/ai/flows/gee-flow';
+import { getValuesForPoints } from '@/ai/flows/gee-flow';
 import { ScrollArea } from '../ui/scroll-area';
 import { Checkbox } from '../ui/checkbox';
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
@@ -195,7 +195,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   const [profileStats, setProfileStats] = useState<ProfileStats | null>(null);
   const [activeProfileDrawTool, setActiveProfileDrawTool] = useState<'LineString' | 'FreehandLine' | null>(null);
   const [isGeneratingProfile, setIsGeneratingProfile] = useState(false);
-  const [profileDataset, setProfileDataset] = useState<'NASADEM_ELEVATION' | 'ALOS_DSM'>('NASADEM_ELEVATION');
+  const [profileDataset, setProfileDataset] = useState<'NASADEM_ELEVATION' | 'ALOS_DSM' | 'JRC_WATER_OCCURRENCE'>('NASADEM_ELEVATION');
   const [profileLayerId, setProfileLayerId] = useState<string>('');
   const [verticalExaggeration, setVerticalExaggeration] = useState<number>(1);
   const [yAxisDomain, setYAxisDomain] = useState<{min: number | 'auto'; max: number | 'auto'}>({min: 'auto', max: 'auto'});
@@ -381,7 +381,21 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
             pointsToQuery.push({ lon, lat, distance });
         }
         
-        const elevationValues = await getElevationForPoints(pointsToQuery, profileDataset);
+        let datasetId = '';
+        let bandName = '';
+        
+        if (profileDataset === 'NASADEM_ELEVATION') {
+            datasetId = 'NASA/NASADEM_HGT/001';
+            bandName = 'elevation';
+        } else if (profileDataset === 'ALOS_DSM') {
+            datasetId = 'JAXA/ALOS/AW3D30/V3_2';
+            bandName = 'DSM';
+        } else if (profileDataset === 'JRC_WATER_OCCURRENCE') {
+            datasetId = 'JRC/GSW1_4/GlobalSurfaceWater';
+            bandName = 'occurrence';
+        }
+
+        const elevationValues = await getValuesForPoints({ points: pointsToQuery, datasetId, bandName });
         
         if (!elevationValues || elevationValues.length !== pointsToQuery.length) {
             throw new Error("No se obtuvieron datos de elevación válidos del servidor.");
@@ -1131,14 +1145,15 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                     </div>
                      <div className="space-y-2 p-2 border border-white/10 rounded-md">
                          <div>
-                            <Label htmlFor="profile-dataset-select" className="text-xs">Dataset de Elevación (GEE)</Label>
-                            <Select value={profileDataset} onValueChange={(v: 'NASADEM_ELEVATION' | 'ALOS_DSM') => setProfileDataset(v)}>
+                            <Label htmlFor="profile-dataset-select" className="text-xs">Dataset de GEE</Label>
+                            <Select value={profileDataset} onValueChange={(v: any) => setProfileDataset(v)}>
                                 <SelectTrigger id="profile-dataset-select" className="h-8 text-xs bg-black/20">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent className="bg-gray-700 text-white border-gray-600">
                                   <SelectItem value="NASADEM_ELEVATION" className="text-xs">NASADEM (Elevación)</SelectItem>
                                   <SelectItem value="ALOS_DSM" className="text-xs">ALOS (Superficie)</SelectItem>
+                                  <SelectItem value="JRC_WATER_OCCURRENCE" className="text-xs">Agua Superficial (JRC)</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
@@ -1151,7 +1166,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                         <div className="space-y-2 pt-2 border-t border-white/10">
                              <div className="grid grid-cols-2 gap-2">
                                 <div className="space-y-1">
-                                    <Label className="text-xs">Rango Eje Y (m)</Label>
+                                    <Label className="text-xs">Rango Eje Y</Label>
                                     <div className="flex items-center gap-1">
                                         <Input type="number" placeholder="Mín" value={yAxisDomain.min} onChange={(e) => handleYAxisDomainChange('min', e.target.value)} className="h-8 text-xs bg-black/20 text-center"/>
                                         <Input type="number" placeholder="Máx" value={yAxisDomain.max} onChange={(e) => handleYAxisDomainChange('max', e.target.value)} className="h-8 text-xs bg-black/20 text-center"/>
@@ -1565,6 +1580,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
 
 
 

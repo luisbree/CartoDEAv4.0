@@ -6,7 +6,7 @@
  * - getGeeTileLayer - Generates a tile layer URL for a given Area of Interest.
  * - getGeeVectorDownloadUrl - Generates a download URL for vectorized GEE data.
  * - getGeeHistogram - Calculates a histogram for a given dataset and AOI.
- * - getElevationForPoints - Generates an elevation profile from a list of points.
+ * - getValuesForPoints - Generates an elevation profile from a list of points.
  */
 
 import { ai } from '@/ai/genkit';
@@ -64,13 +64,24 @@ export async function authenticateWithGee(): Promise<{ success: boolean; message
 }
 
 // --- REFACTORED PROFILE FUNCTION ---
-export async function getElevationForPoints(points: ElevationPoint[], dataset: 'NASADEM_ELEVATION' | 'ALOS_DSM'): Promise<(number | null)[]> {
+export async function getValuesForPoints({
+    points,
+    datasetId,
+    bandName
+}: {
+    points: ElevationPoint[];
+    datasetId: string;
+    bandName: string;
+}): Promise<(number | null)[]> {
     await initializeEe();
-
-    const bandName = dataset === 'ALOS_DSM' ? 'DSM' : 'elevation';
-    const image = dataset === 'ALOS_DSM'
-        ? ee.ImageCollection('JAXA/ALOS/AW3D30/V3_2').select('DSM').mosaic()
-        : ee.Image('NASA/NASADEM_HGT/001').select('elevation');
+    
+    let image;
+    // Special handling for mosaic collections vs single images
+    if (datasetId === 'JAXA/ALOS/AW3D30/V3_2' || datasetId === 'COPERNICUS/S2_SR_HARMONIZED') {
+        image = ee.ImageCollection(datasetId).select(bandName).mosaic();
+    } else {
+        image = ee.Image(datasetId).select(bandName);
+    }
 
     // Convert the array of points into an ee.FeatureCollection
     const features = points.map((point, index) => {
@@ -81,7 +92,7 @@ export async function getElevationForPoints(points: ElevationPoint[], dataset: '
     const featureCollection = ee.FeatureCollection(features);
 
     // Use reduceRegions to get the elevation for all points in a single request
-    const elevations = image.reduceRegions({
+    const values = image.reduceRegions({
         collection: featureCollection,
         reducer: ee.Reducer.first(),
         scale: 30, // Native resolution is appropriate here
@@ -89,10 +100,10 @@ export async function getElevationForPoints(points: ElevationPoint[], dataset: '
 
     // Promisify the evaluate call to use async/await
     const resultCollection = await new Promise<any>((resolve, reject) => {
-        elevations.evaluate((result: any, error?: string) => {
+        values.evaluate((result: any, error?: string) => {
             if (error) {
                 console.error("GEE reduceRegions Error:", error);
-                reject(new Error(`Error al consultar las elevaciones en GEE: ${error}`));
+                reject(new Error(`Error al consultar los valores en GEE: ${error}`));
             } else {
                 resolve(result);
             }
@@ -100,22 +111,21 @@ export async function getElevationForPoints(points: ElevationPoint[], dataset: '
     });
 
     // Process the results from the single request
-    const elevationArray: (number | null)[] = new Array(points.length).fill(null);
+    const valueArray: (number | null)[] = new Array(points.length).fill(null);
 
     if (resultCollection && resultCollection.features) {
         for (const feature of resultCollection.features) {
             const index = feature.properties.original_index;
-            // CORRECTED: The reducer 'first' outputs its result to a property named 'first'
+            // The reducer 'first' outputs its result to a property named 'first'
             const value = feature.properties['first']; 
             if (index !== undefined && value !== undefined) {
-                elevationArray[index] = value;
+                valueArray[index] = value;
             }
         }
     }
     
-    console.log('[GEE-FLOW] Server returning elevation results:', elevationArray);
     // Replace any remaining nulls with -9999 for the client
-    return elevationArray.map(r => r === null ? -9999 : r);
+    return valueArray.map(r => r === null ? -9999 : r);
 }
 
 

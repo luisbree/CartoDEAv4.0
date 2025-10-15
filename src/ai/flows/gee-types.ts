@@ -78,7 +78,7 @@ export type GeeGeoTiffDownloadInput = z.infer<typeof GeeGeoTiffDownloadInputSche
 // New schemas for histogram generation
 export const GeeHistogramInputSchema = z.object({
     aoi: GeeAoiSchema.describe("The Area of Interest as a bounding box for the histogram calculation."),
-    bandCombination: z.enum(['NASADEM_ELEVATION', 'ALOS_DSM']).describe("The elevation dataset to analyze."),
+    bandCombination: z.enum(['NASADEM_ELEVATION', 'ALOS_DSM', 'JRC_WATER_OCCURRENCE']).describe("The elevation dataset to analyze."),
 });
 export type GeeHistogramInput = z.infer<typeof GeeHistogramInputSchema>;
 
@@ -109,7 +109,7 @@ const TurfLineStringFeatureSchema = z.custom<TurfFeature<TurfLineString>>(
 // New schemas for profile generation
 export const GeeProfileInputSchema = z.object({
   line: TurfLineStringFeatureSchema.describe('A GeoJSON LineString feature for the profile.'),
-  dataset: z.enum(['NASADEM_ELEVATION', 'ALOS_DSM']).describe('The elevation dataset to sample.'),
+  dataset: z.enum(['NASADEM_ELEVATION', 'ALOS_DSM', 'JRC_WATER_OCCURRENCE']).describe('The elevation dataset to sample.'),
 });
 export type GeeProfileInput = z.infer<typeof GeeProfileInputSchema>;
 
