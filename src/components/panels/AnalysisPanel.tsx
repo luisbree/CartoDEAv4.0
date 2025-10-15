@@ -537,11 +537,19 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   };
 
   const handleDownloadProfile = (format: 'csv' | 'jpg' | 'pdf') => {
+    if (!profileData) {
+        toast({ description: "No hay datos de perfil para descargar.", variant: "destructive" });
+        return;
+    }
+    const chartElement = document.getElementById('profile-chart-to-export');
+    if (!chartElement) {
+        toast({ description: "El contenedor del gráfico no está listo.", variant: "destructive" });
+        return;
+    }
+    
+    toast({ description: `Exportando como ${format.toUpperCase()}...` });
+
     if (format === 'csv') {
-        if (!profileData) {
-            toast({ description: "No hay datos de perfil para descargar.", variant: "destructive" });
-            return;
-        }
         const headers = ["distance", "lon", "lat", ...profileData.map(d => d.datasetId)].join(",");
         const dataRows = profileData[0].points.map((_, i) => {
             const distance = profileData[0].points[i].distance.toFixed(2);
@@ -564,42 +572,35 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         link.click();
         document.body.removeChild(link);
         toast({ description: "Descarga de perfil CSV iniciada." });
-    } else {
-        const chartElement = document.getElementById('profile-chart-to-export');
-        if (!chartElement) {
-            toast({ description: "El contenedor del gráfico no está listo.", variant: "destructive" });
-            return;
-        }
-        toast({ description: `Exportando como ${format.toUpperCase()}...` });
-        if (format === 'jpg') {
-            htmlToImage.toJpeg(chartElement, { quality: 0.95, backgroundColor: '#1f2937' })
-                .then(function (dataUrl) {
-                    const link = document.createElement('a');
-                    link.download = 'perfil_topografico.jpg';
-                    link.href = dataUrl;
-                    link.click();
-                })
-                .catch(function (error) {
-                    console.error('Error al generar JPG:', error);
-                    toast({ description: "Error al generar JPG.", variant: "destructive" });
+
+    } else if (format === 'jpg') {
+        htmlToImage.toJpeg(chartElement, { quality: 0.95, backgroundColor: '#ffffff' })
+            .then(function (dataUrl) {
+                const link = document.createElement('a');
+                link.download = 'perfil_topografico.jpg';
+                link.href = dataUrl;
+                link.click();
+            })
+            .catch(function (error) {
+                console.error('Error al generar JPG:', error);
+                toast({ description: "Error al generar JPG.", variant: "destructive" });
+            });
+    } else if (format === 'pdf') {
+        htmlToImage.toCanvas(chartElement, { backgroundColor: '#ffffff' })
+            .then(function (canvas) {
+                const imgData = canvas.toDataURL('image/png');
+                const pdf = new jsPDF({
+                    orientation: 'landscape',
+                    unit: 'px',
+                    format: [canvas.width, canvas.height]
                 });
-        } else if (format === 'pdf') {
-            htmlToImage.toCanvas(chartElement, { backgroundColor: '#1f2937' })
-                .then(function (canvas) {
-                    const imgData = canvas.toDataURL('image/png');
-                    const pdf = new jsPDF({
-                        orientation: 'landscape',
-                        unit: 'px',
-                        format: [canvas.width, canvas.height]
-                    });
-                    pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
-                    pdf.save("perfil_topografico.pdf");
-                })
-                .catch(function (error) {
-                    console.error('Error al generar PDF:', error);
-                    toast({ description: "Error al generar PDF.", variant: "destructive" });
-                });
-        }
+                pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+                pdf.save("perfil_topografico.pdf");
+            })
+            .catch(function (error) {
+                console.error('Error al generar PDF:', error);
+                toast({ description: "Error al generar PDF.", variant: "destructive" });
+            });
     }
   };
   // --- END Profile Logic ---
@@ -1259,8 +1260,8 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                         </Button>
                     </div>
                     {profileData && (
-                        <div id="profile-chart-to-export" className="bg-gray-800/50 p-2 rounded-md">
-                            <div className="space-y-2 pt-2 border-t border-white/10">
+                        <div id="profile-chart-to-export" className="bg-background p-2 rounded-md">
+                            <div className="space-y-2 pt-2 border-t border-border">
                                 <div className="h-[250px] w-full mt-2" ref={chartContainerRef}>
                                 <ResponsiveContainer>
                                         <AreaChart data={exaggeratedProfileData} margin={{ top: 5, right: 20, left: -25, bottom: 5 }}>
@@ -1728,6 +1729,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
 
 
 
