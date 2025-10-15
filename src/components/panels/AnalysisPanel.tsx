@@ -1277,6 +1277,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                                 formatter={(value, name, props) => {
                                                     const rawValue = props.payload[`${name}_raw`];
                                                     const series = profileData.find(d => d.datasetId === name);
+                                                    if (rawValue === undefined) return [null, null];
                                                     return [`${rawValue.toFixed(2)}`, series?.name];
                                                 }}
                                             />
@@ -1729,6 +1730,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
 
 
 
