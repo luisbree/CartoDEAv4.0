@@ -152,6 +152,11 @@ interface CorrelationResult {
     yDataset: DatasetId;
 }
 
+interface CombinedChartDataPoint {
+    distance: number;
+    [key: string]: number; // Will hold values for each datasetId, e.g., NASADEM_ELEVATION: 45.3
+}
+
 
 const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   panelRef,
@@ -226,7 +231,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   const drawInteractionRef = useRef<Draw | null>(null);
   const liveTooltipRef = useRef<Overlay | null>(null);
   const liveTooltipElementRef = useRef<HTMLDivElement | null>(null);
-  const chartContainerRef = useRef<HTMLDivElement>(null);
+  const chartContainerRef = useRef<HTMLDivElement | null>(null);
   const [correlationResult, setCorrelationResult] = useState<CorrelationResult | null>(null);
   const [corrAxisX, setCorrAxisX] = useState<DatasetId | ''>('');
   const [corrAxisY, setCorrAxisY] = useState<DatasetId | ''>('');
@@ -471,6 +476,24 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         setIsGeneratingProfile(false);
     }
   };
+
+  const combinedChartData = useMemo(() => {
+    if (!profileData || profileData.length === 0) return [];
+
+    const combined: CombinedChartDataPoint[] = [];
+    const numPoints = profileData[0].points.length;
+
+    for (let i = 0; i < numPoints; i++) {
+        const dataPoint: CombinedChartDataPoint = {
+            distance: profileData[0].points[i].distance
+        };
+        for (const series of profileData) {
+            dataPoint[series.datasetId] = series.points[i].value;
+        }
+        combined.push(dataPoint);
+    }
+    return combined;
+  }, [profileData]);
   
   const handleCalculateCorrelation = () => {
     if (!profileData || !corrAxisX || !corrAxisY || corrAxisX === corrAxisY) {
@@ -1246,7 +1269,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                             <div className="space-y-2 pt-2 border-t border-border">
                                 <div className="h-[250px] w-full mt-2" ref={chartContainerRef}>
                                     <ResponsiveContainer>
-                                        <AreaChart data={profileData.flatMap(series => series.points)} margin={{ top: 5, right: 20, left: -25, bottom: 5 }}>
+                                        <AreaChart data={combinedChartData} margin={{ top: 5, right: 20, left: -25, bottom: 5 }}>
                                             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted-foreground), 0.3)" />
                                             <XAxis dataKey="distance" type="number" stroke="hsl(var(--muted-foreground))" fontSize={10} tickFormatter={(val) => `${(val / 1000).toFixed(1)} km`} domain={['dataMin', 'dataMax']} />
                                             <YAxis yAxisId="left" stroke={profileData[0]?.color || '#8884d8'} fontSize={10} domain={[yAxisDomainLeft.min, yAxisDomainLeft.max]} tickFormatter={(val) => `${val.toFixed(0)}${profileData[0]?.unit || ''}`} />
@@ -1259,7 +1282,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                                 labelStyle={{ color: 'hsl(var(--muted-foreground))', fontSize: '11px' }}
                                                 cursor={{ stroke: 'hsl(var(--primary))', strokeWidth: 1 }}
                                                 labelFormatter={(label) => `Distancia: ${Number(label).toFixed(2)} m`}
-                                                formatter={(value: number, name: string, props) => {
+                                                formatter={(value: number, name: string) => {
                                                     const series = profileData.find(d => d.datasetId === name);
                                                     if (!series) return [value, name];
                                                     return [`${value.toFixed(2)} ${series.unit}`, series.name];
@@ -1267,7 +1290,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                             />
                                             <Legend wrapperStyle={{fontSize: "10px"}} />
                                             {profileData.map((series, index) => (
-                                                <Area key={series.datasetId} yAxisId={index === 0 ? 'left' : 'right'} type="monotone" dataKey={p => p.datasetId === series.datasetId ? p.value : undefined} data={series.points} name={series.name} stroke={series.color} fill={series.color} fillOpacity={0.2} connectNulls />
+                                                <Area key={series.datasetId} yAxisId={index === 0 ? 'left' : 'right'} type="monotone" dataKey={series.datasetId} name={series.name} stroke={series.color} fill={series.color} fillOpacity={0.2} connectNulls />
                                             ))}
                                         </AreaChart>
                                     </ResponsiveContainer>
@@ -1713,4 +1736,5 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
 
