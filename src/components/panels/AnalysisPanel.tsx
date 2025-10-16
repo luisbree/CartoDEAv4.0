@@ -121,16 +121,17 @@ function jenks(data: number[], n_classes: number): number[] {
 
 type DatasetId = 'NASADEM_ELEVATION' | 'ALOS_DSM' | 'JRC_WATER_OCCURRENCE';
 
-const DATASET_DEFINITIONS: Record<DatasetId, { id: string; band: string; name: string; color: string; }> = {
-    'NASADEM_ELEVATION': { id: 'NASA/NASADEM_HGT/001', band: 'elevation', name: 'Elevación (NASADEM)', color: '#8884d8' },
-    'ALOS_DSM': { id: 'JAXA/ALOS/AW3D30/V3_2', band: 'DSM', name: 'Superficie (ALOS)', color: '#82ca9d' },
-    'JRC_WATER_OCCURRENCE': { id: 'JRC/GSW1_4/GlobalSurfaceWater', band: 'occurrence', name: 'Agua Superficial (JRC)', color: '#3a86ff' },
+const DATASET_DEFINITIONS: Record<DatasetId, { id: string; band: string; name: string; color: string; unit: 'm' | '%'; }> = {
+    'NASADEM_ELEVATION': { id: 'NASA/NASADEM_HGT/001', band: 'elevation', name: 'Elevación (NASADEM)', color: '#8884d8', unit: 'm' },
+    'ALOS_DSM': { id: 'JAXA/ALOS/AW3D30/V3_2', band: 'DSM', name: 'Superficie (ALOS)', color: '#82ca9d', unit: 'm' },
+    'JRC_WATER_OCCURRENCE': { id: 'JRC/GSW1_4/GlobalSurfaceWater', band: 'occurrence', name: 'Agua Superficial (JRC)', color: '#3a86ff', unit: '%' },
 };
 
 interface ProfileDataSeries {
     datasetId: DatasetId;
     name: string;
     color: string;
+    unit: 'm' | '%';
     points: ProfilePoint[];
     stats: ProfileStats;
 }
@@ -219,8 +220,8 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   const [isGeneratingProfile, setIsGeneratingProfile] = useState(false);
   const [selectedProfileDatasets, setSelectedProfileDatasets] = useState<DatasetId[]>(['NASADEM_ELEVATION']);
   const [profileLayerId, setProfileLayerId] = useState<string>('');
-  const [verticalExaggeration, setVerticalExaggeration] = useState<number>(1);
-  const [yAxisDomain, setYAxisDomain] = useState<{min: number | 'auto'; max: number | 'auto'}>({min: 'auto', max: 'auto'});
+  const [yAxisDomainLeft, setYAxisDomainLeft] = useState<{min: number | 'auto'; max: number | 'auto'}>({min: 'auto', max: 'auto'});
+  const [yAxisDomainRight, setYAxisDomainRight] = useState<{min: number | 'auto'; max: number | 'auto'}>({min: 'auto', max: 'auto'});
   const analysisLayerRef = useRef<VectorLayer<VectorSource<Feature<Geometry>>> | null>(null);
   const drawInteractionRef = useRef<Draw | null>(null);
   const liveTooltipRef = useRef<Overlay | null>(null);
@@ -442,13 +443,21 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                 stats.jenksBreaks = jenks(validValues, 3);
             }
             
-            allProfileData.push({ datasetId, name: def.name, color: def.color, points, stats });
+            allProfileData.push({ datasetId, name: def.name, color: def.color, unit: def.unit, points, stats });
         }
 
         if (allProfileData.length > 0) {
             setProfileData(allProfileData);
             const firstStat = allProfileData[0].stats;
-            setYAxisDomain({ min: Math.floor(firstStat.min), max: Math.ceil(firstStat.max) });
+            setYAxisDomainLeft({ min: Math.floor(firstStat.min), max: Math.ceil(firstStat.max) });
+
+            if (allProfileData.length > 1) {
+                const secondStat = allProfileData[1].stats;
+                setYAxisDomainRight({ min: Math.floor(secondStat.min), max: Math.ceil(secondStat.max) });
+            } else {
+                 setYAxisDomainRight({min: 'auto', max: 'auto'});
+            }
+
             toast({ description: "Perfil(es) generado(s) con éxito." });
         } else {
              throw new Error("No se obtuvieron puntos válidos a lo largo de la línea.");
@@ -501,39 +510,12 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     toast({ description: `Correlación calculada: r = ${coefficient.toFixed(4)}` });
   };
   
-  const exaggeratedProfileData = useMemo(() => {
-    if (!profileData) return null;
-    
-    const firstSeries = profileData[0];
-    const minElev = typeof yAxisDomain.min === 'number' ? yAxisDomain.min : firstSeries.stats.min;
-
-    // Combine data points from all series based on distance
-    const combinedPoints: { [distance: number]: any } = {};
-    
-    profileData.forEach(series => {
-        series.points.forEach(point => {
-            if (!combinedPoints[point.distance]) {
-                combinedPoints[point.distance] = { distance: point.distance };
-            }
-            combinedPoints[point.distance][series.datasetId] = minElev + ((point.value - minElev) * verticalExaggeration);
-            combinedPoints[point.distance][`${series.datasetId}_raw`] = point.value;
-        });
-    });
-
-    return Object.values(combinedPoints);
-  }, [profileData, verticalExaggeration, yAxisDomain]);
-  
-  const handleExaggerationStep = (direction: 'inc' | 'dec') => {
-    setVerticalExaggeration(prev => {
-        const newValue = direction === 'inc' ? prev + 1 : prev - 1;
-        return Math.max(1, newValue);
-    });
-  };
-  
-  const handleYAxisDomainChange = (key: 'min' | 'max', value: string) => {
+  const handleYAxisDomainChange = (axis: 'left' | 'right', key: 'min' | 'max', value: string) => {
     const numValue = value === '' ? 'auto' : parseFloat(value);
     if (value !== '' && isNaN(numValue as number)) return; // Ignore invalid numbers
-    setYAxisDomain(prev => ({ ...prev, [key]: numValue }));
+    
+    const setDomain = axis === 'left' ? setYAxisDomainLeft : setYAxisDomainRight;
+    setDomain(prev => ({ ...prev, [key]: numValue }));
   };
 
   const handleDownloadProfile = (format: 'csv' | 'jpg' | 'pdf') => {
@@ -1263,27 +1245,29 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                         <div id="profile-chart-to-export" className="bg-background p-2 rounded-md">
                             <div className="space-y-2 pt-2 border-t border-border">
                                 <div className="h-[250px] w-full mt-2" ref={chartContainerRef}>
-                                <ResponsiveContainer>
-                                        <AreaChart data={exaggeratedProfileData} margin={{ top: 5, right: 20, left: -25, bottom: 5 }}>
+                                    <ResponsiveContainer>
+                                        <AreaChart data={profileData.flatMap(series => series.points)} margin={{ top: 5, right: 20, left: -25, bottom: 5 }}>
                                             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted-foreground), 0.3)" />
                                             <XAxis dataKey="distance" type="number" stroke="hsl(var(--muted-foreground))" fontSize={10} tickFormatter={(val) => `${(val / 1000).toFixed(1)} km`} domain={['dataMin', 'dataMax']} />
-                                            <YAxis stroke="hsl(var(--muted-foreground))" fontSize={10} domain={[yAxisDomain.min, yAxisDomain.max]} tickFormatter={(val) => `${val.toFixed(0)}m`} />
+                                            <YAxis yAxisId="left" stroke={profileData[0]?.color || '#8884d8'} fontSize={10} domain={[yAxisDomainLeft.min, yAxisDomainLeft.max]} tickFormatter={(val) => `${val.toFixed(0)}${profileData[0]?.unit || ''}`} />
+                                            {profileData.length > 1 && (
+                                                <YAxis yAxisId="right" orientation="right" stroke={profileData[1]?.color || '#82ca9d'} fontSize={10} domain={[yAxisDomainRight.min, yAxisDomainRight.max]} tickFormatter={(val) => `${val.toFixed(0)}${profileData[1]?.unit || ''}`} />
+                                            )}
                                             <Tooltip
                                                 contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', color: 'hsl(var(--foreground))' }}
                                                 itemStyle={{ fontSize: '12px' }}
                                                 labelStyle={{ color: 'hsl(var(--muted-foreground))', fontSize: '11px' }}
                                                 cursor={{ stroke: 'hsl(var(--primary))', strokeWidth: 1 }}
                                                 labelFormatter={(label) => `Distancia: ${Number(label).toFixed(2)} m`}
-                                                formatter={(value, name, props) => {
-                                                    const rawValue = props.payload[`${name}_raw`];
+                                                formatter={(value: number, name: string, props) => {
                                                     const series = profileData.find(d => d.datasetId === name);
-                                                    if (rawValue === undefined) return [null, null];
-                                                    return [`${rawValue.toFixed(2)}`, series?.name];
+                                                    if (!series) return [value, name];
+                                                    return [`${value.toFixed(2)} ${series.unit}`, series.name];
                                                 }}
                                             />
                                             <Legend wrapperStyle={{fontSize: "10px"}} />
-                                            {profileData.map((series) => (
-                                                <Area key={series.datasetId} type="monotone" dataKey={series.datasetId} name={series.name} stroke={series.color} fill={series.color} fillOpacity={0.2} />
+                                            {profileData.map((series, index) => (
+                                                <Area key={series.datasetId} yAxisId={index === 0 ? 'left' : 'right'} type="monotone" dataKey={p => p.datasetId === series.datasetId ? p.value : undefined} data={series.points} name={series.name} stroke={series.color} fill={series.color} fillOpacity={0.2} connectNulls />
                                             ))}
                                         </AreaChart>
                                     </ResponsiveContainer>
@@ -1293,21 +1277,20 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                     )}
                     {profileData && profileData.length > 0 && (
                         <div className="pt-2 border-t border-white/10 flex flex-col gap-1">
-                             <div className="grid grid-cols-2 gap-2">
+                            <div className="grid grid-cols-2 gap-2">
                                 <div className="space-y-1">
-                                    <Label className="text-xs">Rango Eje Y</Label>
+                                    <Label className="text-xs">Rango Eje Izquierdo</Label>
                                     <div className="flex items-center gap-1">
-                                        <Input type="number" placeholder="Mín" value={yAxisDomain.min} onChange={(e) => handleYAxisDomainChange('min', e.target.value)} className="h-8 text-xs bg-black/20 text-center"/>
-                                        <Input type="number" placeholder="Máx" value={yAxisDomain.max} onChange={(e) => handleYAxisDomainChange('max', e.target.value)} className="h-8 text-xs bg-black/20 text-center"/>
+                                        <Input type="number" placeholder="Mín" value={yAxisDomainLeft.min} onChange={(e) => handleYAxisDomainChange('left', 'min', e.target.value)} className="h-8 text-xs bg-black/20 text-center"/>
+                                        <Input type="number" placeholder="Máx" value={yAxisDomainLeft.max} onChange={(e) => handleYAxisDomainChange('left', 'max', e.target.value)} className="h-8 text-xs bg-black/20 text-center"/>
                                     </div>
                                 </div>
                                 <div className="space-y-1">
-                                  <Label className="text-xs">Exageración Vertical</Label>
-                                  <div className="flex items-center gap-1">
-                                      <Button onClick={() => handleExaggerationStep('dec')} variant="outline" size="icon" className="h-8 w-8 flex-shrink-0 bg-black/20 hover:bg-black/40 border-white/30 text-white/90"><Minus className="h-4 w-4"/></Button>
-                                      <Input type="number" min="1" step="1" value={verticalExaggeration} onChange={(e) => setVerticalExaggeration(Math.max(1, Number(e.target.value)))} className="h-8 text-xs bg-black/20 text-center" />
-                                      <Button onClick={() => handleExaggerationStep('inc')} variant="outline" size="icon" className="h-8 w-8 flex-shrink-0 bg-black/20 hover:bg-black/40 border-white/30 text-white/90"><Plus className="h-4 w-4"/></Button>
-                                  </div>
+                                    <Label className="text-xs">Rango Eje Derecho</Label>
+                                    <div className="flex items-center gap-1">
+                                        <Input type="number" placeholder="Mín" value={yAxisDomainRight.min} onChange={(e) => handleYAxisDomainChange('right', 'min', e.target.value)} className="h-8 text-xs bg-black/20 text-center" disabled={profileData.length < 2}/>
+                                        <Input type="number" placeholder="Máx" value={yAxisDomainRight.max} onChange={(e) => handleYAxisDomainChange('right', 'max', e.target.value)} className="h-8 text-xs bg-black/20 text-center" disabled={profileData.length < 2}/>
+                                    </div>
                                 </div>
                             </div>
                             <ScrollArea className="max-h-32 mt-2">
@@ -1730,10 +1713,4 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
-
-
-
-
-
-
 
