@@ -1265,8 +1265,8 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                         </Button>
                     </div>
                     {profileData && (
-                        <div id="profile-chart-to-export" className="bg-background p-2 rounded-md">
-                            <div className="space-y-2 pt-2 border-t border-border">
+                        <div className="pt-2 border-t border-white/10 flex flex-col gap-2">
+                             <div id="profile-chart-to-export" className="bg-background p-2 rounded-md">
                                 <div className="h-[250px] w-full mt-2" ref={chartContainerRef}>
                                     <ResponsiveContainer>
                                         <AreaChart data={combinedChartData} margin={{ top: 5, right: 20, left: -25, bottom: 5 }}>
@@ -1296,41 +1296,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                     </ResponsiveContainer>
                                 </div>
                             </div>
-                        </div>
-                    )}
-                    {profileData && profileData.length > 0 && (
-                        <div className="pt-2 border-t border-white/10 flex flex-col gap-1">
-                            <div className="grid grid-cols-2 gap-2">
-                                <div className="space-y-1">
-                                    <Label className="text-xs">Rango Eje Izquierdo</Label>
-                                    <div className="flex items-center gap-1">
-                                        <Input type="number" placeholder="Mín" value={yAxisDomainLeft.min} onChange={(e) => handleYAxisDomainChange('left', 'min', e.target.value)} className="h-8 text-xs bg-black/20 text-center"/>
-                                        <Input type="number" placeholder="Máx" value={yAxisDomainLeft.max} onChange={(e) => handleYAxisDomainChange('left', 'max', e.target.value)} className="h-8 text-xs bg-black/20 text-center"/>
-                                    </div>
-                                </div>
-                                <div className="space-y-1">
-                                    <Label className="text-xs">Rango Eje Derecho</Label>
-                                    <div className="flex items-center gap-1">
-                                        <Input type="number" placeholder="Mín" value={yAxisDomainRight.min} onChange={(e) => handleYAxisDomainChange('right', 'min', e.target.value)} className="h-8 text-xs bg-black/20 text-center" disabled={profileData.length < 2}/>
-                                        <Input type="number" placeholder="Máx" value={yAxisDomainRight.max} onChange={(e) => handleYAxisDomainChange('right', 'max', e.target.value)} className="h-8 text-xs bg-black/20 text-center" disabled={profileData.length < 2}/>
-                                    </div>
-                                </div>
-                            </div>
-                            <ScrollArea className="max-h-32 mt-2">
-                                <Table>
-                                    <TableBody>
-                                        {profileData.map(series => (
-                                            <React.Fragment key={series.datasetId}>
-                                                <TableRow className="bg-gray-700/50 hover:bg-gray-700/70"><TableCell colSpan={2} className="text-xs text-white p-1.5 font-bold">{series.name}</TableCell></TableRow>
-                                                <TableRow><TableCell className="text-xs text-gray-300 p-1.5">Mín / Máx</TableCell><TableCell className="text-xs text-white p-1.5 text-right font-mono">{series.stats.min.toFixed(2)} / {series.stats.max.toFixed(2)}</TableCell></TableRow>
-                                                <TableRow><TableCell className="text-xs text-gray-300 p-1.5">Promedio</TableCell><TableCell className="text-xs text-white p-1.5 text-right font-mono">{series.stats.mean.toFixed(2)}</TableCell></TableRow>
-                                                <TableRow><TableCell className="text-xs text-gray-300 p-1.5">Desv. Estándar</TableCell><TableCell className="text-xs text-white p-1.5 text-right font-mono">{series.stats.stdDev.toFixed(2)}</TableCell></TableRow>
-                                            </React.Fragment>
-                                        ))}
-                                    </TableBody>
-                                </Table>
-                            </ScrollArea>
-                            <div className="flex items-center gap-2 mt-2">
+                            <div className="flex items-center gap-2">
                                 <Button onClick={() => handleDownloadProfile('csv')} size="sm" className="w-full h-8 text-xs" variant="secondary" disabled={!profileData}>
                                     <Download className="mr-2 h-3.5 w-3.5" /> CSV
                                 </Button>
@@ -1341,6 +1307,39 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                     <FileText className="mr-2 h-3.5 w-3.5" /> PDF
                                 </Button>
                             </div>
+                            <div className="grid grid-cols-2 gap-2">
+                                <div className="space-y-1">
+                                    <Label className="text-xs">Rango Eje Izquierdo</Label>
+                                    <div className="flex items-center gap-1">
+                                        <Input type="number" placeholder="Mín" value={yAxisDomainLeft.min === 'auto' ? '' : yAxisDomainLeft.min} onChange={(e) => handleYAxisDomainChange('left', 'min', e.target.value)} className="h-8 text-xs bg-black/20 text-center"/>
+                                        <Input type="number" placeholder="Máx" value={yAxisDomainLeft.max === 'auto' ? '' : yAxisDomainLeft.max} onChange={(e) => handleYAxisDomainChange('left', 'max', e.target.value)} className="h-8 text-xs bg-black/20 text-center"/>
+                                    </div>
+                                </div>
+                                <div className="space-y-1">
+                                    <Label className="text-xs">Rango Eje Derecho</Label>
+                                    <div className="flex items-center gap-1">
+                                        <Input type="number" placeholder="Mín" value={yAxisDomainRight.min === 'auto' ? '' : yAxisDomainRight.min} onChange={(e) => handleYAxisDomainChange('right', 'min', e.target.value)} className="h-8 text-xs bg-black/20 text-center" disabled={profileData.length < 2}/>
+                                        <Input type="number" placeholder="Máx" value={yAxisDomainRight.max === 'auto' ? '' : yAxisDomainRight.max} onChange={(e) => handleYAxisDomainChange('right', 'max', e.target.value)} className="h-8 text-xs bg-black/20 text-center" disabled={profileData.length < 2}/>
+                                    </div>
+                                </div>
+                            </div>
+                            <ScrollArea className="max-h-32">
+                                <div className="grid grid-cols-2 gap-4">
+                                {profileData.map(series => (
+                                    <div key={series.datasetId}>
+                                    <h4 className="text-xs text-white p-1.5 font-bold border-b border-white/10" style={{color: series.color}}>{series.name}</h4>
+                                    <Table>
+                                        <TableBody>
+                                        <TableRow><TableCell className="text-xs text-gray-300 p-1.5">Mín / Máx</TableCell><TableCell className="text-xs text-white p-1.5 text-right font-mono">{series.stats.min.toFixed(2)} / {series.stats.max.toFixed(2)}</TableCell></TableRow>
+                                        <TableRow><TableCell className="text-xs text-gray-300 p-1.5">Promedio</TableCell><TableCell className="text-xs text-white p-1.5 text-right font-mono">{series.stats.mean.toFixed(2)}</TableCell></TableRow>
+                                        <TableRow><TableCell className="text-xs text-gray-300 p-1.5">Desv. Est.</TableCell><TableCell className="text-xs text-white p-1.5 text-right font-mono">{series.stats.stdDev.toFixed(2)}</TableCell></TableRow>
+                                        <TableRow><TableCell className="text-xs text-gray-300 p-1.5">Jenks</TableCell><TableCell className="text-xs text-white p-1.5 text-right font-mono">{series.stats.jenksBreaks.map(b => b.toFixed(2)).join(' | ')}</TableCell></TableRow>
+                                        </TableBody>
+                                    </Table>
+                                    </div>
+                                ))}
+                                </div>
+                            </ScrollArea>
                         </div>
                     )}
                     {profileData && profileData.length >= 2 && (
@@ -1736,5 +1735,6 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
 
 
