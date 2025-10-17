@@ -1283,9 +1283,10 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                                 cursor={{ stroke: 'hsl(var(--primary))', strokeWidth: 1 }}
                                                 labelFormatter={(label) => `Distancia: ${Number(label).toFixed(2)} m`}
                                                 formatter={(value: number, name: string) => {
+                                                    if (!profileData) return [value, name];
                                                     const series = profileData.find(d => d.datasetId === name);
                                                     if (!series) return [value, name];
-                                                    return [`${value.toFixed(2)} ${series.unit}`, series.name];
+                                                    return [`${(value || 0).toFixed(2)} ${series.unit}`, series.name];
                                                 }}
                                             />
                                             <Legend wrapperStyle={{fontSize: "10px"}} />
@@ -1323,7 +1324,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                     </div>
                                 </div>
                             </div>
-                            <ScrollArea className="max-h-32">
+                            <ScrollArea className="max-h-40">
                                 <div className="grid grid-cols-2 gap-4">
                                 {profileData.map(series => (
                                     <div key={series.datasetId}>
@@ -1735,6 +1736,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
 
 
 
