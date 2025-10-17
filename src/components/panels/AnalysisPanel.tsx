@@ -27,7 +27,7 @@ import { getValuesForPoints } from '@/ai/flows/gee-flow';
 import { ScrollArea } from '../ui/scroll-area';
 import { Checkbox } from '../ui/checkbox';
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
-import { Style, Text as TextStyle, Fill, Stroke } from 'ol/style';
+import { Style, Text as TextStyle, Fill, Stroke, Circle as CircleStyle } from 'ol/style';
 import type { Map } from 'ol';
 import Draw, { createBox } from 'ol/interaction/Draw';
 import { ResponsiveContainer, XAxis, YAxis, Tooltip, AreaChart, Area, CartesianGrid, ReferenceLine, Legend, ScatterChart, Scatter, Line } from 'recharts';
@@ -60,8 +60,13 @@ const SectionHeader: React.FC<{ icon: React.ElementType; title: string; }> = ({ 
 );
 
 const analysisLayerStyle = new Style({
-    stroke: new Stroke({ color: 'rgba(0, 255, 255, 1)', width: 2.5, lineDash: [8, 8] }),
-    fill: new Fill({ color: 'rgba(0, 255, 255, 0.2)' }),
+    stroke: new Stroke({ color: '#f4a261', width: 2.5 }),
+    fill: new Fill({ color: 'rgba(244, 162, 97, 0.2)' }),
+    image: new CircleStyle({
+        radius: 5,
+        fill: new Fill({ color: 'rgba(244, 162, 97, 0.5)' }),
+        stroke: new Stroke({ color: '#f4a261', width: 1.5 }),
+    }),
 });
 
 // --- Jenks Natural Breaks Algorithm (copied for profile stats) ---
@@ -154,7 +159,8 @@ interface CorrelationResult {
 
 interface CombinedChartDataPoint {
     distance: number;
-    [key: string]: number; // Will hold values for each datasetId, e.g., NASADEM_ELEVATION: 45.3
+    location: number[]; // [lon, lat] in EPSG:4326
+    [key: string]: number | number[]; // Will hold values for each datasetId, e.g., NASADEM_ELEVATION: 45.3
 }
 
 
@@ -235,6 +241,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   const [correlationResult, setCorrelationResult] = useState<CorrelationResult | null>(null);
   const [corrAxisX, setCorrAxisX] = useState<DatasetId | ''>('');
   const [corrAxisY, setCorrAxisY] = useState<DatasetId | ''>('');
+  const profileHoverMarkerRef = useRef<Overlay | null>(null);
 
 
   const { toast } = useToast();
@@ -280,11 +287,29 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         analysisLayerRef.current = layer;
         mapRef.current.addLayer(layer);
     }
+
+    // Add the hover marker overlay to the map
+    if (mapRef.current && !profileHoverMarkerRef.current) {
+        const markerElement = document.createElement('div');
+        markerElement.className = 'w-3 h-3 bg-orange-500 rounded-full border-2 border-white shadow-lg pointer-events-none';
+        const marker = new Overlay({
+            element: markerElement,
+            positioning: 'center-center',
+            stopEvent: false,
+        });
+        profileHoverMarkerRef.current = marker;
+        mapRef.current.addOverlay(marker);
+    }
+
     // Cleanup on unmount
     return () => {
         if (mapRef.current && analysisLayerRef.current) {
             mapRef.current.removeLayer(analysisLayerRef.current);
             analysisLayerRef.current = null;
+        }
+        if (mapRef.current && profileHoverMarkerRef.current) {
+            mapRef.current.removeOverlay(profileHoverMarkerRef.current);
+            profileHoverMarkerRef.current = null;
         }
         stopDrawing();
     };
@@ -487,7 +512,8 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   
     for (let i = 0; i < numPoints; i++) {
         const dataPoint: CombinedChartDataPoint = {
-            distance: profileData[0].points[i].distance
+            distance: profileData[0].points[i].distance,
+            location: profileData[0].points[i].location, // Keep location data here
         };
         for (const series of profileData) {
             // Ensure the series has points and the index is valid
@@ -612,6 +638,20 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                 toast({ description: "Error al generar PDF.", variant: "destructive" });
             });
     }
+  };
+
+  const handleChartMouseMove = (data: any) => {
+    if (data?.activePayload?.[0]?.payload?.location && profileHoverMarkerRef.current && mapRef.current) {
+        const [lon, lat] = data.activePayload[0].payload.location;
+        const mapCoords = transform([lon, lat], 'EPSG:4326', 'EPSG:3857');
+        profileHoverMarkerRef.current.setPosition(mapCoords);
+    }
+  };
+
+  const handleChartMouseLeave = () => {
+      if (profileHoverMarkerRef.current) {
+          profileHoverMarkerRef.current.setPosition(undefined);
+      }
   };
   // --- END Profile Logic ---
 
@@ -1224,26 +1264,26 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                 </AccordionTrigger>
                 <AccordionContent className="p-3 pt-2 space-y-3 border-t border-white/10 bg-transparent rounded-b-md">
                     <div className="space-y-2 p-2 border border-white/10 rounded-md">
-                        <div className="flex items-center gap-2">
-                           <div className="flex items-center gap-1 flex-shrink-0">
-                              <Button onClick={() => handleToggleDrawProfile('LineString')} size="icon" className={cn("h-8 w-8 text-xs border-white/30 bg-black/20", activeProfileDrawTool === 'LineString' && "bg-primary hover:bg-primary/90")} title="Dibujar Línea">
-                                  <PenLine className="h-4 w-4" />
-                              </Button>
-                              <Button onClick={() => handleToggleDrawProfile('FreehandLine')} size="icon" className={cn("h-8 w-8 text-xs border-white/30 bg-black/20", activeProfileDrawTool === 'FreehandLine' && "bg-primary hover:bg-primary/90")} title="Dibujar a Mano Alzada">
-                                  <Brush className="h-4 w-4" />
-                              </Button>
-                               <Button onClick={() => clearAnalysisGeometries()} size="icon" variant="destructive" className="h-8 w-8 flex-shrink-0">
-                                  <Eraser className="h-4 w-4" />
-                              </Button>
-                           </div>
-                           <div className="flex-grow border-l border-dashed border-gray-600 pl-2">
+                         <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1 flex-shrink-0">
+                                <Button onClick={() => handleToggleDrawProfile('LineString')} size="icon" className={cn("h-8 w-8 text-xs border-white/30 bg-black/20", activeProfileDrawTool === 'LineString' && "bg-primary hover:bg-primary/90")} title="Dibujar Línea">
+                                    <PenLine className="h-4 w-4" />
+                                </Button>
+                                <Button onClick={() => handleToggleDrawProfile('FreehandLine')} size="icon" className={cn("h-8 w-8 text-xs border-white/30 bg-black/20", activeProfileDrawTool === 'FreehandLine' && "bg-primary hover:bg-primary/90")} title="Dibujar a Mano Alzada">
+                                    <Brush className="h-4 w-4" />
+                                </Button>
+                                <Button onClick={() => clearAnalysisGeometries()} size="icon" variant="destructive" className="h-8 w-8 flex-shrink-0">
+                                    <Eraser className="h-4 w-4" />
+                                </Button>
+                            </div>
+                            <div className="flex-grow border-l border-dashed border-gray-600 pl-2">
                                <Select value={profileLayerId} onValueChange={handleSelectProfileLayer}>
-                                  <SelectTrigger className="h-8 text-xs bg-black/20 w-full"><SelectValue placeholder="o seleccionar capa de línea..." /></SelectTrigger>
+                                  <SelectTrigger className="h-8 text-xs bg-black/20 w-full"><SelectValue placeholder="o seleccionar capa..." /></SelectTrigger>
                                   <SelectContent className="bg-gray-700 text-white border-gray-600">
                                     {lineLayers.map(l => <SelectItem key={l.id} value={l.id} className="text-xs">{l.name}</SelectItem>)}
                                   </SelectContent>
                                 </Select>
-                           </div>
+                            </div>
                         </div>
                     </div>
                      <div className="space-y-2 p-2 border border-white/10 rounded-md">
@@ -1270,22 +1310,16 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                         </Button>
                     </div>
                     {profileData && (
-                        <div className="pt-2 border-t border-white/10 flex flex-col gap-2">
-                            <div className="flex items-center gap-2">
-                                <Button onClick={() => handleDownloadProfile('csv')} size="sm" className="w-full h-8 text-xs" variant="secondary" disabled={!profileData}>
-                                    <Download className="mr-2 h-3.5 w-3.5" /> CSV
-                                </Button>
-                                <Button onClick={() => handleDownloadProfile('jpg')} size="sm" className="w-full h-8 text-xs" variant="secondary" disabled={!profileData}>
-                                    <FileImage className="mr-2 h-3.5 w-3.5" /> JPG
-                                </Button>
-                                <Button onClick={() => handleDownloadProfile('pdf')} size="sm" className="w-full h-8 text-xs" variant="secondary" disabled={!profileData}>
-                                    <FileText className="mr-2 h-3.5 w-3.5" /> PDF
-                                </Button>
-                            </div>
-                            <div id="profile-chart-to-export" className="bg-background p-2 rounded-md">
+                        <div className="pt-2 border-t border-white/10 flex flex-col gap-3">
+                             <div id="profile-chart-to-export" className="bg-background p-2 rounded-md">
                                 <div className="h-[250px] w-full mt-2" ref={chartContainerRef}>
                                     <ResponsiveContainer>
-                                        <AreaChart data={combinedChartData} margin={{ top: 5, right: 20, left: -25, bottom: 5 }}>
+                                        <AreaChart 
+                                          data={combinedChartData} 
+                                          margin={{ top: 5, right: 20, left: -25, bottom: 5 }}
+                                          onMouseMove={handleChartMouseMove}
+                                          onMouseLeave={handleChartMouseLeave}
+                                        >
                                             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted-foreground), 0.3)" />
                                             <XAxis dataKey="distance" type="number" stroke="hsl(var(--muted-foreground))" fontSize={10} tickFormatter={(val) => `${(val / 1000).toFixed(1)} km`} domain={['dataMin', 'dataMax']} />
                                             <YAxis yAxisId="left" stroke={profileData[0]?.color || '#8884d8'} fontSize={10} domain={[yAxisDomainLeft.min, yAxisDomainLeft.max]} tickFormatter={(val) => `${val.toFixed(0)}${profileData[0]?.unit || ''}`} />
@@ -1312,6 +1346,17 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                         </AreaChart>
                                     </ResponsiveContainer>
                                 </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <Button onClick={() => handleDownloadProfile('csv')} size="sm" className="w-full h-8 text-xs" variant="secondary" disabled={!profileData}>
+                                    <Download className="mr-2 h-3.5 w-3.5" /> CSV
+                                </Button>
+                                <Button onClick={() => handleDownloadProfile('jpg')} size="sm" className="w-full h-8 text-xs" variant="secondary" disabled={!profileData}>
+                                    <FileImage className="mr-2 h-3.5 w-3.5" /> JPG
+                                </Button>
+                                <Button onClick={() => handleDownloadProfile('pdf')} size="sm" className="w-full h-8 text-xs" variant="secondary" disabled={!profileData}>
+                                    <FileText className="mr-2 h-3.5 w-3.5" /> PDF
+                                </Button>
                             </div>
                             <div className="grid grid-cols-2 gap-2">
                                 <div className="space-y-1">
@@ -1741,6 +1786,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
 
 
 
