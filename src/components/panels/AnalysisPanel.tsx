@@ -513,10 +513,9 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     for (let i = 0; i < numPoints; i++) {
         const dataPoint: CombinedChartDataPoint = {
             distance: profileData[0].points[i].distance,
-            location: profileData[0].points[i].location, // Keep location data here
+            location: profileData[0].points[i].location,
         };
         for (const series of profileData) {
-            // Ensure the series has points and the index is valid
             if (series.points && i < series.points.length) {
                 dataPoint[series.datasetId] = series.points[i].value;
             }
@@ -1343,6 +1342,18 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                             {profileData.map((series, index) => (
                                                 <Area key={series.datasetId} yAxisId={index === 0 ? 'left' : 'right'} type="monotone" dataKey={series.datasetId} name={series.name} stroke={series.color} fill={series.color} fillOpacity={0.2} connectNulls />
                                             ))}
+                                            {/* Reference Lines for Jenks Breaks */}
+                                            {profileData.map((series, index) => (
+                                                series.stats.jenksBreaks.map((breakValue, i) => (
+                                                    <ReferenceLine 
+                                                        key={`jenks-${series.datasetId}-${i}`} 
+                                                        yAxisId={index === 0 ? 'left' : 'right'} 
+                                                        y={breakValue} 
+                                                        stroke="hsl(var(--muted-foreground), 0.5)" 
+                                                        strokeDasharray="3 3" 
+                                                    />
+                                                ))
+                                            ))}
                                         </AreaChart>
                                     </ResponsiveContainer>
                                 </div>
@@ -1374,7 +1385,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                     </div>
                                 </div>
                             </div>
-                            <ScrollArea className="max-h-40">
+                             <ScrollArea className="max-h-40">
                                 <div className="grid grid-cols-2 gap-4">
                                 {profileData.map(series => (
                                     <div key={series.datasetId}>
@@ -1786,6 +1797,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
 
 
 
