@@ -1319,7 +1319,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                           onMouseMove={handleChartMouseMove}
                                           onMouseLeave={handleChartMouseLeave}
                                         >
-                                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted-foreground), 0.3)" />
+                                            <CartesianGrid strokeDasharray="3 3" stroke="rgba(200, 200, 200, 0.2)" />
                                             <XAxis dataKey="distance" type="number" stroke="hsl(var(--muted-foreground))" fontSize={10} tickFormatter={(val) => `${(val / 1000).toFixed(1)} km`} domain={['dataMin', 'dataMax']} />
                                             <YAxis yAxisId="left" stroke={profileData[0]?.color || '#8884d8'} fontSize={10} domain={[yAxisDomainLeft.min, yAxisDomainLeft.max]} tickFormatter={(val) => `${val.toFixed(0)}${profileData[0]?.unit || ''}`} />
                                             {profileData.length > 1 && (
@@ -1349,7 +1349,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                                         key={`jenks-${series.datasetId}-${i}`} 
                                                         yAxisId={index === 0 ? 'left' : 'right'} 
                                                         y={breakValue} 
-                                                        stroke="hsl(var(--muted-foreground), 0.5)" 
+                                                        stroke="rgba(150, 150, 150, 0.6)" 
                                                         strokeDasharray="3 3" 
                                                     />
                                                 ))
@@ -1357,17 +1357,6 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                         </AreaChart>
                                     </ResponsiveContainer>
                                 </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <Button onClick={() => handleDownloadProfile('csv')} size="sm" className="w-full h-8 text-xs" variant="secondary" disabled={!profileData}>
-                                    <Download className="mr-2 h-3.5 w-3.5" /> CSV
-                                </Button>
-                                <Button onClick={() => handleDownloadProfile('jpg')} size="sm" className="w-full h-8 text-xs" variant="secondary" disabled={!profileData}>
-                                    <FileImage className="mr-2 h-3.5 w-3.5" /> JPG
-                                </Button>
-                                <Button onClick={() => handleDownloadProfile('pdf')} size="sm" className="w-full h-8 text-xs" variant="secondary" disabled={!profileData}>
-                                    <FileText className="mr-2 h-3.5 w-3.5" /> PDF
-                                </Button>
                             </div>
                             <div className="grid grid-cols-2 gap-2">
                                 <div className="space-y-1">
@@ -1385,22 +1374,33 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                     </div>
                                 </div>
                             </div>
-                             <ScrollArea className="max-h-40">
-                                <div className="grid grid-cols-2 gap-4">
+                             <div className="flex items-center gap-2">
+                                <Button onClick={() => handleDownloadProfile('csv')} size="sm" className="w-full h-8 text-xs" variant="secondary" disabled={!profileData}>
+                                    <Download className="mr-2 h-3.5 w-3.5" /> CSV
+                                </Button>
+                                <Button onClick={() => handleDownloadProfile('jpg')} size="sm" className="w-full h-8 text-xs" variant="secondary" disabled={!profileData}>
+                                    <FileImage className="mr-2 h-3.5 w-3.5" /> JPG
+                                </Button>
+                                <Button onClick={() => handleDownloadProfile('pdf')} size="sm" className="w-full h-8 text-xs" variant="secondary" disabled={!profileData}>
+                                    <FileText className="mr-2 h-3.5 w-3.5" /> PDF
+                                </Button>
+                            </div>
+                            <ScrollArea className="max-h-40">
+                              <div className="grid grid-cols-2 gap-4">
                                 {profileData.map(series => (
                                     <div key={series.datasetId}>
-                                    <h4 className="text-xs text-white p-1.5 font-bold border-b border-white/10" style={{color: series.color}}>{series.name}</h4>
-                                    <Table>
-                                        <TableBody>
-                                        <TableRow><TableCell className="text-xs text-gray-300 p-1.5">Mín / Máx</TableCell><TableCell className="text-xs text-white p-1.5 text-right font-mono">{series.stats.min.toFixed(2)} / {series.stats.max.toFixed(2)}</TableCell></TableRow>
-                                        <TableRow><TableCell className="text-xs text-gray-300 p-1.5">Promedio</TableCell><TableCell className="text-xs text-white p-1.5 text-right font-mono">{series.stats.mean.toFixed(2)}</TableCell></TableRow>
-                                        <TableRow><TableCell className="text-xs text-gray-300 p-1.5">Desv. Est.</TableCell><TableCell className="text-xs text-white p-1.5 text-right font-mono">{series.stats.stdDev.toFixed(2)}</TableCell></TableRow>
-                                        <TableRow><TableCell className="text-xs text-gray-300 p-1.5">Jenks</TableCell><TableCell className="text-xs text-white p-1.5 text-right font-mono">{series.stats.jenksBreaks.map(b => b.toFixed(2)).join(' | ')}</TableCell></TableRow>
-                                        </TableBody>
-                                    </Table>
+                                      <h4 className="text-xs text-white p-1.5 font-bold border-b border-white/10" style={{color: series.color}}>{series.name}</h4>
+                                      <Table>
+                                          <TableBody>
+                                            <TableRow><TableCell className="text-xs text-gray-300 p-1.5">Mín / Máx</TableCell><TableCell className="text-xs text-white p-1.5 text-right font-mono">{series.stats.min.toFixed(2)} / {series.stats.max.toFixed(2)}</TableCell></TableRow>
+                                            <TableRow><TableCell className="text-xs text-gray-300 p-1.5">Promedio</TableCell><TableCell className="text-xs text-white p-1.5 text-right font-mono">{series.stats.mean.toFixed(2)}</TableCell></TableRow>
+                                            <TableRow><TableCell className="text-xs text-gray-300 p-1.5">Desv. Est.</TableCell><TableCell className="text-xs text-white p-1.5 text-right font-mono">{series.stats.stdDev.toFixed(2)}</TableCell></TableRow>
+                                            <TableRow><TableCell className="text-xs text-gray-300 p-1.5">Jenks</TableCell><TableCell className="text-xs text-white p-1.5 text-right font-mono">{series.stats.jenksBreaks.map(b => b.toFixed(2)).join(' | ')}</TableCell></TableRow>
+                                          </TableBody>
+                                      </Table>
                                     </div>
                                 ))}
-                                </div>
+                              </div>
                             </ScrollArea>
                         </div>
                     )}
@@ -1797,6 +1797,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
 
 
 
