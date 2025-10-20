@@ -143,7 +143,6 @@ const GeeProcessingPanel: React.FC<GeeProcessingPanelProps> = ({
                     case 'DYNAMIC_WORLD': layerName = 'Dynamic World Land Cover'; break;
                     case 'NASADEM_ELEVATION': layerName = `NASADEM Elevación (${elevationRange[0]}-${elevationRange[1]}m)`; break;
                     case 'ALOS_DSM': layerName = `ALOS DSM (${elevationRange[0]}-${elevationRange[1]}m)`; break;
-                    case 'INTA_UPA': layerName = 'INTA - Aptitud Productiva (UPA)'; break;
                     default: layerName = 'Capa GEE';
                 }
                 onAddGeeLayer(result.tileUrl, layerName, geeParams);
@@ -294,7 +293,7 @@ const GeeProcessingPanel: React.FC<GeeProcessingPanelProps> = ({
     );
   };
 
-  const isDateSelectionDisabled = ['JRC_WATER_OCCURRENCE', 'OPENLANDMAP_SOC', 'NASADEM_ELEVATION', 'ALOS_DSM', 'INTA_UPA'].includes(selectedCombination);
+  const isDateSelectionDisabled = ['JRC_WATER_OCCURRENCE', 'OPENLANDMAP_SOC', 'NASADEM_ELEVATION', 'ALOS_DSM'].includes(selectedCombination);
   const showElevationControls = selectedCombination === 'NASADEM_ELEVATION' || selectedCombination === 'ALOS_DSM';
   const showDynamicWorldLegend = selectedCombination === 'DYNAMIC_WORLD';
   const showVectorizeButton = selectedCombination === 'DYNAMIC_WORLD';
@@ -356,10 +355,6 @@ const GeeProcessingPanel: React.FC<GeeProcessingPanelProps> = ({
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="ALOS_DSM" id="alos-combo" />
                 <Label htmlFor="alos-combo" className="text-xs font-normal">Modelo de Superficie (ALOS DSM)</Label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="INTA_UPA" id="inta-combo" />
-                <Label htmlFor="inta-combo" className="text-xs font-normal">INTA - Aptitud Productiva (UPA)</Label>
               </div>
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="JRC_WATER_OCCURRENCE" id="jrc-combo" />

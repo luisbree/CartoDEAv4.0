@@ -39,6 +39,10 @@ export const PREDEFINED_SERVERS: OgcServer[] = [
     url: 'https://geo-backend.inta.gob.ar/geoserver/'
   },
   {
+    name: 'GeoINTA',
+    url: 'https://geointa.inta.gob.ar/geoserver/wms'
+  },
+  {
     name: 'IGN - Capas',
     url: 'https://wms.ign.gob.ar/geoserver/ign_produccion/'
   },
