@@ -410,5 +410,3 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
 };
 
 export default LegendPanel;
-
-    
