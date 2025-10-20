@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DraftingCompass, Scissors, Layers, CircleDotDashed, MinusSquare, BoxSelect, Droplet, Sparkles, Loader2, Combine, Minus, Plus, TrendingUp, Waypoints as CrosshairIcon, Merge, LineChart, PenLine, Eraser, Brush, ZoomIn, Download, FileImage, FileText, CheckCircle } from 'lucide-react';
+import { DraftingCompass, Scissors, Layers, CircleDotDashed, MinusSquare, BoxSelect, Droplet, Sparkles, Loader2, Combine, Minus, Plus, TrendingUp, Waypoints as CrosshairIcon, Merge, LineChart, PenLine, Eraser, Brush, ZoomIn, Download, FileImage, FileText, CheckCircle, GitCommit } from 'lucide-react';
 import type { MapLayer, VectorMapLayer, ProfilePoint } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { nanoid } from 'nanoid';
@@ -22,7 +22,7 @@ import { multiPolygon } from '@turf/helpers';
 import Feature from 'ol/Feature';
 import { type Geometry, type LineString as OlLineString, Point } from 'ol/geom';
 import { getLength as olGetLength } from 'ol/sphere';
-import { performBufferAnalysis, performConvexHull, performConcaveHull, calculateOptimalConcavity, projectPopulationGeometric, generateCrossSections, dissolveFeatures } from '@/services/spatial-analysis';
+import { performBufferAnalysis, performConvexHull, performConcaveHull, calculateOptimalConcavity, projectPopulationGeometric, generateCrossSections, dissolveFeatures, performBezierSmoothing } from '@/services/spatial-analysis';
 import { getValuesForPoints } from '@/ai/flows/gee-flow';
 import { ScrollArea } from '../ui/scroll-area';
 import { Checkbox } from '../ui/checkbox';
@@ -223,6 +223,11 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   const [crossSectionLength, setCrossSectionLength] = useState<number>(50);
   const [crossSectionUnits, setCrossSectionUnits] = useState<'meters' | 'kilometers'>('meters');
   const [isGeneratingCrossSections, setIsGeneratingCrossSections] = useState(false);
+
+  // State for Bezier Smoothing
+  const [smoothInputLayerId, setSmoothInputLayerId] = useState<string>('');
+  const [smoothOutputName, setSmoothOutputName] = useState<string>('');
+  const [smoothness, setSmoothness] = useState<number>(5000);
 
   // State for Topographic Profile
   const [profileLine, setProfileLine] = useState<Feature<OlLineString> | null>(null);
@@ -1221,6 +1226,61 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     }
   };
 
+  const handleRunBezier = async () => {
+    const inputLayer = vectorLayers.find(l => l.id === smoothInputLayerId);
+    if (!inputLayer) {
+        toast({ description: "Por favor, seleccione una capa para suavizar.", variant: "destructive" });
+        return;
+    }
+    const inputSource = inputLayer.olLayer.getSource();
+    if (!inputSource || inputSource.getFeatures().length === 0) {
+        toast({ description: "La capa de entrada no tiene entidades.", variant: "destructive" });
+        return;
+    }
+
+    const outputName = smoothOutputName.trim() || `Suavizado_${inputLayer.name}`;
+    toast({ description: "Aplicando suavizado Bezier..." });
+
+    try {
+        const smoothedFeatures = await performBezierSmoothing({
+            features: inputSource.getFeatures(),
+            resolution: smoothness,
+        });
+
+        if (smoothedFeatures.length === 0) {
+            throw new Error("La operación de suavizado no produjo resultados.");
+        }
+        
+        smoothedFeatures.forEach(f => f.setId(nanoid()));
+
+        const newLayerId = `smooth-result-${nanoid()}`;
+        const newSource = new VectorSource({ features: smoothedFeatures });
+        const newOlLayer = new VectorLayer({
+            source: newSource,
+            properties: { id: newLayerId, name: outputName, type: 'analysis' },
+            style: inputLayer.olLayer.getStyle(),
+        });
+        
+        onAddLayer({
+            id: newLayerId,
+            name: outputName,
+            olLayer: newOlLayer,
+            visible: true,
+            opacity: 1,
+            type: 'analysis',
+        }, true);
+        
+        toast({ description: `Se creó la capa suavizada "${outputName}".` });
+        setSmoothInputLayerId('');
+        setSmoothOutputName('');
+
+    } catch (error: any) {
+        console.error("Bezier smoothing failed:", error);
+        toast({ title: "Error de Suavizado", description: error.message, variant: "destructive" });
+    }
+  };
+
+
   const trendlineData = useMemo(() => {
     if (!correlationResult) return [];
     const { slope, intercept, scatterData } = correlationResult;
@@ -1358,23 +1418,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                     </ResponsiveContainer>
                                 </div>
                             </div>
-                            <div className="grid grid-cols-2 gap-2">
-                                <div className="space-y-1">
-                                    <Label className="text-xs">Rango Eje Izquierdo</Label>
-                                    <div className="flex items-center gap-1">
-                                        <Input type="number" placeholder="Mín" value={yAxisDomainLeft.min === 'auto' ? '' : yAxisDomainLeft.min} onChange={(e) => handleYAxisDomainChange('left', 'min', e.target.value)} className="h-8 text-xs bg-black/20 text-center"/>
-                                        <Input type="number" placeholder="Máx" value={yAxisDomainLeft.max === 'auto' ? '' : yAxisDomainLeft.max} onChange={(e) => handleYAxisDomainChange('left', 'max', e.target.value)} className="h-8 text-xs bg-black/20 text-center"/>
-                                    </div>
-                                </div>
-                                <div className="space-y-1">
-                                    <Label className="text-xs">Rango Eje Derecho</Label>
-                                    <div className="flex items-center gap-1">
-                                        <Input type="number" placeholder="Mín" value={yAxisDomainRight.min === 'auto' ? '' : yAxisDomainRight.min} onChange={(e) => handleYAxisDomainChange('right', 'min', e.target.value)} className="h-8 text-xs bg-black/20 text-center" disabled={profileData.length < 2}/>
-                                        <Input type="number" placeholder="Máx" value={yAxisDomainRight.max === 'auto' ? '' : yAxisDomainRight.max} onChange={(e) => handleYAxisDomainChange('right', 'max', e.target.value)} className="h-8 text-xs bg-black/20 text-center" disabled={profileData.length < 2}/>
-                                    </div>
-                                </div>
-                            </div>
-                             <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2">
                                 <Button onClick={() => handleDownloadProfile('csv')} size="sm" className="w-full h-8 text-xs" variant="secondary" disabled={!profileData}>
                                     <Download className="mr-2 h-3.5 w-3.5" /> CSV
                                 </Button>
@@ -1385,7 +1429,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                     <FileText className="mr-2 h-3.5 w-3.5" /> PDF
                                 </Button>
                             </div>
-                            <ScrollArea className="max-h-40">
+                            <ScrollArea className="max-h-32">
                               <div className="grid grid-cols-2 gap-4">
                                 {profileData.map(series => (
                                     <div key={series.datasetId}>
@@ -1673,6 +1717,40 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                             </div>
                         </div>
                     </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs font-semibold">Suavizado de Geometría (Bezier)</Label>
+                      <div className="space-y-2 p-2 border border-white/10 rounded-md">
+                           <div>
+                              <Label htmlFor="smooth-input-layer" className="text-xs">Capa de Entrada (Líneas o Polígonos)</Label>
+                              <Select value={smoothInputLayerId} onValueChange={setSmoothInputLayerId}>
+                                <SelectTrigger id="smooth-input-layer" className="h-8 text-xs bg-black/20"><SelectValue placeholder="Seleccionar capa..." /></SelectTrigger>
+                                <SelectContent className="bg-gray-700 text-white border-gray-600">
+                                  {vectorLayers.map(l => <SelectItem key={l.id} value={l.id} className="text-xs">{l.name}</SelectItem>)}
+                                </SelectContent>
+                              </Select>
+                          </div>
+                          <div>
+                            <Label htmlFor="smoothness-slider" className="text-xs">Nivel de Suavizado</Label>
+                            <Slider
+                                id="smoothness-slider"
+                                min={100}
+                                max={20000}
+                                step={100}
+                                value={[smoothness]}
+                                onValueChange={(value) => setSmoothness(value[0])}
+                            />
+                            <p className="text-xs text-gray-400 mt-1">Valores más altos producen curvas más suaves y detalladas.</p>
+                          </div>
+                          <div>
+                              <Label htmlFor="smooth-output-name" className="text-xs">Nombre de la Capa de Salida</Label>
+                              <Input id="smooth-output-name" value={smoothOutputName} onChange={(e) => setSmoothOutputName(e.target.value)} placeholder="Ej: Suavizado_CapaX" className="h-8 text-xs bg-black/20"/>
+                          </div>
+                           <Button onClick={handleRunBezier} size="sm" className="w-full h-8 text-xs" disabled={!smoothInputLayerId}>
+                              <GitCommit className="mr-2 h-3.5 w-3.5" />
+                              Ejecutar Suavizado
+                          </Button>
+                      </div>
+                    </div>
                 </AccordionContent>
             </AccordionItem>
             
@@ -1797,6 +1875,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
 
 
 

@@ -1,9 +1,10 @@
 
+
 "use client";
 
 import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as TurfMultiPolygon, FeatureCollection as TurfFeatureCollection, Geometry as TurfGeometry, Point as TurfPoint, LineString as TurfLineString } from 'geojson';
-import { area as turfArea, intersect, featureCollection, buffer as turfBuffer, union, convex, concave, nearestPoint, along, length as turfLength, bearing, destination } from '@turf/turf';
-import { multiPolygon } from '@turf/helpers';
+import { area as turfArea, intersect, featureCollection, buffer as turfBuffer, union, convex, concave, nearestPoint, along, length as turfLength, bearing, destination, bezierSpline } from '@turf/turf';
+import { multiPolygon, lineString as turfLineString, polygon as turfPolygon } from '@turf/helpers';
 import type Feature from 'ol/Feature';
 import GeoJSON from 'ol/format/GeoJSON';
 import type { Geometry, LineString as OlLineString } from 'ol/geom';
@@ -502,4 +503,88 @@ export async function dissolveFeatures({
     }
 }
 
+
+/**
+ * Smooths the geometry of features using a Bezier spline.
+ * @param params - The features to smooth and the resolution.
+ * @returns A promise resolving to an array of smoothed OpenLayers Features.
+ */
+export async function performBezierSmoothing({
+    features,
+    resolution,
+}: {
+    features: Feature<Geometry>[];
+    resolution: number;
+}): Promise<Feature<Geometry>[]> {
+    if (!features || features.length === 0) {
+        throw new Error("No features provided to smooth.");
+    }
+
+    const format = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
+    const formatForMap = new GeoJSON({ dataProjection: 'EPSG:4326', featureProjection: 'EPSG:3857' });
+
+    try {
+        const featuresGeoJSON = format.writeFeaturesObject(features);
+        const smoothedTurfFeatures: TurfFeature<any>[] = [];
+
+        for (const feature of featuresGeoJSON.features) {
+            const geomType = feature.geometry.type;
+            let smoothedFeature: TurfFeature<any> | null = null;
+            
+            try {
+                if (geomType === 'LineString') {
+                    smoothedFeature = bezierSpline(feature as TurfFeature<TurfLineString>, { resolution });
+                } else if (geomType === 'Polygon') {
+                    const smoothedRings = (feature.geometry.coordinates as any[]).map(ring => {
+                        const line = turfLineString(ring);
+                        const smoothedLine = bezierSpline(line, { resolution });
+                        return smoothedLine.geometry.coordinates;
+                    });
+                    smoothedFeature = turfPolygon(smoothedRings, feature.properties);
+                } else if (geomType === 'MultiLineString') {
+                     const smoothedLines = (feature.geometry.coordinates as any[]).map(lineCoords => {
+                        const line = turfLineString(lineCoords);
+                        return bezierSpline(line, { resolution }).geometry.coordinates;
+                    });
+                    smoothedFeature = {
+                        ...feature,
+                        geometry: { type: 'MultiLineString', coordinates: smoothedLines }
+                    };
+                } else if (geomType === 'MultiPolygon') {
+                    const smoothedPolygons = (feature.geometry.coordinates as any[]).map(polyCoords => {
+                        return polyCoords.map(ring => {
+                            const line = turfLineString(ring);
+                            return bezierSpline(line, { resolution }).geometry.coordinates;
+                        });
+                    });
+                     smoothedFeature = {
+                        ...feature,
+                        geometry: { type: 'MultiPolygon', coordinates: smoothedPolygons }
+                    };
+                } else {
+                    // For points or other types, just keep the original
+                    smoothedFeature = feature;
+                }
+
+                if (smoothedFeature) {
+                    smoothedFeature.properties = { ...feature.properties };
+                    smoothedTurfFeatures.push(smoothedFeature);
+                }
+            } catch (individualError) {
+                 console.warn(`Skipping a feature that could not be smoothed (ID: ${feature.id}):`, individualError);
+                 // Keep the original feature if smoothing fails
+                 smoothedTurfFeatures.push(feature);
+            }
+        }
+        
+        return formatForMap.readFeatures({
+            type: 'FeatureCollection',
+            features: smoothedTurfFeatures,
+        });
+
+    } catch (error: any) {
+        console.error("Error during Bezier smoothing analysis:", error);
+        throw new Error(`Turf.js bezierSpline failed: ${error.message}`);
+    }
+}
     
