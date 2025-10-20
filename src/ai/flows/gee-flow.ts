@@ -250,7 +250,7 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
         finalImage = ee.Image("OpenLandMap/SOL/SOL_ORGANIC-CARBON_USDA-6A1C_M/v02").select('b0');
         visParams = { min: 0, max: 100, palette: ['#FFFFE5', '#FFF7BC', '#FEE391', '#FEC44F', '#FE9929', '#EC7014', '#CC4C02', '#8C2D04'] };
     } else if (bandCombination === 'INTA_UPA') {
-        finalImage = ee.Image('INTA/UPA/UA/v1').select('b1');
+        finalImage = ee.Image('users/geointa/upa/upa_v1_1').select('b1');
         visParams = { min: 1, max: 7, palette: INTA_UPA_PALETTE };
     } else { // JRC_WATER_OCCURRENCE
         finalImage = ee.Image('JRC/GSW1_4/GlobalSurfaceWater').select('occurrence');
@@ -631,5 +631,3 @@ function initializeEe(): Promise<void> {
   }
   return eeInitialized;
 }
-
-    
