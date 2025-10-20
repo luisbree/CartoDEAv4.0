@@ -20,9 +20,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import type { GraduatedSymbology, VectorMapLayer, ColorRampId, ClassificationMethod } from '@/lib/types';
+import type { GraduatedSymbology, VectorMapLayer, ColorRampId, ClassificationMethod, MapLayer } from '@/lib/types';
 import { ColorPicker } from './StyleEditorDialog';
 import { ScrollArea } from '../ui/scroll-area';
+import WebGLTileLayer from 'ol/layer/WebGLTile';
+import GeoTIFF from 'ol/source/GeoTIFF';
 
 // --- Color Interpolation Helpers ---
 function hexToRgb(hex: string): [number, number, number] {
@@ -146,7 +148,7 @@ interface GraduatedSymbologyDialogProps {
   isOpen: boolean;
   onClose: () => void;
   onApply: (symbology: GraduatedSymbology) => void;
-  layer: VectorMapLayer;
+  layer: MapLayer;
 }
 
 const GraduatedSymbologyDialog: React.FC<GraduatedSymbologyDialogProps> = ({
@@ -155,6 +157,7 @@ const GraduatedSymbologyDialog: React.FC<GraduatedSymbologyDialogProps> = ({
   onApply,
   layer,
 }) => {
+  const isRaster = layer?.type === 'geotiff';
   const [field, setField] = useState<string>('');
   const [method, setMethod] = useState<ClassificationMethod>('quantiles');
   const [classes, setClasses] = useState<number>(5);
@@ -165,7 +168,10 @@ const GraduatedSymbologyDialog: React.FC<GraduatedSymbologyDialogProps> = ({
   const [strokeWidth, setStrokeWidth] = useState(1);
 
   const numericFields = useMemo(() => {
-    const source = layer?.olLayer.getSource();
+    if (isRaster) {
+      return ["Pixel Value"];
+    }
+    const source = (layer?.olLayer as VectorMapLayer['olLayer'])?.getSource();
     if (!source) return [];
     const features = source.getFeatures();
     if (features.length === 0) return [];
@@ -178,11 +184,10 @@ const GraduatedSymbologyDialog: React.FC<GraduatedSymbologyDialogProps> = ({
       }
     }
     return Array.from(keys).sort();
-  }, [layer]);
+  }, [layer, isRaster]);
 
   useEffect(() => {
     if (isOpen) {
-      // Reset state when dialog opens
       const existingSymbology = layer.graduatedSymbology;
       const initialField = existingSymbology?.field || numericFields[0] || '';
       setField(initialField);
@@ -196,16 +201,25 @@ const GraduatedSymbologyDialog: React.FC<GraduatedSymbologyDialogProps> = ({
     }
   }, [isOpen, numericFields, layer]);
 
-  const handleGenerateClassification = () => {
-    const source = layer?.olLayer.getSource();
-    if (!source || !field) {
-      setClassification(null);
-      return;
-    }
+  const handleGenerateClassification = async () => {
+    let values: number[] = [];
 
-    const values = source.getFeatures()
-      .map(f => f.get(field))
-      .filter(v => typeof v === 'number' && isFinite(v)) as number[];
+    if (isRaster) {
+        const source = layer.olLayer.getSource() as GeoTIFF;
+        const view = await source.getView();
+        const image = await view.readRasters({ interleave: true });
+        const data = image.data as number[];
+        values = data.filter(v => v !== view.nodata);
+    } else {
+        const source = (layer?.olLayer as VectorMapLayer['olLayer'])?.getSource();
+        if (!source || !field) {
+            setClassification(null);
+            return;
+        }
+        values = source.getFeatures()
+            .map(f => f.get(field))
+            .filter(v => typeof v === 'number' && isFinite(v)) as number[];
+    }
     
     if (values.length === 0) {
       setClassification(null);
@@ -230,11 +244,9 @@ const GraduatedSymbologyDialog: React.FC<GraduatedSymbologyDialogProps> = ({
     
     if (method === 'natural-breaks') {
       breaks = jenks(values, numClasses);
-      // Ensure the last break is the max value of the dataset
       if (breaks.length > 0 && breaks[breaks.length - 1] < values[values.length - 1]) {
         breaks.push(values[values.length - 1]);
       } else if (breaks.length === 0) {
-        // Handle case where jenks fails or returns no breaks
         breaks.push(values[values.length - 1]);
       }
     } else { // quantiles
@@ -246,7 +258,6 @@ const GraduatedSymbologyDialog: React.FC<GraduatedSymbologyDialogProps> = ({
       breaks.push(values[values.length - 1]);
     }
     
-    // Ensure breaks are unique and handle cases with few unique values
     breaks = [...new Set(breaks)].sort((a, b) => a - b);
     const finalNumClasses = breaks.length;
     const finalColors = generateColorRamp(startColor, endColor, finalNumClasses);
@@ -297,7 +308,7 @@ const GraduatedSymbologyDialog: React.FC<GraduatedSymbologyDialogProps> = ({
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label htmlFor="field-select" className="text-xs">Campo</Label>
-                <Select value={field} onValueChange={setField}>
+                <Select value={field} onValueChange={setField} disabled={isRaster}>
                   <SelectTrigger id="field-select" className="h-8 text-xs bg-black/20">
                     <SelectValue placeholder="Seleccionar..." />
                   </SelectTrigger>

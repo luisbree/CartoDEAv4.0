@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -27,7 +28,6 @@ import StyleEditorDialog, { type StyleOptions } from './StyleEditorDialog';
 import LabelEditorDialog from './LabelEditorDialog';
 import GraduatedSymbologyDialog from './GraduatedSymbologyDialog';
 import CategorizedSymbologyDialog from './CategorizedSymbologyDialog';
-import GeoTiffStyleEditorDialog from './GeoTiffStyleEditorDialog';
 
 
 interface LayerItemProps {
@@ -50,7 +50,7 @@ interface LayerItemProps {
   onChangeLayerLabels: (layerId: string, labelOptions: LabelOptions) => void;
   onApplyGraduatedSymbology: (layerId: string, symbology: GraduatedSymbology) => void;
   onApplyCategorizedSymbology: (layerId: string, symbology: CategorizedSymbology) => void;
-  onApplyGeoTiffStyle: (layerId: string, style: GeoTiffStyle) => void;
+  onApplyGeoTiffStyle: (layerId: string, symbology: GraduatedSymbology) => void;
   onToggleWmsStyle: (layerId: string) => void;
   
   // Drag and Drop props
@@ -123,7 +123,6 @@ const LayerItem: React.FC<LayerItemProps> = ({
   const [isLabelEditorOpen, setIsLabelEditorOpen] = useState(false);
   const [isGraduatedEditorOpen, setIsGraduatedEditorOpen] = useState(false);
   const [isCategorizedEditorOpen, setIsCategorizedEditorOpen] = useState(false);
-  const [isGeoTiffStyleEditorOpen, setIsGeoTiffStyleEditorOpen] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   
@@ -191,7 +190,11 @@ const LayerItem: React.FC<LayerItemProps> = ({
   };
 
   const handleGraduatedSymbologyApply = (symbology: GraduatedSymbology) => {
-    onApplyGraduatedSymbology(layer.id, symbology);
+    if (isGeoTiffLayer) {
+        onApplyGeoTiffStyle(layer.id, symbology);
+    } else {
+        onApplyGraduatedSymbology(layer.id, symbology);
+    }
     setIsGraduatedEditorOpen(false);
     setIsDropdownOpen(false);
   };
@@ -199,12 +202,6 @@ const LayerItem: React.FC<LayerItemProps> = ({
   const handleCategorizedSymbologyApply = (symbology: CategorizedSymbology) => {
     onApplyCategorizedSymbology(layer.id, symbology);
     setIsCategorizedEditorOpen(false);
-    setIsDropdownOpen(false);
-  };
-
-  const handleGeoTiffStyleApply = (style: GeoTiffStyle) => {
-    onApplyGeoTiffStyle(layer.id, style);
-    setIsGeoTiffStyleEditorOpen(false);
     setIsDropdownOpen(false);
   };
 
@@ -311,17 +308,7 @@ const LayerItem: React.FC<LayerItemProps> = ({
                       </DropdownMenuItem>
                   )}
 
-                  {isGeoTiffLayer && (
-                     <DropdownMenuItem
-                        className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer"
-                        onSelect={(e) => { e.preventDefault(); setIsGeoTiffStyleEditorOpen(true); }}
-                      >
-                        <ImageIcon className="mr-2 h-3.5 w-3.5" />
-                        Estilo Ráster
-                      </DropdownMenuItem>
-                  )}
-
-                  {isVectorLayer && (
+                  {(isVectorLayer || isGeoTiffLayer) && (
                     <DropdownMenuSub>
                       <DropdownMenuSubTrigger className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer data-[state=open]:bg-gray-600">
                         <Palette className="mr-2 h-3.5 w-3.5" />
@@ -329,27 +316,35 @@ const LayerItem: React.FC<LayerItemProps> = ({
                       </DropdownMenuSubTrigger>
                       <DropdownMenuPortal>
                         <DropdownMenuSubContent className="bg-gray-700 text-white border-gray-600">
-                          <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setIsStyleEditorOpen(true); }} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">
-                            <Palette className="mr-2 h-3.5 w-3.5" /> Simple
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setIsCategorizedEditorOpen(true); }} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">
-                            <AppWindow className="mr-2 h-3.5 w-3.5" /> Por Categorías
-                          </DropdownMenuItem>
+                           {isVectorLayer && (
+                             <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setIsStyleEditorOpen(true); }} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">
+                                <Palette className="mr-2 h-3.5 w-3.5" /> Simple
+                             </DropdownMenuItem>
+                           )}
+                           {isVectorLayer && (
+                              <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setIsCategorizedEditorOpen(true); }} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">
+                                <AppWindow className="mr-2 h-3.5 w-3.5" /> Por Categorías
+                              </DropdownMenuItem>
+                           )}
                           <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setIsGraduatedEditorOpen(true); }} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">
                             <Waypoints className="mr-2 h-3.5 w-3.5" /> Graduada
                           </DropdownMenuItem>
-                          <DropdownMenuSeparator className="bg-gray-500/50 my-1" />
-                          <DropdownMenuCheckboxItem
-                            checked={layer.wmsStyleEnabled}
-                            onSelect={(e) => {
-                                e.preventDefault();
-                                onToggleWmsStyle(layer.id);
-                            }}
-                            disabled={!isWfsLayer}
-                            className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            Usar Estilo del Servidor (WMS)
-                          </DropdownMenuCheckboxItem>
+                          {isVectorLayer && (
+                            <>
+                              <DropdownMenuSeparator className="bg-gray-500/50 my-1" />
+                              <DropdownMenuCheckboxItem
+                                checked={layer.wmsStyleEnabled}
+                                onSelect={(e) => {
+                                    e.preventDefault();
+                                    onToggleWmsStyle(layer.id);
+                                }}
+                                disabled={!isWfsLayer}
+                                className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                Usar Estilo del Servidor (WMS)
+                              </DropdownMenuCheckboxItem>
+                            </>
+                          )}
                         </DropdownMenuSubContent>
                       </DropdownMenuPortal>
                     </DropdownMenuSub>
@@ -480,41 +475,41 @@ const LayerItem: React.FC<LayerItemProps> = ({
           </DropdownMenu>
         </div>
       </li>
-      {!isSharedView && isVectorLayer && (
+      {!isSharedView && (
         <>
-          <StyleEditorDialog
-            isOpen={isStyleEditorOpen}
-            onClose={() => setIsStyleEditorOpen(false)}
-            onApply={handleStyleChange}
-            layerType={(layer.olLayer as VectorLayer<any>).getSource()?.getFeatures()[0]?.getGeometry()?.getType() || 'Point'}
-          />
-          <LabelEditorDialog
-              isOpen={isLabelEditorOpen}
-              onClose={() => setIsLabelEditorOpen(false)}
-              onApply={handleLabelChange}
-              layer={layer as any}
-          />
-          <GraduatedSymbologyDialog
-              isOpen={isGraduatedEditorOpen}
-              onClose={() => setIsGraduatedEditorOpen(false)}
-              onApply={handleGraduatedSymbologyApply}
-              layer={layer as any}
-          />
-          <CategorizedSymbologyDialog
-              isOpen={isCategorizedEditorOpen}
-              onClose={() => setIsCategorizedEditorOpen(false)}
-              onApply={handleCategorizedSymbologyApply}
-              layer={layer as any}
-          />
+          {isVectorLayer && (
+            <StyleEditorDialog
+              isOpen={isStyleEditorOpen}
+              onClose={() => setIsStyleEditorOpen(false)}
+              onApply={handleStyleChange}
+              layerType={(layer.olLayer as VectorLayer<any>).getSource()?.getFeatures()[0]?.getGeometry()?.getType() || 'Point'}
+            />
+          )}
+           {isVectorLayer && (
+            <LabelEditorDialog
+                isOpen={isLabelEditorOpen}
+                onClose={() => setIsLabelEditorOpen(false)}
+                onApply={handleLabelChange}
+                layer={layer as any}
+            />
+           )}
+           {(isVectorLayer || isGeoTiffLayer) && (
+            <GraduatedSymbologyDialog
+                isOpen={isGraduatedEditorOpen}
+                onClose={() => setIsGraduatedEditorOpen(false)}
+                onApply={handleGraduatedSymbologyApply}
+                layer={layer}
+            />
+           )}
+           {isVectorLayer && (
+            <CategorizedSymbologyDialog
+                isOpen={isCategorizedEditorOpen}
+                onClose={() => setIsCategorizedEditorOpen(false)}
+                onApply={handleCategorizedSymbologyApply}
+                layer={layer as any}
+            />
+           )}
         </>
-      )}
-      {!isSharedView && isGeoTiffLayer && (
-         <GeoTiffStyleEditorDialog
-            isOpen={isGeoTiffStyleEditorOpen}
-            onClose={() => setIsGeoTiffStyleEditorOpen(false)}
-            onApply={handleGeoTiffStyleApply}
-            layer={layer}
-          />
       )}
     </>
   );
