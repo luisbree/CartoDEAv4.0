@@ -152,9 +152,19 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
     ];
     
     const ELEVATION_PALETTE = ['006633', 'E5FFCC', '662A00', 'D8D8D8', 'FFFFFF'];
+    
+    const INTA_UPA_PALETTE = [
+        '#f4f4f4', // 1: Cuerpos de Agua
+        '#005100', // 2: Forestal
+        '#33ff00', // 3: Agrícola
+        '#ffff00', // 4: Mixta
+        '#ffaa00', // 5: Ganadera
+        '#ff0000', // 6: Área no productiva
+        '#c8c8c8', // 7: Área urbana
+    ];
 
 
-    if (bandCombination !== 'JRC_WATER_OCCURRENCE' && bandCombination !== 'OPENLANDMAP_SOC' && bandCombination !== 'DYNAMIC_WORLD' && bandCombination !== 'NASADEM_ELEVATION' && bandCombination !== 'ALOS_DSM') {
+    if (bandCombination !== 'JRC_WATER_OCCURRENCE' && bandCombination !== 'OPENLANDMAP_SOC' && bandCombination !== 'DYNAMIC_WORLD' && bandCombination !== 'NASADEM_ELEVATION' && bandCombination !== 'ALOS_DSM' && bandCombination !== 'INTA_UPA') {
         let s2ImageCollection = ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
           .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 20));
         
@@ -239,6 +249,9 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
     } else if (bandCombination === 'OPENLANDMAP_SOC') {
         finalImage = ee.Image("OpenLandMap/SOL/SOL_ORGANIC-CARBON_USDA-6A1C_M/v02").select('b0');
         visParams = { min: 0, max: 100, palette: ['#FFFFE5', '#FFF7BC', '#FEE391', '#FEC44F', '#FE9929', '#EC7014', '#CC4C02', '#8C2D04'] };
+    } else if (bandCombination === 'INTA_UPA') {
+        finalImage = ee.Image('INTA/UPA/UA/v1').select('b1');
+        visParams = { min: 1, max: 7, palette: INTA_UPA_PALETTE };
     } else { // JRC_WATER_OCCURRENCE
         finalImage = ee.Image('JRC/GSW1_4/GlobalSurfaceWater').select('occurrence');
         visParams = { min: 0, max: 100, palette: ['#FFFFFF', 'lightblue', 'blue'] };
@@ -618,3 +631,5 @@ function initializeEe(): Promise<void> {
   }
   return eeInitialized;
 }
+
+    
