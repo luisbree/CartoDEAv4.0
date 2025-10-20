@@ -1,4 +1,5 @@
 
+
 import VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
 import GeoJSON from 'ol/format/GeoJSON';
@@ -34,16 +35,16 @@ const getBaseName = (filename: string): string => {
 // --- Style rotation for new layers ---
 let styleCounter = 0;
 const RANDOM_STYLES = [
-    { stroke: '#0077b6', fill: 'rgba(0, 119, 182, 1)' },   // Blue
-    { stroke: '#e63946', fill: 'rgba(230, 57, 70, 1)' },    // Red
-    { stroke: '#2a9d8f', fill: 'rgba(42, 157, 143, 1)' },   // Green
-    { stroke: '#f4a261', fill: 'rgba(244, 162, 97, 1)' },   // Orange
-    { stroke: '#8338ec', fill: 'rgba(131, 56, 236, 1)' },   // Violet
-    { stroke: '#ffbe0b', fill: 'rgba(255, 190, 11, 1)' },   // Yellow
-    { stroke: '#fb5607', fill: 'rgba(251, 86, 7, 1)' },     // Dark Orange
-    { stroke: '#00ffff', fill: 'rgba(0, 255, 255, 1)' },     // Cyan
-    { stroke: '#ff00ff', fill: 'rgba(255, 0, 255, 1)' },     // Magenta
-    { stroke: '#3a86ff', fill: 'rgba(58, 134, 255, 1)' },   // Light Blue
+    { stroke: '#0077b6', fill: 'rgba(0, 119, 182, 0.7)' },   // Blue
+    { stroke: '#e63946', fill: 'rgba(230, 57, 70, 0.7)' },    // Red
+    { stroke: '#2a9d8f', fill: 'rgba(42, 157, 143, 0.7)' },   // Green
+    { stroke: '#f4a261', fill: 'rgba(244, 162, 97, 0.7)' },   // Orange
+    { stroke: '#8338ec', fill: 'rgba(131, 56, 236, 0.7)' },   // Violet
+    { stroke: '#ffbe0b', fill: 'rgba(255, 190, 11, 0.7)' },   // Yellow
+    { stroke: '#fb5607', fill: 'rgba(251, 86, 7, 0.7)' },     // Dark Orange
+    { stroke: '#00ffff', fill: 'rgba(0, 255, 255, 0.7)' },     // Cyan
+    { stroke: '#ff00ff', fill: 'rgba(255, 0, 255, 0.7)' },     // Magenta
+    { stroke: '#3a86ff', fill: 'rgba(58, 134, 255, 0.7)' },   // Light Blue
 ];
 
 const createVectorLayer = (features: Feature[], layerName: string): MapLayer => {
