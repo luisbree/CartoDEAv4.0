@@ -29,6 +29,10 @@ export interface GraduatedSymbology {
   strokeColor: string;
   strokeWidth: number;
   customColors?: { start: string; end: string };
+  // Extra properties for GeoTIFF
+  min?: number;
+  max?: number;
+  band?: number;
 }
 
 export interface CategorizedSymbology {

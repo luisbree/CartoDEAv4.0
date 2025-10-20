@@ -166,6 +166,7 @@ const GraduatedSymbologyDialog: React.FC<GraduatedSymbologyDialogProps> = ({
   const [classification, setClassification] = useState<{ breaks: number[]; colors: string[] } | null>(null);
   const [strokeColor, setStrokeColor] = useState('negro');
   const [strokeWidth, setStrokeWidth] = useState(1);
+  const [range, setRange] = useState<{min: number, max: number}>({min: 0, max: 255});
 
   const numericFields = useMemo(() => {
     if (isRaster) {
@@ -198,28 +199,50 @@ const GraduatedSymbologyDialog: React.FC<GraduatedSymbologyDialogProps> = ({
       setStrokeColor(existingSymbology?.strokeColor || 'negro');
       setStrokeWidth(existingSymbology?.strokeWidth === undefined ? 1 : existingSymbology.strokeWidth);
       setClassification(null);
+      
+      // For rasters, set initial min/max if not already set
+      if (isRaster && layer.geoTiffStyle) {
+          setRange({ min: layer.geoTiffStyle.min, max: layer.geoTiffStyle.max });
+      } else if (isRaster) {
+          setRange({ min: 0, max: 255 }); // Default for 8-bit
+      }
+
     }
-  }, [isOpen, numericFields, layer]);
+  }, [isOpen, numericFields, layer, isRaster]);
 
   const handleGenerateClassification = async () => {
     let values: number[] = [];
 
     if (isRaster) {
-        const source = layer.olLayer.getSource() as GeoTIFF;
-        const view = await source.getView();
-        const image = await view.readRasters({ interleave: true });
-        const data = image.data as number[];
-        values = data.filter(v => v !== view.nodata);
-    } else {
-        const source = (layer?.olLayer as VectorMapLayer['olLayer'])?.getSource();
-        if (!source || !field) {
-            setClassification(null);
-            return;
+        // For rasters, we don't calculate breaks from data, we just use min/max
+        // The breaks will be evenly spaced within the min/max range.
+        const numClasses = Math.max(2, classes);
+        const step = (range.max - range.min) / numClasses;
+        const breaks = Array.from({ length: numClasses }, (_, i) => range.min + (i + 1) * step);
+        
+        let startColor: string, endColor: string;
+        if (colorRamp === 'custom') {
+            startColor = customColors.start;
+            endColor = customColors.end;
+        } else {
+            startColor = COLOR_RAMP_DEFINITIONS[colorRamp].start;
+            endColor = COLOR_RAMP_DEFINITIONS[colorRamp].end;
         }
-        values = source.getFeatures()
-            .map(f => f.get(field))
-            .filter(v => typeof v === 'number' && isFinite(v)) as number[];
+        
+        const finalColors = generateColorRamp(startColor, endColor, numClasses);
+        setClassification({ breaks, colors: finalColors });
+        return;
     }
+
+    // --- Vector Logic ---
+    const source = (layer?.olLayer as VectorMapLayer['olLayer'])?.getSource();
+    if (!source || !field) {
+        setClassification(null);
+        return;
+    }
+    values = source.getFeatures()
+        .map(f => f.get(field))
+        .filter(v => typeof v === 'number' && isFinite(v)) as number[];
     
     if (values.length === 0) {
       setClassification(null);
@@ -269,6 +292,27 @@ const GraduatedSymbologyDialog: React.FC<GraduatedSymbologyDialogProps> = ({
   };
 
   const handleApply = () => {
+    if (isRaster) {
+        // For rasters, we apply a different kind of symbology
+        onApply({
+            field: 'Pixel Value', // Placeholder
+            method: 'quantiles', // Method is not strictly used but needed for type
+            classes: classes,
+            colorRamp: colorRamp,
+            breaks: classification?.breaks || [], // Pass generated breaks
+            colors: classification?.colors || [], // Pass generated colors
+            strokeColor: '', // Not used for rasters
+            strokeWidth: 0, // Not used
+            customColors: colorRamp === 'custom' ? customColors : undefined,
+            // Raster-specific properties
+            min: range.min,
+            max: range.max,
+            band: 1, // Assume band 1 for now
+        });
+        return;
+    }
+
+    // Vector logic
     if (classification && field && classification.breaks.length > 0) {
         const symbology: GraduatedSymbology = {
             field,
@@ -319,7 +363,7 @@ const GraduatedSymbologyDialog: React.FC<GraduatedSymbologyDialogProps> = ({
               </div>
               <div className="space-y-1">
                 <Label htmlFor="method-select" className="text-xs">Método</Label>
-                <Select value={method} onValueChange={(v) => setMethod(v as ClassificationMethod)}>
+                <Select value={method} onValueChange={(v) => setMethod(v as ClassificationMethod)} disabled={isRaster}>
                   <SelectTrigger id="method-select" className="h-8 text-xs bg-black/20">
                     <SelectValue />
                   </SelectTrigger>
@@ -364,6 +408,18 @@ const GraduatedSymbologyDialog: React.FC<GraduatedSymbologyDialogProps> = ({
                 </Select>
               </div>
             </div>
+             {isRaster && (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                    <Label htmlFor="min-range" className="text-xs">Valor Mínimo</Label>
+                    <Input id="min-range" type="number" value={range.min} onChange={(e) => setRange(prev => ({...prev, min: Number(e.target.value)}))} className="h-8 text-xs bg-black/20"/>
+                </div>
+                 <div className="space-y-1">
+                    <Label htmlFor="max-range" className="text-xs">Valor Máximo</Label>
+                    <Input id="max-range" type="number" value={range.max} onChange={(e) => setRange(prev => ({...prev, max: Number(e.target.value)}))} className="h-8 text-xs bg-black/20"/>
+                </div>
+              </div>
+            )}
 
             {colorRamp === 'custom' && (
               <div className="flex items-end gap-3 w-full justify-around pt-1.5 border-t border-white/10">
@@ -385,49 +441,55 @@ const GraduatedSymbologyDialog: React.FC<GraduatedSymbologyDialogProps> = ({
               </div>
             )}
             
-            <Button onClick={handleGenerateClassification} disabled={!field} className="h-8 text-xs w-full">
+            <Button onClick={handleGenerateClassification} disabled={!isRaster && !field} className="h-8 text-xs w-full">
               Clasificar
             </Button>
           </div>
 
-          <div className="p-2 border border-white/10 rounded-md">
-             <div className="flex items-center justify-between gap-3 w-full">
-                <h4 className="text-xs font-semibold">Contorno</h4>
-                <div className="flex items-center gap-2">
-                    <div className="flex flex-col items-center gap-1">
-                      <Label htmlFor="stroke-color" className="text-xs">Color</Label>
-                      <ColorPicker 
-                        value={strokeColor}
-                        onChange={setStrokeColor}
-                      />
-                    </div>
-                     <div className="flex flex-col items-center gap-1">
-                        <Label htmlFor="stroke-width" className="text-xs">Grosor</Label>
-                        <Input
-                          id="stroke-width"
-                          type="number"
-                          min="0"
-                          max="20"
-                          step="0.1"
-                          value={strokeWidth}
-                          onChange={(e) => setStrokeWidth(Number(e.target.value))}
-                          className="h-8 text-xs bg-black/20 w-16"
+          {!isRaster && (
+            <div className="p-2 border border-white/10 rounded-md">
+                <div className="flex items-center justify-between gap-3 w-full">
+                    <h4 className="text-xs font-semibold">Contorno</h4>
+                    <div className="flex items-center gap-2">
+                        <div className="flex flex-col items-center gap-1">
+                        <Label htmlFor="stroke-color" className="text-xs">Color</Label>
+                        <ColorPicker 
+                            value={strokeColor}
+                            onChange={setStrokeColor}
                         />
+                        </div>
+                        <div className="flex flex-col items-center gap-1">
+                            <Label htmlFor="stroke-width" className="text-xs">Grosor</Label>
+                            <Input
+                            id="stroke-width"
+                            type="number"
+                            min="0"
+                            max="20"
+                            step="0.1"
+                            value={strokeWidth}
+                            onChange={(e) => setStrokeWidth(Number(e.target.value))}
+                            className="h-8 text-xs bg-black/20 w-16"
+                            />
+                        </div>
                     </div>
                 </div>
-             </div>
-          </div>
+            </div>
+          )}
+
 
           {classification && (
             <div className="space-y-1">
               <ScrollArea className="h-32">
                 <div className="space-y-1 rounded-md bg-black/10 p-2">
                   {classification.colors.map((color, index) => {
-                    const lowerBound = index === 0 ? 'Mín' : formatNumber(classification.breaks[index - 1]);
+                    const lowerBoundRaw = index === 0 ? (isRaster ? range.min : 0) : classification.breaks[index - 1];
+                    const lowerBound = formatNumber(lowerBoundRaw);
                     const upperBound = formatNumber(classification.breaks[index]);
+                    const strokeStyle = isRaster ? {} : { borderColor: colorOptions.find(c => c.value === strokeColor)?.hex || strokeColor, borderWidth: `${strokeWidth}px` };
+
                     return (
                       <div key={index} className="flex items-center gap-2 text-xs">
-                        <div className="h-4 w-4 rounded-sm border" style={{ backgroundColor: color, borderColor: colorOptions.find(c => c.value === strokeColor)?.hex || strokeColor, borderWidth: `${strokeWidth}px` }} />
+                        <div className="h-4 w-4 rounded-sm border" style={{ backgroundColor: color, ...strokeStyle }} />
                         <span>{lowerBound} - {upperBound}</span>
                       </div>
                     );
