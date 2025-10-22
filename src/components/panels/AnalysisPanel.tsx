@@ -1418,6 +1418,28 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                     </ResponsiveContainer>
                                 </div>
                             </div>
+                            <div className="grid grid-cols-2 gap-2">
+                                <div className="space-y-1">
+                                    <Label htmlFor="y-min-left" className="text-xs">Y Mín ({profileData[0].unit})</Label>
+                                    <Input id="y-min-left" type="number" placeholder="auto" value={yAxisDomainLeft.min} onChange={(e) => handleYAxisDomainChange('left', 'min', e.target.value)} className="h-7 text-xs bg-black/20" />
+                                </div>
+                                <div className="space-y-1">
+                                    <Label htmlFor="y-max-left" className="text-xs">Y Máx ({profileData[0].unit})</Label>
+                                    <Input id="y-max-left" type="number" placeholder="auto" value={yAxisDomainLeft.max} onChange={(e) => handleYAxisDomainChange('left', 'max', e.target.value)} className="h-7 text-xs bg-black/20" />
+                                </div>
+                                {profileData.length > 1 && (
+                                    <>
+                                        <div className="space-y-1">
+                                            <Label htmlFor="y-min-right" className="text-xs">Y Mín ({profileData[1].unit})</Label>
+                                            <Input id="y-min-right" type="number" placeholder="auto" value={yAxisDomainRight.min} onChange={(e) => handleYAxisDomainChange('right', 'min', e.target.value)} className="h-7 text-xs bg-black/20" />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <Label htmlFor="y-max-right" className="text-xs">Y Máx ({profileData[1].unit})</Label>
+                                            <Input id="y-max-right" type="number" placeholder="auto" value={yAxisDomainRight.max} onChange={(e) => handleYAxisDomainChange('right', 'max', e.target.value)} className="h-7 text-xs bg-black/20" />
+                                        </div>
+                                    </>
+                                )}
+                            </div>
                             <div className="flex items-center gap-2">
                                 <Button onClick={() => handleDownloadProfile('csv')} size="sm" className="w-full h-8 text-xs" variant="secondary" disabled={!profileData}>
                                     <Download className="mr-2 h-3.5 w-3.5" /> CSV
@@ -1875,6 +1897,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
 
 
 
