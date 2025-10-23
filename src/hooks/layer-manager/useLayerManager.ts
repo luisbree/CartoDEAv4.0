@@ -24,7 +24,7 @@ import GeoJSON from 'ol/format/GeoJSON';
 import KML from 'ol/format/KML';
 import { download as downloadShp } from 'shpjs';
 import { bbox as bboxStrategy } from 'ol/loadingstrategy';
-import type { GeeValueQueryInput } from '@/ai/flows/gee-types';
+import { getGeeTileLayer, type GeeValueQueryInput } from '@/ai/flows/gee-flow';
 import { ToastAction } from '@/components/ui/toast';
 import { saveFileWithPicker } from '@/services/download-service';
 import { writeArrayBuffer } from 'geotiff';
@@ -291,63 +291,74 @@ export const useLayerManager = ({
     });
 
   }, [mapRef, setLayers]);
-
-  const addSmnRadarLayer = useCallback(() => {
-    if (!mapRef.current) return;
-    const map = mapRef.current;
-    const radarLayerId = 'smn-radar-layer';
-    const existingLayer = layers.find(l => l.id === radarLayerId) as MapLayer | undefined;
-
-    const createOrUpdateSource = () => {
-        const radarSource = new TileWMS({
-            url: 'https://geoservicios.smn.gob.ar/geoserver/wms',
-            params: {
-                'LAYERS': 'capa:mosaicovisor',
-                'TILED': true,
-                'VERSION': '1.1.1',
-                'TRANSPARENT': true,
-            },
-            serverType: 'geoserver',
-            crossOrigin: 'anonymous',
-        });
-
-        // Use a custom tileLoadFunction to route requests through the proxy
-        radarSource.setTileLoadFunction((tile: any, src: string) => {
-            // Add a cache-busting parameter to the original source URL
-            const cacheBustSrc = src + '&cacheBust=' + Date.now();
-            const proxyUrl = `/api/geoserver-proxy?url=${encodeURIComponent(cacheBustSrc)}`;
-            tile.getImage().src = proxyUrl;
-        });
-
-        return radarSource;
-    };
-
-    if (existingLayer) {
-        const newSource = createOrUpdateSource();
-        existingLayer.olLayer.setSource(newSource);
-        toast({ description: 'Capa de radar del SMN actualizada.' });
-    } else {
-        const radarLayer = new TileLayer({
-            source: createOrUpdateSource(),
-            properties: { id: radarLayerId, name: 'Radar SMN (Mosaico)', type: 'wms' },
-            zIndex: WMS_LAYER_Z_INDEX + 1,
-            opacity: 0.7,
-        });
-
-        const newMapLayer: MapLayer = {
-            id: radarLayerId,
-            name: 'Radar SMN (Mosaico)',
-            olLayer: radarLayer,
-            visible: true,
-            opacity: 0.7,
-            type: 'wms',
-        };
-
-        addLayer(newMapLayer, true);
-        toast({ description: 'Capa de radar del SMN añadida.' });
-    }
-}, [mapRef, layers, addLayer, toast]);
   
+  const addGeeLayerToMap = useCallback((tileUrl: string, layerName: string, geeParams: Omit<GeeValueQueryInput, 'aoi' | 'zoom' | 'lon' | 'lat'>) => {
+    if (!mapRef.current) return;
+
+    const layerId = `gee-${nanoid()}`;
+    
+    const geeSource = new XYZ({
+      url: tileUrl,
+      crossOrigin: 'anonymous',
+    });
+
+    const geeLayer = new TileLayer({
+      source: geeSource,
+      properties: {
+        id: layerId,
+        name: layerName,
+        type: 'gee',
+        geeParams: { ...geeParams, tileUrl }, // Store the tileUrl for sharing
+      },
+    });
+
+    addLayer({
+      id: layerId,
+      name: layerName,
+      olLayer: geeLayer,
+      visible: true,
+      opacity: 1,
+      type: 'gee'
+    });
+    
+    setTimeout(() => toast({ description: `Capa de Google Earth Engine "${layerName}" añadida.` }), 0);
+
+  }, [mapRef, addLayer, toast]);
+  
+  const addGoesLayer = useCallback(async () => {
+    if (!mapRef.current) {
+        throw new Error("El mapa no está listo.");
+    }
+    const map = mapRef.current;
+    const view = map.getView();
+    const extent = view.calculateExtent(map.getSize()!);
+    const zoom = view.getZoom() || 2;
+    const extent4326 = transformExtent(extent, view.getProjection(), 'EPSG:4326');
+    const aoi = { minLon: extent4326[0], minLat: extent4326[1], maxLon: extent4326[2], maxLat: extent4326[3] };
+    const geeParams = { bandCombination: 'GOES_CLOUDTOP' as const };
+    
+    const result = await getGeeTileLayer({ aoi, zoom, ...geeParams });
+    if (!result || !result.tileUrl) {
+        throw new Error("No se pudo obtener la URL de la capa GOES desde el servidor.");
+    }
+
+    const layerId = 'goes-cmi-layer';
+    const layerName = 'GOES CMI Topes Nubosos';
+    
+    // Check if layer already exists
+    const existingLayer = layers.find(l => l.id === layerId);
+    
+    if (existingLayer) {
+        // Update source of existing layer
+        const newSource = new XYZ({ url: result.tileUrl, crossOrigin: 'anonymous' });
+        existingLayer.olLayer.setSource(newSource);
+        toast({ description: `Capa GOES actualizada.` });
+    } else {
+        // Create new layer
+        addGeeLayerToMap(result.tileUrl, layerName, geeParams);
+    }
+  }, [mapRef, layers, addGeeLayerToMap, toast]);
+
   const handleAddHybridLayer = useCallback(async (layerName: string, layerTitle: string, serverUrl: string, bbox?: [number, number, number, number], styleName?: string, isInitiallyVisible: boolean = true, initialOpacity: number = 0.7, useWmsStyle: boolean = true): Promise<MapLayer | null> => {
     if (!isMapReady || !mapRef.current) return null;
     const map = mapRef.current;
@@ -442,40 +453,6 @@ export const useLayerManager = ({
         return null;
     }
 }, [isMapReady, mapRef, addLayer, updateGeoServerDiscoveredLayerState, toast]);
-
-  const addGeeLayerToMap = useCallback((tileUrl: string, layerName: string, geeParams: Omit<GeeValueQueryInput, 'aoi' | 'zoom'>) => {
-    if (!mapRef.current) return;
-
-    const layerId = `gee-${nanoid()}`;
-    
-    const geeSource = new XYZ({
-      url: tileUrl,
-      crossOrigin: 'anonymous',
-    });
-
-    const geeLayer = new TileLayer({
-      source: geeSource,
-      properties: {
-        id: layerId,
-        name: layerName,
-        type: 'gee',
-        geeParams: { ...geeParams, tileUrl }, // Store the tileUrl for sharing
-      },
-    });
-
-    addLayer({
-      id: layerId,
-      name: layerName,
-      olLayer: geeLayer,
-      visible: true,
-      opacity: 1,
-      type: 'gee'
-    });
-    
-    setTimeout(() => toast({ description: `Capa de Google Earth Engine "${layerName}" añadida.` }), 0);
-
-  }, [mapRef, addLayer, toast]);
-  
 
   const undoRemove = useCallback(() => {
       if (!mapRef.current || lastRemovedLayers.length === 0) return;
@@ -1278,7 +1255,7 @@ export const useLayerManager = ({
     layers,
     addLayer,
     addGeeLayerToMap,
-    addSmnRadarLayer,
+    addGoesLayer,
     handleAddHybridLayer,
     removeLayer,
     removeLayers,
@@ -1317,6 +1294,8 @@ export const useLayerManager = ({
     
 
     
+
+
 
 
 
