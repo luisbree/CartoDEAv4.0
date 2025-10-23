@@ -420,6 +420,53 @@ export const useLayerManager = ({
 
   }, [mapRef, addLayer, toast]);
   
+  const addSmnRadarLayer = useCallback(() => {
+    if (!mapRef.current) return;
+    const map = mapRef.current;
+    const radarLayerId = 'smn-radar-layer';
+    const existingLayer = layers.find(l => l.id === radarLayerId) as MapLayer | undefined;
+
+    if (existingLayer) {
+        const source = existingLayer.olLayer.getSource() as TileWMS;
+        const params = source.getParams();
+        params['TIME'] = Date.now(); // Cache-busting parameter
+        source.updateParams(params);
+        toast({ description: 'Capa de radar del SMN actualizada.' });
+    } else {
+        const radarSource = new TileWMS({
+            url: 'https://geoservicios.smn.gob.ar/geoserver/wms',
+            params: {
+                'LAYERS': 'capa:mosaicovisor',
+                'TILED': true,
+                'VERSION': '1.1.1',
+                'TRANSPARENT': true,
+            },
+            serverType: 'geoserver',
+            crossOrigin: 'anonymous',
+        });
+
+        const radarLayer = new TileLayer({
+            source: radarSource,
+            properties: { id: radarLayerId, name: 'Radar SMN (Mosaico)', type: 'wms' },
+            zIndex: WMS_LAYER_Z_INDEX + 1, // Ensure it's on top of other WMS
+            opacity: 0.7,
+        });
+
+        const newMapLayer: MapLayer = {
+            id: radarLayerId,
+            name: 'Radar SMN (Mosaico)',
+            olLayer: radarLayer,
+            visible: true,
+            opacity: 0.7,
+            type: 'wms',
+        };
+
+        addLayer(newMapLayer, true);
+        toast({ description: 'Capa de radar del SMN añadida.' });
+    }
+  }, [mapRef, layers, addLayer, toast]);
+
+
   const undoRemove = useCallback(() => {
       if (!mapRef.current || lastRemovedLayers.length === 0) return;
       const map = mapRef.current;
@@ -1221,6 +1268,7 @@ export const useLayerManager = ({
     layers,
     addLayer,
     addGeeLayerToMap,
+    addSmnRadarLayer,
     handleAddHybridLayer,
     removeLayer,
     removeLayers,
@@ -1259,6 +1307,7 @@ export const useLayerManager = ({
     
 
     
+
 
 
 

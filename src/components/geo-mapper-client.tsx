@@ -1236,6 +1236,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
             onToggleCollapse={() => togglePanelCollapse('clima')}
             onClosePanel={() => togglePanelMinimize('clima')}
             onMouseDownHeader={(e) => handlePanelMouseDown(e, 'clima')}
+            onAddSmnRadarLayer={layerManagerHook.addSmnRadarLayer}
             style={{ top: `${panels.clima.position.y}px`, left: `${panels.clima.position.x}px`, zIndex: panels.clima.zIndex }}
           />
         )}
