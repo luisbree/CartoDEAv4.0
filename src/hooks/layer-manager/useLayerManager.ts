@@ -292,6 +292,53 @@ export const useLayerManager = ({
 
   }, [mapRef, setLayers]);
 
+  const addSmnRadarLayer = useCallback(() => {
+    if (!mapRef.current) return;
+    const map = mapRef.current;
+    const radarLayerId = 'smn-radar-layer';
+    const existingLayer = layers.find(l => l.id === radarLayerId) as MapLayer | undefined;
+    const uniqueTimeParam = { 'TIME': Date.now() };
+
+    if (existingLayer) {
+        const source = existingLayer.olLayer.getSource() as TileWMS;
+        const params = { ...source.getParams(), ...uniqueTimeParam };
+        source.updateParams(params);
+        toast({ description: 'Capa de radar del SMN actualizada.' });
+    } else {
+        const radarSource = new TileWMS({
+            url: 'https://geoservicios.smn.gob.ar/geoserver/wms',
+            params: {
+                'LAYERS': 'capa:mosaicovisor',
+                'TILED': true,
+                'VERSION': '1.1.1',
+                'TRANSPARENT': true,
+                ...uniqueTimeParam,
+            },
+            serverType: 'geoserver',
+            crossOrigin: 'anonymous',
+        });
+
+        const radarLayer = new TileLayer({
+            source: radarSource,
+            properties: { id: radarLayerId, name: 'Radar SMN (Mosaico)', type: 'wms' },
+            zIndex: WMS_LAYER_Z_INDEX + 1,
+            opacity: 0.7,
+        });
+
+        const newMapLayer: MapLayer = {
+            id: radarLayerId,
+            name: 'Radar SMN (Mosaico)',
+            olLayer: radarLayer,
+            visible: true,
+            opacity: 0.7,
+            type: 'wms',
+        };
+
+        addLayer(newMapLayer, true);
+        toast({ description: 'Capa de radar del SMN añadida.' });
+    }
+  }, [mapRef, layers, addLayer, toast]);
+  
   const handleAddHybridLayer = useCallback(async (layerName: string, layerTitle: string, serverUrl: string, bbox?: [number, number, number, number], styleName?: string, isInitiallyVisible: boolean = true, initialOpacity: number = 0.7, useWmsStyle: boolean = true): Promise<MapLayer | null> => {
     if (!isMapReady || !mapRef.current) return null;
     const map = mapRef.current;
@@ -420,53 +467,6 @@ export const useLayerManager = ({
 
   }, [mapRef, addLayer, toast]);
   
-  const addSmnRadarLayer = useCallback(() => {
-    if (!mapRef.current) return;
-    const map = mapRef.current;
-    const radarLayerId = 'smn-radar-layer';
-    const existingLayer = layers.find(l => l.id === radarLayerId) as MapLayer | undefined;
-    const uniqueTimeParam = { 'TIME': Date.now() };
-
-    if (existingLayer) {
-        const source = existingLayer.olLayer.getSource() as TileWMS;
-        const params = { ...source.getParams(), ...uniqueTimeParam };
-        source.updateParams(params);
-        toast({ description: 'Capa de radar del SMN actualizada.' });
-    } else {
-        const radarSource = new TileWMS({
-            url: 'https://geoservicios.smn.gob.ar/geoserver/wms',
-            params: {
-                'LAYERS': 'capa:mosaicovisor',
-                'TILED': true,
-                'VERSION': '1.1.1',
-                'TRANSPARENT': true,
-                ...uniqueTimeParam,
-            },
-            serverType: 'geoserver',
-            crossOrigin: 'anonymous',
-        });
-
-        const radarLayer = new TileLayer({
-            source: radarSource,
-            properties: { id: radarLayerId, name: 'Radar SMN (Mosaico)', type: 'wms' },
-            zIndex: WMS_LAYER_Z_INDEX + 1,
-            opacity: 0.7,
-        });
-
-        const newMapLayer: MapLayer = {
-            id: radarLayerId,
-            name: 'Radar SMN (Mosaico)',
-            olLayer: radarLayer,
-            visible: true,
-            opacity: 0.7,
-            type: 'wms',
-        };
-
-        addLayer(newMapLayer, true);
-        toast({ description: 'Capa de radar del SMN añadida.' });
-    }
-  }, [mapRef, layers, addLayer, toast]);
-
 
   const undoRemove = useCallback(() => {
       if (!mapRef.current || lastRemovedLayers.length === 0) return;
@@ -1308,6 +1308,7 @@ export const useLayerManager = ({
     
 
     
+
 
 
 
