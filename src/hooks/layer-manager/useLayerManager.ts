@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
@@ -325,9 +324,9 @@ export const useLayerManager = ({
 
   }, [mapRef, addLayer, toast]);
   
-  const addGoesLayer = useCallback(async () => {
+    const addGoesLayer = useCallback(async () => {
     if (!mapRef.current) {
-        throw new Error("El mapa no está listo.");
+      throw new Error("El mapa no está listo.");
     }
     const map = mapRef.current;
     const view = map.getView();
@@ -336,26 +335,23 @@ export const useLayerManager = ({
     const extent4326 = transformExtent(extent, view.getProjection(), 'EPSG:4326');
     const aoi = { minLon: extent4326[0], minLat: extent4326[1], maxLon: extent4326[2], maxLat: extent4326[3] };
     const geeParams = { bandCombination: 'GOES_CLOUDTOP' as const };
-    
+  
     const result = await getGeeTileLayer({ aoi, zoom, ...geeParams });
+    
     if (!result || !result.tileUrl) {
-        throw new Error("No se pudo obtener la URL de la capa GOES desde el servidor.");
+      throw new Error("No se pudo obtener la URL de la capa GOES desde el servidor.");
     }
-
+  
     const layerId = 'goes-cmi-layer';
     const layerName = 'GOES CMI Topes Nubosos';
-    
-    // Check if layer already exists
     const existingLayer = layers.find(l => l.id === layerId);
-    
+  
     if (existingLayer) {
-        // Update source of existing layer
-        const newSource = new XYZ({ url: result.tileUrl, crossOrigin: 'anonymous' });
-        existingLayer.olLayer.setSource(newSource);
-        toast({ description: `Capa GOES actualizada.` });
+      const newSource = new XYZ({ url: result.tileUrl, crossOrigin: 'anonymous' });
+      existingLayer.olLayer.setSource(newSource);
+      toast({ description: `Capa GOES actualizada.` });
     } else {
-        // Create new layer
-        addGeeLayerToMap(result.tileUrl, layerName, geeParams);
+      addGeeLayerToMap(result.tileUrl, layerName, geeParams);
     }
   }, [mapRef, layers, addGeeLayerToMap, toast]);
 
@@ -1289,22 +1285,3 @@ export const useLayerManager = ({
     handleExportWmsAsGeotiff,
   };
 };
-
-
-    
-
-    
-
-
-
-
-
-
-
-
-
-
-
-
-
-
