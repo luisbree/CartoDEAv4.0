@@ -3,7 +3,7 @@
 
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 
-type PanelId = 'tools' | 'legend' | 'attributes' | 'ai' | 'trello' | 'wfsLibrary' | 'help' | 'printComposer' | 'gee' | 'statistics' | 'analysis';
+type PanelId = 'tools' | 'legend' | 'attributes' | 'ai' | 'trello' | 'wfsLibrary' | 'help' | 'printComposer' | 'gee' | 'statistics' | 'analysis' | 'clima';
 
 interface PanelState {
   isMinimized: boolean;
@@ -24,6 +24,7 @@ interface UseFloatingPanelsProps {
   geePanelRef: React.RefObject<HTMLDivElement>;
   statisticsPanelRef: React.RefObject<HTMLDivElement>;
   analysisPanelRef: React.RefObject<HTMLDivElement>;
+  climaPanelRef: React.RefObject<HTMLDivElement>;
   mapAreaRef: React.RefObject<HTMLDivElement>;
   panelWidth: number;
   panelPadding: number;
@@ -37,6 +38,7 @@ const panelCascadeOrder: PanelId[] = [
     'wfsLibrary', 
     'tools', 
     'analysis',
+    'clima',
     'trello', 
     'attributes', 
     'printComposer', 
@@ -58,6 +60,7 @@ export const useFloatingPanels = ({
   geePanelRef,
   statisticsPanelRef,
   analysisPanelRef,
+  climaPanelRef,
   mapAreaRef,
   panelWidth,
   panelPadding
@@ -75,7 +78,8 @@ export const useFloatingPanels = ({
     gee: geePanelRef,
     statistics: statisticsPanelRef,
     analysis: analysisPanelRef,
-  }), [attributesPanelRef, aiPanelRef, legendPanelRef, toolsPanelRef, trelloPanelRef, wfsLibraryPanelRef, helpPanelRef, printComposerPanelRef, geePanelRef, statisticsPanelRef, analysisPanelRef]);
+    clima: climaPanelRef,
+  }), [attributesPanelRef, aiPanelRef, legendPanelRef, toolsPanelRef, trelloPanelRef, wfsLibraryPanelRef, helpPanelRef, printComposerPanelRef, geePanelRef, statisticsPanelRef, analysisPanelRef, climaPanelRef]);
   
   const [panels, setPanels] = useState<Record<PanelId, PanelState>>({
       // Start with minimized panels off-screen or at a default position to avoid hydration errors.
@@ -89,6 +93,7 @@ export const useFloatingPanels = ({
       gee: { isMinimized: true, isCollapsed: false, position: { x: -9999, y: -9999 }, zIndex: initialZIndex },
       statistics: { isMinimized: true, isCollapsed: false, position: { x: -9999, y: -9999 }, zIndex: initialZIndex },
       analysis: { isMinimized: true, isCollapsed: false, position: { x: -9999, y: -9999 }, zIndex: initialZIndex },
+      clima: { isMinimized: true, isCollapsed: false, position: { x: -9999, y: -9999 }, zIndex: initialZIndex },
       ai: { isMinimized: false, isCollapsed: false, position: { x: -9999, y: -9999 }, zIndex: initialZIndex + 3 },
       help: { isMinimized: true, isCollapsed: false, position: { x: -9999, y: -9999 }, zIndex: initialZIndex },
   });
@@ -115,6 +120,7 @@ export const useFloatingPanels = ({
             gee: { ...prev.gee, position: { x: panelPadding, y: panelPadding } },
             statistics: { ...prev.statistics, position: { x: panelPadding, y: panelPadding } },
             analysis: { ...prev.analysis, position: { x: panelPadding, y: panelPadding } },
+            clima: { ...prev.clima, position: { x: panelPadding, y: panelPadding } },
             ai: { ...prev.ai, position: { x: aiPanelX, y: panelPadding } },
             help: { ...prev.help, position: { x: aiPanelX, y: panelPadding } },
         }));

@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
-import { MapPin, Database, Wrench, ListTree, ListChecks, Sparkles, ClipboardCheck, Library, LifeBuoy, Printer, Server, BrainCircuit, Camera, Loader2, SlidersHorizontal, ZoomIn, Undo2, BarChartHorizontal, DraftingCompass, Target, Share2 } from 'lucide-react';
+import { MapPin, Database, Wrench, ListTree, ListChecks, Sparkles, ClipboardCheck, Library, LifeBuoy, Printer, Server, BrainCircuit, Camera, Loader2, SlidersHorizontal, ZoomIn, Undo2, BarChartHorizontal, DraftingCompass, Target, Share2, CloudRain } from 'lucide-react';
 import { Style, Fill, Stroke, Circle as CircleStyle, Text as TextStyle } from 'ol/style';
 import { transform, transformExtent } from 'ol/proj';
 import type { Extent } from 'ol/extent';
@@ -42,6 +42,7 @@ import PrintComposerPanel from '@/components/panels/PrintComposerPanel';
 import GeeProcessingPanel from '@/components/panels/GeeProcessingPanel';
 import StatisticsPanel from '@/components/panels/StatisticsPanel';
 import AnalysisPanel from '@/components/panels/AnalysisPanel';
+import ClimaPanel from '@/components/panels/ClimaPanel';
 import WfsLoadingIndicator from '@/components/feedback/WfsLoadingIndicator';
 import LocationSearch from '@/components/location-search/LocationSearch';
 import BaseLayerSelector from '@/components/layer-manager/BaseLayerSelector';
@@ -140,6 +141,7 @@ const panelToggleConfigs = [
   { id: 'wfsLibrary', IconComponent: Library, name: "Biblioteca de Servidores" },
   { id: 'tools', IconComponent: Wrench, name: "Herramientas" },
   { id: 'analysis', IconComponent: DraftingCompass, name: "Análisis Espacial" },
+  { id: 'clima', IconComponent: CloudRain, name: "Clima" },
   { id: 'trello', IconComponent: ClipboardCheck, name: "Trello" },
   { id: 'attributes', IconComponent: ListChecks, name: "Atributos" },
   { id: 'printComposer', IconComponent: Printer, name: "Impresión" },
@@ -167,6 +169,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
   const geePanelRef = useRef<HTMLDivElement>(null);
   const statisticsPanelRef = useRef<HTMLDivElement>(null);
   const analysisPanelRef = useRef<HTMLDivElement>(null);
+  const climaPanelRef = useRef<HTMLDivElement>(null);
   const trelloPopupRef = useRef<Window | null>(null);
   const [isMounted, setIsMounted] = useState(false);
   const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
@@ -201,6 +204,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
     geePanelRef,
     statisticsPanelRef,
     analysisPanelRef,
+    climaPanelRef,
     mapAreaRef,
     panelWidth: PANEL_WIDTH,
     panelPadding: PANEL_PADDING,
@@ -1160,6 +1164,8 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
             onFeatureSelect={handleAttributeTableFeatureSelect}
             onAttributeChange={layerManagerHook.updateFeatureAttribute}
             onAddField={layerManagerHook.addFieldToLayer}
+            sortConfig={featureInspectionHook.sortConfig}
+            onSortChange={featureInspectionHook.setSortConfig}
           />
         )}
         
@@ -1220,6 +1226,17 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
             onAddLayer={(layer: MapLayer, bringToTop?: boolean) => layerManagerHook.addLayer(layer, bringToTop)}
             style={{ top: `${panels.analysis.position.y}px`, left: `${panels.analysis.position.x}px`, zIndex: panels.analysis.zIndex }}
             mapRef={mapRef}
+          />
+        )}
+
+        {isMounted && !initialMapState && panels.clima && !panels.clima.isMinimized && (
+          <ClimaPanel
+            panelRef={climaPanelRef}
+            isCollapsed={panels.clima.isCollapsed}
+            onToggleCollapse={() => togglePanelCollapse('clima')}
+            onClosePanel={() => togglePanelMinimize('clima')}
+            onMouseDownHeader={(e) => handlePanelMouseDown(e, 'clima')}
+            style={{ top: `${panels.clima.position.y}px`, left: `${panels.clima.position.x}px`, zIndex: panels.clima.zIndex }}
           />
         )}
 
