@@ -298,13 +298,7 @@ export const useLayerManager = ({
     const radarLayerId = 'smn-radar-layer';
     const existingLayer = layers.find(l => l.id === radarLayerId) as MapLayer | undefined;
 
-    if (existingLayer) {
-        const source = existingLayer.olLayer.getSource() as TileWMS;
-        const params = { ...source.getParams(), 'TIME': Date.now() };
-        source.updateParams(params);
-        source.refresh(); // Important to force a reload
-        toast({ description: 'Capa de radar del SMN actualizada.' });
-    } else {
+    const createOrUpdateSource = () => {
         const radarSource = new TileWMS({
             url: 'https://geoservicios.smn.gob.ar/geoserver/wms',
             params: {
@@ -312,7 +306,6 @@ export const useLayerManager = ({
                 'TILED': true,
                 'VERSION': '1.1.1',
                 'TRANSPARENT': true,
-                'TIME': Date.now(),
             },
             serverType: 'geoserver',
             crossOrigin: 'anonymous',
@@ -320,12 +313,22 @@ export const useLayerManager = ({
 
         // Use a custom tileLoadFunction to route requests through the proxy
         radarSource.setTileLoadFunction((tile: any, src: string) => {
-            const proxyUrl = `/api/geoserver-proxy?url=${encodeURIComponent(src)}`;
+            // Add a cache-busting parameter to the original source URL
+            const cacheBustSrc = src + '&cacheBust=' + Date.now();
+            const proxyUrl = `/api/geoserver-proxy?url=${encodeURIComponent(cacheBustSrc)}`;
             tile.getImage().src = proxyUrl;
         });
 
+        return radarSource;
+    };
+
+    if (existingLayer) {
+        const newSource = createOrUpdateSource();
+        existingLayer.olLayer.setSource(newSource);
+        toast({ description: 'Capa de radar del SMN actualizada.' });
+    } else {
         const radarLayer = new TileLayer({
-            source: radarSource,
+            source: createOrUpdateSource(),
             properties: { id: radarLayerId, name: 'Radar SMN (Mosaico)', type: 'wms' },
             zIndex: WMS_LAYER_Z_INDEX + 1,
             opacity: 0.7,
@@ -1314,6 +1317,7 @@ export const useLayerManager = ({
     
 
     
+
 
 
 
