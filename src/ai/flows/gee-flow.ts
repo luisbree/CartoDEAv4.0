@@ -159,7 +159,7 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
         if (!geometry) {
             throw new Error("Se requiere un área de interés (AOI) para la capa GOES.");
         }
-        const goesCollection = ee.ImageCollection('NOAA/GOES/16/ABI-L2-CMIPF')
+        const goesCollection = ee.ImageCollection('NOAA/GOES/16/MCMIPF')
             .filter(ee.Filter.bounds(geometry))
             .limit(1, 'system:time_start', false); // Get the latest image
 
@@ -637,5 +637,3 @@ function initializeEe(): Promise<void> {
   }
   return eeInitialized;
 }
-
-    
