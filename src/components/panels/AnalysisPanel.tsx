@@ -1418,22 +1418,27 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                     </ResponsiveContainer>
                                 </div>
                             </div>
-                            <div className="grid grid-cols-2 gap-2">
-                                <div className="space-y-1">
-                                    <Label htmlFor="y-min-left" className="text-xs">Y Mín ({profileData[0].unit})</Label>
-                                    <Input id="y-min-left" type="number" placeholder="auto" value={yAxisDomainLeft.min} onChange={(e) => handleYAxisDomainChange('left', 'min', e.target.value)} className="h-7 text-xs bg-black/20" />
-                                </div>
-                                <div className="space-y-1">
-                                    <Label htmlFor="y-max-left" className="text-xs">Y Máx ({profileData[0].unit})</Label>
-                                    <Input id="y-max-left" type="number" placeholder="auto" value={yAxisDomainLeft.max} onChange={(e) => handleYAxisDomainChange('left', 'max', e.target.value)} className="h-7 text-xs bg-black/20" />
-                                </div>
-                                {profileData.length > 1 && (
+                            
+                            <div className="flex items-end gap-2">
+                                {profileData[0] && (
+                                    <div className="flex-1 space-y-1">
+                                        <Label htmlFor="y-min-left" className="text-xs">Y Mín ({profileData[0].unit})</Label>
+                                        <Input id="y-min-left" type="number" placeholder="auto" value={yAxisDomainLeft.min} onChange={(e) => handleYAxisDomainChange('left', 'min', e.target.value)} className="h-7 text-xs bg-black/20" />
+                                    </div>
+                                )}
+                                {profileData[0] && (
+                                     <div className="flex-1 space-y-1">
+                                        <Label htmlFor="y-max-left" className="text-xs">Y Máx ({profileData[0].unit})</Label>
+                                        <Input id="y-max-left" type="number" placeholder="auto" value={yAxisDomainLeft.max} onChange={(e) => handleYAxisDomainChange('left', 'max', e.target.value)} className="h-7 text-xs bg-black/20" />
+                                    </div>
+                                )}
+                                {profileData.length > 1 && profileData[1] && (
                                     <>
-                                        <div className="space-y-1">
+                                        <div className="flex-1 space-y-1">
                                             <Label htmlFor="y-min-right" className="text-xs">Y Mín ({profileData[1].unit})</Label>
                                             <Input id="y-min-right" type="number" placeholder="auto" value={yAxisDomainRight.min} onChange={(e) => handleYAxisDomainChange('right', 'min', e.target.value)} className="h-7 text-xs bg-black/20" />
                                         </div>
-                                        <div className="space-y-1">
+                                        <div className="flex-1 space-y-1">
                                             <Label htmlFor="y-max-right" className="text-xs">Y Máx ({profileData[1].unit})</Label>
                                             <Input id="y-max-right" type="number" placeholder="auto" value={yAxisDomainRight.max} onChange={(e) => handleYAxisDomainChange('right', 'max', e.target.value)} className="h-7 text-xs bg-black/20" />
                                         </div>
@@ -1441,17 +1446,17 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                 )}
                             </div>
                             <div className="flex items-center gap-2">
-                                <Button onClick={() => handleDownloadProfile('csv')} size="sm" className="w-full h-8 text-xs" variant="secondary" disabled={!profileData}>
+                                <Button onClick={() => handleDownloadProfile('csv')} size="sm" className="h-8 text-xs flex-1" variant="secondary" disabled={!profileData}>
                                     <Download className="mr-2 h-3.5 w-3.5" /> CSV
                                 </Button>
-                                <Button onClick={() => handleDownloadProfile('jpg')} size="sm" className="w-full h-8 text-xs" variant="secondary" disabled={!profileData}>
+                                <Button onClick={() => handleDownloadProfile('jpg')} size="sm" className="h-8 text-xs flex-1" variant="secondary" disabled={!profileData}>
                                     <FileImage className="mr-2 h-3.5 w-3.5" /> JPG
                                 </Button>
-                                <Button onClick={() => handleDownloadProfile('pdf')} size="sm" className="w-full h-8 text-xs" variant="secondary" disabled={!profileData}>
+                                <Button onClick={() => handleDownloadProfile('pdf')} size="sm" className="h-8 text-xs flex-1" variant="secondary" disabled={!profileData}>
                                     <FileText className="mr-2 h-3.5 w-3.5" /> PDF
                                 </Button>
                             </div>
-                            <ScrollArea className="max-h-32">
+                            <ScrollArea className="max-h-40">
                               <div className="grid grid-cols-2 gap-4">
                                 {profileData.map(series => (
                                     <div key={series.datasetId}>
@@ -1461,7 +1466,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                             <TableRow><TableCell className="text-xs text-gray-300 p-1.5">Mín / Máx</TableCell><TableCell className="text-xs text-white p-1.5 text-right font-mono">{series.stats.min.toFixed(2)} / {series.stats.max.toFixed(2)}</TableCell></TableRow>
                                             <TableRow><TableCell className="text-xs text-gray-300 p-1.5">Promedio</TableCell><TableCell className="text-xs text-white p-1.5 text-right font-mono">{series.stats.mean.toFixed(2)}</TableCell></TableRow>
                                             <TableRow><TableCell className="text-xs text-gray-300 p-1.5">Desv. Est.</TableCell><TableCell className="text-xs text-white p-1.5 text-right font-mono">{series.stats.stdDev.toFixed(2)}</TableCell></TableRow>
-                                            <TableRow><TableCell className="text-xs text-gray-300 p-1.5">Jenks</TableCell><TableCell className="text-xs text-white p-1.5 text-right font-mono">{series.stats.jenksBreaks.map(b => b.toFixed(2)).join(' | ')}</TableCell></TableRow>
+                                            <TableRow><TableCell className="text-xs text-gray-300 p-1.5">Jenks</TableCell><TableCell className="text-xs text-white p-1.5 text-right font-mono whitespace-normal">{series.stats.jenksBreaks.map(b => b.toFixed(2)).join(' | ')}</TableCell></TableRow>
                                           </TableBody>
                                       </Table>
                                     </div>
@@ -1897,6 +1902,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
 
 
 
