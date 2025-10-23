@@ -153,8 +153,15 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
     
     const ELEVATION_PALETTE = ['006633', 'E5FFCC', '662A00', 'D8D8D8', 'FFFFFF'];
 
+    const CLOUDTOP_PALETTE = ['#000080', '#0000FF', '#00FFFF', '#FFFFFF']; // From cold (blue) to hot (white)
 
-    if (bandCombination !== 'JRC_WATER_OCCURRENCE' && bandCombination !== 'OPENLANDMAP_SOC' && bandCombination !== 'DYNAMIC_WORLD' && bandCombination !== 'NASADEM_ELEVATION' && bandCombination !== 'ALOS_DSM') {
+    if (bandCombination === 'GOES_CLOUDTOP') {
+        const goesCollection = ee.ImageCollection('NOAA/GOES/16/ABI-L2-CMIPF')
+            .filter(ee.Filter.bounds(geometry!))
+            .limit(1, 'system:time_start', false); // Get the latest image
+        finalImage = goesCollection.first().select('CMI_C13');
+        visParams = { min: 300, max: 190, palette: CLOUDTOP_PALETTE }; // Temp in Kelvin, inverted
+    } else if (['URBAN_FALSE_COLOR', 'SWIR_FALSE_COLOR', 'BSI', 'NDVI', 'TASSELED_CAP'].includes(bandCombination)) {
         let s2ImageCollection = ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
           .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 20));
         
