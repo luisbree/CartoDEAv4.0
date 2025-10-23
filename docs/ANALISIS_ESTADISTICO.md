@@ -22,6 +22,7 @@ Podemos organizar las pruebas en categorías, desde las más simples hasta las m
 *   **Qué es:** Explorar y modelar las relaciones entre diferentes variables espaciales.
 *   **Pruebas Recomendadas:**
     *   **Análisis de Correlación Bivariada:** Similar a lo que empezamos a explorar con el perfil topográfico. Se calcula un coeficiente de correlación (ej. Pearson) entre dos variables (atributos) dentro de las mismas entidades para ver si se mueven juntas (ej. a mayor pendiente, ¿hay mayor erosión?).
+    *   **Análisis de Varianza (ANOVA):** Compara las medias (promedios) de una variable numérica entre tres o más grupos definidos por una variable categórica. Responde a la pregunta: "¿Las diferencias en el promedio de mi variable de interés entre estos grupos son estadísticamente significativas?". Es ideal para validar si una categorización (ej. "tipo de uso de suelo") tiene un efecto real sobre una medición (ej. "nivel de contaminación").
     *   **Regresión Geográficamente Ponderada (GWR - Geographically Weighted Regression):** Es una versión "pro" de la regresión lineal. Mientras que una regresión normal te da una sola ecuación para todo el mapa, la GWR te da una ecuación *para cada entidad*, permitiendo que la relación entre variables cambie a lo largo del espacio. Responde a: "¿La relación entre la población y el acceso a servicios es la misma en el centro de la ciudad que en la periferia?".
 
 ## 2. Organización y Flujo de Trabajo
@@ -40,14 +41,16 @@ Un flujo de trabajo lógico para un analista sería:
     *   **Pregunta Clave:** "¿Existen agrupamientos estadísticamente significativos de valores altos o bajos en mi mapa?".
 
 3.  **Paso 3: Análisis de Relaciones.**
-    *   **Insumos:** Una capa con al menos dos atributos numéricos que se sospecha están relacionados.
+    *   **Insumos:** Una capa con al menos dos atributos numéricos que se sospecha están relacionados, o una capa con una variable numérica y una categórica para ANOVA.
     *   **Acción en la App:**
-        *   **Opción A (Simple):** Usar la herramienta de **Correlación** (como la que tenemos en el perfil) para obtener un coeficiente de Pearson y ver la fuerza de la relación.
-        *   **Opción B (Avanzada - GWR):** En una nueva sección "Modelado de Relaciones", seleccionar una variable dependiente y una o más variables independientes. Ejecutar la **Regresión Geográficamente Ponderada**.
+        *   **Opción A (Simple - Correlación):** Usar la herramienta de **Correlación** para obtener un coeficiente de Pearson y ver la fuerza de la relación entre dos variables numéricas.
+        *   **Opción B (Comparación de Grupos - ANOVA):** En una nueva sección "Análisis de Varianza", seleccionar una variable numérica (dependiente) y una categórica (factor/grupo). Ejecutar ANOVA.
+        *   **Opción C (Avanzada - GWR):** En una nueva sección "Modelado de Relaciones", seleccionar una variable dependiente y una o más variables independientes. Ejecutar la **Regresión Geográficamente Ponderada**.
     *   **Resultado:**
         *   **Opción A:** Un número (el coeficiente `r`).
-        *   **Opción B:** Se genera una nueva capa de salida. Los atributos de esta capa no son los originales, sino los resultados de la regresión para cada entidad: el coeficiente local (ej. `local_r2`), el residuo, etc. Simbolizar esta capa por los residuos es muy útil para ver dónde el modelo funciona bien o mal.
-    *   **Pregunta Clave:** "¿Existe una relación entre estas dos variables? ¿Y esa relación es constante en todo el mapa?".
+        *   **Opción B:** Un valor p que indica si hay diferencias significativas entre los grupos. Se puede acompañar con un gráfico de cajas (box-plot).
+        *   **Opción C:** Se genera una nueva capa de salida. Los atributos de esta capa no son los originales, sino los resultados de la regresión para cada entidad: el coeficiente local (ej. `local_r2`), el residuo, etc. Simbolizar esta capa por los residuos es muy útil para ver dónde el modelo funciona bien o mal.
+    *   **Pregunta Clave:** "¿Existe una relación entre estas dos variables? ¿El promedio de mi variable difiere entre estos grupos? ¿Y esa relación es constante en todo el mapa?".
 
 ## 3. Insumos de Información Necesarios
 
@@ -55,4 +58,5 @@ Para que estos análisis funcionen, la clave está en la calidad de los datos de
 
 *   **Capas Vectoriales (Puntos, Líneas o Polígonos):** Son la base. Los análisis de patrones y relaciones necesitan geometrías bien definidas.
 *   **Atributos Numéricos Ricos:** ¡Fundamental! No podemos hacer estadística sin números. Cada capa debería tener atributos cuantitativos (ej. población, altura, rendimiento de cultivo, nivel de contaminación, valor de la propiedad, etc.).
+*   **Atributos Categóricos:** Para análisis como ANOVA, es crucial tener campos que clasifiquen las entidades en grupos (ej. tipo de suelo, jurisdicción, uso de la tierra).
 *   **Datos Contiguos o Densos:** Los análisis de autocorrelación y hotspots funcionan mejor cuando las entidades cubren un área de estudio de forma continua (como municipios o parcelas) en lugar de puntos muy dispersos.
