@@ -42,15 +42,12 @@ Un flujo de trabajo lógico para un analista sería:
 
 3.  **Paso 3: Análisis de Relaciones.**
     *   **Insumos:** Una capa con al menos dos atributos numéricos que se sospecha están relacionados, o una capa con una variable numérica y una categórica para ANOVA.
-    *   **Acción en la App:**
-        *   **Opción A (Simple - Correlación):** Usar la herramienta de **Correlación** para obtener un coeficiente de Pearson y ver la fuerza de la relación entre dos variables numéricas.
-        *   **Opción B (Comparación de Grupos - ANOVA):** En una nueva sección "Análisis de Varianza", seleccionar una variable numérica (dependiente) y una categórica (factor/grupo). Ejecutar ANOVA.
-        *   **Opción C (Avanzada - GWR):** En una nueva sección "Modelado de Relaciones", seleccionar una variable dependiente y una o más variables independientes. Ejecutar la **Regresión Geográficamente Ponderada**.
-    *   **Resultado:**
-        *   **Opción A:** Un número (el coeficiente `r`).
-        *   **Opción B:** Un valor p que indica si hay diferencias significativas entre los grupos. Se puede acompañar con un gráfico de cajas (box-plot).
-        *   **Opción C:** Se genera una nueva capa de salida. Los atributos de esta capa no son los originales, sino los resultados de la regresión para cada entidad: el coeficiente local (ej. `local_r2`), el residuo, etc. Simbolizar esta capa por los residuos es muy útil para ver dónde el modelo funciona bien o mal.
-    *   **Pregunta Clave:** "¿Existe una relación entre estas dos variables? ¿El promedio de mi variable difiere entre estos grupos? ¿Y esa relación es constante en todo el mapa?".
+    *   **Acción en la App (Ejemplo con ANOVA):**
+        *   **Contexto:** Quieres saber si el promedio de la variable "concentración_nitratos" difiere entre distintas "zonas_urbanas" (Centro, Periferia, Industrial), que son polígonos dibujados o cargados en otra capa.
+        *   **Herramienta:** En una sección "Análisis de Varianza", seleccionas tu capa de mediciones como capa de interés, "concentración_nitratos" como variable numérica, y la capa de polígonos de "zonas_urbanas" como el factor de agrupación.
+        *   **Proceso Interno:** La app realiza una unión espacial, asignando a cada medición la zona a la que pertenece. Luego, ejecuta ANOVA.
+        *   **Resultado:** Un valor p que indica si hay diferencias significativas entre las zonas. Se puede acompañar con un gráfico de cajas (box-plot) para visualizar las distribuciones de cada zona.
+    *   **Pregunta Clave:** "¿El promedio de mi variable difiere significativamente entre estos grupos/áreas? ¿La relación entre dos variables es constante en todo el mapa (con GWR)?".
 
 ## 3. Insumos de Información Necesarios
 
@@ -58,5 +55,5 @@ Para que estos análisis funcionen, la clave está en la calidad de los datos de
 
 *   **Capas Vectoriales (Puntos, Líneas o Polígonos):** Son la base. Los análisis de patrones y relaciones necesitan geometrías bien definidas.
 *   **Atributos Numéricos Ricos:** ¡Fundamental! No podemos hacer estadística sin números. Cada capa debería tener atributos cuantitativos (ej. población, altura, rendimiento de cultivo, nivel de contaminación, valor de la propiedad, etc.).
-*   **Atributos Categóricos:** Para análisis como ANOVA, es crucial tener campos que clasifiquen las entidades en grupos (ej. tipo de suelo, jurisdicción, uso de la tierra).
+*   **Atributos Categóricos:** Para análisis como ANOVA, es crucial tener campos que clasifiquen las entidades en grupos (ej. tipo de suelo, jurisdicción, uso de la tierra). Esto también se puede lograr usando **áreas espaciales disjuntas** (polígonos) para definir los grupos.
 *   **Datos Contiguos o Densos:** Los análisis de autocorrelación y hotspots funcionan mejor cuando las entidades cubren un área de estudio de forma continua (como municipios o parcelas) en lugar de puntos muy dispersos.
