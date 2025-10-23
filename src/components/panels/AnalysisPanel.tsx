@@ -71,7 +71,7 @@ const analysisLayerStyle = new Style({
 
 // --- Jenks Natural Breaks Algorithm (copied for profile stats) ---
 function jenks(data: number[], n_classes: number): number[] {
-  if (n_classes > data.length) return [];
+  if (n_classes > data.length || n_classes <= 1) return [];
 
   data = data.slice().sort((a, b) => a - b);
 
@@ -116,6 +116,7 @@ function jenks(data: number[], n_classes: number): number[] {
   const { backlinkMatrix } = matrices;
   const breaks: number[] = [];
   let k = data.length;
+  // n_classes - 1 because we want the break points, not the classes themselves
   for (let i = n_classes; i > 1; i--) {
     breaks.push(data[backlinkMatrix[k][i] - 2]);
     k = backlinkMatrix[k][i] - 1;
@@ -146,7 +147,7 @@ interface ProfileStats {
     max: number;
     mean: number;
     stdDev: number;
-    jenksBreaks: number[]; // For 3 classes, it will have 2 values
+    jenksBreaks: number[];
 }
 
 interface CorrelationResult {
@@ -238,6 +239,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   const [profileLayerId, setProfileLayerId] = useState<string>('');
   const [yAxisDomainLeft, setYAxisDomainLeft] = useState<{min: number | 'auto'; max: number | 'auto'}>({min: 'auto', max: 'auto'});
   const [yAxisDomainRight, setYAxisDomainRight] = useState<{min: number | 'auto'; max: number | 'auto'}>({min: 'auto', max: 'auto'});
+  const [jenksClasses, setJenksClasses] = useState<number>(3); // New state for Jenks classes
   const analysisLayerRef = useRef<VectorLayer<VectorSource<Feature<Geometry>>> | null>(null);
   const drawInteractionRef = useRef<Draw | null>(null);
   const liveTooltipRef = useRef<Overlay | null>(null);
@@ -475,7 +477,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                 stats.max = Math.max(...validValues);
                 const variance = validValues.reduce((sq, n) => sq + Math.pow(n - stats.mean, 2), 0) / validValues.length;
                 stats.stdDev = Math.sqrt(variance);
-                stats.jenksBreaks = jenks(validValues, 3);
+                stats.jenksBreaks = jenks(validValues, jenksClasses);
             }
             
             allProfileData.push({ datasetId, name: def.name, color: def.color, unit: def.unit, points, stats });
@@ -1419,22 +1421,22 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                 </div>
                             </div>
                             
-                            <div className="flex items-end gap-2">
-                                <div className="flex-1 space-y-1">
+                           <div className="flex items-end gap-2 w-full">
+                                <div className="space-y-1 flex-1">
                                     <Label htmlFor="y-min-left" className="text-xs">Y Mín ({profileData[0]?.unit})</Label>
                                     <Input id="y-min-left" type="number" placeholder="auto" value={yAxisDomainLeft.min} onChange={(e) => handleYAxisDomainChange('left', 'min', e.target.value)} className="h-7 text-xs bg-black/20" />
                                 </div>
-                                <div className="flex-1 space-y-1">
+                                <div className="space-y-1 flex-1">
                                     <Label htmlFor="y-max-left" className="text-xs">Y Máx ({profileData[0]?.unit})</Label>
                                     <Input id="y-max-left" type="number" placeholder="auto" value={yAxisDomainLeft.max} onChange={(e) => handleYAxisDomainChange('left', 'max', e.target.value)} className="h-7 text-xs bg-black/20" />
                                 </div>
                                 {profileData.length > 1 && (
                                     <>
-                                        <div className="flex-1 space-y-1">
+                                        <div className="space-y-1 flex-1">
                                             <Label htmlFor="y-min-right" className="text-xs">Y Mín ({profileData[1]?.unit})</Label>
                                             <Input id="y-min-right" type="number" placeholder="auto" value={yAxisDomainRight.min} onChange={(e) => handleYAxisDomainChange('right', 'min', e.target.value)} className="h-7 text-xs bg-black/20" />
                                         </div>
-                                        <div className="flex-1 space-y-1">
+                                        <div className="space-y-1 flex-1">
                                             <Label htmlFor="y-max-right" className="text-xs">Y Máx ({profileData[1]?.unit})</Label>
                                             <Input id="y-max-right" type="number" placeholder="auto" value={yAxisDomainRight.max} onChange={(e) => handleYAxisDomainChange('right', 'max', e.target.value)} className="h-7 text-xs bg-black/20" />
                                         </div>
@@ -1452,7 +1454,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                     <FileText className="mr-2 h-3.5 w-3.5" /> PDF
                                 </Button>
                             </div>
-                            <ScrollArea className="max-h-[200px]">
+                            <ScrollArea className="max-h-48">
                               <div className="grid grid-cols-2 gap-4">
                                 {profileData.map(series => (
                                     <div key={series.datasetId}>
@@ -1462,7 +1464,13 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                             <TableRow><TableCell className="text-xs text-gray-300 p-1.5">Mín / Máx</TableCell><TableCell className="text-xs text-white p-1.5 text-right font-mono">{series.stats.min.toFixed(2)} / {series.stats.max.toFixed(2)}</TableCell></TableRow>
                                             <TableRow><TableCell className="text-xs text-gray-300 p-1.5">Promedio</TableCell><TableCell className="text-xs text-white p-1.5 text-right font-mono">{series.stats.mean.toFixed(2)}</TableCell></TableRow>
                                             <TableRow><TableCell className="text-xs text-gray-300 p-1.5">Desv. Est.</TableCell><TableCell className="text-xs text-white p-1.5 text-right font-mono">{series.stats.stdDev.toFixed(2)}</TableCell></TableRow>
-                                            <TableRow><TableCell className="text-xs text-gray-300 p-1.5">Jenks</TableCell><TableCell className="text-xs text-white p-1.5 text-right font-mono whitespace-normal">{series.stats.jenksBreaks.map(b => b.toFixed(2)).join(' | ')}</TableCell></TableRow>
+                                            <TableRow>
+                                                <TableCell className="text-xs text-gray-300 p-1.5 flex items-center gap-2">
+                                                    Jenks
+                                                    <Input type="number" value={jenksClasses} onChange={(e) => setJenksClasses(Math.max(2, Number(e.target.value)))} className="h-6 w-12 text-xs bg-black/20 p-1 text-center" min="2" max="10"/>
+                                                </TableCell>
+                                                <TableCell className="text-xs text-white p-1.5 text-right font-mono whitespace-normal">{series.stats.jenksBreaks.map(b => b.toFixed(2)).join(' | ')}</TableCell>
+                                            </TableRow>
                                           </TableBody>
                                       </Table>
                                     </div>
@@ -1898,6 +1906,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
 
 
 
