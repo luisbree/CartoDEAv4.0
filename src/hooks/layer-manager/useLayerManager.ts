@@ -425,11 +425,11 @@ export const useLayerManager = ({
     const map = mapRef.current;
     const radarLayerId = 'smn-radar-layer';
     const existingLayer = layers.find(l => l.id === radarLayerId) as MapLayer | undefined;
+    const uniqueTimeParam = { 'TIME': Date.now() };
 
     if (existingLayer) {
         const source = existingLayer.olLayer.getSource() as TileWMS;
-        const params = source.getParams();
-        params['TIME'] = Date.now(); // Cache-busting parameter
+        const params = { ...source.getParams(), ...uniqueTimeParam };
         source.updateParams(params);
         toast({ description: 'Capa de radar del SMN actualizada.' });
     } else {
@@ -440,6 +440,7 @@ export const useLayerManager = ({
                 'TILED': true,
                 'VERSION': '1.1.1',
                 'TRANSPARENT': true,
+                ...uniqueTimeParam,
             },
             serverType: 'geoserver',
             crossOrigin: 'anonymous',
@@ -448,7 +449,7 @@ export const useLayerManager = ({
         const radarLayer = new TileLayer({
             source: radarSource,
             properties: { id: radarLayerId, name: 'Radar SMN (Mosaico)', type: 'wms' },
-            zIndex: WMS_LAYER_Z_INDEX + 1, // Ensure it's on top of other WMS
+            zIndex: WMS_LAYER_Z_INDEX + 1,
             opacity: 0.7,
         });
 
@@ -1307,6 +1308,7 @@ export const useLayerManager = ({
     
 
     
+
 
 
 
