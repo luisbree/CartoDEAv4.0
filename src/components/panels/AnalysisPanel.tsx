@@ -1441,7 +1441,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                     </>
                                 )}
                             </div>
-                             <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2">
                                 <Button onClick={() => handleDownloadProfile('csv')} size="sm" className="h-8 text-xs flex-1" variant="secondary" disabled={!profileData}>
                                     <Download className="mr-2 h-3.5 w-3.5" /> CSV
                                 </Button>
@@ -1452,7 +1452,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                     <FileText className="mr-2 h-3.5 w-3.5" /> PDF
                                 </Button>
                             </div>
-                            <ScrollArea className="max-h-40">
+                            <ScrollArea className="max-h-[200px]">
                               <div className="grid grid-cols-2 gap-4">
                                 {profileData.map(series => (
                                     <div key={series.datasetId}>
@@ -1898,6 +1898,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
 
 
 
