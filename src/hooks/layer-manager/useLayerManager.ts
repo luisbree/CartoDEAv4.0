@@ -297,12 +297,12 @@ export const useLayerManager = ({
     const map = mapRef.current;
     const radarLayerId = 'smn-radar-layer';
     const existingLayer = layers.find(l => l.id === radarLayerId) as MapLayer | undefined;
-    const uniqueTimeParam = { 'TIME': Date.now() };
 
     if (existingLayer) {
         const source = existingLayer.olLayer.getSource() as TileWMS;
-        const params = { ...source.getParams(), ...uniqueTimeParam };
+        const params = { ...source.getParams(), 'TIME': Date.now() };
         source.updateParams(params);
+        source.refresh(); // Important to force a reload
         toast({ description: 'Capa de radar del SMN actualizada.' });
     } else {
         const radarSource = new TileWMS({
@@ -312,10 +312,16 @@ export const useLayerManager = ({
                 'TILED': true,
                 'VERSION': '1.1.1',
                 'TRANSPARENT': true,
-                ...uniqueTimeParam,
+                'TIME': Date.now(),
             },
             serverType: 'geoserver',
             crossOrigin: 'anonymous',
+        });
+
+        // Use a custom tileLoadFunction to route requests through the proxy
+        radarSource.setTileLoadFunction((tile: any, src: string) => {
+            const proxyUrl = `/api/geoserver-proxy?url=${encodeURIComponent(src)}`;
+            tile.getImage().src = proxyUrl;
         });
 
         const radarLayer = new TileLayer({
@@ -337,7 +343,7 @@ export const useLayerManager = ({
         addLayer(newMapLayer, true);
         toast({ description: 'Capa de radar del SMN añadida.' });
     }
-  }, [mapRef, layers, addLayer, toast]);
+}, [mapRef, layers, addLayer, toast]);
   
   const handleAddHybridLayer = useCallback(async (layerName: string, layerTitle: string, serverUrl: string, bbox?: [number, number, number, number], styleName?: string, isInitiallyVisible: boolean = true, initialOpacity: number = 0.7, useWmsStyle: boolean = true): Promise<MapLayer | null> => {
     if (!isMapReady || !mapRef.current) return null;
@@ -450,7 +456,7 @@ export const useLayerManager = ({
         id: layerId,
         name: layerName,
         type: 'gee',
-        geeParams: { ...geeParams, tileUrl }, // Store the tileUrl in geeParams for sharing
+        geeParams: { ...geeParams, tileUrl }, // Store the tileUrl for sharing
       },
     });
 
@@ -1308,6 +1314,7 @@ export const useLayerManager = ({
     
 
     
+
 
 
 
