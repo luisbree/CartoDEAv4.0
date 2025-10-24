@@ -158,10 +158,14 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
     const CLOUDTOP_PALETTE = ['#000080', '#0000FF', '#00FFFF', '#FFFFFF'];
 
     if (bandCombination === 'GOES_CLOUDTOP') {
-        const collection = ee.ImageCollection('NOAA/GOES/19/MCMIPF')
+        const goesCollection = ee.ImageCollection('NOAA/GOES/19/MCMIPF')
             .filterDate(ee.Date(Date.now()).advance(-12, 'hour'), ee.Date(Date.now()));
         
-        const latestImage = ee.Image(collection.sort('system:time_start', false).first());
+        if (geometry) {
+             goesCollection.filter(ee.Filter.bounds(geometry));
+        }
+        
+        const latestImage = ee.Image(goesCollection.sort('system:time_start', false).first());
 
         // This function needs to be defined to be mapped over the collection.
         const applyScaleAndOffset = (image: ee.Image) => {
