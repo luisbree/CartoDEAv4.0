@@ -158,7 +158,7 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
     const CLOUDTOP_PALETTE = ['#000080', '#0000FF', '#00FFFF', '#FFFFFF']; // From cold (blue) to hot (white)
 
     if (bandCombination === 'GOES_CLOUDTOP') {
-        const goesCollection = ee.ImageCollection('NOAA/GOES/16/MCMIPF')
+        const goesCollection = ee.ImageCollection('NOAA/GOES/19/MCMIPF')
             .filterDate(ee.Date(Date.now()).advance(-2, 'hour'), ee.Date(Date.now()));
         
         const latestImage = ee.Image(goesCollection.sort('system:time_start', false).first());
@@ -289,7 +289,7 @@ const geeTileLayerFlow = ai.defineFlow(
     
     // Check for GOES collection size before proceeding to avoid null errors
     if (input.bandCombination === 'GOES_CLOUDTOP') {
-        const collection = ee.ImageCollection('NOAA/GOES/16/MCMIPF')
+        const collection = ee.ImageCollection('NOAA/GOES/19/MCMIPF')
             .filterDate(ee.Date(Date.now()).advance(-2, 'hour'), ee.Date(Date.now()));
         const count = await promisify(collection.size().evaluate)();
         if (count === 0) {
@@ -689,5 +689,7 @@ function initializeEe(): Promise<void> {
 
     
 
+
+    
 
     
