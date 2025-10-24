@@ -171,7 +171,8 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
              goesCollection = goesCollection.filter(ee.Filter.bounds(geometry));
         }
         
-        const latestImage = ee.Image(goesCollection.map(applyScaleAndOffset).mosaic());
+        const processedCollection = goesCollection.map(applyScaleAndOffset);
+        const latestImage = ee.Image(processedCollection.mosaic());
         
         if (!latestImage.getInfo()) {
              throw new Error('No se encontraron imágenes de GOES para el área y tiempo especificados.');
@@ -273,7 +274,7 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
         visParams = { min: 0, max: 100, palette: ['#FFFFFF', 'lightblue', 'blue'] };
     }
 
-    if (geometry) {
+    if (geometry && bandCombination !== 'GOES_CLOUDTOP') { // GOES is already clipped
         finalImage = finalImage.clip(geometry);
     }
 
@@ -659,4 +660,5 @@ function initializeEe(): Promise<void> {
     
 
     
+
 
