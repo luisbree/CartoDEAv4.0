@@ -1,5 +1,3 @@
-
-
 "use client";
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
@@ -292,7 +290,7 @@ export const useLayerManager = ({
 
   }, [mapRef, setLayers]);
   
-  const addGeeLayerToMap = useCallback((tileUrl: string, layerName: string, geeParams: Omit<GeeValueQueryInput, 'aoi' | 'zoom' | 'lon' | 'lat'>) => {
+  const addGeeLayerToMap = useCallback((tileUrl: string, layerName: string, geeParams: Omit<GeeValueQueryInput, 'aoi' | 'zoom' | 'lon' | 'lat'> & { metadata?: any }) => {
     if (!mapRef.current) return;
 
     const layerId = `gee-${nanoid()}`;
@@ -302,13 +300,15 @@ export const useLayerManager = ({
       crossOrigin: 'anonymous',
     });
 
+    const fullGeeParams = { ...geeParams, tileUrl };
+
     const geeLayer = new TileLayer({
       source: geeSource,
       properties: {
         id: layerId,
         name: layerName,
         type: 'gee',
-        geeParams: { ...geeParams, tileUrl }, // Store the tileUrl for sharing
+        geeParams: fullGeeParams,
       },
     });
 
@@ -317,13 +317,22 @@ export const useLayerManager = ({
       name: layerName,
       olLayer: geeLayer,
       visible: true,
-      opacity: 1,
+      opacity: 0.8,
       type: 'gee'
-    });
+    }, true);
     
     setTimeout(() => toast({ description: `Capa de Google Earth Engine "${layerName}" añadida.` }), 0);
 
-  }, [mapRef, addLayer, toast]);
+    // Show metadata in attributes panel if available
+    if (geeParams.metadata) {
+      // GEE metadata is already a plain object. We can create a fake PlainFeatureData.
+      const plainData: PlainFeatureData[] = [{
+        id: nanoid(), // Give it a unique ID for the table
+        attributes: geeParams.metadata,
+      }];
+      onShowTableRequest(plainData, `${layerName} - Metadatos`, layerId);
+    }
+  }, [mapRef, addLayer, toast, onShowTableRequest]);
   
 
   const handleAddHybridLayer = useCallback(async (layerName: string, layerTitle: string, serverUrl: string, bbox?: [number, number, number, number], styleName?: string, isInitiallyVisible: boolean = true, initialOpacity: number = 0.7, useWmsStyle: boolean = true): Promise<MapLayer | null> => {
@@ -773,7 +782,12 @@ export const useLayerManager = ({
 
   const handleShowLayerTable = useCallback((layerId: string) => {
     const layer = layers.find(l => l.id === layerId);
-    if (layer && layer.olLayer instanceof VectorLayer) {
+    if (!layer) {
+      setTimeout(() => toast({ description: "No se pudo encontrar la capa." }), 0);
+      return;
+    }
+
+    if (layer.olLayer instanceof VectorLayer) {
         const source = layer.olLayer.getSource();
         if (source) {
             const features = source.getFeatures();
@@ -787,8 +801,16 @@ export const useLayerManager = ({
                 setTimeout(() => toast({ description: `La capa "${layer.name}" no tiene entidades para mostrar en la tabla.` }), 0);
             }
         }
+    } else if (layer.type === 'gee' && layer.olLayer.get('geeParams')?.metadata) {
+      // Handle metadata for GEE layers
+      const metadata = layer.olLayer.get('geeParams').metadata;
+      const plainData: PlainFeatureData[] = [{
+        id: nanoid(), // Give it a unique ID for the table
+        attributes: metadata,
+      }];
+      onShowTableRequest(plainData, `${layer.name} - Metadatos`, layer.id);
     } else {
-        setTimeout(() => toast({ description: "Solo se puede mostrar la tabla de atributos para capas vectoriales." }), 0);
+        setTimeout(() => toast({ description: "Solo se puede mostrar la tabla de atributos para capas vectoriales o capas GEE con metadatos." }), 0);
     }
   }, [layers, onShowTableRequest, toast]);
 
@@ -1132,6 +1154,14 @@ export const useLayerManager = ({
         toast({ description: "No se pudo encontrar la capa activa para añadir el campo.", variant: 'destructive' });
     }
   }, [layers, toast, handleShowLayerTable]);
+  
+  const handleExportWmsAsGeotiff = useCallback(async (layerId: string) => {
+    // This is a placeholder for the actual implementation, which would involve
+    // a backend service to make the GetMap request and convert it to a GeoTIFF.
+    // The logic has been moved to use the existing GEE GeoTIFF download flow.
+    toast({ description: 'La exportación de WMS a GeoTIFF no está implementada directamente. Utilice las herramientas de GEE para exportar GeoTIFFs.', variant: 'default', duration: 5000 });
+  }, [toast]);
+
 
   return {
     layers,
@@ -1158,6 +1188,7 @@ export const useLayerManager = ({
     handleExtractByPolygon,
     handleExtractBySelection,
     handleExportLayer,
+    handleExportWmsAsGeotiff,
     findSentinel2FootprintsInCurrentView,
     isFindingSentinelFootprints,
     clearSentinel2FootprintsLayer,

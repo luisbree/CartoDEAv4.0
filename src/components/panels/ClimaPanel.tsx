@@ -10,7 +10,7 @@ import TileLayer from 'ol/layer/Tile';
 import { getGoesLayer } from '@/ai/flows/gee-flow';
 import { nanoid } from 'nanoid';
 import XYZ from 'ol/source/XYZ';
-import { formatDistanceToNow } from 'date-fns';
+import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
 interface ClimaPanelProps {
@@ -48,8 +48,8 @@ const ClimaPanel: React.FC<ClimaPanelProps> = ({
                 
                 if (result.metadata?.timestamp) {
                     const imageDate = new Date(result.metadata.timestamp);
-                     const timeAgo = formatDistanceToNow(imageDate, { addSuffix: true, locale: es });
-                     layerName = `GOES-19 Topes Nubosos (${timeAgo})`;
+                     const formattedDate = format(imageDate, "dd/MM/yyyy HH:mm 'UTC'", { locale: es });
+                     layerName = `GOES-19 Topes Nubosos (${formattedDate})`;
                 }
 
                 const goesSource = new XYZ({
@@ -57,14 +57,19 @@ const ClimaPanel: React.FC<ClimaPanelProps> = ({
                     crossOrigin: 'anonymous',
                 });
 
+                const geeParams = {
+                    bandCombination: 'GOES_CLOUDTOP',
+                    metadata: result.metadata, // Store all metadata
+                };
+
                 const goesLayer = new TileLayer({
                     source: goesSource,
                     opacity: 0.8,
                     properties: {
                         id: layerId,
                         name: layerName,
-                        type: 'gee', // Treat as a GEE layer type
-                        geeParams: { bandCombination: 'GOES_CLOUDTOP' }
+                        type: 'gee',
+                        geeParams: geeParams
                     }
                 });
 
