@@ -315,7 +315,7 @@ const geeTileLayerFlow = ai.defineFlow(
                  if (error.includes && error.includes('computation timed out')) {
                     return reject(new Error('El procesamiento en Earth Engine tardó demasiado. Intente con un área más pequeña.'));
                 }
-                if (error.includes && (error.includes('does not have a band') || error.includes('No bands in image') || error.includes("Parameter 'object' is required") || error.includes("Image.get: Parameter 'object' is required") || error.includes("Parameter 'input' is required"))) {
+                if (error.includes && (error.includes('does not have a band') || error.includes('No bands in image') || error.includes("Parameter 'object' is required") || error.includes("Image.get: Parameter 'object' is required") || error.includes("Image.select: Parameter 'input' is required"))) {
                     return reject(new Error('No se encontraron imágenes de GOES para el área y tiempo especificados.'));
                 }
                 return reject(new Error(`Ocurrió un error al generar la capa de Earth Engine: ${error || 'Error desconocido'}`));
