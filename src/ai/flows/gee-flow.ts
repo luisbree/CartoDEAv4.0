@@ -165,7 +165,7 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
 
     if (bandCombination === 'GOES_CLOUDTOP') {
         let goesCollection: ee.ImageCollection = ee.ImageCollection('NOAA/GOES/16/MCMIPF')
-            .filter(ee.Filter.date(ee.Date(Date.now()).advance(-1, 'hour'), ee.Date(Date.now())));
+            .filter(ee.Filter.date(ee.Date(Date.now()).advance(-2, 'hour'), ee.Date(Date.now())));
 
         if (geometry) {
              goesCollection = goesCollection.filter(ee.Filter.bounds(geometry));
@@ -178,8 +178,11 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
         }
 
         finalImage = latestImage;
+        if (geometry) {
+            finalImage = finalImage.clip(geometry);
+        }
 
-        visParams = { min: 300, max: 190, palette: CLOUDTOP_PALETTE }; // Temp in Kelvin, inverted
+        visParams = { min: 190, max: 300, palette: CLOUDTOP_PALETTE }; // Temp in Kelvin
     } else if (['URBAN_FALSE_COLOR', 'SWIR_FALSE_COLOR', 'BSI', 'NDVI', 'TASSELED_CAP'].includes(bandCombination)) {
         let s2ImageCollection = ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
           .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 20));
@@ -656,3 +659,4 @@ function initializeEe(): Promise<void> {
     
 
     
+
