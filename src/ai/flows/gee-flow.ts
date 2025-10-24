@@ -168,6 +168,7 @@ export async function getGoesLayer(): Promise<GeeTileLayerOutput> {
         scene_id: latestImage.get('scene_id'),
     };
     
+    // This is the SMN-inspired palette
     const SMN_CLOUDTOP_PALETTE = [
         '#ffffff', '#cccccc', '#999999', // Grays (50C to -10C)
         '#0000ff', '#00ffff',             // Blues/Cian (-10C to -40C)
@@ -176,6 +177,7 @@ export async function getGoesLayer(): Promise<GeeTileLayerOutput> {
         '#000000'                         // Black (-80C to -90C)
     ];
     
+    // Temperatures from -90°C to 50°C in Kelvin
     const visParams = { min: 183, max: 323, palette: SMN_CLOUDTOP_PALETTE };
 
     return new Promise((resolve, reject) => {
@@ -223,9 +225,13 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
     
     const ELEVATION_PALETTE = ['006633', 'E5FFCC', '662A00', 'D8D8D8', 'FFFFFF'];
 
+    // This is the SMN-inspired palette
     const SMN_CLOUDTOP_PALETTE = [
-        '#ffffff', '#cccccc', '#999999', '#0000ff', '#00ffff',
-        '#00ff00', '#ffff00', '#ff0000', '#800000', '#000000'
+        '#ffffff', '#cccccc', '#999999', // Grays (50C to -10C)
+        '#0000ff', '#00ffff',             // Blues/Cian (-10C to -40C)
+        '#00ff00', '#ffff00',             // Green/Yellow (-40C to -60C)
+        '#ff0000', '#800000',             // Red/Dark Red (-60C to -80C)
+        '#000000'                         // Black (-80C to -90C)
     ];
 
     if (bandCombination === 'GOES_CLOUDTOP') {
@@ -244,6 +250,9 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
         const scaledImage = applyScaleAndOffset(latestImage);
 
         metadata.timestamp = latestImage.get('system:time_start');
+        metadata.satellite = latestImage.get('satellite');
+        metadata.platform_id = latestImage.get('platform_id');
+        metadata.scene_id = latestImage.get('scene_id');
         finalImage = scaledImage;
         visParams = { min: 183, max: 323, palette: SMN_CLOUDTOP_PALETTE };
     
@@ -738,5 +747,3 @@ function initializeEe(): Promise<void> {
   }
   return eeInitialized;
 }
-
-    
