@@ -138,8 +138,20 @@ export async function getGoesLayer(): Promise<GeeTileLayerOutput> {
 
     const latestImage = ee.Image(collection.first());
     
-    if (!latestImage) {
-        throw new Error('No se encontraron imágenes de GOES en el catálogo.');
+    // Check if an image was found
+    const imageExists = await new Promise((resolve, reject) => {
+        latestImage.get('system:id').evaluate((id, error) => {
+            if (error) {
+                console.error("Error checking for GOES image:", error);
+                reject(new Error("Error al verificar la existencia de la imagen GOES."));
+            } else {
+                resolve(!!id);
+            }
+        });
+    });
+
+    if (!imageExists) {
+        throw new Error('No se encontraron imágenes de GOES en el catálogo en este momento.');
     }
     
     const applyScaleAndOffset = (image: ee.Image) => {
@@ -205,7 +217,6 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
         // It's kept here as a placeholder for other flows that might still call it,
         // but the main logic path from the ClimaPanel won't use this.
         const goesCollection = ee.ImageCollection('NOAA/GOES/19/MCMIPF')
-            .filterDate(ee.Date(Date.now()).advance(-12, 'hour'), ee.Date(Date.now()))
             .sort('system:time_start', false);
         
         const latestImageForMeta = ee.Image(goesCollection.first());
