@@ -174,7 +174,7 @@ export async function getGoesLayer(): Promise<GeeTileLayerOutput> {
         '#ffff00', '#00ff00',             // Yellow/Green (-60C to -40C)
         '#00ffff', '#0000ff',             // Cyan/Blue (-40C to -10C)
         '#999999', '#cccccc', '#ffffff'  // Grays (-10C to 50C)
-    ];
+    ].reverse();
     
     // Temperatures from -90°C to 50°C in Kelvin
     const visParams = { min: 183, max: 323, palette: SMN_CLOUDTOP_PALETTE };
@@ -230,7 +230,7 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
         '#ffff00', '#00ff00',             // Yellow/Green (-60C to -40C)
         '#00ffff', '#0000ff',             // Cyan/Blue (-40C to -10C)
         '#999999', '#cccccc', '#ffffff'  // Grays (-10C to 50C)
-    ];
+    ].reverse();
 
     if (bandCombination === 'GOES_CLOUDTOP') {
         const goesCollection = ee.ImageCollection('NOAA/GOES/19/MCMIPF')
