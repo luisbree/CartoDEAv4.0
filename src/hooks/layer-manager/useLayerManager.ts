@@ -343,28 +343,42 @@ export const useLayerManager = ({
         throw new Error("No se pudo obtener la URL de la capa GOES desde el servidor.");
     }
     
+    let layerName = "GOES Topes Nubosos";
     const timestamp = result.metadata?.timestamp;
-    let formattedDate = '';
     if (timestamp) {
-        const date = new Date(timestamp);
-        // Argentina is UTC-3, adjust time before formatting
-        date.setHours(date.getHours() - 3);
-        formattedDate = `(${date.toLocaleDateString('es-AR', {day: '2-digit', month: '2-digit'})} ${date.toLocaleTimeString('es-AR', {hour: '2-digit', minute: '2-digit'})})`;
+        try {
+            const date = new Date(timestamp);
+            date.setHours(date.getHours() - 3); // Adjust to Argentina time (approx)
+            const formattedDate = `(${date.toLocaleDateString('es-AR', {day: '2-digit', month: '2-digit'})} ${date.toLocaleTimeString('es-AR', {hour: '2-digit', minute: '2-digit'})} UTC-3)`;
+            layerName = `GOES Topes Nubosos ${formattedDate}`;
+        } catch (e) {
+            console.error("Error formatting GOES timestamp:", e);
+        }
     }
     
-    const layerId = 'goes-cmi-layer'; // Use a fixed ID to allow replacement
-    const layerName = `GOES Topes Nubosos ${formattedDate}`.trim();
+    const layerId = 'goes-cmi-layer';
     const existingLayer = layers.find(l => l.id === layerId);
 
     if (existingLayer) {
         const newSource = new XYZ({ url: result.tileUrl, crossOrigin: 'anonymous' });
         (existingLayer.olLayer as TileLayer<any>).setSource(newSource);
         setLayers(prev => prev.map(l => l.id === layerId ? { ...l, name: layerName } : l));
-        toast({ description: `Capa GOES actualizada: ${formattedDate}` });
+        toast({ description: `Capa GOES actualizada.` });
     } else {
-        addGeeLayerToMap(result.tileUrl, layerName, geeParams);
+        const newLayer = new TileLayer({
+            source: new XYZ({ url: result.tileUrl, crossOrigin: 'anonymous' }),
+            properties: { id: layerId, name: layerName, type: 'gee', geeParams: { ...geeParams, tileUrl: result.tileUrl } },
+        });
+        addLayer({
+            id: layerId,
+            name: layerName,
+            olLayer: newLayer,
+            visible: true,
+            opacity: 1,
+            type: 'gee'
+        }, true);
     }
-}, [mapRef, layers, addGeeLayerToMap, toast, setLayers]);
+}, [mapRef, layers, addLayer, toast, setLayers]);
 
 
   const handleAddHybridLayer = useCallback(async (layerName: string, layerTitle: string, serverUrl: string, bbox?: [number, number, number, number], styleName?: string, isInitiallyVisible: boolean = true, initialOpacity: number = 0.7, useWmsStyle: boolean = true): Promise<MapLayer | null> => {
@@ -1283,7 +1297,7 @@ export const useLayerManager = ({
     renameLayer,
     isDrawingSourceEmptyOrNotPolygon,
     handleExtractByPolygon,
-    handleExtractBySelection: (features: Feature<Geometry>[]) => handleExtractBySelection(features),
+    handleExtractBySelection,
     handleExportLayer,
     findSentinel2FootprintsInCurrentView,
     isFindingSentinelFootprints,
@@ -1297,4 +1311,5 @@ export const useLayerManager = ({
     handleExportWmsAsGeotiff,
   };
 };
+
 

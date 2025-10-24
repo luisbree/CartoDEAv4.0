@@ -159,7 +159,7 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
 
     if (bandCombination === 'GOES_CLOUDTOP') {
         const goesCollection = ee.ImageCollection('NOAA/GOES/19/MCMIPF')
-            .filterDate(ee.Date(Date.now()).advance(-2, 'hour'), ee.Date(Date.now()));
+            .filterDate(ee.Date(Date.now()).advance(-12, 'hour'), ee.Date(Date.now()));
         
         const latestImage = ee.Image(goesCollection.sort('system:time_start', false).first());
         
@@ -295,7 +295,7 @@ const geeTileLayerFlow = ai.defineFlow(
     
     if (input.bandCombination === 'GOES_CLOUDTOP') {
         const collection = ee.ImageCollection('NOAA/GOES/19/MCMIPF')
-            .filterDate(ee.Date(Date.now()).advance(-2, 'hour'), ee.Date(Date.now()));
+            .filterDate(ee.Date(Date.now()).advance(-12, 'hour'), ee.Date(Date.now()));
         
         const count = await new Promise<number>((resolve, reject) => {
             collection.size().evaluate((size: number, error?: string) => {
