@@ -159,7 +159,7 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
 
     if (bandCombination === 'GOES_CLOUDTOP') {
         const goesCollection = ee.ImageCollection('NOAA/GOES/19/MCMIPF')
-            .filterDate(ee.Date(Date.now()).advance(-12, 'hour'), ee.Date(Date.now()))
+            .filterDate(ee.Date(Date.now()).advance(-24, 'hour'), ee.Date(Date.now()))
             .sort('system:time_start', false);
         
         const latestImageForMeta = ee.Image(goesCollection.first());
@@ -286,11 +286,9 @@ const geeTileLayerFlow = ai.defineFlow(
   async (input) => {
     await initializeEe();
     
-    // The most robust way to get the latest GOES image is to sort and take the first.
     if (input.bandCombination === 'GOES_CLOUDTOP') {
         const collection = ee.ImageCollection('NOAA/GOES/19/MCMIPF')
-            .filterDate(ee.Date(Date.now()).advance(-24, 'hour'), ee.Date(Date.now()))
-            .sort('system:time_start', false);
+            .filterDate(ee.Date(Date.now()).advance(-24, 'hour'), ee.Date(Date.now()));
             
         // Validate that the collection is not empty before proceeding
         const count = await new Promise<number>((resolve, reject) => {
@@ -317,7 +315,7 @@ const geeTileLayerFlow = ai.defineFlow(
                  if (error.includes && error.includes('computation timed out')) {
                     return reject(new Error('El procesamiento en Earth Engine tardó demasiado. Intente con un área más pequeña.'));
                 }
-                if (error.includes && (error.includes('does not have a band') || error.includes('No bands in image') || error.includes("Parameter 'object' is required") || error.includes("Image.get: Parameter 'object' is required"))) {
+                if (error.includes && (error.includes('does not have a band') || error.includes('No bands in image') || error.includes("Parameter 'object' is required") || error.includes("Image.get: Parameter 'object' is required") || error.includes("Parameter 'input' is required"))) {
                     return reject(new Error('No se encontraron imágenes de GOES para el área y tiempo especificados.'));
                 }
                 return reject(new Error(`Ocurrió un error al generar la capa de Earth Engine: ${error || 'Error desconocido'}`));
