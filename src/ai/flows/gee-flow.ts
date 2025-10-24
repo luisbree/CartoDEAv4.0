@@ -163,18 +163,24 @@ export async function getGoesLayer(): Promise<GeeTileLayerOutput> {
     const scaledImage = applyScaleAndOffset(latestImage);
     const metadata = { timestamp: latestImage.get('system:time_start') };
     
-    // Paleta de colores mejorada, inspirada en la del SMN
-    const CLOUDTOP_PALETTE = [
-        '#606060',  // Grises para nubes más bajas/cálidas
-        '#0000FF',  // Azul
-        '#00FFFF',  // Cian
-        '#00FF00',  // Verde
-        '#FFFF00',  // Amarillo
-        '#FF7F00',  // Naranja
-        '#FF0000',  // Rojo para los topes más fríos
+    const SMN_CLOUDTOP_PALETTE = [
+        '#000000',  // ~-90C Negro
+        '#ff0000',  // ~-70C Rojo
+        '#ffff00',  // ~-60C Amarillo
+        '#00ff00',  // ~-50C Verde
+        '#0000ff',  // ~-40C Azul
+        '#00ffff',  // ~-30C Cian
+        '#ffffff',  // ~-20C Blanco
+        '#cccccc',  // Grises para temps más altas
+        '#999999',
+        '#666666'
     ];
     
-    const visParams = { min: 200, max: 300, palette: CLOUDTOP_PALETTE };
+    // Temperature range in Kelvin (C + 273.15)
+    // -90C = 183.15K
+    // +50C = 323.15K
+    const visParams = { min: 183, max: 323, palette: SMN_CLOUDTOP_PALETTE };
+
 
     return new Promise((resolve, reject) => {
         scaledImage.getMap(visParams, (mapDetails: any, error: string) => {
@@ -221,18 +227,16 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
     
     const ELEVATION_PALETTE = ['006633', 'E5FFCC', '662A00', 'D8D8D8', 'FFFFFF'];
 
-    const CLOUDTOP_PALETTE = [
-      '#606060', '#0000FF', '#00FFFF', '#00FF00', '#FFFF00', '#FF7F00', '#FF0000',
+    const SMN_CLOUDTOP_PALETTE = [
+        '#000000', '#ff0000', '#ffff00', '#00ff00', '#0000ff',
+        '#00ffff', '#ffffff', '#cccccc', '#999999', '#666666'
     ];
 
     if (bandCombination === 'GOES_CLOUDTOP') {
-        // This case is now handled by the dedicated getGoesLayer function
-        // It's kept here as a placeholder for other flows that might still call it,
-        // but the main logic path from the ClimaPanel won't use this.
         const goesCollection = ee.ImageCollection('NOAA/GOES/19/MCMIPF')
-            .sort('system:time_start', false);
+            .filterDate(ee.Date(Date.now()).advance(-2, 'hour'), ee.Date(Date.now()));
         
-        const latestImageForMeta = ee.Image(goesCollection.first());
+        const latestImage = ee.Image(goesCollection.sort('system:time_start', false).first());
         
         const applyScaleAndOffset = (image: ee.Image) => {
             const bandName = 'CMI_C13';
@@ -241,11 +245,11 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
             return image.select(bandName).multiply(scale).add(offset);
         };
         
-        const scaledImage = applyScaleAndOffset(latestImageForMeta);
+        const scaledImage = applyScaleAndOffset(latestImage);
 
-        metadata.timestamp = latestImageForMeta.get('system:time_start');
+        metadata.timestamp = latestImage.get('system:time_start');
         finalImage = scaledImage;
-        visParams = { min: 200, max: 300, palette: CLOUDTOP_PALETTE };
+        visParams = { min: 183, max: 323, palette: SMN_CLOUDTOP_PALETTE };
     
     } else if (['URBAN_FALSE_COLOR', 'SWIR_FALSE_COLOR', 'BSI', 'NDVI', 'TASSELED_CAP'].includes(bandCombination)) {
         let s2ImageCollection = ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
