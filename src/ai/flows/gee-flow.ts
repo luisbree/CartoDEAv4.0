@@ -161,21 +161,19 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
         const goesCollection = ee.ImageCollection('NOAA/GOES/19/MCMIPF')
             .filterDate(ee.Date(Date.now()).advance(-12, 'hour'), ee.Date(Date.now()));
         
-        // This function needs to be defined to be mapped over the collection.
+        const latestImageForMeta = ee.Image(goesCollection.sort('system:time_start', false).first());
+        
         const applyScaleAndOffset = (image: ee.Image) => {
-            const bandName = 'CMI_C13'; // Use the correct band name for this product
+            const bandName = 'CMI_C13';
             const offset = ee.Number(image.get(bandName + '_offset'));
             const scale = ee.Number(image.get(bandName + '_scale'));
             return image.select(bandName).multiply(scale).add(offset);
         };
         
-        const scaledCollection = goesCollection.map(applyScaleAndOffset);
-        const mosaic = scaledCollection.mosaic(); // Mosaic the collection to get the most recent valid pixels.
+        const scaledImage = applyScaleAndOffset(latestImageForMeta);
 
-        const latestImageForMeta = ee.Image(goesCollection.sort('system:time_start', false).first());
-        
         metadata.timestamp = latestImageForMeta.get('system:time_start');
-        finalImage = mosaic;
+        finalImage = scaledImage;
         visParams = { min: 190, max: 300, palette: CLOUDTOP_PALETTE };
     
     } else if (['URBAN_FALSE_COLOR', 'SWIR_FALSE_COLOR', 'BSI', 'NDVI', 'TASSELED_CAP'].includes(bandCombination)) {
@@ -286,23 +284,23 @@ const geeTileLayerFlow = ai.defineFlow(
   async (input) => {
     await initializeEe();
     
+    // The most robust way to get the latest GOES image is to sort and take the first.
     if (input.bandCombination === 'GOES_CLOUDTOP') {
         const collection = ee.ImageCollection('NOAA/GOES/19/MCMIPF')
-            .filterDate(ee.Date(Date.now()).advance(-12, 'hour'), ee.Date(Date.now()));
-        
-        const count = await new Promise<number>((resolve, reject) => {
-            collection.size().evaluate((size: number, error?: string) => {
-                if (error) {
-                    reject(new Error(error));
+            .sort('system:time_start', false); // Sort by time, newest first
+            
+        const latestImage = ee.Image(collection.first());
+
+        // This check needs to be done via evaluate to know if the image is valid
+        const imageId = await new Promise<string>((resolve, reject) => {
+            latestImage.id().evaluate((id, error) => {
+                if (error || !id) {
+                    reject(new Error('No se encontraron imágenes de GOES disponibles.'));
                 } else {
-                    resolve(size);
+                    resolve(id);
                 }
             });
         });
-        
-        if (count === 0) {
-            throw new Error('No se encontraron imágenes de GOES para el área y tiempo especificados.');
-        }
     }
     
     const { finalImage, visParams, metadata } = getImageForProcessing(input);
@@ -695,6 +693,8 @@ function initializeEe(): Promise<void> {
 
     
 
+
+    
 
     
 
