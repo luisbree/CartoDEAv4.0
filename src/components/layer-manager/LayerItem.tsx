@@ -17,8 +17,14 @@ import {
   DropdownMenuPortal,
   DropdownMenuCheckboxItem,
 } from "@/components/ui/dropdown-menu";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Slider } from "@/components/ui/slider"; 
-import { Eye, EyeOff, Settings2, ZoomIn, Table2, Trash2, Scissors, Percent, GripVertical, CopyPlus, Download, Edit, Palette, Tags, Waypoints, AppWindow, BarChartHorizontal, Target, Image as ImageIcon } from 'lucide-react';
+import { Eye, EyeOff, Settings2, ZoomIn, Table2, Trash2, Scissors, Percent, GripVertical, CopyPlus, Download, Edit, Palette, Tags, Waypoints, AppWindow, BarChartHorizontal, Target, Image as ImageIcon, Info } from 'lucide-react';
 import type { CategorizedSymbology, GeoTiffStyle, GraduatedSymbology, InteractionToolId, LabelOptions, MapLayer, VectorMapLayer } from '@/lib/types';
 import VectorLayer from 'ol/layer/Vector'; 
 import WebGLTileLayer from 'ol/layer/WebGLTile';
@@ -29,6 +35,8 @@ import LabelEditorDialog from './LabelEditorDialog';
 import GraduatedSymbologyDialog from './GraduatedSymbologyDialog';
 import CategorizedSymbologyDialog from './CategorizedSymbologyDialog';
 import { useLayerManager } from '@/hooks/layer-manager/useLayerManager';
+import { format } from 'date-fns';
+import { es } from 'date-fns/locale';
 
 
 interface LayerItemProps {
@@ -118,6 +126,7 @@ const LayerItem: React.FC<LayerItemProps> = ({
   const isVectorLayer = layer.olLayer instanceof VectorLayer;
   const isWfsLayer = layer.type === 'wfs';
   const isGeoTiffLayer = layer.type === 'geotiff' || layer.type === 'gee';
+  const isGoesLayer = isGeoTiffLayer && layer.olLayer.get('geeParams')?.bandCombination === 'GOES_CLOUDTOP';
   const isWmsLayer = layer.type === 'wms';
   const currentOpacityPercentage = Math.round(layer.opacity * 100);
 
@@ -208,9 +217,34 @@ const LayerItem: React.FC<LayerItemProps> = ({
     setIsCategorizedEditorOpen(false);
     setIsDropdownOpen(false);
   };
+  
+  const GoesMetadataTooltip = () => {
+    const metadata = layer.olLayer.get('geeParams')?.metadata;
+    if (!isGoesLayer || !metadata) return null;
+
+    const timestamp = metadata.timestamp ? format(new Date(metadata.timestamp), "dd/MM/yyyy HH:mm:ss 'UTC'", { locale: es }) : 'N/D';
+    const satellite = metadata.satellite || 'N/D';
+    const sceneId = metadata.scene_id || 'N/D';
+
+    return (
+        <Tooltip>
+            <TooltipTrigger asChild>
+                <Info className="h-3 w-3 text-gray-400 hover:text-white ml-2 flex-shrink-0" />
+            </TooltipTrigger>
+            <TooltipContent side="right" className="bg-gray-700 text-white border-gray-600 text-xs">
+                <div className="space-y-1">
+                    <p><strong>Fecha:</strong> {timestamp}</p>
+                    <p><strong>Satélite:</strong> {satellite}</p>
+                    <p><strong>ID Escena:</strong> <span className="break-all">{sceneId}</span></p>
+                </div>
+            </TooltipContent>
+        </Tooltip>
+    );
+  };
 
   return (
     <>
+    <TooltipProvider>
       <li 
         className={cn(
           "flex items-center px-1.5 py-1 transition-all overflow-hidden relative",
@@ -267,6 +301,7 @@ const LayerItem: React.FC<LayerItemProps> = ({
         )}
         
         <div className="flex items-center space-x-0.5 flex-shrink-0">
+          <GoesMetadataTooltip />
           <DropdownMenu open={isDropdownOpen} onOpenChange={setIsDropdownOpen}>
             <DropdownMenuTrigger asChild>
               <Button
@@ -312,47 +347,51 @@ const LayerItem: React.FC<LayerItemProps> = ({
                       </DropdownMenuItem>
                   )}
 
-                  {(isVectorLayer || isGeoTiffLayer) && (
-                    <DropdownMenuSub>
-                      <DropdownMenuSubTrigger className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer data-[state=open]:bg-gray-600">
-                        <Palette className="mr-2 h-3.5 w-3.5" />
-                        <span>Simbología</span>
+                  <DropdownMenuSub>
+                      <DropdownMenuSubTrigger 
+                        className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer data-[state=open]:bg-gray-600"
+                        disabled={isGoesLayer}
+                      >
+                          <Palette className="mr-2 h-3.5 w-3.5" />
+                          <span>Simbología</span>
                       </DropdownMenuSubTrigger>
-                      <DropdownMenuPortal>
-                        <DropdownMenuSubContent className="bg-gray-700 text-white border-gray-600">
-                           {isVectorLayer && (
-                             <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setIsStyleEditorOpen(true); }} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">
-                                <Palette className="mr-2 h-3.5 w-3.5" /> Simple
-                             </DropdownMenuItem>
-                           )}
-                           {isVectorLayer && (
-                              <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setIsCategorizedEditorOpen(true); }} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">
-                                <AppWindow className="mr-2 h-3.5 w-3.5" /> Por Categorías
-                              </DropdownMenuItem>
-                           )}
-                          <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setIsGraduatedEditorOpen(true); }} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">
-                            <Waypoints className="mr-2 h-3.5 w-3.5" /> Graduada
-                          </DropdownMenuItem>
-                          {isVectorLayer && (
-                            <>
-                              <DropdownMenuSeparator className="bg-gray-500/50 my-1" />
-                              <DropdownMenuCheckboxItem
-                                checked={layer.wmsStyleEnabled}
-                                onSelect={(e) => {
-                                    e.preventDefault();
-                                    onToggleWmsStyle(layer.id);
-                                }}
-                                disabled={!isWfsLayer}
-                                className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                              >
-                                Usar Estilo del Servidor (WMS)
-                              </DropdownMenuCheckboxItem>
-                            </>
-                          )}
-                        </DropdownMenuSubContent>
-                      </DropdownMenuPortal>
-                    </DropdownMenuSub>
-                  )}
+                      {(isVectorLayer || isGeoTiffLayer) && !isGoesLayer && (
+                        <DropdownMenuPortal>
+                          <DropdownMenuSubContent className="bg-gray-700 text-white border-gray-600">
+                             {isVectorLayer && (
+                               <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setIsStyleEditorOpen(true); }} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">
+                                  <Palette className="mr-2 h-3.5 w-3.5" /> Simple
+                               </DropdownMenuItem>
+                             )}
+                             {isVectorLayer && (
+                                <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setIsCategorizedEditorOpen(true); }} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">
+                                  <AppWindow className="mr-2 h-3.5 w-3.5" /> Por Categorías
+                                </DropdownMenuItem>
+                             )}
+                            <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setIsGraduatedEditorOpen(true); }} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">
+                              <Waypoints className="mr-2 h-3.5 w-3.5" /> Graduada
+                            </DropdownMenuItem>
+                            {isVectorLayer && (
+                              <>
+                                <DropdownMenuSeparator className="bg-gray-500/50 my-1" />
+                                <DropdownMenuCheckboxItem
+                                  checked={layer.wmsStyleEnabled}
+                                  onSelect={(e) => {
+                                      e.preventDefault();
+                                      onToggleWmsStyle(layer.id);
+                                  }}
+                                  disabled={!isWfsLayer}
+                                  className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  Usar Estilo del Servidor (WMS)
+                                </DropdownMenuCheckboxItem>
+                              </>
+                            )}
+                          </DropdownMenuSubContent>
+                        </DropdownMenuPortal>
+                      )}
+                  </DropdownMenuSub>
+
 
                   {isVectorLayer && (
                     <DropdownMenuItem
@@ -480,6 +519,7 @@ const LayerItem: React.FC<LayerItemProps> = ({
           </DropdownMenu>
         </div>
       </li>
+      </TooltipProvider>
       {!isSharedView && (
         <>
           {isVectorLayer && (
@@ -521,3 +561,6 @@ const LayerItem: React.FC<LayerItemProps> = ({
 };
 
 export default LayerItem;
+
+
+    
