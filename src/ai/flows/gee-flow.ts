@@ -158,30 +158,39 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
     const CLOUDTOP_PALETTE = ['#000080', '#0000FF', '#00FFFF', '#FFFFFF']; // From cold (blue) to hot (white)
 
     if (bandCombination === 'GOES_CLOUDTOP') {
-        const applyScaleAndOffset = function(image: ee.Image) {
+        const goesCollection = ee.ImageCollection('NOAA/GOES/16/MCMIPF')
+            .filterDate(ee.Date(Date.now()).advance(-2, 'hour'), ee.Date(Date.now()))
+            .filter(ee.Filter.bounds(geometry!));
+
+        const size = goesCollection.size();
+
+        const processGoes = () => {
+            const latestImage = ee.Image(goesCollection.sort('system:time_start', false).first());
+            
             const bandName = 'CMI_C13';
-            const offset = image.get(bandName + '_offset');
-            const scale = image.get(bandName + '_scale');
-            return image.select(bandName).multiply(ee.Image.constant(scale)).add(ee.Image.constant(offset));
+            const offset = ee.Number(latestImage.get(bandName + '_offset'));
+            const scale = ee.Number(latestImage.get(bandName + '_scale'));
+            const scaledImage = latestImage.select(bandName).multiply(scale).add(offset);
+
+            if (geometry) {
+                finalImage = scaledImage.clip(geometry);
+            } else {
+                finalImage = scaledImage;
+            }
+            metadata.timestamp = latestImage.get('system:time_start');
+            return finalImage;
         };
 
-        let goesCollection = ee.ImageCollection('NOAA/GOES/16/MCMIPF')
-            .filterDate(ee.Date(Date.now()).advance(-2, 'hour'), ee.Date(Date.now()));
-            
-        if (geometry) {
-            goesCollection = goesCollection.filterBounds(geometry);
-        }
+        // Use ee.Algorithms.If to handle the case where the collection is empty.
+        finalImage = ee.Image(ee.Algorithms.If(
+            ee.Number(size).gt(0),
+            // If collection is not empty, process it
+            processGoes(),
+            // If collection is empty, create a blank image to avoid errors
+            ee.Image().rename('CMI_C13')
+        ));
         
-        const latestImage = ee.Image(goesCollection.sort('system:time_start', false).first());
-        
-        finalImage = applyScaleAndOffset(latestImage);
-
-        if (geometry) {
-            finalImage = finalImage.clip(geometry);
-        }
-        
-        metadata.timestamp = latestImage.get('system:time_start');
-        visParams = { min: 190, max: 300, palette: CLOUDTOP_PALETTE }; // Temp in Kelvin
+        visParams = { min: 190, max: 300, palette: CLOUDTOP_PALETTE };
     } else if (['URBAN_FALSE_COLOR', 'SWIR_FALSE_COLOR', 'BSI', 'NDVI', 'TASSELED_CAP'].includes(bandCombination)) {
         let s2ImageCollection = ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
           .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 20));
@@ -298,6 +307,9 @@ const geeTileLayerFlow = ai.defineFlow(
                  if (error.includes && error.includes('computation timed out')) {
                     return reject(new Error('El procesamiento en Earth Engine tardó demasiado. Intente con un área más pequeña.'));
                 }
+                if (error.includes && (error.includes('does not have a band') || error.includes('No bands in image'))) {
+                    return reject(new Error('No se encontraron imágenes de GOES para el área y tiempo especificados.'));
+                }
                 return reject(new Error(`Ocurrió un error al generar la capa de Earth Engine: ${error || 'Error desconocido'}`));
             }
 
@@ -308,7 +320,7 @@ const geeTileLayerFlow = ai.defineFlow(
             const tileUrl = mapDetails.urlFormat.replace('{x}', '{x}').replace('{y}', '{y}').replace('{z}', '{z}');
             
             // If metadata (like a timestamp) exists, evaluate it and return it with the URL.
-            if (metadata && Object.keys(metadata).length > 0) {
+            if (metadata && Object.keys(metadata).length > 0 && metadata.timestamp) {
                  ee.Dictionary(metadata).evaluate((evaluatedMetadata, error) => {
                     if (error) {
                         console.error("Error evaluating metadata:", error);
@@ -674,6 +686,9 @@ function initializeEe(): Promise<void> {
     
 
 
+
+
+    
 
 
     
