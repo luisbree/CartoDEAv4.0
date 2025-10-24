@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
@@ -26,6 +27,7 @@ import type { GeeValueQueryInput } from '@/ai/flows/gee-types';
 import { ToastAction } from '@/components/ui/toast';
 import { saveFileWithPicker } from '@/services/download-service';
 import { writeArrayBuffer } from 'geotiff';
+import { getGeeGeoTiffDownloadUrl } from '@/ai/flows/gee-flow';
 
 
 interface UseLayerManagerProps {
@@ -317,7 +319,7 @@ export const useLayerManager = ({
       name: layerName,
       olLayer: geeLayer,
       visible: true,
-      opacity: 0.8,
+      opacity: 0.6,
       type: 'gee'
     }, true);
     
@@ -1156,11 +1158,49 @@ export const useLayerManager = ({
   }, [layers, toast, handleShowLayerTable]);
   
   const handleExportWmsAsGeotiff = useCallback(async (layerId: string) => {
-    // This is a placeholder for the actual implementation, which would involve
-    // a backend service to make the GetMap request and convert it to a GeoTIFF.
-    // The logic has been moved to use the existing GEE GeoTIFF download flow.
-    toast({ description: 'La exportación de WMS a GeoTIFF no está implementada directamente. Utilice las herramientas de GEE para exportar GeoTIFFs.', variant: 'default', duration: 5000 });
-  }, [toast]);
+    const layer = layers.find(l => l.id === layerId);
+    if (!layer || !mapRef.current) return;
+
+    if (layer.type === 'gee') {
+        const geeParams = layer.olLayer.get('geeParams');
+        if (!geeParams || !geeParams.bandCombination) {
+            toast({ description: "La capa GEE no tiene los parámetros necesarios para la exportación.", variant: "destructive" });
+            return;
+        }
+
+        toast({ description: "Iniciando exportación de GeoTIFF desde GEE..." });
+
+        const view = mapRef.current.getView();
+        const extent = view.calculateExtent(mapRef.current.getSize()!);
+        const extent4326 = transformExtent(extent, view.getProjection(), 'EPSG:4326');
+        
+        try {
+            const result = await getGeeGeoTiffDownloadUrl({
+                aoi: { minLon: extent4326[0], minLat: extent4326[1], maxLon: extent4326[2], maxLat: extent4326[3] },
+                bandCombination: geeParams.bandCombination,
+                // Pass other relevant params from the original layer if they exist
+                startDate: geeParams.startDate,
+                endDate: geeParams.endDate,
+                minElevation: geeParams.minElevation,
+                maxElevation: geeParams.maxElevation,
+            });
+    
+            if (result?.downloadUrl) {
+                window.open(result.downloadUrl, '_blank');
+                toast({ description: "Descarga de GeoTIFF iniciada." });
+            } else {
+                throw new Error("No se recibió una URL de descarga del servidor.");
+            }
+        } catch(error: any) {
+            console.error("Error exporting GEE layer as GeoTIFF:", error);
+            toast({ title: "Error de Exportación", description: error.message, variant: "destructive" });
+        }
+
+    } else {
+        // Fallback for generic WMS or other types if needed in the future
+        toast({ description: 'La exportación directa de esta capa a GeoTIFF no está implementada. Use las herramientas de GEE.', variant: 'default', duration: 5000 });
+    }
+}, [layers, mapRef, toast]);
 
 
   return {
