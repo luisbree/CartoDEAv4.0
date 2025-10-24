@@ -547,7 +547,12 @@ const geeGeoTiffDownloadFlow = ai.defineFlow(
         if (!geometry) {
             throw new Error("Se requiere un área de interés (AOI) para la exportación de GeoTIFF.");
         }
-        const clippedImage = finalImage.clip(geometry);
+        
+        // For GOES layers, clipping is not applicable as they are full-disk images.
+        // The 'region' parameter in getDownloadURL will handle the spatial subsetting.
+        const imageToExport = input.bandCombination === 'GOES_CLOUDTOP' 
+            ? finalImage 
+            : finalImage.clip(geometry);
 
         return new Promise((resolve, reject) => {
             const componentName = input.tasseledCapComponent ? `_${input.tasseledCapComponent.toLowerCase()}` : '';
@@ -558,11 +563,11 @@ const geeGeoTiffDownloadFlow = ai.defineFlow(
                 format: 'GEO_TIFF',
                 region: geometry,
                 // For multi-band images, specify band order. For single band, it's automatic.
-                bands: clippedImage.bandNames().getInfo(),
+                bands: imageToExport.bandNames().getInfo(),
                 scale: 30, // Use a reasonable default of 30 meters.
             };
 
-            clippedImage.getDownloadURL(params, (url, error) => {
+            imageToExport.getDownloadURL(params, (url, error) => {
                 if (error) {
                     console.error("Earth Engine getDownloadURL Error for GeoTIFF:", error);
                     if (error.includes && error.includes('computation timed out')) {
@@ -745,3 +750,5 @@ function initializeEe(): Promise<void> {
   }
   return eeInitialized;
 }
+
+    
