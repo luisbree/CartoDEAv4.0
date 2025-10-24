@@ -158,11 +158,12 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
     const CLOUDTOP_PALETTE = ['#000080', '#0000FF', '#00FFFF', '#FFFFFF'];
 
     if (bandCombination === 'GOES_CLOUDTOP') {
-        const goesCollection = ee.ImageCollection('NOAA/GOES/19/MCMIPF')
+        const collection = ee.ImageCollection('NOAA/GOES/19/MCMIPF')
             .filterDate(ee.Date(Date.now()).advance(-12, 'hour'), ee.Date(Date.now()));
         
-        const latestImage = ee.Image(goesCollection.sort('system:time_start', false).first());
-        
+        const latestImage = ee.Image(collection.sort('system:time_start', false).first());
+
+        // This function needs to be defined to be mapped over the collection.
         const applyScaleAndOffset = (image: ee.Image) => {
             const bandName = 'CMI_C13';
             const offset = ee.Number(image.get(bandName + '_offset'));
@@ -170,21 +171,18 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
             return image.select(bandName).multiply(scale).add(offset);
         };
         
+        // Use ee.Algorithms.If to handle the case where latestImage might be null.
         const scaledImage = ee.Image(ee.Algorithms.If(
-            latestImage, 
-            applyScaleAndOffset(latestImage),
-            ee.Image() // Return an empty image if latestImage is null
+            latestImage, // Condition: if latestImage is not null
+            applyScaleAndOffset(latestImage), // Then: apply the function
+            ee.Image() // Else: return an empty image to avoid errors
         ));
 
         metadata.timestamp = latestImage.get('system:time_start');
-
-        if (geometry) {
-            finalImage = scaledImage.clip(geometry);
-        } else {
-            finalImage = scaledImage;
-        }
-
+        
+        finalImage = scaledImage; // Assign to finalImage, clipping happens later if needed.
         visParams = { min: 190, max: 300, palette: CLOUDTOP_PALETTE };
+    
     } else if (['URBAN_FALSE_COLOR', 'SWIR_FALSE_COLOR', 'BSI', 'NDVI', 'TASSELED_CAP'].includes(bandCombination)) {
         let s2ImageCollection = ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
           .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 20));
@@ -275,7 +273,7 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
         visParams = { min: 0, max: 100, palette: ['#FFFFFF', 'lightblue', 'blue'] };
     }
 
-    if (geometry && bandCombination !== 'GOES_CLOUDTOP') { // GOES is clipped manually
+    if (geometry) {
         finalImage = finalImage.clip(geometry);
     }
 
