@@ -1275,7 +1275,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
         {isMounted && !initialMapState && panels.wfsLibrary && !panels.wfsLibrary.isMinimized && (
           <WfsLibraryPanel
             panelRef={wfsLibraryPanelRef}
-            isCollapsed={panels.wfsLibrary.isMinimized}
+            isCollapsed={panels.wfsLibrary.isCollapsed}
             onToggleCollapse={() => togglePanelCollapse('wfsLibrary')}
             onClosePanel={() => togglePanelMinimize('wfsLibrary')}
             onMouseDownHeader={(e) => handlePanelMouseDown(e, 'wfsLibrary')}
