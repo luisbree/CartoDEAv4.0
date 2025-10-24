@@ -1,3 +1,4 @@
+
 'use server';
 /**
  * @fileOverview A flow for generating Google Earth Engine tile layers, vector data, and histograms.
@@ -161,7 +162,19 @@ export async function getGoesLayer(): Promise<GeeTileLayerOutput> {
 
     const scaledImage = applyScaleAndOffset(latestImage);
     const metadata = { timestamp: latestImage.get('system:time_start') };
-    const visParams = { min: 190, max: 300, palette: ['#000080', '#0000FF', '#00FFFF', '#FFFFFF'] };
+    
+    // Paleta de colores mejorada, inspirada en la del SMN
+    const CLOUDTOP_PALETTE = [
+        '#606060',  // Grises para nubes más bajas/cálidas
+        '#0000FF',  // Azul
+        '#00FFFF',  // Cian
+        '#00FF00',  // Verde
+        '#FFFF00',  // Amarillo
+        '#FF7F00',  // Naranja
+        '#FF0000',  // Rojo para los topes más fríos
+    ];
+    
+    const visParams = { min: 200, max: 300, palette: CLOUDTOP_PALETTE };
 
     return new Promise((resolve, reject) => {
         scaledImage.getMap(visParams, (mapDetails: any, error: string) => {
@@ -208,7 +221,9 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
     
     const ELEVATION_PALETTE = ['006633', 'E5FFCC', '662A00', 'D8D8D8', 'FFFFFF'];
 
-    const CLOUDTOP_PALETTE = ['#000080', '#0000FF', '#00FFFF', '#FFFFFF'];
+    const CLOUDTOP_PALETTE = [
+      '#606060', '#0000FF', '#00FFFF', '#00FF00', '#FFFF00', '#FF7F00', '#FF0000',
+    ];
 
     if (bandCombination === 'GOES_CLOUDTOP') {
         // This case is now handled by the dedicated getGoesLayer function
@@ -230,7 +245,7 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
 
         metadata.timestamp = latestImageForMeta.get('system:time_start');
         finalImage = scaledImage;
-        visParams = { min: 190, max: 300, palette: CLOUDTOP_PALETTE };
+        visParams = { min: 200, max: 300, palette: CLOUDTOP_PALETTE };
     
     } else if (['URBAN_FALSE_COLOR', 'SWIR_FALSE_COLOR', 'BSI', 'NDVI', 'TASSELED_CAP'].includes(bandCombination)) {
         let s2ImageCollection = ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
