@@ -169,9 +169,9 @@ export async function getGoesLayer(): Promise<GeeTileLayerOutput> {
     };
     
     const SMN_CLOUDTOP_PALETTE = [
-      '#000000', '#800000', '#ff0000', '#ffff00', '#00ff00',
-      '#00ffff', '#0000ff', '#999999', '#cccccc', '#ffffff'
-    ].reverse();
+        '#000000', '#800000', '#ff0000', '#ffff00', '#00ff00',
+        '#00ffff', '#0000ff', '#999999', '#cccccc', '#ffffff'
+    ];
     
     // Temperatures from -90°C to 50°C in Kelvin
     const visParams = { min: 183, max: 323, palette: SMN_CLOUDTOP_PALETTE };
@@ -222,9 +222,9 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
     const ELEVATION_PALETTE = ['006633', 'E5FFCC', '662A00', 'D8D8D8', 'FFFFFF'];
 
     const SMN_CLOUDTOP_PALETTE = [
-      '#000000', '#800000', '#ff0000', '#ffff00', '#00ff00',
-      '#00ffff', '#0000ff', '#999999', '#cccccc', '#ffffff'
-    ].reverse();
+        '#000000', '#800000', '#ff0000', '#ffff00', '#00ff00',
+        '#00ffff', '#0000ff', '#999999', '#cccccc', '#ffffff'
+    ];
 
     if (bandCombination === 'GOES_CLOUDTOP') {
         const goesCollection = ee.ImageCollection('NOAA/GOES/19/MCMIPF')
