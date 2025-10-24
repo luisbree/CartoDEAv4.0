@@ -31,13 +31,14 @@ const ClimaPanel: React.FC<ClimaPanelProps> = ({
 
     const handleGenerate = async () => {
         setIsGenerating(true);
+        toast({ description: "Buscando última imagen de GOES-19..." });
         try {
             await onAddGoesLayer();
-        } catch (error) {
+        } catch (error: any) {
             console.error("Error en el panel de clima al generar capa GOES:", error);
             toast({
                 title: "Error",
-                description: "No se pudo generar la capa de GOES.",
+                description: error.message || "No se pudo generar la capa de GOES.",
                 variant: "destructive",
             });
         } finally {
@@ -62,9 +63,9 @@ const ClimaPanel: React.FC<ClimaPanelProps> = ({
     >
       <div className="p-3 space-y-4">
         <div className="space-y-2">
-            <h3 className="text-sm font-semibold">Temperatura de Topes Nubosos (GOES-16)</h3>
+            <h3 className="text-sm font-semibold">Temperatura de Topes Nubosos (GOES-19)</h3>
             <p className="text-xs text-gray-400">
-                Visualiza la temperatura de los topes de las nubes a partir de la banda infrarroja del satélite GOES-16. Las temperaturas más frías (violeta/blanco) indican nubes de mayor desarrollo vertical, asociadas a tormentas intensas.
+                Visualiza la temperatura de los topes de las nubes a partir de la banda infrarroja del satélite GOES-19. Las temperaturas más frías (violeta/blanco) indican nubes de mayor desarrollo vertical, asociadas a tormentas intensas.
             </p>
             <Button className="w-full" onClick={handleGenerate} disabled={isGenerating}>
                 {isGenerating ? (

@@ -158,18 +158,19 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
     const CLOUDTOP_PALETTE = ['#000080', '#0000FF', '#00FFFF', '#FFFFFF'];
 
     if (bandCombination === 'GOES_CLOUDTOP') {
-        const goesCollection = ee.ImageCollection('NOAA/GOES/19/MCMIPF')
+        const goesCollection = ee.ImageCollection('GOOGLE/GOES/19/L2-CMIP')
             .filterDate(ee.Date(Date.now()).advance(-12, 'hour'), ee.Date(Date.now()));
         
+        let filteredCollection = goesCollection;
         if (geometry) {
-             goesCollection.filter(ee.Filter.bounds(geometry));
+             filteredCollection = goesCollection.filter(ee.Filter.bounds(geometry));
         }
         
-        const latestImage = ee.Image(goesCollection.sort('system:time_start', false).first());
+        const latestImage = ee.Image(filteredCollection.sort('system:time_start', false).first());
 
         // This function needs to be defined to be mapped over the collection.
         const applyScaleAndOffset = (image: ee.Image) => {
-            const bandName = 'CMI_C13';
+            const bandName = 'CMI'; // Correct band name for this collection
             const offset = ee.Number(image.get(bandName + '_offset'));
             const scale = ee.Number(image.get(bandName + '_scale'));
             return image.select(bandName).multiply(scale).add(offset);
@@ -184,7 +185,7 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
 
         metadata.timestamp = latestImage.get('system:time_start');
         
-        finalImage = scaledImage; // Assign to finalImage, clipping happens later if needed.
+        finalImage = scaledImage; 
         visParams = { min: 190, max: 300, palette: CLOUDTOP_PALETTE };
     
     } else if (['URBAN_FALSE_COLOR', 'SWIR_FALSE_COLOR', 'BSI', 'NDVI', 'TASSELED_CAP'].includes(bandCombination)) {
@@ -296,7 +297,7 @@ const geeTileLayerFlow = ai.defineFlow(
     await initializeEe();
     
     if (input.bandCombination === 'GOES_CLOUDTOP') {
-        const collection = ee.ImageCollection('NOAA/GOES/19/MCMIPF')
+        const collection = ee.ImageCollection('GOOGLE/GOES/19/L2-CMIP')
             .filterDate(ee.Date(Date.now()).advance(-12, 'hour'), ee.Date(Date.now()));
         
         const count = await new Promise<number>((resolve, reject) => {
