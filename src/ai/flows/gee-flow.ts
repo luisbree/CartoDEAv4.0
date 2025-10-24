@@ -159,9 +159,10 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
 
     if (bandCombination === 'GOES_CLOUDTOP') {
         const goesCollection = ee.ImageCollection('NOAA/GOES/19/MCMIPF')
-            .filterDate(ee.Date(Date.now()).advance(-12, 'hour'), ee.Date(Date.now()));
+            .filterDate(ee.Date(Date.now()).advance(-12, 'hour'), ee.Date(Date.now()))
+            .sort('system:time_start', false);
         
-        const latestImageForMeta = ee.Image(goesCollection.sort('system:time_start', false).first());
+        const latestImageForMeta = ee.Image(goesCollection.first());
         
         const applyScaleAndOffset = (image: ee.Image) => {
             const bandName = 'CMI_C13';
@@ -258,12 +259,13 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
     } else if (bandCombination === 'ALOS_DSM') {
         finalImage = ee.ImageCollection('JAXA/ALOS/AW3D30/V3_2').select('DSM').mosaic();
         visParams = { min: minElevation ?? 0, max: maxElevation ?? 4000, palette: ELEVATION_PALETTE };
-    } else if (bandCombination === 'OPENLANDMAP_SOC') {
-        finalImage = ee.Image("OpenLandMap/SOL/SOL_ORGANIC-CARBON_USDA-6A1C_M/v02").select('b0');
-        visParams = { min: 0, max: 100, palette: ['#FFFFE5', '#FFF7BC', '#FEE391', '#FEC44F', '#FE9929', '#EC7014', '#CC4C02', '#8C2D04'] };
-    } else { // JRC_WATER_OCCURRENCE
-        finalImage = ee.Image('JRC/GSW1_4/GlobalSurfaceWater').select('occurrence');
-        visParams = { min: 0, max: 100, palette: ['#FFFFFF', 'lightblue', 'blue'] };
+    } else { // JRC_WATER_OCCURRENCE or OPENLANDMAP_SOC
+        finalImage = bandCombination === 'JRC_WATER_OCCURRENCE'
+            ? ee.Image('JRC/GSW1_4/GlobalSurfaceWater').select('occurrence')
+            : ee.Image("OpenLandMap/SOL/SOL_ORGANIC-CARBON_USDA-6A1C_M/v02").select('b0');
+        visParams = bandCombination === 'JRC_WATER_OCCURRENCE'
+            ? { min: 0, max: 100, palette: ['#FFFFFF', 'lightblue', 'blue'] }
+            : { min: 0, max: 100, palette: ['#FFFFE5', '#FFF7BC', '#FEE391', '#FEC44F', '#FE9929', '#EC7014', '#CC4C02', '#8C2D04'] };
     }
 
     if (geometry) {
@@ -287,20 +289,23 @@ const geeTileLayerFlow = ai.defineFlow(
     // The most robust way to get the latest GOES image is to sort and take the first.
     if (input.bandCombination === 'GOES_CLOUDTOP') {
         const collection = ee.ImageCollection('NOAA/GOES/19/MCMIPF')
-            .sort('system:time_start', false); // Sort by time, newest first
+            .filterDate(ee.Date(Date.now()).advance(-24, 'hour'), ee.Date(Date.now()))
+            .sort('system:time_start', false);
             
-        const latestImage = ee.Image(collection.first());
-
-        // This check needs to be done via evaluate to know if the image is valid
-        const imageId = await new Promise<string>((resolve, reject) => {
-            latestImage.id().evaluate((id, error) => {
-                if (error || !id) {
-                    reject(new Error('No se encontraron imágenes de GOES disponibles.'));
+        // Validate that the collection is not empty before proceeding
+        const count = await new Promise<number>((resolve, reject) => {
+            collection.size().evaluate((size: number, error?: string) => {
+                if (error) {
+                    reject(new Error(error));
                 } else {
-                    resolve(id);
+                    resolve(size);
                 }
             });
         });
+
+        if (count === 0) {
+            throw new Error('No se encontraron imágenes de GOES para el área y tiempo especificados.');
+        }
     }
     
     const { finalImage, visParams, metadata } = getImageForProcessing(input);
@@ -481,7 +486,10 @@ const geeGeoTiffDownloadFlow = ai.defineFlow(
         const { finalImage, geometry } = getImageForProcessing(input);
 
         // Clip the image to the specified Area of Interest (AOI)
-        const clippedImage = finalImage.clip(geometry!);
+        if (!geometry) {
+            throw new Error("Se requiere un área de interés (AOI) para la exportación de GeoTIFF.");
+        }
+        const clippedImage = finalImage.clip(geometry);
 
         return new Promise((resolve, reject) => {
             const componentName = input.tasseledCapComponent ? `_${input.tasseledCapComponent.toLowerCase()}` : '';
@@ -679,23 +687,3 @@ function initializeEe(): Promise<void> {
   }
   return eeInitialized;
 }
-
-    
-
-    
-
-    
-
-    
-
-
-
-
-    
-
-
-    
-
-    
-
-    
