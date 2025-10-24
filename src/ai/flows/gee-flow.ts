@@ -168,12 +168,9 @@ export async function getGoesLayer(): Promise<GeeTileLayerOutput> {
         scene_id: latestImage.get('scene_id'),
     };
     
-    // This is the SMN-inspired palette
     const SMN_CLOUDTOP_PALETTE = [
-        '#000000', '#800000', '#ff0000', // Black/Reds (-90C to -60C)
-        '#ffff00', '#00ff00',             // Yellow/Green (-60C to -40C)
-        '#00ffff', '#0000ff',             // Cyan/Blue (-40C to -10C)
-        '#999999', '#cccccc', '#ffffff'  // Grays (-10C to 50C)
+      '#000000', '#800000', '#ff0000', '#ffff00', '#00ff00',
+      '#00ffff', '#0000ff', '#999999', '#cccccc', '#ffffff'
     ];
     
     // Temperatures from -90°C to 50°C in Kelvin
@@ -224,12 +221,9 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
     
     const ELEVATION_PALETTE = ['006633', 'E5FFCC', '662A00', 'D8D8D8', 'FFFFFF'];
 
-    // This is the SMN-inspired palette, with the correct order for the temperature range.
     const SMN_CLOUDTOP_PALETTE = [
-        '#000000', '#800000', '#ff0000', // Black/Reds (-90C to -60C)
-        '#ffff00', '#00ff00',             // Yellow/Green (-60C to -40C)
-        '#00ffff', '#0000ff',             // Cyan/Blue (-40C to -10C)
-        '#999999', '#cccccc', '#ffffff'  // Grays (-10C to 50C)
+      '#000000', '#800000', '#ff0000', '#ffff00', '#00ff00',
+      '#00ffff', '#0000ff', '#999999', '#cccccc', '#ffffff'
     ];
 
     if (bandCombination === 'GOES_CLOUDTOP') {
@@ -558,13 +552,13 @@ const geeGeoTiffDownloadFlow = ai.defineFlow(
             const componentName = input.tasseledCapComponent ? `_${input.tasseledCapComponent.toLowerCase()}` : '';
             const filename = `gee_export_${input.bandCombination.toLowerCase()}${componentName}`;
             
-            const params = {
+            const params: ee.data.GetDownloadURLParams = {
                 name: filename,
                 format: 'GEO_TIFF',
                 region: geometry,
                 // For multi-band images, specify band order. For single band, it's automatic.
                 bands: imageToExport.bandNames().getInfo(),
-                scale: 30, // Use a reasonable default of 30 meters.
+                scale: input.bandCombination === 'GOES_CLOUDTOP' ? 2000 : 30,
             };
 
             imageToExport.getDownloadURL(params, (url, error) => {
@@ -750,5 +744,3 @@ function initializeEe(): Promise<void> {
   }
   return eeInitialized;
 }
-
-    
