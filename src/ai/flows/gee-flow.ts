@@ -166,6 +166,7 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
         
         const applyScaleAndOffset = (image: ee.Image) => {
             const bandName = 'CMI_C13';
+            // Use .get() to safely access properties that might not exist on a null image
             const offset = ee.Number(image.get(bandName + '_offset'));
             const scale = ee.Number(image.get(bandName + '_scale'));
             return image.select(bandName).multiply(scale).add(offset);
@@ -268,7 +269,7 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
             : { min: 0, max: 100, palette: ['#FFFFE5', '#FFF7BC', '#FEE391', '#FEC44F', '#FE9929', '#EC7014', '#CC4C02', '#8C2D04'] };
     }
 
-    if (geometry) {
+    if (geometry && bandCombination !== 'GOES_CLOUDTOP') {
         finalImage = finalImage.clip(geometry);
     }
 
