@@ -159,37 +159,25 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
 
     if (bandCombination === 'GOES_CLOUDTOP') {
         const goesCollection = ee.ImageCollection('NOAA/GOES/16/MCMIPF')
-            .filterDate(ee.Date(Date.now()).advance(-2, 'hour'), ee.Date(Date.now()))
-            .filter(ee.Filter.bounds(geometry!));
-
-        const size = goesCollection.size();
-
-        const processGoes = () => {
-            const latestImage = ee.Image(goesCollection.sort('system:time_start', false).first());
-            
-            const bandName = 'CMI_C13';
-            const offset = ee.Number(latestImage.get(bandName + '_offset'));
-            const scale = ee.Number(latestImage.get(bandName + '_scale'));
-            const scaledImage = latestImage.select(bandName).multiply(scale).add(offset);
-
-            if (geometry) {
-                finalImage = scaledImage.clip(geometry);
-            } else {
-                finalImage = scaledImage;
-            }
-            metadata.timestamp = latestImage.get('system:time_start');
-            return finalImage;
-        };
-
-        // Use ee.Algorithms.If to handle the case where the collection is empty.
-        finalImage = ee.Image(ee.Algorithms.If(
-            ee.Number(size).gt(0),
-            // If collection is not empty, process it
-            processGoes(),
-            // If collection is empty, create a blank image to avoid errors
-            ee.Image().rename('CMI_C13')
-        ));
+            .filterDate(ee.Date(Date.now()).advance(-2, 'hour'), ee.Date(Date.now()));
         
+        const latestImage = ee.Image(goesCollection.sort('system:time_start', false).first());
+        
+        // This is a server-side check. If latestImage is null, this will throw an error on the GEE server.
+        // We will catch this error in the 'evaluate' or 'getMap' callbacks.
+        const bandName = 'CMI_C13';
+        const offset = ee.Number(latestImage.get(bandName + '_offset'));
+        const scale = ee.Number(latestImage.get(bandName + '_scale'));
+        const scaledImage = latestImage.select(bandName).multiply(scale).add(offset);
+        
+        metadata.timestamp = latestImage.get('system:time_start');
+
+        if (geometry) {
+            finalImage = scaledImage.clip(geometry);
+        } else {
+            finalImage = scaledImage;
+        }
+
         visParams = { min: 190, max: 300, palette: CLOUDTOP_PALETTE };
     } else if (['URBAN_FALSE_COLOR', 'SWIR_FALSE_COLOR', 'BSI', 'NDVI', 'TASSELED_CAP'].includes(bandCombination)) {
         let s2ImageCollection = ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
@@ -281,7 +269,7 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
         visParams = { min: 0, max: 100, palette: ['#FFFFFF', 'lightblue', 'blue'] };
     }
 
-    if (geometry && bandCombination !== 'GOES_CLOUDTOP') { // GOES is already clipped
+    if (geometry && bandCombination !== 'GOES_CLOUDTOP') { // GOES is clipped manually
         finalImage = finalImage.clip(geometry);
     }
 
@@ -298,6 +286,17 @@ const geeTileLayerFlow = ai.defineFlow(
   },
   async (input) => {
     await initializeEe();
+    
+    // Check for GOES collection size before proceeding to avoid null errors
+    if (input.bandCombination === 'GOES_CLOUDTOP') {
+        const collection = ee.ImageCollection('NOAA/GOES/16/MCMIPF')
+            .filterDate(ee.Date(Date.now()).advance(-2, 'hour'), ee.Date(Date.now()));
+        const count = await promisify(collection.size().evaluate)();
+        if (count === 0) {
+            throw new Error('No se encontraron imágenes de GOES para el área y tiempo especificados.');
+        }
+    }
+    
     const { finalImage, visParams, metadata } = getImageForProcessing(input);
 
     return new Promise((resolve, reject) => {
@@ -307,7 +306,7 @@ const geeTileLayerFlow = ai.defineFlow(
                  if (error.includes && error.includes('computation timed out')) {
                     return reject(new Error('El procesamiento en Earth Engine tardó demasiado. Intente con un área más pequeña.'));
                 }
-                if (error.includes && (error.includes('does not have a band') || error.includes('No bands in image'))) {
+                if (error.includes && (error.includes('does not have a band') || error.includes('No bands in image') || error.includes("Parameter 'object' is required"))) {
                     return reject(new Error('No se encontraron imágenes de GOES para el área y tiempo especificados.'));
                 }
                 return reject(new Error(`Ocurrió un error al generar la capa de Earth Engine: ${error || 'Error desconocido'}`));

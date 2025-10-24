@@ -325,47 +325,47 @@ export const useLayerManager = ({
 
   }, [mapRef, addLayer, toast]);
   
-    const addGoesLayer = useCallback(async () => {
-        if (!mapRef.current) {
-            throw new Error("El mapa no está listo.");
-        }
-        const map = mapRef.current;
-        const view = map.getView();
-        const extent = view.calculateExtent(map.getSize()!);
-        const zoom = view.getZoom() || 2;
-        const extent4326 = transformExtent(extent, view.getProjection(), 'EPSG:4326');
-        const aoi = { minLon: extent4326[0], minLat: extent4326[1], maxLon: extent4326[2], maxLat: extent4326[3] };
-        const geeParams = { bandCombination: 'GOES_CLOUDTOP' as const };
+  const addGoesLayer = useCallback(async () => {
+    if (!mapRef.current) {
+        throw new Error("El mapa no está listo.");
+    }
+    const map = mapRef.current;
+    const view = map.getView();
+    const extent = view.calculateExtent(map.getSize()!);
+    const zoom = view.getZoom() || 2;
+    const extent4326 = transformExtent(extent, view.getProjection(), 'EPSG:4326');
+    const aoi = { minLon: extent4326[0], minLat: extent4326[1], maxLon: extent4326[2], maxLat: extent4326[3] };
+    const geeParams = { bandCombination: 'GOES_CLOUDTOP' as const };
+
+    const result = await getGeeTileLayer({ aoi, zoom, ...geeParams });
     
-        const result = await getGeeTileLayer({ aoi, zoom, ...geeParams });
-        
-        if (!result || !result.tileUrl) {
-            throw new Error("No se pudo obtener la URL de la capa GOES desde el servidor.");
-        }
-        
-        const timestamp = result.metadata?.timestamp;
-        let formattedDate = '';
-        if (timestamp) {
-            // Adjust for Argentina timezone (UTC-3)
-            const date = new Date(timestamp);
-            date.setHours(date.getHours() - 3);
-            formattedDate = `(${date.toLocaleDateString('es-AR')} ${date.toLocaleTimeString('es-AR')})`;
-        }
-        
-        const layerId = 'goes-cmi-layer';
-        const layerName = `GOES Topes Nubosos ${formattedDate}`.trim();
-        const existingLayer = layers.find(l => l.id === layerId);
+    if (!result || !result.tileUrl) {
+        throw new Error("No se pudo obtener la URL de la capa GOES desde el servidor.");
+    }
     
-        if (existingLayer) {
-            const newSource = new XYZ({ url: result.tileUrl, crossOrigin: 'anonymous' });
-            existingLayer.olLayer.setSource(newSource);
-            // Update the name of the existing layer
-            setLayers(prev => prev.map(l => l.id === layerId ? { ...l, name: layerName } : l));
-            toast({ description: `Capa GOES actualizada: ${formattedDate}` });
-        } else {
-            addGeeLayerToMap(result.tileUrl, layerName, geeParams);
-        }
-    }, [mapRef, layers, addGeeLayerToMap, toast, setLayers]);
+    const timestamp = result.metadata?.timestamp;
+    let formattedDate = '';
+    if (timestamp) {
+        const date = new Date(timestamp);
+        // Argentina is UTC-3, adjust time before formatting
+        date.setHours(date.getHours() - 3);
+        formattedDate = `(${date.toLocaleDateString('es-AR', {day: '2-digit', month: '2-digit'})} ${date.toLocaleTimeString('es-AR', {hour: '2-digit', minute: '2-digit'})})`;
+    }
+    
+    const layerId = 'goes-cmi-layer'; // Use a fixed ID to allow replacement
+    const layerName = `GOES Topes Nubosos ${formattedDate}`.trim();
+    const existingLayer = layers.find(l => l.id === layerId);
+
+    if (existingLayer) {
+        const newSource = new XYZ({ url: result.tileUrl, crossOrigin: 'anonymous' });
+        (existingLayer.olLayer as TileLayer<any>).setSource(newSource);
+        setLayers(prev => prev.map(l => l.id === layerId ? { ...l, name: layerName } : l));
+        toast({ description: `Capa GOES actualizada: ${formattedDate}` });
+    } else {
+        addGeeLayerToMap(result.tileUrl, layerName, geeParams);
+    }
+}, [mapRef, layers, addGeeLayerToMap, toast, setLayers]);
+
 
   const handleAddHybridLayer = useCallback(async (layerName: string, layerTitle: string, serverUrl: string, bbox?: [number, number, number, number], styleName?: string, isInitiallyVisible: boolean = true, initialOpacity: number = 0.7, useWmsStyle: boolean = true): Promise<MapLayer | null> => {
     if (!isMapReady || !mapRef.current) return null;
@@ -1297,3 +1297,4 @@ export const useLayerManager = ({
     handleExportWmsAsGeotiff,
   };
 };
+
