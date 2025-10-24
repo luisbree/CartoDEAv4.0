@@ -155,7 +155,7 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
     
     const ELEVATION_PALETTE = ['006633', 'E5FFCC', '662A00', 'D8D8D8', 'FFFFFF'];
 
-    const CLOUDTOP_PALETTE = ['#000080', '#0000FF', '#00FFFF', '#FFFFFF']; // From cold (blue) to hot (white)
+    const CLOUDTOP_PALETTE = ['#000080', '#0000FF', '#00FFFF', '#FFFFFF'];
 
     if (bandCombination === 'GOES_CLOUDTOP') {
         const goesCollection = ee.ImageCollection('NOAA/GOES/19/MCMIPF')
@@ -163,13 +163,19 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
         
         const latestImage = ee.Image(goesCollection.sort('system:time_start', false).first());
         
-        // This is a server-side check. If latestImage is null, this will throw an error on the GEE server.
-        // We will catch this error in the 'evaluate' or 'getMap' callbacks.
-        const bandName = 'CMI_C13';
-        const offset = ee.Number(latestImage.get(bandName + '_offset'));
-        const scale = ee.Number(latestImage.get(bandName + '_scale'));
-        const scaledImage = latestImage.select(bandName).multiply(scale).add(offset);
+        const applyScaleAndOffset = (image: ee.Image) => {
+            const bandName = 'CMI_C13';
+            const offset = ee.Number(image.get(bandName + '_offset'));
+            const scale = ee.Number(image.get(bandName + '_scale'));
+            return image.select(bandName).multiply(scale).add(offset);
+        };
         
+        const scaledImage = ee.Image(ee.Algorithms.If(
+            latestImage, 
+            applyScaleAndOffset(latestImage),
+            ee.Image() // Return an empty image if latestImage is null
+        ));
+
         metadata.timestamp = latestImage.get('system:time_start');
 
         if (geometry) {
@@ -287,11 +293,20 @@ const geeTileLayerFlow = ai.defineFlow(
   async (input) => {
     await initializeEe();
     
-    // Check for GOES collection size before proceeding to avoid null errors
     if (input.bandCombination === 'GOES_CLOUDTOP') {
         const collection = ee.ImageCollection('NOAA/GOES/19/MCMIPF')
             .filterDate(ee.Date(Date.now()).advance(-2, 'hour'), ee.Date(Date.now()));
-        const count = await promisify(collection.size().evaluate)();
+        
+        const count = await new Promise<number>((resolve, reject) => {
+            collection.size().evaluate((size: number, error?: string) => {
+                if (error) {
+                    reject(new Error(error));
+                } else {
+                    resolve(size);
+                }
+            });
+        });
+
         if (count === 0) {
             throw new Error('No se encontraron imágenes de GOES para el área y tiempo especificados.');
         }
@@ -306,7 +321,7 @@ const geeTileLayerFlow = ai.defineFlow(
                  if (error.includes && error.includes('computation timed out')) {
                     return reject(new Error('El procesamiento en Earth Engine tardó demasiado. Intente con un área más pequeña.'));
                 }
-                if (error.includes && (error.includes('does not have a band') || error.includes('No bands in image') || error.includes("Parameter 'object' is required"))) {
+                if (error.includes && (error.includes('does not have a band') || error.includes('No bands in image') || error.includes("Parameter 'object' is required") || error.includes("Image.get: Parameter 'object' is required"))) {
                     return reject(new Error('No se encontraron imágenes de GOES para el área y tiempo especificados.'));
                 }
                 return reject(new Error(`Ocurrió un error al generar la capa de Earth Engine: ${error || 'Error desconocido'}`));
@@ -318,12 +333,10 @@ const geeTileLayerFlow = ai.defineFlow(
 
             const tileUrl = mapDetails.urlFormat.replace('{x}', '{x}').replace('{y}', '{y}').replace('{z}', '{z}');
             
-            // If metadata (like a timestamp) exists, evaluate it and return it with the URL.
             if (metadata && Object.keys(metadata).length > 0 && metadata.timestamp) {
                  ee.Dictionary(metadata).evaluate((evaluatedMetadata, error) => {
                     if (error) {
                         console.error("Error evaluating metadata:", error);
-                        // Resolve with just the tileUrl if metadata fails
                         resolve({ tileUrl });
                     } else {
                         resolve({ tileUrl, metadata: evaluatedMetadata });
