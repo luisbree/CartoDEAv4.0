@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useRef, useState } from 'react';
@@ -18,6 +19,7 @@ interface LayerListProps {
   onExtractBySelection: () => void;
   onSelectByLayer: (targetLayerId: string, selectorLayerId: string) => void;
   onExportLayer: (layerId: string, format: 'geojson' | 'kml' | 'shp') => void;
+  onExportWmsAsGeotiff: (layerId: string) => void;
   isDrawingSourceEmptyOrNotPolygon: boolean;
   isSelectionEmpty: boolean;
   onSetLayerOpacity: (layerId: string, opacity: number) => void;
@@ -52,6 +54,7 @@ const LayerList: React.FC<LayerListProps> = ({
   onExtractBySelection,
   onSelectByLayer,
   onExportLayer,
+  onExportWmsAsGeotiff,
   isDrawingSourceEmptyOrNotPolygon,
   isSelectionEmpty,
   onSetLayerOpacity,
@@ -143,6 +146,7 @@ const LayerList: React.FC<LayerListProps> = ({
           onExtractBySelection={onExtractBySelection}
           onSelectByLayer={onSelectByLayer}
           onExportLayer={onExportLayer}
+          onExportWmsAsGeotiff={onExportWmsAsGeotiff}
           onRenameLayer={onRenameLayer}
           onChangeLayerStyle={onChangeLayerStyle}
           onChangeLayerLabels={onChangeLayerLabels}

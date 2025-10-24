@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useMemo } from 'react';
@@ -49,6 +50,7 @@ interface LegendPanelProps {
   onExtractBySelection: () => void;
   onSelectByLayer: (targetLayerId: string, selectorLayerId: string) => void;
   onExportLayer: (layerId: string, format: 'geojson' | 'kml' | 'shp') => void;
+  onExportWmsAsGeotiff: (layerId: string) => void;
   isDrawingSourceEmptyOrNotPolygon: boolean;
   isSelectionEmpty: boolean;
   onSetLayerOpacity: (layerId: string, opacity: number) => void; 
@@ -94,7 +96,7 @@ type DeasOrgNode = { [orgName: string]: DeasProjectNode };
 const LegendPanel: React.FC<LegendPanelProps> = ({
   panelRef, isCollapsed, onToggleCollapse, onClosePanel, onMouseDownHeader,
   layers, onToggleLayerVisibility, onRemoveLayer, onRemoveLayers, onZoomToLayerExtent, onShowLayerTable, onShowStatistics,
-  onExtractByPolygon, onExtractBySelection, onSelectByLayer, onExportLayer, isDrawingSourceEmptyOrNotPolygon, isSelectionEmpty, onSetLayerOpacity, onReorderLayers, onRenameLayer,
+  onExtractByPolygon, onExtractBySelection, onSelectByLayer, onExportLayer, onExportWmsAsGeotiff, isDrawingSourceEmptyOrNotPolygon, isSelectionEmpty, onSetLayerOpacity, onReorderLayers, onRenameLayer,
   onChangeLayerStyle, onChangeLayerLabels, onApplyGraduatedSymbology, onApplyCategorizedSymbology, onApplyGeoTiffStyle, onToggleWmsStyle,
   onAddLayer, 
   activeTool, onSetActiveTool, onClearSelection,
@@ -278,6 +280,7 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
                             onExtractBySelection={onExtractBySelection}
                             onSelectByLayer={onSelectByLayer}
                             onExportLayer={onExportLayer}
+                            onExportWmsAsGeotiff={onExportWmsAsGeotiff}
                             onRenameLayer={onRenameLayer}
                             onChangeLayerStyle={onChangeLayerStyle}
                             onChangeLayerLabels={onChangeLayerLabels}

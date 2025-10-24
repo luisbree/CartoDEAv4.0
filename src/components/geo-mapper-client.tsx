@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
@@ -1119,6 +1120,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
             onExtractBySelection={() => layerManagerHook.handleExtractBySelection(featureInspectionHook.selectedFeatures)}
             onSelectByLayer={featureInspectionHook.selectByLayer}
             onExportLayer={layerManagerHook.handleExportLayer}
+            onExportWmsAsGeotiff={layerManagerHook.handleExportWmsAsGeotiff}
             onRenameLayer={layerManagerHook.renameLayer}
             onChangeLayerStyle={layerManagerHook.changeLayerStyle}
             onChangeLayerLabels={layerManagerHook.changeLayerLabels}
