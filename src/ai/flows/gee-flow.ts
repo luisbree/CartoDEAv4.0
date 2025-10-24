@@ -135,7 +135,7 @@ export async function getGoesLayer(): Promise<GeeTileLayerOutput> {
     const collection = ee.ImageCollection('NOAA/GOES/19/MCMIPF')
         .filterDate(ee.Date(Date.now()).advance(-2, 'hour'), ee.Date(Date.now()));
         
-    const latestImage = ee.Image(collection.sort('system:time_start', false).first());
+    const latestImage = ee.Image(collection.first());
     
     // Check if an image was found
     const imageExists = await new Promise((resolve, reject) => {
@@ -174,7 +174,7 @@ export async function getGoesLayer(): Promise<GeeTileLayerOutput> {
         '#ffff00', '#00ff00',             // Yellow/Green (-60C to -40C)
         '#00ffff', '#0000ff',             // Cyan/Blue (-40C to -10C)
         '#999999', '#cccccc', '#ffffff'  // Grays (-10C to 50C)
-    ].reverse();
+    ];
     
     // Temperatures from -90°C to 50°C in Kelvin
     const visParams = { min: 183, max: 323, palette: SMN_CLOUDTOP_PALETTE };
@@ -230,13 +230,13 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
         '#ffff00', '#00ff00',             // Yellow/Green (-60C to -40C)
         '#00ffff', '#0000ff',             // Cyan/Blue (-40C to -10C)
         '#999999', '#cccccc', '#ffffff'  // Grays (-10C to 50C)
-    ].reverse();
+    ];
 
     if (bandCombination === 'GOES_CLOUDTOP') {
         const goesCollection = ee.ImageCollection('NOAA/GOES/19/MCMIPF')
             .filterDate(ee.Date(Date.now()).advance(-2, 'hour'), ee.Date(Date.now()));
         
-        const latestImage = ee.Image(goesCollection.sort('system:time_start', false).first());
+        const latestImage = ee.Image(goesCollection.first());
         
         const applyScaleAndOffset = (image: ee.Image) => {
             const bandName = 'CMI_C13';
