@@ -7,8 +7,11 @@ import { Button } from '../ui/button';
 import { useToast } from '@/hooks/use-toast';
 import type { MapLayer } from '@/lib/types';
 import TileLayer from 'ol/layer/Tile';
-import TileWMS from 'ol/source/TileWMS';
+import { getGoesLayer } from '@/ai/flows/gee-flow';
 import { nanoid } from 'nanoid';
+import XYZ from 'ol/source/XYZ';
+import { formatDistanceToNow } from 'date-fns';
+import { es } from 'date-fns/locale';
 
 interface ClimaPanelProps {
   panelRef: React.RefObject<HTMLDivElement>;
@@ -32,54 +35,58 @@ const ClimaPanel: React.FC<ClimaPanelProps> = ({
     const [isLoading, setIsLoading] = useState(false);
     const { toast } = useToast();
 
-    const handleAddRadarLayer = () => {
+    const handleAddGoesLayer = async () => {
         setIsLoading(true);
-        toast({ description: "Añadiendo capa de radar..." });
+        toast({ description: "Buscando la última imagen de GOES-19..." });
 
         try {
-            const layerId = 'radar-weather-layer';
-            const layerName = 'Radar Meteorológico (NEXRAD)';
+            const result = await getGoesLayer();
             
-            // Example NEXRAD WMS service from Iowa State University
-            const radarSource = new TileWMS({
-                url: 'https://mesonet.agron.iastate.edu/cgi-bin/wms/nexrad/n0r.cgi',
-                params: {
-                    'LAYERS': 'nexrad-n0r-900913',
-                    'TILED': true,
-                    'TRANSPARENT': true,
-                    'FORMAT': 'image/png',
-                },
-                serverType: 'geoserver',
-                crossOrigin: 'anonymous'
-            });
+            if (result && result.tileUrl) {
+                const layerId = `goes-c13-layer-${nanoid()}`;
+                let layerName = 'GOES-19 Topes Nubosos';
+                
+                if (result.metadata?.timestamp) {
+                    const imageDate = new Date(result.metadata.timestamp);
+                     const timeAgo = formatDistanceToNow(imageDate, { addSuffix: true, locale: es });
+                     layerName = `GOES-19 Topes Nubosos (${timeAgo})`;
+                }
 
-            const radarLayer = new TileLayer({
-                source: radarSource,
-                opacity: 0.7,
-                properties: {
+                const goesSource = new XYZ({
+                    url: result.tileUrl,
+                    crossOrigin: 'anonymous',
+                });
+
+                const goesLayer = new TileLayer({
+                    source: goesSource,
+                    opacity: 0.8,
+                    properties: {
+                        id: layerId,
+                        name: layerName,
+                        type: 'gee', // Treat as a GEE layer type
+                        geeParams: { bandCombination: 'GOES_CLOUDTOP' }
+                    }
+                });
+
+                onAddLayer({
                     id: layerId,
                     name: layerName,
-                    type: 'wms'
-                }
-            });
+                    olLayer: goesLayer,
+                    visible: true,
+                    opacity: 0.8,
+                    type: 'gee'
+                }, true);
 
-            // This is a simplified addLayer; the main GeoMapperClient will handle adding to map and state
-            onAddLayer({
-                id: layerId,
-                name: layerName,
-                olLayer: radarLayer,
-                visible: true,
-                opacity: 0.7,
-                type: 'wms'
-            }, true);
-
-            toast({ description: `Capa "${layerName}" añadida.` });
+                toast({ description: `Capa "${layerName}" añadida.` });
+            } else {
+                 throw new Error("No se recibió una URL válida del servidor de GEE.");
+            }
 
         } catch (error: any) {
-            console.error("Error adding radar layer:", error);
+            console.error("Error adding GOES layer:", error);
             toast({
-                title: "Error",
-                description: "No se pudo añadir la capa de radar.",
+                title: "Error al obtener capa GOES",
+                description: error.message || "No se pudo añadir la capa de GOES.",
                 variant: "destructive",
             });
         } finally {
@@ -89,7 +96,7 @@ const ClimaPanel: React.FC<ClimaPanelProps> = ({
 
   return (
     <DraggablePanel
-      title="Clima y Radar"
+      title="Clima y Satélite"
       icon={CloudRain}
       panelRef={panelRef}
       initialPosition={{ x: 0, y: 0 }}
@@ -104,23 +111,18 @@ const ClimaPanel: React.FC<ClimaPanelProps> = ({
     >
       <div className="p-3 space-y-4">
         <div className="space-y-2">
-            <h3 className="text-sm font-semibold">Radar Meteorológico (NEXRAD)</h3>
+            <h3 className="text-sm font-semibold">Satélite GOES-19 (Topes Nubosos)</h3>
             <p className="text-xs text-gray-400">
-                Visualiza la reflectividad del radar base de la red NEXRAD de EE.UU. (ejemplo). Las intensidades más altas (rojos/amarillos) indican precipitaciones más fuertes. La capa se actualiza periódicamente.
+                Visualiza la temperatura de los topes nubosos captada por el satélite GOES-19. Las áreas más frías (blancas/azules) indican nubes de mayor desarrollo vertical, asociadas a posibles tormentas.
             </p>
-            <Button className="w-full" onClick={handleAddRadarLayer} disabled={isLoading}>
+            <Button className="w-full" onClick={handleAddGoesLayer} disabled={isLoading}>
                 {isLoading ? (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : (
-                    <RadioTower className="mr-2 h-4 w-4" />
+                    <Satellite className="mr-2 h-4 w-4" />
                 )}
-                Añadir / Actualizar Capa de Radar
+                Añadir / Actualizar Capa GOES
             </Button>
-        </div>
-        <div className="text-center text-gray-300 border-t border-gray-700 pt-4">
-            <p className="text-sm">
-                Integración con SMN pendiente.
-            </p>
         </div>
       </div>
     </DraggablePanel>
