@@ -164,21 +164,20 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
     };
 
     if (bandCombination === 'GOES_CLOUDTOP') {
-        const goesCollection = ee.ImageCollection('NOAA/GOES/16/MCMIPF')
-            .filter(ee.Filter.date(ee.Date(Date.now()).advance(-1, 'hour'), ee.Date(Date.now())))
-            .mosaic();
+        let goesCollection: ee.ImageCollection = ee.ImageCollection('NOAA/GOES/16/MCMIPF')
+            .filter(ee.Filter.date(ee.Date(Date.now()).advance(-1, 'hour'), ee.Date(Date.now())));
 
         if (geometry) {
-             goesCollection.filter(ee.Filter.bounds(geometry));
+             goesCollection = goesCollection.filter(ee.Filter.bounds(geometry));
         }
         
-        const latestImage = goesCollection.limit(1, 'system:time_start', false).first();
+        const latestImage = ee.Image(goesCollection.map(applyScaleAndOffset).mosaic());
         
-        if (latestImage.getInfo() == null) {
+        if (!latestImage.getInfo()) {
              throw new Error('No se encontraron imágenes de GOES para el área y tiempo especificados.');
         }
 
-        finalImage = applyScaleAndOffset(ee.Image(latestImage));
+        finalImage = latestImage;
 
         visParams = { min: 300, max: 190, palette: CLOUDTOP_PALETTE }; // Temp in Kelvin, inverted
     } else if (['URBAN_FALSE_COLOR', 'SWIR_FALSE_COLOR', 'BSI', 'NDVI', 'TASSELED_CAP'].includes(bandCombination)) {
