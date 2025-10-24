@@ -161,13 +161,6 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
         const goesCollection = ee.ImageCollection('GOOGLE/GOES/19/L2-CMIP')
             .filterDate(ee.Date(Date.now()).advance(-12, 'hour'), ee.Date(Date.now()));
         
-        let filteredCollection = goesCollection;
-        if (geometry) {
-             filteredCollection = goesCollection.filter(ee.Filter.bounds(geometry));
-        }
-        
-        const latestImage = ee.Image(filteredCollection.sort('system:time_start', false).first());
-
         // This function needs to be defined to be mapped over the collection.
         const applyScaleAndOffset = (image: ee.Image) => {
             const bandName = 'CMI'; // Correct band name for this collection
@@ -176,16 +169,13 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
             return image.select(bandName).multiply(scale).add(offset);
         };
         
-        // Use ee.Algorithms.If to handle the case where latestImage might be null.
-        const scaledImage = ee.Image(ee.Algorithms.If(
-            latestImage, // Condition: if latestImage is not null
-            applyScaleAndOffset(latestImage), // Then: apply the function
-            ee.Image() // Else: return an empty image to avoid errors
-        ));
+        const scaledCollection = goesCollection.map(applyScaleAndOffset);
+        const mosaic = scaledCollection.mosaic(); // Mosaic the collection to get the most recent valid pixels.
 
-        metadata.timestamp = latestImage.get('system:time_start');
+        const latestImageForMeta = ee.Image(goesCollection.sort('system:time_start', false).first());
         
-        finalImage = scaledImage; 
+        metadata.timestamp = latestImageForMeta.get('system:time_start');
+        finalImage = mosaic;
         visParams = { min: 190, max: 300, palette: CLOUDTOP_PALETTE };
     
     } else if (['URBAN_FALSE_COLOR', 'SWIR_FALSE_COLOR', 'BSI', 'NDVI', 'TASSELED_CAP'].includes(bandCombination)) {
@@ -309,7 +299,7 @@ const geeTileLayerFlow = ai.defineFlow(
                 }
             });
         });
-
+        
         if (count === 0) {
             throw new Error('No se encontraron imágenes de GOES para el área y tiempo especificados.');
         }
