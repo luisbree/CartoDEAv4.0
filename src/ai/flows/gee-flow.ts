@@ -173,7 +173,7 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
         
         const latestImage = goesCollection.limit(1, 'system:time_start', false).first();
         
-        if (!latestImage.get('system:id').getInfo()) {
+        if (!ee.Algorithms.IsEqual(latestImage, null).getInfo()) {
              throw new Error('No se encontraron imágenes de GOES para el área y tiempo especificados.');
         }
 
@@ -648,6 +648,8 @@ function initializeEe(): Promise<void> {
   }
   return eeInitialized;
 }
+
+    
 
     
 
