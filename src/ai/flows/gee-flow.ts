@@ -170,11 +170,10 @@ export async function getGoesLayer(): Promise<GeeTileLayerOutput> {
     
     // This is the SMN-inspired palette
     const SMN_CLOUDTOP_PALETTE = [
-        '#ffffff', '#cccccc', '#999999', // Grays (50C to -10C)
-        '#0000ff', '#00ffff',             // Blues/Cian (-10C to -40C)
-        '#00ff00', '#ffff00',             // Green/Yellow (-40C to -60C)
-        '#ff0000', '#800000',             // Red/Dark Red (-60C to -80C)
-        '#000000'                         // Black (-80C to -90C)
+        '#000000', '#800000', '#ff0000', // Black/Reds (-90C to -60C)
+        '#ffff00', '#00ff00',             // Yellow/Green (-60C to -40C)
+        '#00ffff', '#0000ff',             // Cyan/Blue (-40C to -10C)
+        '#999999', '#cccccc', '#ffffff'  // Grays (-10C to 50C)
     ];
     
     // Temperatures from -90°C to 50°C in Kelvin
@@ -225,13 +224,12 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
     
     const ELEVATION_PALETTE = ['006633', 'E5FFCC', '662A00', 'D8D8D8', 'FFFFFF'];
 
-    // This is the SMN-inspired palette
+    // This is the SMN-inspired palette, with the correct order for the temperature range.
     const SMN_CLOUDTOP_PALETTE = [
-        '#ffffff', '#cccccc', '#999999', // Grays (50C to -10C)
-        '#0000ff', '#00ffff',             // Blues/Cian (-10C to -40C)
-        '#00ff00', '#ffff00',             // Green/Yellow (-40C to -60C)
-        '#ff0000', '#800000',             // Red/Dark Red (-60C to -80C)
-        '#000000'                         // Black (-80C to -90C)
+        '#000000', '#800000', '#ff0000', // Black/Reds (-90C to -60C)
+        '#ffff00', '#00ff00',             // Yellow/Green (-60C to -40C)
+        '#00ffff', '#0000ff',             // Cyan/Blue (-40C to -10C)
+        '#999999', '#cccccc', '#ffffff'  // Grays (-10C to 50C)
     ];
 
     if (bandCombination === 'GOES_CLOUDTOP') {
