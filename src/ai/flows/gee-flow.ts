@@ -171,7 +171,7 @@ export async function getGoesLayer(): Promise<GeeTileLayerOutput> {
     const SMN_CLOUDTOP_PALETTE = [
       '#000000', '#800000', '#ff0000', '#ffff00', '#00ff00',
       '#00ffff', '#0000ff', '#999999', '#cccccc', '#ffffff'
-    ];
+    ].reverse();
     
     // Temperatures from -90°C to 50°C in Kelvin
     const visParams = { min: 183, max: 323, palette: SMN_CLOUDTOP_PALETTE };
@@ -224,7 +224,7 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
     const SMN_CLOUDTOP_PALETTE = [
       '#000000', '#800000', '#ff0000', '#ffff00', '#00ff00',
       '#00ffff', '#0000ff', '#999999', '#cccccc', '#ffffff'
-    ];
+    ].reverse();
 
     if (bandCombination === 'GOES_CLOUDTOP') {
         const goesCollection = ee.ImageCollection('NOAA/GOES/19/MCMIPF')
@@ -556,6 +556,7 @@ const geeGeoTiffDownloadFlow = ai.defineFlow(
                 name: filename,
                 format: 'GEO_TIFF',
                 region: geometry,
+                crs: 'EPSG:3857', // Force standard projection for export
                 // For multi-band images, specify band order. For single band, it's automatic.
                 bands: imageToExport.bandNames().getInfo(),
                 scale: input.bandCombination === 'GOES_CLOUDTOP' ? 2000 : 30,
