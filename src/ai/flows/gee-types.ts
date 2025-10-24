@@ -1,4 +1,5 @@
 
+
 /**
  * @fileOverview Types and schemas for the GEE flow.
  *
@@ -36,6 +37,7 @@ export type GeeTileLayerInput = z.infer<typeof GeeTileLayerInputSchema>;
 
 export const GeeTileLayerOutputSchema = z.object({
   tileUrl: z.string().describe("The XYZ tile URL template for the generated GEE layer."),
+  metadata: z.record(z.any()).optional().describe("Optional metadata about the generated layer, like image timestamp."),
 });
 export type GeeTileLayerOutput = z.infer<typeof GeeTileLayerOutputSchema>;
 

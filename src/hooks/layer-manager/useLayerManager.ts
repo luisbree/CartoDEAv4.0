@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
@@ -325,35 +326,46 @@ export const useLayerManager = ({
   }, [mapRef, addLayer, toast]);
   
     const addGoesLayer = useCallback(async () => {
-    if (!mapRef.current) {
-      throw new Error("El mapa no está listo.");
-    }
-    const map = mapRef.current;
-    const view = map.getView();
-    const extent = view.calculateExtent(map.getSize()!);
-    const zoom = view.getZoom() || 2;
-    const extent4326 = transformExtent(extent, view.getProjection(), 'EPSG:4326');
-    const aoi = { minLon: extent4326[0], minLat: extent4326[1], maxLon: extent4326[2], maxLat: extent4326[3] };
-    const geeParams = { bandCombination: 'GOES_CLOUDTOP' as const };
-  
-    const result = await getGeeTileLayer({ aoi, zoom, ...geeParams });
+        if (!mapRef.current) {
+            throw new Error("El mapa no está listo.");
+        }
+        const map = mapRef.current;
+        const view = map.getView();
+        const extent = view.calculateExtent(map.getSize()!);
+        const zoom = view.getZoom() || 2;
+        const extent4326 = transformExtent(extent, view.getProjection(), 'EPSG:4326');
+        const aoi = { minLon: extent4326[0], minLat: extent4326[1], maxLon: extent4326[2], maxLat: extent4326[3] };
+        const geeParams = { bandCombination: 'GOES_CLOUDTOP' as const };
     
-    if (!result || !result.tileUrl) {
-      throw new Error("No se pudo obtener la URL de la capa GOES desde el servidor.");
-    }
-  
-    const layerId = 'goes-cmi-layer';
-    const layerName = 'GOES CMI Topes Nubosos';
-    const existingLayer = layers.find(l => l.id === layerId);
-  
-    if (existingLayer) {
-      const newSource = new XYZ({ url: result.tileUrl, crossOrigin: 'anonymous' });
-      existingLayer.olLayer.setSource(newSource);
-      toast({ description: `Capa GOES actualizada.` });
-    } else {
-      addGeeLayerToMap(result.tileUrl, layerName, geeParams);
-    }
-  }, [mapRef, layers, addGeeLayerToMap, toast]);
+        const result = await getGeeTileLayer({ aoi, zoom, ...geeParams });
+        
+        if (!result || !result.tileUrl) {
+            throw new Error("No se pudo obtener la URL de la capa GOES desde el servidor.");
+        }
+        
+        const timestamp = result.metadata?.timestamp;
+        let formattedDate = '';
+        if (timestamp) {
+            // Adjust for Argentina timezone (UTC-3)
+            const date = new Date(timestamp);
+            date.setHours(date.getHours() - 3);
+            formattedDate = `(${date.toLocaleDateString('es-AR')} ${date.toLocaleTimeString('es-AR')})`;
+        }
+        
+        const layerId = 'goes-cmi-layer';
+        const layerName = `GOES Topes Nubosos ${formattedDate}`.trim();
+        const existingLayer = layers.find(l => l.id === layerId);
+    
+        if (existingLayer) {
+            const newSource = new XYZ({ url: result.tileUrl, crossOrigin: 'anonymous' });
+            existingLayer.olLayer.setSource(newSource);
+            // Update the name of the existing layer
+            setLayers(prev => prev.map(l => l.id === layerId ? { ...l, name: layerName } : l));
+            toast({ description: `Capa GOES actualizada: ${formattedDate}` });
+        } else {
+            addGeeLayerToMap(result.tileUrl, layerName, geeParams);
+        }
+    }, [mapRef, layers, addGeeLayerToMap, toast, setLayers]);
 
   const handleAddHybridLayer = useCallback(async (layerName: string, layerTitle: string, serverUrl: string, bbox?: [number, number, number, number], styleName?: string, isInitiallyVisible: boolean = true, initialOpacity: number = 0.7, useWmsStyle: boolean = true): Promise<MapLayer | null> => {
     if (!isMapReady || !mapRef.current) return null;
@@ -1174,7 +1186,7 @@ export const useLayerManager = ({
 
     const source = layer.olLayer.getSource();
     if (!(source instanceof TileWMS)) {
-        toast({ description: 'La fuente de la capa no es TileWMS.', variant: "destructive" });
+        toast({ description: 'La fuente de la capa no es TileWMS.', variant: 'destructive' });
         return;
     }
 

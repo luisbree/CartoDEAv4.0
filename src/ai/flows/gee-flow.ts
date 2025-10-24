@@ -1,4 +1,5 @@
 
+
 'use server';
 /**
  * @fileOverview A flow for generating Google Earth Engine tile layers, vector data, and histograms.
@@ -144,6 +145,7 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
 
       
     let finalImage;
+    let metadata: Record<string, any> = {};
     let visParams: { bands?: string[]; min: number | number[]; max: number | number[]; gamma?: number, palette?: string[] } | null = null;
       
     const DYNAMIC_WORLD_PALETTE = [
@@ -158,25 +160,27 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
     if (bandCombination === 'GOES_CLOUDTOP') {
         const applyScaleAndOffset = function(image: ee.Image) {
             const bandName = 'CMI_C13';
-            const offset = ee.Number(image.get(bandName + '_offset'));
-            const scale = ee.Number(image.get(bandName + '_scale'));
-            return image.select(bandName).multiply(scale).add(offset);
+            const offset = image.get(bandName + '_offset');
+            const scale = image.get(bandName + '_scale');
+            return image.select(bandName).multiply(ee.Image.constant(scale)).add(ee.Image.constant(offset));
         };
 
-        let goesCollection: ee.ImageCollection = ee.ImageCollection('NOAA/GOES/16/MCMIPF')
-            .filter(ee.Filter.date(ee.Date(Date.now()).advance(-2, 'hour'), ee.Date(Date.now())));
-
+        let goesCollection = ee.ImageCollection('NOAA/GOES/16/MCMIPF')
+            .filterDate(ee.Date(Date.now()).advance(-2, 'hour'), ee.Date(Date.now()));
+            
         if (geometry) {
-             goesCollection = goesCollection.filter(ee.Filter.bounds(geometry));
+            goesCollection = goesCollection.filterBounds(geometry);
         }
         
-        const processedCollection = goesCollection.map(applyScaleAndOffset);
+        const latestImage = ee.Image(goesCollection.sort('system:time_start', false).first());
         
-        finalImage = ee.Image(processedCollection.mosaic());
+        finalImage = applyScaleAndOffset(latestImage);
+
         if (geometry) {
             finalImage = finalImage.clip(geometry);
         }
-
+        
+        metadata.timestamp = latestImage.get('system:time_start');
         visParams = { min: 190, max: 300, palette: CLOUDTOP_PALETTE }; // Temp in Kelvin
     } else if (['URBAN_FALSE_COLOR', 'SWIR_FALSE_COLOR', 'BSI', 'NDVI', 'TASSELED_CAP'].includes(bandCombination)) {
         let s2ImageCollection = ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
@@ -272,7 +276,7 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
         finalImage = finalImage.clip(geometry);
     }
 
-    return { finalImage, visParams, geometry };
+    return { finalImage, visParams, geometry, metadata };
 };
 
 
@@ -285,7 +289,7 @@ const geeTileLayerFlow = ai.defineFlow(
   },
   async (input) => {
     await initializeEe();
-    const { finalImage, visParams } = getImageForProcessing(input);
+    const { finalImage, visParams, metadata } = getImageForProcessing(input);
 
     return new Promise((resolve, reject) => {
         finalImage.getMap(visParams, (mapDetails: any, error: string) => {
@@ -302,7 +306,21 @@ const geeTileLayerFlow = ai.defineFlow(
             }
 
             const tileUrl = mapDetails.urlFormat.replace('{x}', '{x}').replace('{y}', '{y}').replace('{z}', '{z}');
-            resolve({ tileUrl });
+            
+            // If metadata (like a timestamp) exists, evaluate it and return it with the URL.
+            if (metadata && Object.keys(metadata).length > 0) {
+                 ee.Dictionary(metadata).evaluate((evaluatedMetadata, error) => {
+                    if (error) {
+                        console.error("Error evaluating metadata:", error);
+                        // Resolve with just the tileUrl if metadata fails
+                        resolve({ tileUrl });
+                    } else {
+                        resolve({ tileUrl, metadata: evaluatedMetadata });
+                    }
+                });
+            } else {
+                 resolve({ tileUrl });
+            }
         });
     });
   }
