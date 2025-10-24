@@ -134,10 +134,9 @@ export async function getGoesLayer(): Promise<GeeTileLayerOutput> {
     await initializeEe();
 
     const collection = ee.ImageCollection('NOAA/GOES/19/MCMIPF')
-        .filterDate(ee.Date(Date.now()).advance(-2, 'hour'), ee.Date(Date.now()))
-        .sort('system:time_start', false); 
-
-    const latestImage = ee.Image(collection.first());
+        .filterDate(ee.Date(Date.now()).advance(-2, 'hour'), ee.Date(Date.now()));
+        
+    const latestImage = ee.Image(collection.sort('system:time_start', false).first());
     
     // Check if an image was found
     const imageExists = await new Promise((resolve, reject) => {
@@ -732,3 +731,6 @@ function initializeEe(): Promise<void> {
 
     
 
+
+
+    
