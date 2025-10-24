@@ -5,7 +5,7 @@ import DraggablePanel from './DraggablePanel';
 import { CloudRain, RadioTower, Satellite, Loader2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { getGeeTileLayer } from '@/ai/flows/gee-flow';
+import { getGoesLayer } from '@/ai/flows/gee-flow';
 
 interface ClimaPanelProps {
   panelRef: React.RefObject<HTMLDivElement>;
@@ -87,3 +87,5 @@ const ClimaPanel: React.FC<ClimaPanelProps> = ({
 };
 
 export default ClimaPanel;
+
+    

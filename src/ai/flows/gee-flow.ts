@@ -130,6 +130,58 @@ export async function getValuesForPoints({
 }
 
 
+export async function getGoesLayer(): Promise<GeeTileLayerOutput> {
+    await initializeEe();
+
+    const collection = ee.ImageCollection('NOAA/GOES/19/MCMIPF')
+        // Filter to a recent, reasonable time window to avoid timeouts
+        .filterDate(ee.Date(Date.now()).advance(-12, 'hour'), ee.Date(Date.now()))
+        .sort('system:time_start', false); // Sort descending to get the latest first
+
+    const count = await new Promise<number>((resolve, reject) => {
+        collection.size().evaluate((size: number, error?: string) => {
+            if (error) reject(new Error(`Error al verificar la colección de GOES: ${error}`));
+            else resolve(size);
+        });
+    });
+
+    if (count === 0) {
+        throw new Error('No se encontraron imágenes de GOES en las últimas 12 horas.');
+    }
+    
+    const latestImage = ee.Image(collection.first());
+
+    const applyScaleAndOffset = (image: ee.Image) => {
+        const bandName = 'CMI_C13';
+        const offset = ee.Number(image.get(bandName + '_offset'));
+        const scale = ee.Number(image.get(bandName + '_scale'));
+        return image.select(bandName).multiply(scale).add(offset);
+    };
+
+    const scaledImage = applyScaleAndOffset(latestImage);
+    const metadata = { timestamp: latestImage.get('system:time_start') };
+    const visParams = { min: 190, max: 300, palette: ['#000080', '#0000FF', '#00FFFF', '#FFFFFF'] };
+
+    return new Promise((resolve, reject) => {
+        scaledImage.getMap(visParams, (mapDetails: any, error: string) => {
+            if (error || !mapDetails?.urlFormat) {
+                console.error("Earth Engine getMap Error for GOES:", error);
+                reject(new Error(`Ocurrió un error al generar la capa de GOES: ${error || 'Respuesta inválida'}`));
+            } else {
+                const tileUrl = mapDetails.urlFormat.replace('{x}', '{x}').replace('{y}', '{y}').replace('{z}', '{z}');
+                ee.Dictionary(metadata).evaluate((evaluatedMetadata, evalError) => {
+                    if (evalError) {
+                        console.error("Error evaluating GOES metadata:", evalError);
+                        resolve({ tileUrl }); // Resolve with URL even if metadata fails
+                    } else {
+                        resolve({ tileUrl, metadata: evaluatedMetadata });
+                    }
+                });
+            }
+        });
+    });
+}
+
 
 const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInput | GeeHistogramInput | GeeProfileInput) => {
     const { bandCombination } = input;
@@ -158,7 +210,11 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
     const CLOUDTOP_PALETTE = ['#000080', '#0000FF', '#00FFFF', '#FFFFFF'];
 
     if (bandCombination === 'GOES_CLOUDTOP') {
+        // This case is now handled by the dedicated getGoesLayer function
+        // It's kept here as a placeholder for other flows that might still call it,
+        // but the main logic path from the ClimaPanel won't use this.
         const goesCollection = ee.ImageCollection('NOAA/GOES/19/MCMIPF')
+            .filterDate(ee.Date(Date.now()).advance(-12, 'hour'), ee.Date(Date.now()))
             .sort('system:time_start', false);
         
         const latestImageForMeta = ee.Image(goesCollection.first());
@@ -286,20 +342,15 @@ const geeTileLayerFlow = ai.defineFlow(
     await initializeEe();
     
     if (input.bandCombination === 'GOES_CLOUDTOP') {
-        // This is a robust way to check if the collection has any images before proceeding.
         const count = await new Promise<number>((resolve, reject) => {
-            ee.ImageCollection('NOAA/GOES/19/MCMIPF').size().evaluate((size: number, error?: string) => {
-                if (error) {
-                    console.error("GEE size evaluation error:", error);
-                    reject(new Error(`Error al verificar la colección de GOES: ${error}`));
-                } else {
-                    resolve(size);
-                }
+            ee.ImageCollection('NOAA/GOES/19/MCMIPF').filterDate(ee.Date(Date.now()).advance(-12, 'hour'), ee.Date(Date.now())).size().evaluate((size: number, error?: string) => {
+                if (error) reject(new Error(`Error al verificar la colección de GOES: ${error}`));
+                else resolve(size);
             });
         });
 
         if (count === 0) {
-            throw new Error('La colección de GOES está vacía o no se pudo acceder a ella.');
+            throw new Error('No se encontraron imágenes de GOES en las últimas 12 horas.');
         }
     }
     
@@ -682,3 +733,6 @@ function initializeEe(): Promise<void> {
   }
   return eeInitialized;
 }
+
+
+    
