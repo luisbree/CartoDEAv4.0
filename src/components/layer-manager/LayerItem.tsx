@@ -347,50 +347,49 @@ const LayerItem: React.FC<LayerItemProps> = ({
                       </DropdownMenuItem>
                   )}
 
-                  <DropdownMenuSub>
-                      <DropdownMenuSubTrigger 
-                        className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer data-[state=open]:bg-gray-600"
-                        disabled={isGoesLayer}
-                      >
-                          <Palette className="mr-2 h-3.5 w-3.5" />
-                          <span>Simbología</span>
-                      </DropdownMenuSubTrigger>
-                      {(isVectorLayer || isGeoTiffLayer) && !isGoesLayer && (
-                        <DropdownMenuPortal>
-                          <DropdownMenuSubContent className="bg-gray-700 text-white border-gray-600">
-                             {isVectorLayer && (
-                               <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setIsStyleEditorOpen(true); }} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">
-                                  <Palette className="mr-2 h-3.5 w-3.5" /> Simple
-                               </DropdownMenuItem>
-                             )}
-                             {isVectorLayer && (
-                                <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setIsCategorizedEditorOpen(true); }} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">
-                                  <AppWindow className="mr-2 h-3.5 w-3.5" /> Por Categorías
+                  {!isGoesLayer && (
+                    <DropdownMenuSub>
+                        <DropdownMenuSubTrigger className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer data-[state=open]:bg-gray-600">
+                            <Palette className="mr-2 h-3.5 w-3.5" />
+                            <span>Simbología</span>
+                        </DropdownMenuSubTrigger>
+                        {(isVectorLayer || isGeoTiffLayer) && (
+                          <DropdownMenuPortal>
+                            <DropdownMenuSubContent className="bg-gray-700 text-white border-gray-600">
+                              {isVectorLayer && (
+                                <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setIsStyleEditorOpen(true); }} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">
+                                    <Palette className="mr-2 h-3.5 w-3.5" /> Simple
                                 </DropdownMenuItem>
-                             )}
-                            <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setIsGraduatedEditorOpen(true); }} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">
-                              <Waypoints className="mr-2 h-3.5 w-3.5" /> Graduada
-                            </DropdownMenuItem>
-                            {isVectorLayer && (
-                              <>
-                                <DropdownMenuSeparator className="bg-gray-500/50 my-1" />
-                                <DropdownMenuCheckboxItem
-                                  checked={layer.wmsStyleEnabled}
-                                  onSelect={(e) => {
-                                      e.preventDefault();
-                                      onToggleWmsStyle(layer.id);
-                                  }}
-                                  disabled={!isWfsLayer}
-                                  className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                  Usar Estilo del Servidor (WMS)
-                                </DropdownMenuCheckboxItem>
-                              </>
-                            )}
-                          </DropdownMenuSubContent>
-                        </DropdownMenuPortal>
-                      )}
-                  </DropdownMenuSub>
+                              )}
+                              {isVectorLayer && (
+                                  <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setIsCategorizedEditorOpen(true); }} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">
+                                    <AppWindow className="mr-2 h-3.5 w-3.5" /> Por Categorías
+                                  </DropdownMenuItem>
+                              )}
+                              <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setIsGraduatedEditorOpen(true); }} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">
+                                <Waypoints className="mr-2 h-3.5 w-3.5" /> Graduada
+                              </DropdownMenuItem>
+                              {isVectorLayer && (
+                                <>
+                                  <DropdownMenuSeparator className="bg-gray-500/50 my-1" />
+                                  <DropdownMenuCheckboxItem
+                                    checked={layer.wmsStyleEnabled}
+                                    onSelect={(e) => {
+                                        e.preventDefault();
+                                        onToggleWmsStyle(layer.id);
+                                    }}
+                                    disabled={!isWfsLayer}
+                                    className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                  >
+                                    Usar Estilo del Servidor (WMS)
+                                  </DropdownMenuCheckboxItem>
+                                </>
+                              )}
+                            </DropdownMenuSubContent>
+                          </DropdownMenuPortal>
+                        )}
+                    </DropdownMenuSub>
+                  )}
 
 
                   {isVectorLayer && (

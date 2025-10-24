@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState } from 'react';
@@ -64,7 +65,7 @@ const ClimaPanel: React.FC<ClimaPanelProps> = ({
 
                 const goesLayer = new TileLayer({
                     source: goesSource,
-                    opacity: 0.8,
+                    opacity: 0.6,
                     properties: {
                         id: layerId,
                         name: layerName,
@@ -78,7 +79,7 @@ const ClimaPanel: React.FC<ClimaPanelProps> = ({
                     name: layerName,
                     olLayer: goesLayer,
                     visible: true,
-                    opacity: 0.8,
+                    opacity: 0.6,
                     type: 'gee'
                 }, true);
 
