@@ -22,7 +22,7 @@ import GeoJSON from 'ol/format/GeoJSON';
 import KML from 'ol/format/KML';
 import { download as downloadShp } from 'shpjs';
 import { bbox as bboxStrategy } from 'ol/loadingstrategy';
-import { getGeeTileLayer, type GeeValueQueryInput } from '@/ai/flows/gee-flow';
+import type { GeeValueQueryInput } from '@/ai/flows/gee-types';
 import { ToastAction } from '@/components/ui/toast';
 import { saveFileWithPicker } from '@/services/download-service';
 import { writeArrayBuffer } from 'geotiff';
@@ -323,55 +323,6 @@ export const useLayerManager = ({
 
   }, [mapRef, addLayer, toast]);
   
-  const addGoesLayer = useCallback(async () => {
-    if (!mapRef.current) {
-        throw new Error("El mapa no está listo.");
-    }
-
-    const geeParams = { bandCombination: 'GOES_CLOUDTOP' as const };
-    const result = await getGeeTileLayer({ aoi: { minLon: -180, minLat: -90, maxLon: 180, maxLat: 90 }, zoom: 2, ...geeParams });
-    
-    if (!result || !result.tileUrl) {
-        throw new Error("No se pudo obtener la URL de la capa GOES desde el servidor.");
-    }
-    
-    let layerName = "GOES Topes Nubosos";
-    const timestamp = result.metadata?.timestamp;
-    if (timestamp) {
-        try {
-            const date = new Date(timestamp);
-            date.setHours(date.getHours() - 3); // Adjust to Argentina time (approx)
-            const formattedDate = `(${date.toLocaleDateString('es-AR', {day: '2-digit', month: '2-digit'})} ${date.toLocaleTimeString('es-AR', {hour: '2-digit', minute: '2-digit'})} UTC-3)`;
-            layerName = `GOES Topes Nubosos ${formattedDate}`;
-        } catch (e) {
-            console.error("Error formatting GOES timestamp:", e);
-        }
-    }
-    
-    const layerId = 'goes-cmi-layer';
-    const existingLayer = layers.find(l => l.id === layerId);
-
-    if (existingLayer) {
-        const newSource = new XYZ({ url: result.tileUrl, crossOrigin: 'anonymous' });
-        (existingLayer.olLayer as TileLayer<any>).setSource(newSource);
-        setLayers(prev => prev.map(l => l.id === layerId ? { ...l, name: layerName } : l));
-        toast({ description: `Capa GOES actualizada.` });
-    } else {
-        const newLayer = new TileLayer({
-            source: new XYZ({ url: result.tileUrl, crossOrigin: 'anonymous' }),
-            properties: { id: layerId, name: layerName, type: 'gee', geeParams: { ...geeParams, tileUrl: result.tileUrl } },
-        });
-        addLayer({
-            id: layerId,
-            name: layerName,
-            olLayer: newLayer,
-            visible: true,
-            opacity: 1,
-            type: 'gee'
-        }, true);
-    }
-}, [mapRef, layers, addLayer, toast, setLayers]);
-
 
   const handleAddHybridLayer = useCallback(async (layerName: string, layerTitle: string, serverUrl: string, bbox?: [number, number, number, number], styleName?: string, isInitiallyVisible: boolean = true, initialOpacity: number = 0.7, useWmsStyle: boolean = true): Promise<MapLayer | null> => {
     if (!isMapReady || !mapRef.current) return null;
@@ -1269,7 +1220,6 @@ export const useLayerManager = ({
     layers,
     addLayer,
     addGeeLayerToMap,
-    addGoesLayer,
     handleAddHybridLayer,
     removeLayer,
     removeLayers,

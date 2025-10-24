@@ -5,7 +5,10 @@ import DraggablePanel from './DraggablePanel';
 import { CloudRain, RadioTower, Satellite, Loader2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { getGoesLayer } from '@/ai/flows/gee-flow';
+import type { MapLayer } from '@/lib/types';
+import TileLayer from 'ol/layer/Tile';
+import TileWMS from 'ol/source/TileWMS';
+import { nanoid } from 'nanoid';
 
 interface ClimaPanelProps {
   panelRef: React.RefObject<HTMLDivElement>;
@@ -13,7 +16,7 @@ interface ClimaPanelProps {
   onToggleCollapse: () => void;
   onClosePanel: () => void;
   onMouseDownHeader: (e: React.MouseEvent<HTMLDivElement>) => void;
-  onAddGoesLayer: () => Promise<void>; // Updated prop
+  onAddLayer: (layer: MapLayer, bringToTop?: boolean) => void;
   style?: React.CSSProperties;
 }
 
@@ -23,26 +26,64 @@ const ClimaPanel: React.FC<ClimaPanelProps> = ({
   onToggleCollapse,
   onClosePanel,
   onMouseDownHeader,
-  onAddGoesLayer,
+  onAddLayer,
   style,
 }) => {
-    const [isGenerating, setIsGenerating] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
     const { toast } = useToast();
 
-    const handleGenerate = async () => {
-        setIsGenerating(true);
-        toast({ description: "Buscando última imagen de GOES-19..." });
+    const handleAddRadarLayer = () => {
+        setIsLoading(true);
+        toast({ description: "Añadiendo capa de radar..." });
+
         try {
-            await onAddGoesLayer();
+            const layerId = 'radar-weather-layer';
+            const layerName = 'Radar Meteorológico (NEXRAD)';
+            
+            // Example NEXRAD WMS service from Iowa State University
+            const radarSource = new TileWMS({
+                url: 'https://mesonet.agron.iastate.edu/cgi-bin/wms/nexrad/n0r.cgi',
+                params: {
+                    'LAYERS': 'nexrad-n0r-900913',
+                    'TILED': true,
+                    'TRANSPARENT': true,
+                    'FORMAT': 'image/png',
+                },
+                serverType: 'geoserver',
+                crossOrigin: 'anonymous'
+            });
+
+            const radarLayer = new TileLayer({
+                source: radarSource,
+                opacity: 0.7,
+                properties: {
+                    id: layerId,
+                    name: layerName,
+                    type: 'wms'
+                }
+            });
+
+            // This is a simplified addLayer; the main GeoMapperClient will handle adding to map and state
+            onAddLayer({
+                id: layerId,
+                name: layerName,
+                olLayer: radarLayer,
+                visible: true,
+                opacity: 0.7,
+                type: 'wms'
+            }, true);
+
+            toast({ description: `Capa "${layerName}" añadida.` });
+
         } catch (error: any) {
-            console.error("Error en el panel de clima al generar capa GOES:", error);
+            console.error("Error adding radar layer:", error);
             toast({
                 title: "Error",
-                description: error.message || "No se pudo generar la capa de GOES.",
+                description: "No se pudo añadir la capa de radar.",
                 variant: "destructive",
             });
         } finally {
-            setIsGenerating(false);
+            setIsLoading(false);
         }
     };
 
@@ -63,22 +104,22 @@ const ClimaPanel: React.FC<ClimaPanelProps> = ({
     >
       <div className="p-3 space-y-4">
         <div className="space-y-2">
-            <h3 className="text-sm font-semibold">Temperatura de Topes Nubosos (GOES-19)</h3>
+            <h3 className="text-sm font-semibold">Radar Meteorológico (NEXRAD)</h3>
             <p className="text-xs text-gray-400">
-                Visualiza la temperatura de los topes de las nubes a partir de la banda infrarroja del satélite GOES-19. Las temperaturas más frías (violeta/blanco) indican nubes de mayor desarrollo vertical, asociadas a tormentas intensas.
+                Visualiza la reflectividad del radar base de la red NEXRAD de EE.UU. (ejemplo). Las intensidades más altas (rojos/amarillos) indican precipitaciones más fuertes. La capa se actualiza periódicamente.
             </p>
-            <Button className="w-full" onClick={handleGenerate} disabled={isGenerating}>
-                {isGenerating ? (
+            <Button className="w-full" onClick={handleAddRadarLayer} disabled={isLoading}>
+                {isLoading ? (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : (
-                    <Satellite className="mr-2 h-4 w-4" />
+                    <RadioTower className="mr-2 h-4 w-4" />
                 )}
-                Añadir / Actualizar Capa GOES
+                Añadir / Actualizar Capa de Radar
             </Button>
         </div>
         <div className="text-center text-gray-300 border-t border-gray-700 pt-4">
             <p className="text-sm">
-                Próximos pasos: Análisis de movimiento y predicción.
+                Integración con SMN pendiente.
             </p>
         </div>
       </div>
@@ -87,5 +128,3 @@ const ClimaPanel: React.FC<ClimaPanelProps> = ({
 };
 
 export default ClimaPanel;
-
-    

@@ -1,5 +1,3 @@
-
-
 'use server';
 /**
  * @fileOverview A flow for generating Google Earth Engine tile layers, vector data, and histograms.
@@ -725,12 +723,3 @@ function initializeEe(): Promise<void> {
   }
   return eeInitialized;
 }
-
-
-    
-
-    
-
-
-
-    

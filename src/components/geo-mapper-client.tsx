@@ -141,7 +141,7 @@ const panelToggleConfigs = [
   { id: 'wfsLibrary', IconComponent: Library, name: "Biblioteca de Servidores" },
   { id: 'tools', IconComponent: Wrench, name: "Herramientas" },
   { id: 'analysis', IconComponent: DraftingCompass, name: "Análisis Espacial" },
-  { id: 'clima', IconComponent: CloudRain, name: "Clima" },
+  { id: 'clima', IconComponent: CloudRain, name: "Clima y Radar" },
   { id: 'trello', IconComponent: ClipboardCheck, name: "Trello" },
   { id: 'attributes', IconComponent: ListChecks, name: "Atributos" },
   { id: 'printComposer', IconComponent: Printer, name: "Impresión" },
@@ -1236,7 +1236,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
             onToggleCollapse={() => togglePanelCollapse('clima')}
             onClosePanel={() => togglePanelMinimize('clima')}
             onMouseDownHeader={(e) => handlePanelMouseDown(e, 'clima')}
-            onAddGoesLayer={layerManagerHook.addGoesLayer}
+            onAddLayer={layerManagerHook.addLayer}
             style={{ top: `${panels.clima.position.y}px`, left: `${panels.clima.position.x}px`, zIndex: panels.clima.zIndex }}
           />
         )}
