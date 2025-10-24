@@ -159,14 +159,12 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
 
     if (bandCombination === 'GOES_CLOUDTOP') {
         const goesCollection = ee.ImageCollection('NOAA/GOES/19/MCMIPF')
-            .filterDate(ee.Date(Date.now()).advance(-24, 'hour'), ee.Date(Date.now()))
             .sort('system:time_start', false);
         
         const latestImageForMeta = ee.Image(goesCollection.first());
         
         const applyScaleAndOffset = (image: ee.Image) => {
             const bandName = 'CMI_C13';
-            // Use .get() to safely access properties that might not exist on a null image
             const offset = ee.Number(image.get(bandName + '_offset'));
             const scale = ee.Number(image.get(bandName + '_scale'));
             return image.select(bandName).multiply(scale).add(offset);
@@ -288,14 +286,12 @@ const geeTileLayerFlow = ai.defineFlow(
     await initializeEe();
     
     if (input.bandCombination === 'GOES_CLOUDTOP') {
-        const collection = ee.ImageCollection('NOAA/GOES/19/MCMIPF')
-            .filterDate(ee.Date(Date.now()).advance(-24, 'hour'), ee.Date(Date.now()));
-            
-        // Validate that the collection is not empty before proceeding
+        // This is a robust way to check if the collection has any images before proceeding.
         const count = await new Promise<number>((resolve, reject) => {
-            collection.size().evaluate((size: number, error?: string) => {
+            ee.ImageCollection('NOAA/GOES/19/MCMIPF').size().evaluate((size: number, error?: string) => {
                 if (error) {
-                    reject(new Error(error));
+                    console.error("GEE size evaluation error:", error);
+                    reject(new Error(`Error al verificar la colección de GOES: ${error}`));
                 } else {
                     resolve(size);
                 }
@@ -303,7 +299,7 @@ const geeTileLayerFlow = ai.defineFlow(
         });
 
         if (count === 0) {
-            throw new Error('No se encontraron imágenes de GOES para el área y tiempo especificados.');
+            throw new Error('La colección de GOES está vacía o no se pudo acceder a ella.');
         }
     }
     
@@ -316,8 +312,8 @@ const geeTileLayerFlow = ai.defineFlow(
                  if (error.includes && error.includes('computation timed out')) {
                     return reject(new Error('El procesamiento en Earth Engine tardó demasiado. Intente con un área más pequeña.'));
                 }
-                if (error.includes && (error.includes('does not have a band') || error.includes('No bands in image') || error.includes("Parameter 'object' is required") || error.includes("Image.get: Parameter 'object' is required") || error.includes("Image.select: Parameter 'input' is required"))) {
-                    return reject(new Error('No se encontraron imágenes de GOES para el área y tiempo especificados.'));
+                if (error.includes && (error.includes('does not have a band') || error.includes('No bands in image') || error.includes("Parameter 'input' is required") || error.includes("Image.get: Parameter 'object' is required"))) {
+                    return reject(new Error('No se encontraron imágenes válidas para la consulta actual. Intente con otra área o rango de fechas.'));
                 }
                 return reject(new Error(`Ocurrió un error al generar la capa de Earth Engine: ${error || 'Error desconocido'}`));
             }
