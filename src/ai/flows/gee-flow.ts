@@ -161,26 +161,22 @@ export async function getGoesLayer(): Promise<GeeTileLayerOutput> {
     };
 
     const scaledImage = applyScaleAndOffset(latestImage);
-    const metadata = { timestamp: latestImage.get('system:time_start') };
+    const metadata = { 
+        timestamp: latestImage.get('system:time_start'),
+        satellite: latestImage.get('satellite'),
+        platform_id: latestImage.get('platform_id'),
+        scene_id: latestImage.get('scene_id'),
+    };
     
     const SMN_CLOUDTOP_PALETTE = [
-        '#000000',  // ~-90C Negro
-        '#ff0000',  // ~-70C Rojo
-        '#ffff00',  // ~-60C Amarillo
-        '#00ff00',  // ~-50C Verde
-        '#0000ff',  // ~-40C Azul
-        '#00ffff',  // ~-30C Cian
-        '#ffffff',  // ~-20C Blanco
-        '#cccccc',  // Grises para temps más altas
-        '#999999',
-        '#666666'
+        '#ffffff', '#cccccc', '#999999', // Grays (50C to -10C)
+        '#0000ff', '#00ffff',             // Blues/Cian (-10C to -40C)
+        '#00ff00', '#ffff00',             // Green/Yellow (-40C to -60C)
+        '#ff0000', '#800000',             // Red/Dark Red (-60C to -80C)
+        '#000000'                         // Black (-80C to -90C)
     ];
     
-    // Temperature range in Kelvin (C + 273.15)
-    // -90C = 183.15K
-    // +50C = 323.15K
     const visParams = { min: 183, max: 323, palette: SMN_CLOUDTOP_PALETTE };
-
 
     return new Promise((resolve, reject) => {
         scaledImage.getMap(visParams, (mapDetails: any, error: string) => {
@@ -228,8 +224,8 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
     const ELEVATION_PALETTE = ['006633', 'E5FFCC', '662A00', 'D8D8D8', 'FFFFFF'];
 
     const SMN_CLOUDTOP_PALETTE = [
-        '#000000', '#ff0000', '#ffff00', '#00ff00', '#0000ff',
-        '#00ffff', '#ffffff', '#cccccc', '#999999', '#666666'
+        '#ffffff', '#cccccc', '#999999', '#0000ff', '#00ffff',
+        '#00ff00', '#ffff00', '#ff0000', '#800000', '#000000'
     ];
 
     if (bandCombination === 'GOES_CLOUDTOP') {
@@ -742,3 +738,5 @@ function initializeEe(): Promise<void> {
   }
   return eeInitialized;
 }
+
+    

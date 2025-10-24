@@ -28,6 +28,7 @@ import StyleEditorDialog, { type StyleOptions } from './StyleEditorDialog';
 import LabelEditorDialog from './LabelEditorDialog';
 import GraduatedSymbologyDialog from './GraduatedSymbologyDialog';
 import CategorizedSymbologyDialog from './CategorizedSymbologyDialog';
+import { useLayerManager } from '@/hooks/layer-manager/useLayerManager';
 
 
 interface LayerItemProps {
@@ -41,17 +42,18 @@ interface LayerItemProps {
   onExtractByPolygon: (layerId: string) => void;
   onExtractBySelection: () => void;
   onSelectByLayer: (targetLayerId: string, selectorLayerId: string) => void;
-  isDrawingSourceEmptyOrNotPolygon: boolean;
-  isSelectionEmpty: boolean;
-  onSetLayerOpacity: (layerId: string, opacity: number) => void;
   onExportLayer: (layerId: string, format: 'geojson' | 'kml' | 'shp') => void;
+  onExportWmsAsGeotiff: (layerId: string) => void;
   onRenameLayer: (layerId: string, newName: string) => void;
   onChangeLayerStyle: (layerId: string, styleOptions: StyleOptions) => void;
   onChangeLayerLabels: (layerId: string, labelOptions: LabelOptions) => void;
   onApplyGraduatedSymbology: (layerId: string, symbology: GraduatedSymbology) => void;
   onApplyCategorizedSymbology: (layerId: string, symbology: CategorizedSymbology) => void;
-  onApplyGeoTiffStyle: (layerId: string, symbology: GraduatedSymbology) => void;
+  onApplyGeoTiffStyle: (layerId: string, symbology: GeoTiffStyle) => void;
   onToggleWmsStyle: (layerId: string) => void;
+  isDrawingSourceEmptyOrNotPolygon: boolean;
+  isSelectionEmpty: boolean;
+  onSetLayerOpacity: (layerId: string, opacity: number) => void;
   
   // Drag and Drop props
   isDraggable: boolean;
@@ -86,10 +88,8 @@ const LayerItem: React.FC<LayerItemProps> = ({
   onExtractByPolygon,
   onExtractBySelection,
   onSelectByLayer,
-  isDrawingSourceEmptyOrNotPolygon,
-  isSelectionEmpty,
-  onSetLayerOpacity,
   onExportLayer,
+  onExportWmsAsGeotiff,
   onRenameLayer,
   onChangeLayerStyle,
   onChangeLayerLabels,
@@ -97,6 +97,9 @@ const LayerItem: React.FC<LayerItemProps> = ({
   onApplyCategorizedSymbology,
   onApplyGeoTiffStyle,
   onToggleWmsStyle,
+  isDrawingSourceEmptyOrNotPolygon,
+  isSelectionEmpty,
+  onSetLayerOpacity,
   isDraggable,
   onDragStart,
   onDragEnd,
@@ -114,7 +117,8 @@ const LayerItem: React.FC<LayerItemProps> = ({
 }) => {
   const isVectorLayer = layer.olLayer instanceof VectorLayer;
   const isWfsLayer = layer.type === 'wfs';
-  const isGeoTiffLayer = layer.type === 'geotiff';
+  const isGeoTiffLayer = layer.type === 'geotiff' || layer.type === 'gee';
+  const isWmsLayer = layer.type === 'wms';
   const currentOpacityPercentage = Math.round(layer.opacity * 100);
 
   const [isEditing, setIsEditing] = useState(false);
@@ -191,7 +195,7 @@ const LayerItem: React.FC<LayerItemProps> = ({
 
   const handleGraduatedSymbologyApply = (symbology: GraduatedSymbology) => {
     if (isGeoTiffLayer) {
-        onApplyGeoTiffStyle(layer.id, symbology);
+        onApplyGeoTiffStyle(layer.id, symbology as GeoTiffStyle);
     } else {
         onApplyGraduatedSymbology(layer.id, symbology);
     }
@@ -398,7 +402,7 @@ const LayerItem: React.FC<LayerItemProps> = ({
                     </DropdownMenuSub>
                   )}
 
-                  {isVectorLayer && (
+                  {(isVectorLayer || isWmsLayer || isGeoTiffLayer) && (
                     <DropdownMenuSub>
                       <DropdownMenuSubTrigger className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer data-[state=open]:bg-gray-600">
                         <Download className="mr-2 h-3.5 w-3.5" />
@@ -406,9 +410,10 @@ const LayerItem: React.FC<LayerItemProps> = ({
                       </DropdownMenuSubTrigger>
                       <DropdownMenuPortal>
                         <DropdownMenuSubContent className="bg-gray-700 text-white border-gray-600">
-                          <DropdownMenuItem onSelect={() => onExportLayer(layer.id, 'geojson')} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">GeoJSON</DropdownMenuItem>
-                          <DropdownMenuItem onSelect={() => onExportLayer(layer.id, 'kml')} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">KML</DropdownMenuItem>
-                          <DropdownMenuItem onSelect={() => onExportLayer(layer.id, 'shp')} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">Shapefile (.zip)</DropdownMenuItem>
+                          {isVectorLayer && <DropdownMenuItem onSelect={() => onExportLayer(layer.id, 'geojson')} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">GeoJSON</DropdownMenuItem>}
+                          {isVectorLayer && <DropdownMenuItem onSelect={() => onExportLayer(layer.id, 'kml')} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">KML</DropdownMenuItem>}
+                          {isVectorLayer && <DropdownMenuItem onSelect={() => onExportLayer(layer.id, 'shp')} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">Shapefile (.zip)</DropdownMenuItem>}
+                          {(isWmsLayer || isGeoTiffLayer) && <DropdownMenuItem onSelect={() => onExportWmsAsGeotiff(layer.id)} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">GeoTIFF (Vista Actual)</DropdownMenuItem>}
                         </DropdownMenuSubContent>
                       </DropdownMenuPortal>
                     </DropdownMenuSub>
@@ -516,3 +521,5 @@ const LayerItem: React.FC<LayerItemProps> = ({
 };
 
 export default LayerItem;
+
+    

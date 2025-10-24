@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
@@ -36,6 +37,7 @@ interface UseLayerManagerProps {
   updateGeoServerDiscoveredLayerState: (layerName: string, added: boolean, type: 'wms' | 'wfs') => void;
   clearSelectionAfterExtraction: () => void;
   updateInspectedFeatureData: (featureId: string, key: string, value: any) => void;
+  onExportWmsAsGeotiff: (layerId: string) => void;
 }
 
 const WMS_LAYER_Z_INDEX = 5;
@@ -206,6 +208,7 @@ export const useLayerManager = ({
   updateGeoServerDiscoveredLayerState,
   clearSelectionAfterExtraction,
   updateInspectedFeatureData,
+  onExportWmsAsGeotiff,
 }: UseLayerManagerProps) => {
   const [layers, setLayersInternal] = useState<MapLayer[]>([]);
   const { toast } = useToast();
@@ -1137,83 +1140,73 @@ export const useLayerManager = ({
     
     const layer = layers.find(l => l.id === layerId);
     if (!layer || !(layer.olLayer instanceof TileLayer)) {
-      toast({ description: 'La capa seleccionada no es una capa WMS válida.', variant: "destructive" });
+      toast({ description: 'La capa seleccionada no es una capa WMS o GEE válida.', variant: "destructive" });
       return;
     }
 
     const source = layer.olLayer.getSource();
-    if (!(source instanceof TileWMS)) {
-        toast({ description: 'La fuente de la capa no es TileWMS.', variant: 'destructive' });
+    let getMapUrl: URL | undefined;
+
+    if (source instanceof TileWMS) {
+        const size = map.getSize();
+        if (!size || size[0] === 0 || size[1] === 0) {
+          toast({ description: 'El tamaño del mapa es inválido para la exportación.', variant: 'destructive' });
+          return;
+        }
+        const [width, height] = size;
+        const view = map.getView();
+        const extent = view.calculateExtent(size);
+        const projection = view.getProjection();
+        const srs = projection.getCode();
+        const params = source.getParams();
+        const wmsUrl = source.getUrls()?.[0];
+
+        if (!wmsUrl) {
+          toast({ description: 'No se pudo obtener la URL del servicio WMS.', variant: 'destructive' });
+          return;
+        }
+
+        const getMapParams = {
+            SERVICE: 'WMS', VERSION: '1.3.0', REQUEST: 'GetMap',
+            FORMAT: 'image/geotiff', TRANSPARENT: 'true', LAYERS: params.LAYERS,
+            STYLES: params.STYLES || '', CRS: srs, BBOX: extent.join(','),
+            WIDTH: width, HEIGHT: height,
+        };
+        
+        getMapUrl = new URL(wmsUrl);
+        Object.entries(getMapParams).forEach(([key, value]) => getMapUrl!.searchParams.set(key, String(value)));
+
+    } else if (source instanceof XYZ && (layer.type === 'gee' || layer.type === 'geotiff')) {
+        // Fallback for GEE layers - since we can't directly get GeoTIFF from tile URL,
+        // we delegate this to the onExportWmsAsGeotiff prop which calls the backend.
+        onExportWmsAsGeotiff(layer.id);
+        return;
+    } else {
+        toast({ description: 'Tipo de capa no soportado para exportación GeoTIFF directa.', variant: 'destructive' });
         return;
     }
 
-    const size = map.getSize();
-    if (!size || size[0] === 0 || size[1] === 0) {
-      toast({ description: 'El tamaño del mapa es inválido para la exportación.', variant: 'destructive' });
-      return;
-    }
-    const [width, height] = size;
-
-    const view = map.getView();
-    const extent = view.calculateExtent(size);
-    const projection = view.getProjection();
-    const srs = projection.getCode();
-    
-    const params = source.getParams();
-    const wmsUrl = source.getUrls()?.[0];
-
-    if (!wmsUrl) {
-      toast({ description: 'No se pudo obtener la URL del servicio WMS.', variant: 'destructive' });
-      return;
-    }
-
-    const getMapParams = {
-        SERVICE: 'WMS',
-        VERSION: '1.3.0',
-        REQUEST: 'GetMap',
-        FORMAT: 'image/geotiff',
-        TRANSPARENT: 'true',
-        LAYERS: params.LAYERS,
-        STYLES: params.STYLES || '',
-        CRS: srs,
-        BBOX: extent.join(','),
-        WIDTH: width,
-        HEIGHT: height,
-    };
-    
-    const url = new URL(wmsUrl);
-    Object.entries(getMapParams).forEach(([key, value]) => {
-      url.searchParams.set(key, String(value));
-    });
-
-    const proxyUrl = `/api/geoserver-proxy?url=${encodeURIComponent(url.toString())}`;
+    const proxyUrl = `/api/geoserver-proxy?url=${encodeURIComponent(getMapUrl.toString())}`;
 
     try {
         const response = await fetch(proxyUrl);
-        if (!response.ok) {
-            throw new Error(`El servidor WMS respondió con estado: ${response.status}`);
-        }
+        if (!response.ok) throw new Error(`El servidor respondió con estado: ${response.status}`);
         
         const blob = await response.blob();
-        if (blob.type !== 'image/tiff') {
-            throw new Error('El servidor no devolvió un GeoTIFF válido.');
-        }
+        if (blob.type !== 'image/tiff') throw new Error('El servidor no devolvió un GeoTIFF válido.');
 
-        const link = document.createElement('a');
-        link.href = URL.createObjectURL(blob);
-        link.download = `${layer.name.replace(/ /g, '_')}.tif`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(link.href);
+        await saveFileWithPicker({
+            fileContent: blob,
+            suggestedName: `${layer.name.replace(/ /g, '_')}.tif`,
+            fileType: 'shp', // a bit of a hack, but 'shp' uses .zip which is fine for blob
+        });
         
         toast({ description: `Descargando GeoTIFF para "${layer.name}".` });
-
     } catch (error: any) {
         console.error("Error exporting WMS as GeoTIFF:", error);
         toast({ title: 'Error de Exportación', description: error.message, variant: 'destructive' });
     }
-  }, [layers, mapRef, toast]);
+  }, [layers, mapRef, toast, onExportWmsAsGeotiff]);
 
 
   return {
@@ -1253,3 +1246,5 @@ export const useLayerManager = ({
     handleExportWmsAsGeotiff,
   };
 };
+
+    

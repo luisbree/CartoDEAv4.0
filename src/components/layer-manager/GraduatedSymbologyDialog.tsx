@@ -20,7 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import type { GraduatedSymbology, VectorMapLayer, ColorRampId, ClassificationMethod, MapLayer } from '@/lib/types';
+import type { GraduatedSymbology, VectorMapLayer, ColorRampId, ClassificationMethod, MapLayer, GeoTiffStyle } from '@/lib/types';
 import { ColorPicker } from './StyleEditorDialog';
 import { ScrollArea } from '../ui/scroll-area';
 import WebGLTileLayer from 'ol/layer/WebGLTile';
@@ -157,7 +157,7 @@ const GraduatedSymbologyDialog: React.FC<GraduatedSymbologyDialogProps> = ({
   onApply,
   layer,
 }) => {
-  const isRaster = layer?.type === 'geotiff';
+  const isRaster = layer?.type === 'geotiff' || layer?.type === 'gee';
   const [field, setField] = useState<string>('');
   const [method, setMethod] = useState<ClassificationMethod>('quantiles');
   const [classes, setClasses] = useState<number>(5);
@@ -200,11 +200,16 @@ const GraduatedSymbologyDialog: React.FC<GraduatedSymbologyDialogProps> = ({
       setStrokeWidth(existingSymbology?.strokeWidth === undefined ? 1 : existingSymbology.strokeWidth);
       setClassification(null);
       
-      // For rasters, set initial min/max if not already set
-      if (isRaster && layer.geoTiffStyle) {
-          setRange({ min: layer.geoTiffStyle.min, max: layer.geoTiffStyle.max });
+      const geoTiffStyle = layer.geoTiffStyle;
+      if (isRaster && geoTiffStyle) {
+          setRange({ min: geoTiffStyle.min, max: geoTiffStyle.max });
       } else if (isRaster) {
-          setRange({ min: 0, max: 255 }); // Default for 8-bit
+          // Default range for GOES (Kelvin)
+          if (layer.type === 'gee' && layer.olLayer.get('geeParams')?.bandCombination === 'GOES_CLOUDTOP') {
+              setRange({ min: 183, max: 323 });
+          } else {
+              setRange({ min: 0, max: 255 }); // Default for generic 8-bit
+          }
       }
 
     }
@@ -409,7 +414,7 @@ const GraduatedSymbologyDialog: React.FC<GraduatedSymbologyDialogProps> = ({
               </div>
             </div>
              {isRaster && (
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-3 pt-1 border-t border-white/10 mt-2">
                 <div className="space-y-1">
                     <Label htmlFor="min-range" className="text-xs">Valor Mínimo</Label>
                     <Input id="min-range" type="number" value={range.min} onChange={(e) => setRange(prev => ({...prev, min: Number(e.target.value)}))} className="h-8 text-xs bg-black/20"/>
@@ -510,3 +515,5 @@ const GraduatedSymbologyDialog: React.FC<GraduatedSymbologyDialogProps> = ({
 };
 
 export default GraduatedSymbologyDialog;
+
+    
