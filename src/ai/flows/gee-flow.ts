@@ -134,7 +134,8 @@ export async function getGoesLayer(): Promise<GeeTileLayerOutput> {
     await initializeEe();
 
     const collection = ee.ImageCollection('NOAA/GOES/19/MCMIPF')
-        .sort('system:time_start', false); // Sort descending to get the latest first
+        .filterDate(ee.Date(Date.now()).advance(-2, 'hour'), ee.Date(Date.now()))
+        .sort('system:time_start', false); 
 
     const latestImage = ee.Image(collection.first());
     
@@ -730,3 +731,4 @@ function initializeEe(): Promise<void> {
     
 
     
+
