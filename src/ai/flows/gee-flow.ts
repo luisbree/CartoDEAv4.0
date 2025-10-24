@@ -155,15 +155,14 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
 
     const CLOUDTOP_PALETTE = ['#000080', '#0000FF', '#00FFFF', '#FFFFFF']; // From cold (blue) to hot (white)
 
-    // Function to convert GOES CMI to brightness temperature.
-    const applyScaleAndOffset = function(image: ee.Image) {
-        const bandName = 'CMI_C13';
-        const offset = ee.Number(image.get(bandName + '_offset'));
-        const scale = ee.Number(image.get(bandName + '_scale'));
-        return image.select(bandName).multiply(scale).add(offset);
-    };
-
     if (bandCombination === 'GOES_CLOUDTOP') {
+        const applyScaleAndOffset = function(image: ee.Image) {
+            const bandName = 'CMI_C13';
+            const offset = ee.Number(image.get(bandName + '_offset'));
+            const scale = ee.Number(image.get(bandName + '_scale'));
+            return image.select(bandName).multiply(scale).add(offset);
+        };
+
         let goesCollection: ee.ImageCollection = ee.ImageCollection('NOAA/GOES/16/MCMIPF')
             .filter(ee.Filter.date(ee.Date(Date.now()).advance(-2, 'hour'), ee.Date(Date.now())));
 
@@ -172,13 +171,8 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
         }
         
         const processedCollection = goesCollection.map(applyScaleAndOffset);
-        const latestImage = ee.Image(processedCollection.mosaic());
         
-        if (!latestImage.getInfo()) {
-             throw new Error('No se encontraron imágenes de GOES para el área y tiempo especificados.');
-        }
-
-        finalImage = latestImage;
+        finalImage = ee.Image(processedCollection.mosaic());
         if (geometry) {
             finalImage = finalImage.clip(geometry);
         }
@@ -662,3 +656,6 @@ function initializeEe(): Promise<void> {
     
 
 
+
+
+    
