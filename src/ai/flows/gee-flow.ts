@@ -155,19 +155,30 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
 
     const CLOUDTOP_PALETTE = ['#000080', '#0000FF', '#00FFFF', '#FFFFFF']; // From cold (blue) to hot (white)
 
+    // Function to convert GOES CMI to brightness temperature.
+    const applyScaleAndOffset = function(image: ee.Image) {
+        const bandName = 'CMI_C13';
+        const offset = ee.Number(image.get(bandName + '_offset'));
+        const scale = ee.Number(image.get(bandName + '_scale'));
+        return image.select(bandName).multiply(scale).add(offset);
+    };
+
     if (bandCombination === 'GOES_CLOUDTOP') {
         const goesCollection = ee.ImageCollection('NOAA/GOES/16/MCMIPF')
-            .limit(1, 'system:time_start', false); // Get the latest image
+            .filter(ee.Filter.date(ee.Date(Date.now()).advance(-1, 'hour'), ee.Date(Date.now())));
 
-        const image = ee.Image(goesCollection.first());
-        if (!image.get('system:id').getInfo()) {
+        if (geometry) {
+             goesCollection.filter(ee.Filter.bounds(geometry));
+        }
+        
+        const latestImage = goesCollection.limit(1, 'system:time_start', false).first();
+        
+        if (!latestImage.get('system:id').getInfo()) {
              throw new Error('No se encontraron imágenes de GOES para el área y tiempo especificados.');
         }
 
-        finalImage = image.select('CMI_C13');
-        if (geometry) {
-            finalImage = finalImage.clip(geometry);
-        }
+        finalImage = applyScaleAndOffset(ee.Image(latestImage));
+
         visParams = { min: 300, max: 190, palette: CLOUDTOP_PALETTE }; // Temp in Kelvin, inverted
     } else if (['URBAN_FALSE_COLOR', 'SWIR_FALSE_COLOR', 'BSI', 'NDVI', 'TASSELED_CAP'].includes(bandCombination)) {
         let s2ImageCollection = ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
@@ -257,6 +268,10 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
     } else { // JRC_WATER_OCCURRENCE
         finalImage = ee.Image('JRC/GSW1_4/GlobalSurfaceWater').select('occurrence');
         visParams = { min: 0, max: 100, palette: ['#FFFFFF', 'lightblue', 'blue'] };
+    }
+
+    if (geometry && bandCombination !== 'GOES_CLOUDTOP') { // GOES is already a single image, clipping is handled differently
+        finalImage = finalImage.clip(geometry);
     }
 
     return { finalImage, visParams, geometry };
@@ -633,5 +648,7 @@ function initializeEe(): Promise<void> {
   }
   return eeInitialized;
 }
+
+    
 
     
