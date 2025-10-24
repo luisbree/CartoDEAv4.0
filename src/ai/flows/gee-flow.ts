@@ -159,8 +159,15 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
         const goesCollection = ee.ImageCollection('NOAA/GOES/16/MCMIPF')
             .limit(1, 'system:time_start', false); // Get the latest image
 
-        const image = ee.Image(goesCollection.mosaic());
+        const image = ee.Image(goesCollection.first());
+        if (!image.get('system:id').getInfo()) {
+             throw new Error('No se encontraron imágenes de GOES para el área y tiempo especificados.');
+        }
+
         finalImage = image.select('CMI_C13');
+        if (geometry) {
+            finalImage = finalImage.clip(geometry);
+        }
         visParams = { min: 300, max: 190, palette: CLOUDTOP_PALETTE }; // Temp in Kelvin, inverted
     } else if (['URBAN_FALSE_COLOR', 'SWIR_FALSE_COLOR', 'BSI', 'NDVI', 'TASSELED_CAP'].includes(bandCombination)) {
         let s2ImageCollection = ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
@@ -626,3 +633,5 @@ function initializeEe(): Promise<void> {
   }
   return eeInitialized;
 }
+
+    
