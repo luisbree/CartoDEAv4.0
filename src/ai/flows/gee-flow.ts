@@ -158,12 +158,12 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
     const CLOUDTOP_PALETTE = ['#000080', '#0000FF', '#00FFFF', '#FFFFFF'];
 
     if (bandCombination === 'GOES_CLOUDTOP') {
-        const goesCollection = ee.ImageCollection('GOOGLE/GOES/19/L2-CMIP')
+        const goesCollection = ee.ImageCollection('NOAA/GOES/19/MCMIPF')
             .filterDate(ee.Date(Date.now()).advance(-12, 'hour'), ee.Date(Date.now()));
         
         // This function needs to be defined to be mapped over the collection.
         const applyScaleAndOffset = (image: ee.Image) => {
-            const bandName = 'CMI'; // Correct band name for this collection
+            const bandName = 'CMI_C13'; // Use the correct band name for this product
             const offset = ee.Number(image.get(bandName + '_offset'));
             const scale = ee.Number(image.get(bandName + '_scale'));
             return image.select(bandName).multiply(scale).add(offset);
@@ -287,7 +287,7 @@ const geeTileLayerFlow = ai.defineFlow(
     await initializeEe();
     
     if (input.bandCombination === 'GOES_CLOUDTOP') {
-        const collection = ee.ImageCollection('GOOGLE/GOES/19/L2-CMIP')
+        const collection = ee.ImageCollection('NOAA/GOES/19/MCMIPF')
             .filterDate(ee.Date(Date.now()).advance(-12, 'hour'), ee.Date(Date.now()));
         
         const count = await new Promise<number>((resolve, reject) => {
