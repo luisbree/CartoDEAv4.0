@@ -134,23 +134,14 @@ export async function getGoesLayer(): Promise<GeeTileLayerOutput> {
     await initializeEe();
 
     const collection = ee.ImageCollection('NOAA/GOES/19/MCMIPF')
-        // Filter to a recent, reasonable time window to avoid timeouts
-        .filterDate(ee.Date(Date.now()).advance(-12, 'hour'), ee.Date(Date.now()))
         .sort('system:time_start', false); // Sort descending to get the latest first
 
-    const count = await new Promise<number>((resolve, reject) => {
-        collection.size().evaluate((size: number, error?: string) => {
-            if (error) reject(new Error(`Error al verificar la colección de GOES: ${error}`));
-            else resolve(size);
-        });
-    });
-
-    if (count === 0) {
-        throw new Error('No se encontraron imágenes de GOES en las últimas 12 horas.');
+    const latestImage = ee.Image(collection.first());
+    
+    if (!latestImage) {
+        throw new Error('No se encontraron imágenes de GOES en el catálogo.');
     }
     
-    const latestImage = ee.Image(collection.first());
-
     const applyScaleAndOffset = (image: ee.Image) => {
         const bandName = 'CMI_C13';
         const offset = ee.Number(image.get(bandName + '_offset'));
@@ -341,18 +332,8 @@ const geeTileLayerFlow = ai.defineFlow(
   async (input) => {
     await initializeEe();
     
-    if (input.bandCombination === 'GOES_CLOUDTOP') {
-        const count = await new Promise<number>((resolve, reject) => {
-            ee.ImageCollection('NOAA/GOES/19/MCMIPF').filterDate(ee.Date(Date.now()).advance(-12, 'hour'), ee.Date(Date.now())).size().evaluate((size: number, error?: string) => {
-                if (error) reject(new Error(`Error al verificar la colección de GOES: ${error}`));
-                else resolve(size);
-            });
-        });
-
-        if (count === 0) {
-            throw new Error('No se encontraron imágenes de GOES en las últimas 12 horas.');
-        }
-    }
+    // GOES logic is now handled by the dedicated getGoesLayer function
+    // and is only called from ClimaPanel, not here.
     
     const { finalImage, visParams, metadata } = getImageForProcessing(input);
 
@@ -734,5 +715,7 @@ function initializeEe(): Promise<void> {
   return eeInitialized;
 }
 
+
+    
 
     
