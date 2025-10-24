@@ -165,7 +165,8 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
 
     if (bandCombination === 'GOES_CLOUDTOP') {
         const goesCollection = ee.ImageCollection('NOAA/GOES/16/MCMIPF')
-            .filter(ee.Filter.date(ee.Date(Date.now()).advance(-1, 'hour'), ee.Date(Date.now())));
+            .filter(ee.Filter.date(ee.Date(Date.now()).advance(-1, 'hour'), ee.Date(Date.now())))
+            .mosaic();
 
         if (geometry) {
              goesCollection.filter(ee.Filter.bounds(geometry));
@@ -173,7 +174,7 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
         
         const latestImage = goesCollection.limit(1, 'system:time_start', false).first();
         
-        if (!ee.Algorithms.IsEqual(latestImage, null).getInfo()) {
+        if (latestImage.getInfo() == null) {
              throw new Error('No se encontraron imágenes de GOES para el área y tiempo especificados.');
         }
 
@@ -270,7 +271,7 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
         visParams = { min: 0, max: 100, palette: ['#FFFFFF', 'lightblue', 'blue'] };
     }
 
-    if (geometry && bandCombination !== 'GOES_CLOUDTOP') { // GOES is already a single image, clipping is handled differently
+    if (geometry) {
         finalImage = finalImage.clip(geometry);
     }
 
@@ -648,6 +649,8 @@ function initializeEe(): Promise<void> {
   }
   return eeInitialized;
 }
+
+    
 
     
 
