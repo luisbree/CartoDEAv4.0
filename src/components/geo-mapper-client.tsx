@@ -1240,6 +1240,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
             onMouseDownHeader={(e) => handlePanelMouseDown(e, 'clima')}
             onAddLayer={layerManagerHook.addLayer}
             style={{ top: `${panels.clima.position.y}px`, left: `${panels.clima.position.x}px`, zIndex: panels.clima.zIndex }}
+            mapRef={mapRef}
           />
         )}
 
