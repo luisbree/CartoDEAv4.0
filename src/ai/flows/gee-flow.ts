@@ -222,8 +222,16 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
     const ELEVATION_PALETTE = ['006633', 'E5FFCC', '662A00', 'D8D8D8', 'FFFFFF'];
 
     const SMN_CLOUDTOP_PALETTE = [
-        '#000000', '#800000', '#ff0000', '#ffff00', '#00ff00',
-        '#00ffff', '#0000ff', '#999999', '#cccccc', '#ffffff'
+      '#000000', // Negro
+      '#640000', // Rojo oscuro
+      '#ff0000', // Rojo
+      '#ffff00', // Amarillo
+      '#00c800', // Verde
+      '#0096ff', // Azul
+      '#a0a0a0', // Gris
+      '#c0c0c0', // Gris claro
+      '#e0e0e0', // Gris muy claro
+      '#ffffff'  // Blanco
     ].reverse();
 
     if (bandCombination === 'GOES_CLOUDTOP') {
@@ -536,13 +544,15 @@ const geeGeoTiffDownloadFlow = ai.defineFlow(
         await initializeEe();
 
         const { finalImage, geometry } = getImageForProcessing(input);
+        const isGoesLayer = input.bandCombination === 'GOES_CLOUDTOP';
 
         // Clip the image to the specified Area of Interest (AOI)
         if (!geometry) {
             throw new Error("Se requiere un área de interés (AOI) para la exportación de GeoTIFF.");
         }
         
-        const imageToExport = input.bandCombination === 'GOES_CLOUDTOP'
+        // For GOES, do not clip, as it's a full-disk image.
+        const imageToExport = isGoesLayer
             ? finalImage
             : finalImage.clip(geometry);
 
@@ -555,8 +565,9 @@ const geeGeoTiffDownloadFlow = ai.defineFlow(
                 format: 'GEO_TIFF',
                 region: geometry,
                 crs: 'EPSG:3857',
+                // For multi-band images, specify band order. For single band, it's automatic.
                 bands: imageToExport.bandNames().getInfo(),
-                scale: input.bandCombination === 'GOES_CLOUDTOP' ? 2000 : 30,
+                scale: isGoesLayer ? 2000 : 30, // Use a reasonable default of 30 meters.
             };
 
             imageToExport.getDownloadURL(params, (url, error) => {
@@ -565,7 +576,7 @@ const geeGeoTiffDownloadFlow = ai.defineFlow(
                     if (error.includes && error.includes('computation timed out')) {
                         return reject(new Error('La exportación a GeoTIFF tardó demasiado. Intente con un área más pequeña.'));
                     }
-                    if (error.includes && error.includes('Total request size')) {
+                     if (error.includes('Total request size')) {
                         return reject(new Error(`El área es demasiado grande para la resolución solicitada. Error de GEE: ${error}`));
                     }
                     return reject(new Error(`Ocurrió un error durante la exportación en GEE: ${error}`));
@@ -810,3 +821,5 @@ function initializeEe(): Promise<void> {
   }
   return eeInitialized;
 }
+
+    
