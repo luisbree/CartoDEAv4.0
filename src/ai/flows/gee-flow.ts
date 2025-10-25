@@ -169,21 +169,15 @@ export async function getGoesLayer(): Promise<GeeTileLayerOutput> {
         scene_id: latestImage.get('scene_id'),
     };
     
+    // Final correct palette
     const SMN_CLOUDTOP_PALETTE = [
-        // -90 to -80°C (Black to dark gray for extreme cold)
-        '#000000', '#101010', '#202020', '#303030',
-        // -80 to -70°C (Transition to intense reds)
-        '#4d0000', '#660000', '#800000', '#b30000', '#e60000', '#ff1a1a',
-        // -70 to -60°C (Bright reds to oranges and yellows)
-        '#ff4d4d', '#ff8000', '#ffbf00', '#ffff00',
-        // -60 to -50°C (Yellows to greens)
-        '#bfff00', '#80ff00', '#00ff00',
-        // -50 to -30°C (Greens to blues)
-        '#00ffbf', '#00bfff', '#0080ff', '#0040ff', '#0000ff', '#4000ff',
-        // -30 to 50°C (Blues to light grays to white for warmer tops)
-        '#8000ff', '#bf00ff', '#999999', '#aaaaaa', '#bbbbbb', '#cccccc', '#dddddd', '#eeeeee', '#ffffff'
+        '#ffffff', '#e0e0e0', '#c0c0c0', '#a0a0a0', '#808080', // -90 to -80°C (White to Gray)
+        '#ff0000', '#ff4500', '#ffa500', '#ffff00', // -80 to -70°C (Reds to Yellow)
+        '#adff2f', '#00ff00', // -70 to -65°C (Greens)
+        '#00ffff', '#1e90ff', '#0000ff', // -65 to -50°C (Cyans to Blues)
+        '#dcdcdc', '#f5f5f5', '#ffffff'  // -50 and warmer (Light Grays to White)
     ];
-    
+
     // Temperatures from -90°C to 50°C in Kelvin
     const visParams = { min: 183.15, max: 323.15, palette: SMN_CLOUDTOP_PALETTE };
 
@@ -233,18 +227,11 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
     const ELEVATION_PALETTE = ['006633', 'E5FFCC', '662A00', 'D8D8D8', 'FFFFFF'];
 
     const SMN_CLOUDTOP_PALETTE = [
-        // -90 to -80°C (Black to dark gray for extreme cold)
-        '#000000', '#101010', '#202020', '#303030',
-        // -80 to -70°C (Transition to intense reds)
-        '#4d0000', '#660000', '#800000', '#b30000', '#e60000', '#ff1a1a',
-        // -70 to -60°C (Bright reds to oranges and yellows)
-        '#ff4d4d', '#ff8000', '#ffbf00', '#ffff00',
-        // -60 to -50°C (Yellows to greens)
-        '#bfff00', '#80ff00', '#00ff00',
-        // -50 to -30°C (Greens to blues)
-        '#00ffbf', '#00bfff', '#0080ff', '#0040ff', '#0000ff', '#4000ff',
-        // -30 to 50°C (Blues to light grays to white for warmer tops)
-        '#8000ff', '#bf00ff', '#999999', '#aaaaaa', '#bbbbbb', '#cccccc', '#dddddd', '#eeeeee', '#ffffff'
+        '#ffffff', '#e0e0e0', '#c0c0c0', '#a0a0a0', '#808080', // -90 to -80°C (White to Gray)
+        '#ff0000', '#ff4500', '#ffa500', '#ffff00', // -80 to -70°C (Reds to Yellow)
+        '#adff2f', '#00ff00', // -70 to -65°C (Greens)
+        '#00ffff', '#1e90ff', '#0000ff', // -65 to -50°C (Cyans to Blues)
+        '#dcdcdc', '#f5f5f5', '#ffffff'  // -50 and warmer (Light Grays to White)
     ];
 
 
@@ -559,8 +546,6 @@ const geeGeoTiffDownloadFlow = ai.defineFlow(
 
         const { finalImage, geometry } = getImageForProcessing(input);
         
-        // The clipping logic is now handled inside getImageForProcessing.
-        // But for GOES, we must NOT clip.
         const imageToExport = input.bandCombination === 'GOES_CLOUDTOP' 
             ? finalImage 
             : finalImage.clip(geometry!);
@@ -574,7 +559,6 @@ const geeGeoTiffDownloadFlow = ai.defineFlow(
                 format: 'GEO_TIFF',
                 region: geometry,
                 crs: 'EPSG:3857',
-                // For multi-band images, specify band order. For single band, it's automatic.
                 bands: imageToExport.bandNames().getInfo(),
                 scale: input.bandCombination === 'GOES_CLOUDTOP' ? 2000 : 30,
             };
