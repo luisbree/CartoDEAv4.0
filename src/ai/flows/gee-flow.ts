@@ -170,13 +170,18 @@ export async function getGoesLayer(): Promise<GeeTileLayerOutput> {
     };
     
     const SMN_CLOUDTOP_PALETTE = [
-        '#FFFFFF', '#F0F0F0', '#E0E0E0', '#D0D0D0', '#C0C0C0', '#B0B0B0', '#A0A0A0', '#909090', '#808080', '#707070', '#606060', '#505050', '#404040', '#303030', '#202020', '#101010', '#000000', // -90 a -75
-        '#9e0142', '#d53e4f', '#f46d43', '#fdae61', '#fee08b', // -75 a -65 (rojos/amarillos)
-        '#ffffbf', // -65 a -60 (amarillo claro)
-        '#e6f598', '#abdda4', '#66c2a5', // -60 a -50 (verdes)
-        '#3288bd', '#5e4fa2', // -50 a -30 (azules)
-        '#c0c0c0', '#d0d0d0', '#e0e0e0', '#f0f0f0', '#ffffff', // -30 a -10 (grises claros a blanco)
-        '#f0f0f0', '#e0e0e0', '#d0d0d0', '#c0c0c0', '#b0b0b0', '#a0a0a0', '#909090', '#808080', '#707070', '#606060', '#505050', '#404040', '#303030', '#202020', '#101010', '#000000', // -10 a 50 (blanco a negro)
+        // -90 to -80°C (Black to dark gray for extreme cold)
+        '#000000', '#101010', '#202020', '#303030',
+        // -80 to -70°C (Transition to intense reds)
+        '#4d0000', '#660000', '#800000', '#b30000', '#e60000', '#ff1a1a',
+        // -70 to -60°C (Bright reds to oranges and yellows)
+        '#ff4d4d', '#ff8000', '#ffbf00', '#ffff00',
+        // -60 to -50°C (Yellows to greens)
+        '#bfff00', '#80ff00', '#00ff00',
+        // -50 to -30°C (Greens to blues)
+        '#00ffbf', '#00bfff', '#0080ff', '#0040ff', '#0000ff', '#4000ff',
+        // -30 to 50°C (Blues to light grays to white for warmer tops)
+        '#8000ff', '#bf00ff', '#999999', '#aaaaaa', '#bbbbbb', '#cccccc', '#dddddd', '#eeeeee', '#ffffff'
     ];
     
     // Temperatures from -90°C to 50°C in Kelvin
@@ -228,13 +233,18 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
     const ELEVATION_PALETTE = ['006633', 'E5FFCC', '662A00', 'D8D8D8', 'FFFFFF'];
 
     const SMN_CLOUDTOP_PALETTE = [
-        '#FFFFFF', '#F0F0F0', '#E0E0E0', '#D0D0D0', '#C0C0C0', '#B0B0B0', '#A0A0A0', '#909090', '#808080', '#707070', '#606060', '#505050', '#404040', '#303030', '#202020', '#101010', '#000000', // -90 a -75
-        '#9e0142', '#d53e4f', '#f46d43', '#fdae61', '#fee08b', // -75 a -65 (rojos/amarillos)
-        '#ffffbf', // -65 a -60 (amarillo claro)
-        '#e6f598', '#abdda4', '#66c2a5', // -60 a -50 (verdes)
-        '#3288bd', '#5e4fa2', // -50 a -30 (azules)
-        '#c0c0c0', '#d0d0d0', '#e0e0e0', '#f0f0f0', '#ffffff', // -30 a -10 (grises claros a blanco)
-        '#f0f0f0', '#e0e0e0', '#d0d0d0', '#c0c0c0', '#b0b0b0', '#a0a0a0', '#909090', '#808080', '#707070', '#606060', '#505050', '#404040', '#303030', '#202020', '#101010', '#000000', // -10 a 50 (blanco a negro)
+        // -90 to -80°C (Black to dark gray for extreme cold)
+        '#000000', '#101010', '#202020', '#303030',
+        // -80 to -70°C (Transition to intense reds)
+        '#4d0000', '#660000', '#800000', '#b30000', '#e60000', '#ff1a1a',
+        // -70 to -60°C (Bright reds to oranges and yellows)
+        '#ff4d4d', '#ff8000', '#ffbf00', '#ffff00',
+        // -60 to -50°C (Yellows to greens)
+        '#bfff00', '#80ff00', '#00ff00',
+        // -50 to -30°C (Greens to blues)
+        '#00ffbf', '#00bfff', '#0080ff', '#0040ff', '#0000ff', '#4000ff',
+        // -30 to 50°C (Blues to light grays to white for warmer tops)
+        '#8000ff', '#bf00ff', '#999999', '#aaaaaa', '#bbbbbb', '#cccccc', '#dddddd', '#eeeeee', '#ffffff'
     ];
 
 
@@ -550,7 +560,10 @@ const geeGeoTiffDownloadFlow = ai.defineFlow(
         const { finalImage, geometry } = getImageForProcessing(input);
         
         // The clipping logic is now handled inside getImageForProcessing.
-        const imageToExport = finalImage;
+        // But for GOES, we must NOT clip.
+        const imageToExport = input.bandCombination === 'GOES_CLOUDTOP' 
+            ? finalImage 
+            : finalImage.clip(geometry!);
 
         return new Promise((resolve, reject) => {
             const componentName = input.tasseledCapComponent ? `_${input.tasseledCapComponent.toLowerCase()}` : '';
@@ -749,7 +762,7 @@ const goesStormCoreVectorizationFlow = ai.defineFlow(
 
         // 5. Vectorize the binary mask
         const vectors = stormMask.selfMask().reduceToVectors({
-            geometry: geometry, // Use the provided AOI
+            geometry: geometry,
             scale: 2000, // Use a coarser scale (e.g., 2km) for performance
             geometryType: 'polygon',
             eightConnected: true,
