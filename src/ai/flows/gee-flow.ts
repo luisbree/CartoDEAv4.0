@@ -170,23 +170,17 @@ export async function getGoesLayer(): Promise<GeeTileLayerOutput> {
     };
     
     const SMN_CLOUDTOP_PALETTE = [
-        '#000000', // Negro < -75C
-        '#E00000', // Rojo
-        '#C80000', // Rojo oscuro
-        '#A00000', // Rojo más oscuro
-        '#800000', // Rojo muy oscuro
-        '#600000', // Rojo casi negro
-        '#FFFF00', // Amarillo
-        '#00C800', // Verde
-        '#0096FF', // Azul
-        '#A0A0A0', // Gris
-        '#C0C0C0', // Gris claro
-        '#E0E0E0', // Gris muy claro
-        '#FFFFFF'  // Blanco > 0C
+        '#FFFFFF', '#F0F0F0', '#E0E0E0', '#D0D0D0', '#C0C0C0', '#B0B0B0', '#A0A0A0', '#909090', '#808080', '#707070', '#606060', '#505050', '#404040', '#303030', '#202020', '#101010', '#000000', // -90 a -75
+        '#9e0142', '#d53e4f', '#f46d43', '#fdae61', '#fee08b', // -75 a -65 (rojos/amarillos)
+        '#ffffbf', // -65 a -60 (amarillo claro)
+        '#e6f598', '#abdda4', '#66c2a5', // -60 a -50 (verdes)
+        '#3288bd', '#5e4fa2', // -50 a -30 (azules)
+        '#c0c0c0', '#d0d0d0', '#e0e0e0', '#f0f0f0', '#ffffff', // -30 a -10 (grises claros a blanco)
+        '#f0f0f0', '#e0e0e0', '#d0d0d0', '#c0c0c0', '#b0b0b0', '#a0a0a0', '#909090', '#808080', '#707070', '#606060', '#505050', '#404040', '#303030', '#202020', '#101010', '#000000', // -10 a 50 (blanco a negro)
     ];
     
     // Temperatures from -90°C to 50°C in Kelvin
-    const visParams = { min: 183, max: 323, palette: SMN_CLOUDTOP_PALETTE };
+    const visParams = { min: 183.15, max: 323.15, palette: SMN_CLOUDTOP_PALETTE };
 
     return new Promise((resolve, reject) => {
         scaledImage.getMap(visParams, (mapDetails: any, error: string) => {
@@ -234,20 +228,15 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
     const ELEVATION_PALETTE = ['006633', 'E5FFCC', '662A00', 'D8D8D8', 'FFFFFF'];
 
     const SMN_CLOUDTOP_PALETTE = [
-        '#000000', // Negro < -75C
-        '#E00000', // Rojo
-        '#C80000', // Rojo oscuro
-        '#A00000', // Rojo más oscuro
-        '#800000', // Rojo muy oscuro
-        '#600000', // Rojo casi negro
-        '#FFFF00', // Amarillo
-        '#00C800', // Verde
-        '#0096FF', // Azul
-        '#A0A0A0', // Gris
-        '#C0C0C0', // Gris claro
-        '#E0E0E0', // Gris muy claro
-        '#FFFFFF'  // Blanco > 0C
+        '#FFFFFF', '#F0F0F0', '#E0E0E0', '#D0D0D0', '#C0C0C0', '#B0B0B0', '#A0A0A0', '#909090', '#808080', '#707070', '#606060', '#505050', '#404040', '#303030', '#202020', '#101010', '#000000', // -90 a -75
+        '#9e0142', '#d53e4f', '#f46d43', '#fdae61', '#fee08b', // -75 a -65 (rojos/amarillos)
+        '#ffffbf', // -65 a -60 (amarillo claro)
+        '#e6f598', '#abdda4', '#66c2a5', // -60 a -50 (verdes)
+        '#3288bd', '#5e4fa2', // -50 a -30 (azules)
+        '#c0c0c0', '#d0d0d0', '#e0e0e0', '#f0f0f0', '#ffffff', // -30 a -10 (grises claros a blanco)
+        '#f0f0f0', '#e0e0e0', '#d0d0d0', '#c0c0c0', '#b0b0b0', '#a0a0a0', '#909090', '#808080', '#707070', '#606060', '#505050', '#404040', '#303030', '#202020', '#101010', '#000000', // -10 a 50 (blanco a negro)
     ];
+
 
     if (bandCombination === 'GOES_CLOUDTOP') {
         const goesCollection = ee.ImageCollection('NOAA/GOES/19/MCMIPF')
@@ -269,7 +258,7 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
         metadata.platform_id = latestImage.get('platform_id');
         metadata.scene_id = latestImage.get('scene_id');
         finalImage = scaledImage;
-        visParams = { min: 183, max: 323, palette: SMN_CLOUDTOP_PALETTE };
+        visParams = { min: 183.15, max: 323.15, palette: SMN_CLOUDTOP_PALETTE };
     
     } else if (['URBAN_FALSE_COLOR', 'SWIR_FALSE_COLOR', 'BSI', 'NDVI', 'TASSELED_CAP'].includes(bandCombination)) {
         let s2ImageCollection = ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
@@ -560,7 +549,6 @@ const geeGeoTiffDownloadFlow = ai.defineFlow(
 
         const { finalImage, geometry } = getImageForProcessing(input);
         
-        // For GOES, do not clip, as it's a full-disk image.
         // The clipping logic is now handled inside getImageForProcessing.
         const imageToExport = finalImage;
 
@@ -575,7 +563,7 @@ const geeGeoTiffDownloadFlow = ai.defineFlow(
                 crs: 'EPSG:3857',
                 // For multi-band images, specify band order. For single band, it's automatic.
                 bands: imageToExport.bandNames().getInfo(),
-                scale: input.bandCombination === 'GOES_CLOUDTOP' ? 2000 : 30, // Use a reasonable default of 30 meters.
+                scale: input.bandCombination === 'GOES_CLOUDTOP' ? 2000 : 30,
             };
 
             imageToExport.getDownloadURL(params, (url, error) => {
