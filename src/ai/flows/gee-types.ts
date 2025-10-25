@@ -151,4 +151,8 @@ export const TasseledCapOutputSchema = z.object({
 });
 export type TasseledCapOutput = z.infer<typeof TasseledCapOutputSchema>;
 
-    
+// New schema for GOES storm core vectorization
+export const GoesStormCoresInputSchema = z.object({
+    temperatureThreshold: z.number().describe("The cloud top temperature threshold in Celsius to define a storm core."),
+});
+export type GoesStormCoresInput = z.infer<typeof GoesStormCoresInputSchema>;

@@ -14,8 +14,8 @@ import ee from '@google/earthengine';
 import { promisify } from 'util';
 import type { Feature as TurfFeature, LineString as TurfLineString } from 'geojson';
 import { length as turfLength, along as turfAlong } from '@turf/turf';
-import type { GeeTileLayerInput, GeeTileLayerOutput, GeeVectorizationInput, GeeValueQueryInput, GeeGeoTiffDownloadInput, GeeHistogramInput, GeeHistogramOutput, GeeProfileInput, GeeProfileOutput, ProfilePoint, TasseledCapOutput, TasseledCapComponent, ElevationPoint } from './gee-types';
-import { GeeTileLayerInputSchema, GeeTileLayerOutputSchema, GeeVectorizationInputSchema, GeeValueQueryInputSchema, GeeGeoTiffDownloadInputSchema, GeeHistogramInputSchema, GeeHistogramOutputSchema, GeeProfileInputSchema, GeeProfileOutputSchema, TasseledCapInputSchema, ElevationPointSchema } from './gee-types';
+import type { GeeTileLayerInput, GeeTileLayerOutput, GeeVectorizationInput, GeeValueQueryInput, GeeGeoTiffDownloadInput, GeeHistogramInput, GeeHistogramOutput, GeeProfileInput, GeeProfileOutput, ProfilePoint, TasseledCapOutput, TasseledCapComponent, ElevationPoint, GoesStormCoresInput } from './gee-types';
+import { GeeTileLayerInputSchema, GeeTileLayerOutputSchema, GeeVectorizationInputSchema, GeeValueQueryInputSchema, GeeGeoTiffDownloadInputSchema, GeeHistogramInputSchema, GeeHistogramOutputSchema, GeeProfileInputSchema, GeeProfileOutputSchema, TasseledCapInputSchema, ElevationPointSchema, GoesStormCoresInputSchema } from './gee-types';
 import { z } from 'zod';
 import type { Feature, FeatureCollection } from 'ol';
 import type { Point } from 'ol/geom';
@@ -171,7 +171,7 @@ export async function getGoesLayer(): Promise<GeeTileLayerOutput> {
     const SMN_CLOUDTOP_PALETTE = [
         '#000000', '#800000', '#ff0000', '#ffff00', '#00ff00',
         '#00ffff', '#0000ff', '#999999', '#cccccc', '#ffffff'
-    ];
+    ].reverse();
     
     // Temperatures from -90°C to 50°C in Kelvin
     const visParams = { min: 183, max: 323, palette: SMN_CLOUDTOP_PALETTE };
@@ -224,7 +224,7 @@ const getImageForProcessing = (input: GeeTileLayerInput | GeeGeoTiffDownloadInpu
     const SMN_CLOUDTOP_PALETTE = [
         '#000000', '#800000', '#ff0000', '#ffff00', '#00ff00',
         '#00ffff', '#0000ff', '#999999', '#cccccc', '#ffffff'
-    ];
+    ].reverse();
 
     if (bandCombination === 'GOES_CLOUDTOP') {
         const goesCollection = ee.ImageCollection('NOAA/GOES/19/MCMIPF')
@@ -542,10 +542,8 @@ const geeGeoTiffDownloadFlow = ai.defineFlow(
             throw new Error("Se requiere un área de interés (AOI) para la exportación de GeoTIFF.");
         }
         
-        // For GOES layers, clipping is not applicable as they are full-disk images.
-        // The 'region' parameter in getDownloadURL will handle the spatial subsetting.
-        const imageToExport = input.bandCombination === 'GOES_CLOUDTOP' 
-            ? finalImage 
+        const imageToExport = input.bandCombination === 'GOES_CLOUDTOP'
+            ? finalImage
             : finalImage.clip(geometry);
 
         return new Promise((resolve, reject) => {
@@ -556,8 +554,7 @@ const geeGeoTiffDownloadFlow = ai.defineFlow(
                 name: filename,
                 format: 'GEO_TIFF',
                 region: geometry,
-                crs: 'EPSG:3857', // Force standard projection for export
-                // For multi-band images, specify band order. For single band, it's automatic.
+                crs: 'EPSG:3857',
                 bands: imageToExport.bandNames().getInfo(),
                 scale: input.bandCombination === 'GOES_CLOUDTOP' ? 2000 : 30,
             };
@@ -567,6 +564,9 @@ const geeGeoTiffDownloadFlow = ai.defineFlow(
                     console.error("Earth Engine getDownloadURL Error for GeoTIFF:", error);
                     if (error.includes && error.includes('computation timed out')) {
                         return reject(new Error('La exportación a GeoTIFF tardó demasiado. Intente con un área más pequeña.'));
+                    }
+                    if (error.includes && error.includes('Total request size')) {
+                        return reject(new Error(`El área es demasiado grande para la resolución solicitada. Error de GEE: ${error}`));
                     }
                     return reject(new Error(`Ocurrió un error durante la exportación en GEE: ${error}`));
                 }
@@ -698,6 +698,71 @@ const tasseledCapFlow = ai.defineFlow(
             greenness: { tileUrl: greennessUrl },
             wetness: { tileUrl: wetnessUrl },
         };
+    }
+);
+
+export async function getGoesStormCores(input: GoesStormCoresInput): Promise<{ downloadUrl: string }> {
+    return goesStormCoreVectorizationFlow(input);
+}
+
+const goesStormCoreVectorizationFlow = ai.defineFlow(
+    {
+        name: 'goesStormCoreVectorizationFlow',
+        inputSchema: GoesStormCoresInputSchema,
+        outputSchema: z.object({ downloadUrl: z.string() }),
+    },
+    async (input) => {
+        await initializeEe();
+
+        // 1. Get the latest GOES image
+        const collection = ee.ImageCollection('NOAA/GOES/19/MCMIPF')
+            .filterDate(ee.Date(Date.now()).advance(-2, 'hour'), ee.Date(Date.now()));
+        const latestImage = ee.Image(collection.first());
+
+        // 2. Apply scale and offset to get temperature in Kelvin
+        const applyScaleAndOffset = (image: ee.Image) => {
+            const bandName = 'CMI_C13';
+            const offset = ee.Number(image.get(bandName + '_offset'));
+            const scale = ee.Number(image.get(bandName + '_scale'));
+            return image.select(bandName).multiply(scale).add(offset);
+        };
+        const tempImageKelvin = applyScaleAndOffset(latestImage);
+        
+        // 3. Convert input Celsius threshold to Kelvin
+        const tempThresholdKelvin = input.temperatureThreshold + 273.15;
+
+        // 4. Create a binary mask: 1 where temp <= threshold, 0 otherwise
+        const stormMask = tempImageKelvin.lte(tempThresholdKelvin);
+
+        // 5. Vectorize the binary mask
+        const vectors = stormMask.selfMask().reduceToVectors({
+            geometry: latestImage.geometry(), // Use the full image geometry
+            scale: 5000, // Use a coarser scale (e.g., 5km) for performance
+            geometryType: 'polygon',
+            eightConnected: true,
+            labelProperty: 'zone',
+            maxPixels: 1e12, // Increase maxPixels for large-area processing
+        });
+        
+        return new Promise((resolve, reject) => {
+            vectors.getDownloadURL({
+                format: 'geojson',
+                filename: `nucleos_tormenta_${input.temperatureThreshold}C`,
+                callback: (url, error) => {
+                    if (error) {
+                        console.error("Earth Engine getDownloadURL Error for Storm Cores:", error);
+                        if (error.includes && error.includes('computation timed out')) {
+                            return reject(new Error('La vectorización de núcleos de tormenta tardó demasiado.'));
+                        }
+                        return reject(new Error(`Ocurrió un error durante la vectorización: ${error}`));
+                    }
+                    if (!url) {
+                        return reject(new Error('GEE no devolvió una URL de descarga para los núcleos de tormenta.'));
+                    }
+                    resolve({ downloadUrl: url });
+                }
+            });
+        });
     }
 );
 
