@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState } from 'react';
@@ -19,6 +20,9 @@ import { Slider } from '../ui/slider';
 import { Separator } from '../ui/separator';
 import GeoJSON from 'ol/format/GeoJSON';
 import VectorSource from 'ol/source/Vector';
+import type { Map } from 'ol';
+import { transformExtent } from 'ol/proj';
+
 
 interface ClimaPanelProps {
   panelRef: React.RefObject<HTMLDivElement>;
@@ -28,6 +32,7 @@ interface ClimaPanelProps {
   onMouseDownHeader: (e: React.MouseEvent<HTMLDivElement>) => void;
   onAddLayer: (layer: MapLayer, bringToTop?: boolean) => void;
   style?: React.CSSProperties;
+  mapRef: React.RefObject<Map | null>;
 }
 
 const ClimaPanel: React.FC<ClimaPanelProps> = ({
@@ -38,6 +43,7 @@ const ClimaPanel: React.FC<ClimaPanelProps> = ({
   onMouseDownHeader,
   onAddLayer,
   style,
+  mapRef
 }) => {
     const [isLoading, setIsLoading] = useState(false);
     const [isDetecting, setIsDetecting] = useState(false);
@@ -58,7 +64,7 @@ const ClimaPanel: React.FC<ClimaPanelProps> = ({
                 if (result.metadata?.timestamp) {
                     const imageDate = new Date(result.metadata.timestamp);
                      const formattedDate = format(imageDate, "dd/MM/yyyy HH:mm 'UTC'", { locale: es });
-                     layerName = `GOES-19 Topes Nubosos (${formattedDate})`;
+                     layerName = `GOES-19 (${formattedDate})`;
                 }
 
                 const goesSource = new XYZ({
@@ -93,6 +99,28 @@ const ClimaPanel: React.FC<ClimaPanelProps> = ({
                 }, true);
 
                 toast({ description: `Capa "${layerName}" añadida.` });
+                
+                if (result.metadata) {
+                    onAddLayer({
+                        id: `metadata-${layerId}`,
+                        name: `Metadatos de ${layerName}`,
+                        olLayer: new VectorLayer({ // Dummy layer for metadata
+                             source: new VectorSource(),
+                             properties: {
+                                id: `metadata-${layerId}`,
+                                name: `Metadatos de ${layerName}`,
+                                type: 'vector',
+                                isMetadata: true,
+                                metadata: result.metadata
+                             }
+                        }),
+                        visible: false,
+                        opacity: 0,
+                        type: 'vector'
+                    }, true);
+                }
+
+
             } else {
                  throw new Error("No se recibió una URL válida del servidor de GEE.");
             }
@@ -110,11 +138,23 @@ const ClimaPanel: React.FC<ClimaPanelProps> = ({
     };
     
     const handleDetectStormCores = async () => {
+        if (!mapRef.current) {
+            toast({ description: "El mapa no está listo.", variant: "destructive" });
+            return;
+        }
         setIsDetecting(true);
         toast({ description: `Detectando núcleos de tormenta (T < ${tempThreshold}°C)...` });
 
         try {
-            const result = await getGoesStormCores({ temperatureThreshold: tempThreshold });
+            const view = mapRef.current.getView();
+            const extent = view.calculateExtent(mapRef.current.getSize()!);
+            const extent4326 = transformExtent(extent, view.getProjection(), 'EPSG:4326');
+            const aoi = { minLon: extent4326[0], minLat: extent4326[1], maxLon: extent4326[2], maxLat: extent4326[3] };
+            
+            const result = await getGoesStormCores({ 
+                temperatureThreshold: tempThreshold,
+                aoi,
+            });
             if (result && result.downloadUrl) {
                 const layerId = `storm-cores-${nanoid()}`;
                 const layerName = `Núcleos de Tormenta (${tempThreshold}°C)`;
