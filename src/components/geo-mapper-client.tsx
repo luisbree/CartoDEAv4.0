@@ -1,8 +1,7 @@
 
-
 "use client";
 
-import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { MapPin, Database, Wrench, ListTree, ListChecks, Sparkles, ClipboardCheck, Library, LifeBuoy, Printer, Server, BrainCircuit, Camera, Loader2, SlidersHorizontal, ZoomIn, Undo2, BarChartHorizontal, DraftingCompass, Target, Share2, CloudRain } from 'lucide-react';
 import { Style, Fill, Stroke, Circle as CircleStyle, Text as TextStyle } from 'ol/style';
 import { transform, transformExtent } from 'ol/proj';
@@ -1206,7 +1205,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
         {isMounted && !initialMapState && panels.statistics && !panels.statistics.isMinimized && statisticsLayer && (
             <StatisticsPanel
                 layer={statisticsLayer}
-                allLayers={layerManagerHook.layers}
+                allLayers={layerManagerHook.layers.flatMap(item => ('layers' in item ? item.layers : [item]))}
                 selectedFeatures={featureInspectionHook.selectedFeatures}
                 panelRef={statisticsPanelRef}
                 isCollapsed={panels.statistics.isCollapsed}
@@ -1228,7 +1227,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
             onToggleCollapse={() => togglePanelCollapse('analysis')}
             onClosePanel={() => togglePanelMinimize('analysis')}
             onMouseDownHeader={(e) => handlePanelMouseDown(e, 'analysis')}
-            allLayers={layerManagerHook.layers}
+            allLayers={layerManagerHook.layers.flatMap(item => ('layers' in item ? item.layers : [item]))}
             selectedFeatures={featureInspectionHook.selectedFeatures}
             onAddLayer={(layer: MapLayer, bringToTop?: boolean) => layerManagerHook.addLayer(layer, bringToTop)}
             style={{ top: `${panels.analysis.position.y}px`, left: `${panels.analysis.position.x}px`, zIndex: panels.analysis.zIndex }}
@@ -1257,9 +1256,16 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
             onClosePanel={() => togglePanelMinimize('ai')}
             onMouseDownHeader={(e) => handlePanelMouseDown(e, 'ai')}
             availableLayers={discoveredGeoServerLayers.map(l => ({ name: l.name, title: l.title }))}
-            activeLayers={layerManagerHook.layers.map(l => {
-              const machineName = l.olLayer.get('gsLayerName') || l.name;
-              return { name: machineName, title: l.name, type: l.type };
+            activeLayers={layerManagerHook.layers.flatMap(item => {
+                if ('layers' in item) { // It's a LayerGroup
+                    return item.layers.map(l => {
+                        const machineName = l.olLayer.get('gsLayerName') || l.name;
+                        return { name: machineName, title: l.name, type: l.type };
+                    });
+                } else { // It's a MapLayer
+                    const machineName = item.olLayer.get('gsLayerName') || item.name;
+                    return { name: machineName, title: item.name, type: item.type };
+                }
             })}
             onLayerAction={handleAiAction}
             messages={chatMessages}
