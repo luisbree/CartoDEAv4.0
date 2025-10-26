@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { MapPin, Database, Wrench, ListTree, ListChecks, Sparkles, ClipboardCheck, Library, LifeBuoy, Printer, Server, BrainCircuit, Camera, Loader2, SlidersHorizontal, ZoomIn, Undo2, BarChartHorizontal, DraftingCompass, Target, Share2, CloudRain, Ellipsis, MapPinned } from 'lucide-react';
+import { MapPinned, Database, Wrench, ListTree, ListChecks, Sparkles, ClipboardCheck, Library, LifeBuoy, Printer, Server, BrainCircuit, Camera, Loader2, SlidersHorizontal, ZoomIn, Undo2, BarChartHorizontal, DraftingCompass, Target, Share2, CloudRain, Ellipsis } from 'lucide-react';
 import { Style, Fill, Stroke, Circle as CircleStyle, Text as TextStyle } from 'ol/style';
 import { transform, transformExtent } from 'ol/proj';
 import type { Extent } from 'ol/extent';
@@ -925,7 +925,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
                         className="h-8 w-8 flex-shrink-0 bg-black/20 hover:bg-black/40 border-0 text-white/90"
                         title="Más herramientas del mapa"
                     >
-                        <MapPin className="h-4 w-4" />
+                        <MapPinned className="h-4 w-4" />
                     </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent
@@ -1118,6 +1118,8 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
             onSetGroupDisplayMode={layerManagerHook.setGroupDisplayMode}
             onUngroup={layerManagerHook.ungroupLayer}
             onRenameGroup={layerManagerHook.renameGroup}
+            onToggleGroupPlayback={layerManagerHook.toggleGroupPlayback}
+            onSetGroupPlaySpeed={layerManagerHook.setGroupPlaySpeed}
             isDrawingSourceEmptyOrNotPolygon={layerManagerHook.isDrawingSourceEmptyOrNotPolygon}
             isSelectionEmpty={featureInspectionHook.selectedFeatures.length === 0}
             onSetLayerOpacity={layerManagerHook.setLayerOpacity}
@@ -1302,3 +1304,5 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
     </div>
   );
 }
+
+    

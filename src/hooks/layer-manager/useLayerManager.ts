@@ -216,6 +216,7 @@ export const useLayerManager = ({
   const [isDrawingSourceEmptyOrNotPolygon, setIsDrawingSourceEmptyOrNotPolygon] = useState(true);
   const [isWfsLoading, setIsWfsLoading] = useState(false);
   const [lastRemovedLayers, setLastRemovedLayers] = useState<(MapLayer | LayerGroup)[]>([]);
+  const playbackIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const setLayers = useCallback((updater: React.SetStateAction<(MapLayer | LayerGroup)[]>) => {
       setLayersInternal(prevItems => {
@@ -283,6 +284,15 @@ export const useLayerManager = ({
       source.on('clear', checkDrawingSource);
     };
   }, [drawingSourceRef]);
+  
+  // Cleanup playback interval on unmount
+  useEffect(() => {
+      return () => {
+          if (playbackIntervalRef.current) {
+              clearInterval(playbackIntervalRef.current);
+          }
+      };
+  }, []);
 
   const addLayer = useCallback((newLayer: MapLayer, bringToTop: boolean = true) => {
     if (!mapRef.current) return;
@@ -968,7 +978,7 @@ export const useLayerManager = ({
 
     if (firstFeature) {
       for (const item of layers) {
-        if ('olLayer' in item) { // It's a MapLayer
+        if (!('layers' in item)) { // It's a MapLayer
           const layer = item as VectorMapLayer;
           const source = layer.olLayer.getSource();
           if (source && firstFeature.getId() && source.getFeatureById(firstFeature.getId())) {
@@ -1275,6 +1285,8 @@ const groupLayers = useCallback((layerIds: string[], groupName: string) => {
             }),
             isExpanded: true,
             displayMode: 'multiple',
+            isPlaying: false,
+            playSpeed: 1000,
         };
 
         const firstLayerIndex = prevItems.findIndex(item => item.id === layersToGroup[0].id);
@@ -1359,6 +1371,78 @@ const groupLayers = useCallback((layerIds: string[], groupName: string) => {
         ));
         toast({ description: `Grupo renombrado a "${newName}"` });
     }, [setLayers, toast]);
+    
+    const toggleGroupPlayback = useCallback((groupId: string) => {
+        setLayers(prev => {
+            return prev.map(item => {
+                if (item.id === groupId && 'layers' in item) {
+                    const group = item as LayerGroup;
+                    const newIsPlaying = !group.isPlaying;
+                    
+                    if (newIsPlaying) {
+                        const speed = group.playSpeed || 1000;
+                        playbackIntervalRef.current = setInterval(() => {
+                            setLayers(current => {
+                                const currentGroup = current.find(i => i.id === groupId) as LayerGroup;
+                                if (!currentGroup || currentGroup.layers.length === 0) {
+                                    clearInterval(playbackIntervalRef.current!);
+                                    return current;
+                                }
+                                const visibleIndex = currentGroup.layers.findIndex(l => l.visible);
+                                const nextIndex = (visibleIndex + 1) % currentGroup.layers.length;
+                                
+                                const newGroupLayers = currentGroup.layers.map((layer, index) => {
+                                    const isVisible = index === nextIndex;
+                                    layer.olLayer.setVisible(isVisible);
+                                    return {...layer, visible: isVisible};
+                                });
+                                return current.map(i => i.id === groupId ? {...currentGroup, layers: newGroupLayers} : i);
+                            });
+                        }, speed);
+                    } else {
+                        if (playbackIntervalRef.current) {
+                            clearInterval(playbackIntervalRef.current);
+                            playbackIntervalRef.current = null;
+                        }
+                    }
+                    return { ...group, isPlaying: newIsPlaying };
+                }
+                return item;
+            });
+        });
+    }, [setLayers]);
+    
+    const setGroupPlaySpeed = useCallback((groupId: string, speed: number) => {
+        setLayers(prev => prev.map(item => {
+            if (item.id === groupId && 'layers' in item) {
+                const group = item as LayerGroup;
+                // If it's already playing, restart the interval with the new speed
+                if (group.isPlaying) {
+                    if (playbackIntervalRef.current) clearInterval(playbackIntervalRef.current);
+                    
+                    playbackIntervalRef.current = setInterval(() => {
+                        setLayers(current => {
+                            const currentGroup = current.find(i => i.id === groupId) as LayerGroup;
+                            if (!currentGroup || currentGroup.layers.length === 0) {
+                                clearInterval(playbackIntervalRef.current!);
+                                return current;
+                            }
+                            const visibleIndex = currentGroup.layers.findIndex(l => l.visible);
+                            const nextIndex = (visibleIndex + 1) % currentGroup.layers.length;
+                             const newGroupLayers = currentGroup.layers.map((layer, index) => {
+                                const isVisible = index === nextIndex;
+                                layer.olLayer.setVisible(isVisible);
+                                return {...layer, visible: isVisible};
+                            });
+                            return current.map(i => i.id === groupId ? {...currentGroup, layers: newGroupLayers} : i);
+                        });
+                    }, speed);
+                }
+                return { ...group, playSpeed: speed };
+            }
+            return item;
+        }));
+    }, [setLayers]);
 
 
   return {
@@ -1401,7 +1485,11 @@ const groupLayers = useCallback((layerIds: string[], groupName: string) => {
     toggleGroupExpanded,
     setGroupDisplayMode,
     renameGroup,
+    toggleGroupPlayback,
+    setGroupPlaySpeed,
   };
 };
+
+    
 
     
