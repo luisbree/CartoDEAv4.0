@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
@@ -545,7 +546,7 @@ export const useLayerManager = ({
  const toggleLayerVisibility = useCallback((layerId: string, groupId?: string) => {
     setLayers(currentItems => 
         currentItems.map(item => {
-            // Case 1: The item is not a group, and it's the one we want to toggle
+            // Case 1: The item is a standalone layer (not in a group)
             if (!('layers' in item) && item.id === layerId) {
                 const newVisibility = !item.visible;
                 item.olLayer.setVisible(newVisibility);
@@ -558,34 +559,35 @@ export const useLayerManager = ({
 
             // Case 2: The item is a group, and the toggle happened inside it
             if ('layers' in item && item.id === groupId) {
-                const group = item;
+                const group = { ...item }; // Clone the group
                 const isSingleMode = group.displayMode === 'single';
-                
-                const newLayers = group.layers.map(layerInGroup => {
-                    let newVisibility = layerInGroup.visible;
 
+                group.layers = group.layers.map(layerInGroup => {
                     if (layerInGroup.id === layerId) {
-                        // If it's single mode, clicking it always turns it on.
-                        // If it's multiple mode, it toggles.
-                        newVisibility = isSingleMode ? true : !layerInGroup.visible;
+                        // The layer being clicked
+                        const newVisibility = isSingleMode ? true : !layerInGroup.visible;
+                        layerInGroup.olLayer.setVisible(newVisibility);
+                        const visualLayer = layerInGroup.olLayer.get('visualLayer');
+                        if (visualLayer) {
+                            visualLayer.setVisible(newVisibility && (layerInGroup.wmsStyleEnabled ?? true));
+                        }
+                        return { ...layerInGroup, visible: newVisibility };
                     } else if (isSingleMode) {
-                        // If it's single mode and not the clicked layer, turn it off.
-                        newVisibility = false;
+                        // Another layer in the same single-mode group
+                        layerInGroup.olLayer.setVisible(false);
+                        const visualLayer = layerInGroup.olLayer.get('visualLayer');
+                        if (visualLayer) {
+                            visualLayer.setVisible(false);
+                        }
+                        return { ...layerInGroup, visible: false };
                     }
-                    
-                    // Apply visibility to the actual OL layer
-                    layerInGroup.olLayer.setVisible(newVisibility);
-                    const visualLayer = layerInGroup.olLayer.get('visualLayer');
-                    if (visualLayer) {
-                        visualLayer.setVisible(newVisibility && (layerInGroup.wmsStyleEnabled ?? true));
-                    }
-                    
-                    return { ...layerInGroup, visible: newVisibility };
+                    // Layer in a multi-mode group that wasn't clicked
+                    return layerInGroup; 
                 });
-                return { ...group, layers: newLayers };
+                return group;
             }
 
-            // Case 3: The item is not what we're looking for, return as is.
+            // The item is not what we're looking for, return as is.
             return item;
         })
     );
@@ -1256,40 +1258,34 @@ export const useLayerManager = ({
 const groupLayers = useCallback((layerIds: string[], groupName: string) => {
     setLayers(prevItems => {
         const layersToGroup: MapLayer[] = [];
-        const remainingItems = prevItems.filter(item => {
-            if (layerIds.includes(item.id) && !('layers' in item)) {
-                // When moving into a group, reset its visibility to a predictable state.
-                // We'll make them visible by default.
-                const newLayerState = { ...item, visible: true, groupId: `group-${nanoid()}` };
-                
-                // Also update the actual OpenLayers object
-                newLayerState.olLayer.setVisible(true);
-                const visualLayer = newLayerState.olLayer.get('visualLayer');
-                if (visualLayer) {
-                    visualLayer.setVisible(true && (newLayerState.wmsStyleEnabled ?? true));
-                }
-                
-                layersToGroup.push(newLayerState);
-                return false;
+        // First, extract the layers to be grouped, keeping their original order.
+        layerIds.forEach(id => {
+            const layer = prevItems.find(item => item.id === id && !('layers' in item)) as MapLayer | undefined;
+            if (layer) {
+                layersToGroup.push(layer);
             }
-            return true;
         });
 
-        if (layersToGroup.length > 0) {
-            const newGroup: LayerGroup = {
-                id: `group-${nanoid()}`,
-                name: groupName,
-                layers: layersToGroup,
-                isExpanded: true,
-                displayMode: 'multiple',
-            };
-            
-            // Assign the new groupId to the cloned layers
-            newGroup.layers.forEach(l => l.groupId = newGroup.id);
+        if (layersToGroup.length === 0) return prevItems;
 
-            return [newGroup, ...remainingItems];
-        }
-        return prevItems;
+        // Remove the layers from their original positions
+        const remainingItems = prevItems.filter(item => !layerIds.includes(item.id));
+        
+        const newGroup: LayerGroup = {
+            id: `group-${nanoid()}`,
+            name: groupName,
+            layers: layersToGroup.map(l => ({ ...l, groupId: `group-${nanoid()}` })), // Assign new groupId
+            isExpanded: true,
+            displayMode: 'multiple',
+        };
+
+        // Find the position of the topmost layer that was grouped
+        const firstLayerIndex = prevItems.findIndex(item => item.id === layersToGroup[0].id);
+        
+        // Insert the new group at that position
+        remainingItems.splice(firstLayerIndex, 0, newGroup);
+        
+        return remainingItems;
     });
     toast({ description: `Grupo "${groupName}" creado con ${layerIds.length} capas.` });
 }, [setLayers, toast]);
