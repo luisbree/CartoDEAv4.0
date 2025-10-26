@@ -544,9 +544,9 @@ export const useLayerManager = ({
   }, [toast, setLayers]);
   
  const toggleLayerVisibility = useCallback((layerId: string, groupId?: string) => {
-    setLayers(currentItems => {
-        const newItems = currentItems.map(item => {
-            // Standalone layer
+    setLayers(currentItems => 
+        currentItems.map(item => {
+            // Case 1: Handle a standalone layer (not in a group)
             if (!groupId && item.id === layerId && !('layers' in item)) {
                 const newVisibility = !item.visible;
                 item.olLayer.setVisible(newVisibility);
@@ -557,33 +557,44 @@ export const useLayerManager = ({
                 return { ...item, visible: newVisibility };
             }
 
-            // Layer within a group
+            // Case 2: Handle a layer within a group
             if (groupId && item.id === groupId && 'layers' in item) {
                 const group = item as LayerGroup;
+                let visibilityChanged = false;
+
                 const newLayers = group.layers.map(layerInGroup => {
-                    let newVisibility: boolean;
+                    let newVisibility = layerInGroup.visible;
 
                     if (group.displayMode === 'single') {
-                        newVisibility = layerInGroup.id === layerId; // Turn on only the clicked one
-                    } else { // 'multiple'
-                        newVisibility = layerInGroup.id === layerId ? !layerInGroup.visible : layerInGroup.visible;
+                        // Radio button logic: only one can be active
+                        newVisibility = layerInGroup.id === layerId;
+                    } else {
+                        // Checkbox logic: toggle the clicked one
+                        if (layerInGroup.id === layerId) {
+                            newVisibility = !layerInGroup.visible;
+                        }
                     }
-                    
-                    layerInGroup.olLayer.setVisible(newVisibility);
-                    const visualLayer = layerInGroup.olLayer.get('visualLayer');
-                    if (visualLayer) {
-                        visualLayer.setVisible(newVisibility && (layerInGroup.wmsStyleEnabled ?? true));
+
+                    if (layerInGroup.visible !== newVisibility) {
+                        visibilityChanged = true;
+                        layerInGroup.olLayer.setVisible(newVisibility);
+                        const visualLayer = layerInGroup.olLayer.get('visualLayer');
+                        if (visualLayer) {
+                            visualLayer.setVisible(newVisibility && (layerInGroup.wmsStyleEnabled ?? true));
+                        }
                     }
-                    
+
                     return { ...layerInGroup, visible: newVisibility };
                 });
-                return { ...group, layers: newLayers };
+
+                if (visibilityChanged) {
+                    return { ...group, layers: newLayers };
+                }
             }
 
             return item;
-        });
-        return newItems;
-    });
+        })
+    );
 }, [setLayers]);
 
 
@@ -1253,7 +1264,15 @@ const groupLayers = useCallback((layerIds: string[], groupName: string) => {
         const layersToGroup: MapLayer[] = [];
         const remainingItems = prevItems.filter(item => {
             if (layerIds.includes(item.id) && !('layers' in item)) {
-                layersToGroup.push(item);
+                // Important: Clone the layer object to avoid state mutation issues.
+                // Reset visibility based on the desired default for a new group.
+                const layerClone = { ...item, visible: true, groupId: `group-${nanoid()}` };
+                layerClone.olLayer.setVisible(true);
+                const visualLayer = layerClone.olLayer.get('visualLayer');
+                if (visualLayer) {
+                    visualLayer.setVisible(true && (layerClone.wmsStyleEnabled ?? true));
+                }
+                layersToGroup.push(layerClone);
                 return false;
             }
             return true;
@@ -1267,11 +1286,17 @@ const groupLayers = useCallback((layerIds: string[], groupName: string) => {
                 isExpanded: true,
                 displayMode: 'multiple',
             };
+            
+            // Assign the new groupId to the cloned layers
+            newGroup.layers.forEach(l => l.groupId = newGroup.id);
+
             return [newGroup, ...remainingItems];
         }
         return prevItems;
     });
-  }, [setLayers]);
+    toast({ description: `Grupo "${groupName}" creado con ${layerIds.length} capas.` });
+}, [setLayers, toast]);
+
 
   const ungroupLayer = useCallback((groupId: string) => {
     setLayers(prevItems => {
@@ -1282,7 +1307,9 @@ const groupLayers = useCallback((layerIds: string[], groupName: string) => {
 
         prevItems.forEach(item => {
             if (item.id === groupId) {
-                newItems.push(...groupToUngroup.layers);
+                // When ungrouping, remove the groupId from the layers
+                const ungroupedLayers = groupToUngroup.layers.map(l => ({ ...l, groupId: undefined }));
+                newItems.push(...ungroupedLayers);
             } else {
                 newItems.push(item);
             }
