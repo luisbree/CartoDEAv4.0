@@ -125,34 +125,16 @@ export const useFeatureInspection = ({
   }, [onNewSelection]);
 
   const processAndDisplayFeatures = useCallback((plainData: PlainFeatureData[], layerName: string, layerId: string | null = null) => {
-    
-    // Apply sorting if a sort configuration exists
-    let sortedData = plainData;
-    if (sortConfig && plainData && plainData.length > 0 && sortConfig.key in plainData[0].attributes) {
-      sortedData = [...plainData].sort((a, b) => {
-        const valA = a.attributes[sortConfig.key];
-        const valB = b.attributes[sortConfig.key];
-        
-        if (valA < valB) {
-            return sortConfig.direction === 'ascending' ? -1 : 1;
-        }
-        if (valA > valB) {
-            return sortConfig.direction === 'ascending' ? 1 : -1;
-        }
-        return 0;
-      });
-    }
-
-    setInspectedFeatureData(sortedData);
-    setCurrentInspectedLayerName(layerName);
-    setCurrentInspectedLayerId(layerId);
-    
-    if (plainData && plainData.length > 0) {
-       setTimeout(() => toast({ description: `${plainData.length} entidad(es) de "${layerName}" cargada(s) en la tabla.` }), 0);
-       onNewSelectionRef.current();
-    }
-    
-  }, [toast, sortConfig]);
+      setInspectedFeatureData(plainData); // Set the raw, unsorted data
+      setCurrentInspectedLayerName(layerName);
+      setCurrentInspectedLayerId(layerId);
+      setSortConfig(null); // Reset sort config on new data
+  
+      if (plainData && plainData.length > 0) {
+          setTimeout(() => toast({ description: `${plainData.length} entidad(es) de "${layerName}" cargada(s) en la tabla.` }), 0);
+          onNewSelectionRef.current();
+      }
+  }, [toast]);
   
   const updateInspectedFeatureData = useCallback((featureId: string, key: string, value: any) => {
     setInspectedFeatureData(prevData => {
@@ -736,3 +718,4 @@ export const useFeatureInspection = ({
 
 
     
+

@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
@@ -77,14 +78,30 @@ const AttributesPanelComponent: React.FC<AttributesPanelComponentProps> = ({
   const [isAddFieldDialogOpen, setIsAddFieldDialogOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const featureData = useMemo(() => plainFeatureData || [], [plainFeatureData]);
+  const sortedFeatureData = useMemo(() => {
+    if (!plainFeatureData) return [];
+    if (!sortConfig) return plainFeatureData;
+
+    return [...plainFeatureData].sort((a, b) => {
+        const valA = a.attributes[sortConfig.key];
+        const valB = b.attributes[sortConfig.key];
+
+        if (valA === null || valA === undefined) return 1;
+        if (valB === null || valB === undefined) return -1;
+        
+        if (valA < valB) return sortConfig.direction === 'ascending' ? -1 : 1;
+        if (valA > valB) return sortConfig.direction === 'ascending' ? 1 : -1;
+        
+        return 0;
+    });
+  }, [plainFeatureData, sortConfig]);
+
 
   useEffect(() => {
-    if (featureData.length > 0) {
+    if (plainFeatureData && plainFeatureData.length > 0) {
       setCurrentPage(1);
-      // Sort config is now managed by the parent
     }
-  }, [featureData]);
+  }, [plainFeatureData]);
 
   useEffect(() => {
     if (editingCell) {
@@ -147,11 +164,11 @@ const AttributesPanelComponent: React.FC<AttributesPanelComponentProps> = ({
     }
   };
 
-  const hasFeatures = featureData && featureData.length > 0;
-  const totalPages = Math.ceil((featureData?.length || 0) / ITEMS_PER_PAGE);
+  const hasFeatures = sortedFeatureData.length > 0;
+  const totalPages = Math.ceil(sortedFeatureData.length / ITEMS_PER_PAGE);
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
   const endIndex = startIndex + ITEMS_PER_PAGE;
-  const currentVisibleFeatures = featureData?.slice(startIndex, endIndex) || [];
+  const currentVisibleFeatures = sortedFeatureData.slice(startIndex, endIndex);
 
   const allKeys = useMemo(() => Array.from(
     new Set(currentVisibleFeatures.flatMap(item => (item.attributes ? Object.keys(item.attributes) : [])))
@@ -171,8 +188,8 @@ const AttributesPanelComponent: React.FC<AttributesPanelComponentProps> = ({
   }), [currentVisibleFeatures]);
 
 
-  const panelTitle = layerName && hasFeatures
-    ? `Atributos: ${layerName} (${featureData.length})` 
+  const panelTitle = layerName && plainFeatureData && plainFeatureData.length > 0
+    ? `Atributos: ${layerName} (${plainFeatureData.length})` 
     : 'Atributos';
     
   const addFieldTrigger = hasFeatures ? (
