@@ -144,7 +144,6 @@ const panelToggleConfigs = [
   { id: 'analysis', IconComponent: DraftingCompass, name: "Análisis Espacial" },
   { id: 'clima', IconComponent: CloudRain, name: "Clima y Satélite" },
   { id: 'trello', IconComponent: ClipboardCheck, name: "Trello" },
-  { id: 'attributes', IconComponent: ListChecks, name: "Atributos" },
   { id: 'printComposer', IconComponent: Printer, name: "Impresión" },
   { id: 'gee', IconComponent: BrainCircuit, name: "Procesamiento GEE" },
   { id: 'ai', IconComponent: Sparkles, name: "Asistente IA" },

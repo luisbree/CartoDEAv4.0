@@ -110,6 +110,7 @@ export const useFeatureInspection = ({
   const [inspectedFeatureData, setInspectedFeatureData] = useState<PlainFeatureData[] | null>([]);
   const [currentInspectedLayerName, setCurrentInspectedLayerName] = useState<string | null>(null);
   const [currentInspectedLayerId, setCurrentInspectedLayerId] = useState<string | null>(null);
+  const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'ascending' | 'descending' } | null>(null);
   
   const rasterQueryOverlaysRef = useRef<Overlay[]>([]);
   const rasterQueryMarkersLayerRef = useRef<VectorLayer<VectorSource<Feature<Point>>> | null>(null);
@@ -124,7 +125,25 @@ export const useFeatureInspection = ({
   }, [onNewSelection]);
 
   const processAndDisplayFeatures = useCallback((plainData: PlainFeatureData[], layerName: string, layerId: string | null = null) => {
-    setInspectedFeatureData(plainData);
+    
+    // Apply sorting if a sort configuration exists
+    let sortedData = plainData;
+    if (sortConfig && plainData && plainData.length > 0 && sortConfig.key in plainData[0].attributes) {
+      sortedData = [...plainData].sort((a, b) => {
+        const valA = a.attributes[sortConfig.key];
+        const valB = b.attributes[sortConfig.key];
+        
+        if (valA < valB) {
+            return sortConfig.direction === 'ascending' ? -1 : 1;
+        }
+        if (valA > valB) {
+            return sortConfig.direction === 'ascending' ? 1 : -1;
+        }
+        return 0;
+      });
+    }
+
+    setInspectedFeatureData(sortedData);
     setCurrentInspectedLayerName(layerName);
     setCurrentInspectedLayerId(layerId);
     
@@ -133,7 +152,7 @@ export const useFeatureInspection = ({
        onNewSelectionRef.current();
     }
     
-  }, [toast]);
+  }, [toast, sortConfig]);
   
   const updateInspectedFeatureData = useCallback((featureId: string, key: string, value: any) => {
     setInspectedFeatureData(prevData => {
@@ -434,14 +453,24 @@ export const useFeatureInspection = ({
             const currentSelectedFeatures = e.target.getFeatures().getArray();
             setSelectedFeatures(currentSelectedFeatures);
 
-            if (activeTool === 'inspect') {
-                const plainData: PlainFeatureData[] = currentSelectedFeatures.map(f => ({
-                    id: f.getId() as string,
-                    attributes: f.getProperties()
-                }));
-                processAndDisplayFeatures(plainData, 'Inspección');
-            } else if (activeTool === 'selectBox') {
-                toast({ description: `${currentSelectedFeatures.length} entidad(es) seleccionada(s).` });
+            if (currentSelectedFeatures.length > 0) {
+              const firstFeature = currentSelectedFeatures[0];
+              const layer = map.getAllLayers().find(l => 
+                l instanceof VectorLayer && l.getSource()?.getFeatureById(firstFeature.getId() || '') === firstFeature
+              );
+              
+              const layerName = layer?.get('name') || 'Inspección';
+              const layerId = layer?.get('id') || null;
+
+              const plainData: PlainFeatureData[] = currentSelectedFeatures.map(f => ({
+                  id: f.getId() as string,
+                  attributes: f.getProperties()
+              }));
+              processAndDisplayFeatures(plainData, layerName, layerId);
+            } else {
+              setInspectedFeatureData(null);
+              setCurrentInspectedLayerName(null);
+              setCurrentInspectedLayerId(null);
             }
         });
         
@@ -470,14 +499,25 @@ export const useFeatureInspection = ({
           
             setSelectedFeatures(featuresInBox);
             
-            if (activeTool === 'inspect') {
-              const plainData: PlainFeatureData[] = featuresInBox.map(f => ({
-                id: f.getId() as string,
-                attributes: f.getProperties()
-              }));
-              processAndDisplayFeatures(plainData, 'Inspección por área');
+             if (featuresInBox.length > 0) {
+                const firstFeature = featuresInBox[0];
+                const layer = map.getAllLayers().find(l => 
+                  l instanceof VectorLayer && l.getSource()?.getFeatureById(firstFeature.getId() || '') === firstFeature
+                );
+                
+                const layerName = layer?.get('name') || 'Selección por área';
+                const layerId = layer?.get('id') || null;
+
+                const plainData: PlainFeatureData[] = featuresInBox.map(f => ({
+                    id: f.getId() as string,
+                    attributes: f.getProperties()
+                }));
+                processAndDisplayFeatures(plainData, layerName, layerId);
             } else {
-              toast({ description: `${featuresInBox.length} entidad(es) seleccionada(s).` });
+                setInspectedFeatureData(null);
+                setCurrentInspectedLayerName(null);
+                setCurrentInspectedLayerId(null);
+                toast({ description: 'Ninguna entidad seleccionada.' });
             }
         });
     }
@@ -677,6 +717,8 @@ export const useFeatureInspection = ({
     inspectedFeatureData,
     currentInspectedLayerName,
     currentInspectedLayerId,
+    sortConfig,
+    setSortConfig,
     clearSelection,
     processAndDisplayFeatures,
     selectFeaturesById,
