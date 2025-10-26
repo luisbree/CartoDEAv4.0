@@ -99,27 +99,6 @@ const ClimaPanel: React.FC<ClimaPanelProps> = ({
                 }, true);
 
                 toast({ description: `Capa "${layerName}" añadida.` });
-                
-                if (result.metadata) {
-                    onAddLayer({
-                        id: `metadata-${layerId}`,
-                        name: `Metadatos de ${layerName}`,
-                        olLayer: new VectorLayer({ // Dummy layer for metadata
-                             source: new VectorSource(),
-                             properties: {
-                                id: `metadata-${layerId}`,
-                                name: `Metadatos de ${layerName}`,
-                                type: 'vector',
-                                isMetadata: true,
-                                metadata: result.metadata
-                             }
-                        }),
-                        visible: false,
-                        opacity: 0,
-                        type: 'vector'
-                    }, true);
-                }
-
 
             } else {
                  throw new Error("No se recibió una URL válida del servidor de GEE.");

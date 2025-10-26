@@ -58,7 +58,7 @@ interface LayerItemProps {
   onChangeLayerLabels: (layerId: string, labelOptions: LabelOptions) => void;
   onApplyGraduatedSymbology: (layerId: string, symbology: GraduatedSymbology) => void;
   onApplyCategorizedSymbology: (layerId: string, symbology: CategorizedSymbology) => void;
-  onApplyGeoTiffStyle: (layerId: string, symbology: GeoTiffStyle) => void;
+  onApplyGeoTiffStyle: (layerId: string, style: GeoTiffStyle) => void;
   onToggleWmsStyle: (layerId: string) => void;
   isDrawingSourceEmptyOrNotPolygon: boolean;
   isSelectionEmpty: boolean;
@@ -576,4 +576,5 @@ export default LayerItem;
 
 
     
+
 
