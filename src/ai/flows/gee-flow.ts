@@ -138,6 +138,18 @@ export async function getGoesLayers(input: { numberOfImages: number }): Promise<
         .sort('system:time_start', false) // Sort descending to get the latest
         .limit(input.numberOfImages);
 
+    // Evaluate the image list to get their IDs and metadata on the client (Node.js) side
+    const imageList = await new Promise<any[]>((resolve, reject) => {
+        collection.toList(input.numberOfImages).evaluate((result: any, error?: string) => {
+            if (error) reject(new Error(`Error obteniendo la lista de imágenes de GOES: ${error}`));
+            else resolve(result);
+        });
+    });
+
+    if (!imageList || imageList.length === 0) {
+        throw new Error('No se encontraron imágenes de GOES en las últimas 12 horas.');
+    }
+
     const applyScaleAndOffset = (image: ee.Image) => {
         const bandName = 'CMI_C13';
         const offset = ee.Number(image.get(bandName + '_offset'));
@@ -154,49 +166,33 @@ export async function getGoesLayers(input: { numberOfImages: number }): Promise<
     ];
     const visParams = { min: 183.15, max: 323.15, palette: SMN_CLOUDTOP_PALETTE };
 
-    // Server-side mapping function
-    const getLayerData = (image: ee.Image): ee.Feature => {
-        const scaledImage = applyScaleAndOffset(image);
-        const mapDetails = scaledImage.getMap(visParams);
-        
-        const metadata = ee.Dictionary({
-            timestamp: image.get('system:time_start'),
-            satellite: image.get('satellite'),
-            scene_id: image.get('scene_id'),
-        });
+    const layersDataPromises = imageList.map(imgInfo => {
+        return new Promise<GeeTileLayerOutput>(async (resolve, reject) => {
+            const image = ee.Image(imgInfo.id);
+            const scaledImage = applyScaleAndOffset(image);
 
-        // Use ee.Feature to wrap the dictionary, making it easier to evaluate
-        return ee.Feature(null, {
-            tileUrl: mapDetails.urlFormat,
-            metadata: metadata
-        });
-    };
+            scaledImage.getMap(visParams, (mapDetails, error) => {
+                if (error || !mapDetails) {
+                    return reject(new Error(`Error generando la URL del mapa para la imagen ${imgInfo.id}: ${error}`));
+                }
 
-    // Apply the mapping function on the server
-    const processedCollection = collection.map(getLayerData);
-
-    // Evaluate the entire collection in a single call
-    const evaluatedFeatures = await new Promise<any[]>((resolve, reject) => {
-        processedCollection.toList(input.numberOfImages).evaluate((result: any, error?: string) => {
-            if (error) {
-                console.error("GEE evaluate error:", error);
-                reject(new Error(`Error procesando la colección de GOES: ${error}`));
-            } else {
-                resolve(result);
-            }
+                // Metadata is already client-side from the initial evaluate
+                const metadata = {
+                    timestamp: imgInfo.properties['system:time_start'],
+                    satellite: imgInfo.properties['satellite'],
+                    scene_id: imgInfo.properties['scene_id'],
+                };
+                
+                resolve({
+                    tileUrl: mapDetails.urlFormat.replace('{x}', '{x}').replace('{y}', '{y}').replace('{z}', '{z}'),
+                    metadata
+                });
+            });
         });
     });
 
-    if (!evaluatedFeatures || evaluatedFeatures.length === 0) {
-        throw new Error('No se encontraron imágenes de GOES en las últimas 12 horas.');
-    }
+    const layersData = await Promise.all(layersDataPromises);
 
-    // Format the results into the expected output structure
-    const layersData: GeeTileLayerOutput[] = evaluatedFeatures.map(feature => ({
-        tileUrl: feature.properties.tileUrl.replace('{x}', '{x}').replace('{y}', '{y}').replace('{z}', '{z}'),
-        metadata: feature.properties.metadata
-    }));
-    
     // Return in chronological order (oldest first)
     return layersData.reverse();
 }
@@ -817,5 +813,3 @@ function initializeEe(): Promise<void> {
   }
   return eeInitialized;
 }
-
-    
