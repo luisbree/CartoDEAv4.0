@@ -1372,77 +1372,82 @@ const groupLayers = useCallback((layerIds: string[], groupName: string) => {
         toast({ description: `Grupo renombrado a "${newName}"` });
     }, [setLayers, toast]);
     
+    const startPlayback = useCallback((groupId: string) => {
+        const group = layers.find(item => item.id === groupId) as LayerGroup | undefined;
+        if (!group) return;
+
+        if (playbackIntervalRef.current) {
+            clearInterval(playbackIntervalRef.current);
+        }
+
+        playbackIntervalRef.current = setInterval(() => {
+            setLayers(currentItems => {
+                const currentGroup = currentItems.find(i => i.id === groupId) as LayerGroup | undefined;
+                if (!currentGroup || !currentGroup.isPlaying || currentGroup.layers.length === 0) {
+                    clearInterval(playbackIntervalRef.current!);
+                    playbackIntervalRef.current = null;
+                    return currentItems;
+                }
+
+                const visibleIndex = currentGroup.layers.findIndex(l => l.visible);
+                const nextIndex = (visibleIndex + 1) % currentGroup.layers.length;
+
+                const newGroupLayers = currentGroup.layers.map((layer, index) => {
+                    const isVisible = index === nextIndex;
+                    if (layer.visible !== isVisible) {
+                        layer.olLayer.setVisible(isVisible);
+                        const visualLayer = layer.olLayer.get('visualLayer');
+                        if (visualLayer) visualLayer.setVisible(isVisible && (layer.wmsStyleEnabled ?? true));
+                    }
+                    return { ...layer, visible: isVisible };
+                });
+                
+                return currentItems.map(i => i.id === groupId ? { ...currentGroup, layers: newGroupLayers } : i);
+            });
+        }, group.playSpeed || 1000);
+
+    }, [layers, setLayers]);
+
+    const stopPlayback = useCallback(() => {
+        if (playbackIntervalRef.current) {
+            clearInterval(playbackIntervalRef.current);
+            playbackIntervalRef.current = null;
+        }
+    }, []);
+    
     const toggleGroupPlayback = useCallback((groupId: string) => {
         setLayers(prev => {
-            return prev.map(item => {
-                if (item.id === groupId && 'layers' in item) {
-                    const group = item as LayerGroup;
-                    const newIsPlaying = !group.isPlaying;
-                    
-                    if (newIsPlaying) {
-                        const speed = group.playSpeed || 1000;
-                        playbackIntervalRef.current = setInterval(() => {
-                            setLayers(current => {
-                                const currentGroup = current.find(i => i.id === groupId) as LayerGroup;
-                                if (!currentGroup || currentGroup.layers.length === 0) {
-                                    clearInterval(playbackIntervalRef.current!);
-                                    return current;
-                                }
-                                const visibleIndex = currentGroup.layers.findIndex(l => l.visible);
-                                const nextIndex = (visibleIndex + 1) % currentGroup.layers.length;
-                                
-                                const newGroupLayers = currentGroup.layers.map((layer, index) => {
-                                    const isVisible = index === nextIndex;
-                                    layer.olLayer.setVisible(isVisible);
-                                    return {...layer, visible: isVisible};
-                                });
-                                return current.map(i => i.id === groupId ? {...currentGroup, layers: newGroupLayers} : i);
-                            });
-                        }, speed);
-                    } else {
-                        if (playbackIntervalRef.current) {
-                            clearInterval(playbackIntervalRef.current);
-                            playbackIntervalRef.current = null;
-                        }
-                    }
-                    return { ...group, isPlaying: newIsPlaying };
-                }
-                return item;
-            });
+            const group = prev.find(item => item.id === groupId) as LayerGroup | undefined;
+            if (!group) return prev;
+            
+            const newIsPlaying = !group.isPlaying;
+            if (newIsPlaying) {
+                startPlayback(groupId);
+            } else {
+                stopPlayback();
+            }
+
+            return prev.map(item => 
+                item.id === groupId ? { ...item, isPlaying: newIsPlaying } : item
+            );
         });
-    }, [setLayers]);
+    }, [setLayers, startPlayback, stopPlayback]);
     
     const setGroupPlaySpeed = useCallback((groupId: string, speed: number) => {
-        setLayers(prev => prev.map(item => {
-            if (item.id === groupId && 'layers' in item) {
-                const group = item as LayerGroup;
-                // If it's already playing, restart the interval with the new speed
-                if (group.isPlaying) {
-                    if (playbackIntervalRef.current) clearInterval(playbackIntervalRef.current);
-                    
-                    playbackIntervalRef.current = setInterval(() => {
-                        setLayers(current => {
-                            const currentGroup = current.find(i => i.id === groupId) as LayerGroup;
-                            if (!currentGroup || currentGroup.layers.length === 0) {
-                                clearInterval(playbackIntervalRef.current!);
-                                return current;
-                            }
-                            const visibleIndex = currentGroup.layers.findIndex(l => l.visible);
-                            const nextIndex = (visibleIndex + 1) % currentGroup.layers.length;
-                             const newGroupLayers = currentGroup.layers.map((layer, index) => {
-                                const isVisible = index === nextIndex;
-                                layer.olLayer.setVisible(isVisible);
-                                return {...layer, visible: isVisible};
-                            });
-                            return current.map(i => i.id === groupId ? {...currentGroup, layers: newGroupLayers} : i);
-                        });
-                    }, speed);
-                }
-                return { ...group, playSpeed: speed };
+        setLayers(prev => {
+            const group = prev.find(item => item.id === groupId) as LayerGroup | undefined;
+            if (!group) return prev;
+            
+            if (group.isPlaying) {
+                stopPlayback();
+                startPlayback(groupId);
             }
-            return item;
-        }));
-    }, [setLayers]);
+
+            return prev.map(item => 
+                item.id === groupId ? { ...item, playSpeed: speed } : item
+            );
+        });
+    }, [setLayers, startPlayback, stopPlayback]);
 
 
   return {
