@@ -57,7 +57,18 @@ export interface MapLayer {
   categorizedSymbology?: CategorizedSymbology;
   geoTiffStyle?: GeoTiffStyle;
   wmsStyleEnabled?: boolean; // For hybrid WFS/WMS layers
+  groupId?: string; // ID of the group this layer belongs to
 }
+
+// New type for Layer Groups
+export interface LayerGroup {
+  id: string;
+  name: string;
+  layers: MapLayer[];
+  isExpanded: boolean;
+  displayMode: 'single' | 'multiple'; // 'single' for radio, 'multiple' for checkbox
+}
+
 
 export interface VectorMapLayer extends MapLayer {
   olLayer: VectorLayer<VectorSource<Feature<Geometry>>>;

@@ -14,7 +14,7 @@ import { Geometry, LineString, Point, Polygon } from 'ol/geom';
 import { useToast } from "@/hooks/use-toast";
 import { findSentinel2Footprints } from '@/services/sentinel';
 import { findLandsatFootprints } from '@/services/landsat';
-import type { MapLayer, VectorMapLayer, PlainFeatureData, LabelOptions, StyleOptions, GraduatedSymbology, CategorizedSymbology, GeoTiffStyle } from '@/lib/types';
+import type { MapLayer, VectorMapLayer, PlainFeatureData, LabelOptions, StyleOptions, GraduatedSymbology, CategorizedSymbology, GeoTiffStyle, LayerGroup } from '@/lib/types';
 import { nanoid } from 'nanoid';
 import { Style, Stroke, Fill, Circle as CircleStyle, Text as TextStyle } from 'ol/style';
 import type { StyleLike } from 'ol/style/Style';
@@ -209,31 +209,38 @@ export const useLayerManager = ({
   clearSelectionAfterExtraction,
   updateInspectedFeatureData,
 }: UseLayerManagerProps) => {
-  const [layers, setLayersInternal] = useState<MapLayer[]>([]);
+  const [layers, setLayersInternal] = useState<(MapLayer | LayerGroup)[]>([]);
   const { toast } = useToast();
   const [isFindingSentinelFootprints, setIsFindingSentinelFootprints] = useState(false);
   const [isFindingLandsatFootprints, setIsFindingLandsatFootprints] = useState(false);
   const [isDrawingSourceEmptyOrNotPolygon, setIsDrawingSourceEmptyOrNotPolygon] = useState(true);
   const [isWfsLoading, setIsWfsLoading] = useState(false);
-  const [lastRemovedLayers, setLastRemovedLayers] = useState<MapLayer[]>([]);
+  const [lastRemovedLayers, setLastRemovedLayers] = useState<(MapLayer | LayerGroup)[]>([]);
 
-  const setLayers = useCallback((updater: React.SetStateAction<MapLayer[]>) => {
-      setLayersInternal(prevLayers => {
-          const newLayers = typeof updater === 'function' ? updater(prevLayers) : updater;
+  const setLayers = useCallback((updater: React.SetStateAction<(MapLayer | LayerGroup)[]>) => {
+      setLayersInternal(prevItems => {
+          const newItems = typeof updater === 'function' ? updater(prevItems) : updater;
   
-          // --- Start of zIndex logic ---
-          // All layers that are not WMS are "operational" and their zIndex is determined by their order in the list.
-          const operationalLayers = newLayers.filter(l => l.type !== 'wms');
-          const layer_count = operationalLayers.length;
+          // Flatten the list to get all operational layers for z-index calculation
+          const operationalLayers: MapLayer[] = [];
+          newItems.forEach(item => {
+              if ('layers' in item) { // It's a group
+                  operationalLayers.push(...item.layers);
+              } else { // It's a layer
+                  operationalLayers.push(item);
+              }
+          });
   
-          newLayers.forEach(layer => {
+          const layer_count = operationalLayers.filter(l => l.type !== 'wms').length;
+  
+          operationalLayers.forEach(layer => {
               const zIndex = layer.olLayer.getZIndex();
               let newZIndex = zIndex;
   
               if (layer.type === 'wms') {
                   newZIndex = WMS_LAYER_Z_INDEX;
               } else {
-                  const operationalIndex = operationalLayers.findIndex(opLayer => opLayer.id === layer.id);
+                  const operationalIndex = operationalLayers.filter(l => l.type !== 'wms').findIndex(opLayer => opLayer.id === layer.id);
                   if (operationalIndex !== -1) {
                       newZIndex = LAYER_START_Z_INDEX + (layer_count - 1 - operationalIndex);
                   }
@@ -243,9 +250,8 @@ export const useLayerManager = ({
                   layer.olLayer.setZIndex(newZIndex);
               }
           });
-          // --- End of zIndex logic ---
   
-          return newLayers;
+          return newItems;
       });
   }, []);
 
@@ -437,58 +443,68 @@ export const useLayerManager = ({
       const map = mapRef.current;
       const layersToRestore = lastRemovedLayers;
 
-      layersToRestore.forEach(layer => {
-          map.addLayer(layer.olLayer);
-          const visualLayer = layer.olLayer.get('visualLayer');
-          if (visualLayer) {
-              map.addLayer(visualLayer);
+      layersToRestore.forEach(item => {
+          if ('layers' in item) { // It's a group
+              item.layers.forEach(layer => {
+                  map.addLayer(layer.olLayer);
+                  const visualLayer = layer.olLayer.get('visualLayer');
+                  if (visualLayer) map.addLayer(visualLayer);
+              });
+          } else { // It's a single layer
+              map.addLayer(item.olLayer);
+              const visualLayer = item.olLayer.get('visualLayer');
+              if (visualLayer) map.addLayer(visualLayer);
           }
       });
       
       setLayers(prev => [...layersToRestore, ...prev]);
       setLastRemovedLayers([]); // Clear the undo buffer
 
-      toast({ description: `${layersToRestore.length} capa(s) restaurada(s).` });
+      toast({ description: `${layersToRestore.length} item(s) restaurado(s).` });
   }, [mapRef, lastRemovedLayers, toast, setLayers]);
 
 
-  const removeLayers = useCallback((layerIds: string[]) => {
-    let removedLayers: MapLayer[] = [];
-    setLayers(prevLayers => {
-        if (!mapRef.current || layerIds.length === 0) return prevLayers;
+  const removeLayers = useCallback((itemIds: string[]) => {
+    let removedItems: (MapLayer | LayerGroup)[] = [];
+    
+    setLayers(prevItems => {
+        if (!mapRef.current || itemIds.length === 0) return prevItems;
         const map = mapRef.current;
 
-        const layersToRemove = prevLayers.filter(l => layerIds.includes(l.id));
-        if (layersToRemove.length === 0) return prevLayers;
+        const itemsToRemove = prevItems.filter(item => itemIds.includes(item.id));
+        if (itemsToRemove.length === 0) return prevItems;
         
-        removedLayers = layersToRemove;
-    
-        layersToRemove.forEach(layer => {
-            map.removeLayer(layer.olLayer);
-            
-            const visualLayer = layer.olLayer.get('visualLayer');
-            if (visualLayer) {
-                map.removeLayer(visualLayer);
-            }
-            
-            const gsLayerName = layer.olLayer.get('gsLayerName');
-            if (gsLayerName) {
-                if (layer.type === 'wms' || layer.type === 'wfs') {
+        removedItems = itemsToRemove;
+
+        itemsToRemove.forEach(item => {
+            if ('layers' in item) { // It's a group
+                item.layers.forEach(layer => {
+                    map.removeLayer(layer.olLayer);
+                    const visualLayer = layer.olLayer.get('visualLayer');
+                    if (visualLayer) map.removeLayer(visualLayer);
+                });
+            } else { // It's a single layer
+                map.removeLayer(item.olLayer);
+                const visualLayer = item.olLayer.get('visualLayer');
+                if (visualLayer) map.removeLayer(visualLayer);
+                
+                const gsLayerName = item.olLayer.get('gsLayerName');
+                if (gsLayerName && (item.type === 'wms' || item.type === 'wfs')) {
                     updateGeoServerDiscoveredLayerState(gsLayerName, false, 'wms');
                     updateGeoServerDiscoveredLayerState(gsLayerName, false, 'wfs');
                 }
             }
         });
         
-        return prevLayers.filter(l => !layerIds.includes(l.id));
+        return prevItems.filter(l => !itemIds.includes(l.id));
     });
     
     setTimeout(() => {
-        if (removedLayers.length > 0) {
-            setLastRemovedLayers(removedLayers);
-            const description = removedLayers.length === 1
-                ? `Capa "${removedLayers[0].name}" eliminada.`
-                : `${removedLayers.length} capa(s) eliminada(s).`;
+        if (removedItems.length > 0) {
+            setLastRemovedLayers(removedItems);
+            const description = removedItems.length === 1
+                ? `Item "${removedItems[0].name}" eliminado.`
+                : `${removedItems.length} item(s) eliminado(s).`;
             
             toast({ description });
         }
@@ -518,7 +534,7 @@ export const useLayerManager = ({
         
         if (layersToMove.length > 0) {
             setTimeout(() => {
-                toast({ description: `${layersToMove.length} capa(s) reordenada(s).` });
+                toast({ description: `${layersToMove.length} item(s) reordenado(s).` });
             }, 0);
         }
 
@@ -526,24 +542,40 @@ export const useLayerManager = ({
     });
   }, [toast, setLayers]);
   
-  const toggleLayerVisibility = useCallback((layerId: string) => {
-    setLayers(prev => prev.map(l => {
-        if (l.id === layerId) {
-            const newVisibility = !l.visible;
-            l.olLayer.setVisible(newVisibility);
-            // Also toggle the visual partner layer if it exists
-            const visualLayer = l.olLayer.get('visualLayer');
-            if (visualLayer) {
-                visualLayer.setVisible(newVisibility && (l.wmsStyleEnabled ?? true));
-            }
-            return { ...l, visible: newVisibility };
-        }
-        return l;
-    }));
+  const toggleLayerVisibility = useCallback((layerId: string, groupId?: string) => {
+      setLayers(prevItems => {
+          return prevItems.map(item => {
+              if (item.id === layerId) {
+                  // This is a single layer
+                  const newVisibility = !item.visible;
+                  item.olLayer.setVisible(newVisibility);
+                  const visualLayer = item.olLayer.get('visualLayer');
+                  if (visualLayer) {
+                      visualLayer.setVisible(newVisibility && (item.wmsStyleEnabled ?? true));
+                  }
+                  return { ...item, visible: newVisibility };
+              } else if (item.id === groupId && 'layers' in item) {
+                  // This is a group, and a radio button inside it was clicked
+                  const updatedGroupLayers = item.layers.map(layerInGroup => {
+                      const isTargetLayer = layerInGroup.id === layerId;
+                      layerInGroup.olLayer.setVisible(isTargetLayer);
+                      const visualLayer = layerInGroup.olLayer.get('visualLayer');
+                      if (visualLayer) {
+                          visualLayer.setVisible(isTargetLayer && (layerInGroup.wmsStyleEnabled ?? true));
+                      }
+                      return { ...layerInGroup, visible: isTargetLayer };
+                  });
+                  return { ...item, layers: updatedGroupLayers };
+              }
+              return item;
+          });
+      });
   }, [setLayers]);
+
 
   const toggleWmsStyle = useCallback((layerId: string) => {
     setLayers(prev => prev.map(l => {
+        if ('layers' in l) return l; // Skip groups
         if (l.id === layerId && l.type === 'wfs') {
             const newWmsStyleEnabled = !(l.wmsStyleEnabled ?? true);
             const visualLayer = l.olLayer.get('visualLayer');
@@ -574,6 +606,7 @@ export const useLayerManager = ({
 
   const setLayerOpacity = useCallback((layerId: string, opacity: number) => {
     setLayers(prev => prev.map(l => {
+      if ('layers' in l) return l;
       if (l.id === layerId) {
         l.olLayer.setOpacity(opacity);
          // Also set opacity for the visual partner layer if it exists
@@ -588,7 +621,7 @@ export const useLayerManager = ({
   }, [setLayers]);
 
   const changeLayerStyle = useCallback((layerId: string, styleOptions: StyleOptions) => {
-    const layer = layers.find(l => l.id === layerId) as VectorMapLayer | undefined;
+    const layer = layers.flatMap(item => 'layers' in item ? item.layers : item).find(l => l.id === layerId) as VectorMapLayer | undefined;
     if (!layer) return;
 
     const olLayer = layer.olLayer;
@@ -646,13 +679,16 @@ export const useLayerManager = ({
     const finalStyle = createStyleFunction(newSimpleStyle, olLayer.get('labelOptions'), undefined, undefined);
     olLayer.setStyle(finalStyle);
 
-    setLayers(prev => prev.map(l => l.id === layerId ? { ...l, graduatedSymbology: undefined, categorizedSymbology: undefined } : l));
+    setLayers(prev => prev.map(l => {
+      if ('layers' in l) return l; // It's a group, don't modify it directly
+      return l.id === layerId ? { ...l, graduatedSymbology: undefined, categorizedSymbology: undefined } : l
+    }));
     setTimeout(() => toast({ description: `Estilo de la capa "${layer.name}" actualizado.` }), 0);
 
   }, [layers, toast, setLayers]);
 
   const changeLayerLabels = useCallback((layerId: string, labelOptions: LabelOptions) => {
-    const layer = layers.find(l => l.id === layerId) as VectorMapLayer | undefined;
+    const layer = layers.flatMap(item => 'layers' in item ? item.layers : item).find(l => l.id === layerId) as VectorMapLayer | undefined;
     if (!layer) return;
 
     const olLayer = layer.olLayer;
@@ -674,7 +710,7 @@ export const useLayerManager = ({
   }, [layers, toast]);
 
   const applyGraduatedSymbology = useCallback((layerId: string, symbology: GraduatedSymbology) => {
-    const layer = layers.find(l => l.id === layerId) as VectorMapLayer | undefined;
+    const layer = layers.flatMap(item => 'layers' in item ? item.layers : item).find(l => l.id === layerId) as VectorMapLayer | undefined;
     if (!layer) return;
 
     const olLayer = layer.olLayer;
@@ -687,12 +723,15 @@ export const useLayerManager = ({
     olLayer.setStyle(finalStyle);
     olLayer.set('originalStyle', olLayer.getStyle()); // Store the new function as the base
 
-    setLayers(prev => prev.map(l => l.id === layerId ? { ...l, graduatedSymbology: symbology, categorizedSymbology: undefined } : l));
+    setLayers(prev => prev.map(l => {
+      if ('layers' in l) return l;
+      return l.id === layerId ? { ...l, graduatedSymbology: symbology, categorizedSymbology: undefined } : l;
+    }));
     setTimeout(() => toast({ description: `Simbología graduada aplicada a "${layer.name}".` }), 0);
   }, [layers, toast, setLayers]);
   
   const applyCategorizedSymbology = useCallback((layerId: string, symbology: CategorizedSymbology) => {
-      const layer = layers.find(l => l.id === layerId) as VectorMapLayer | undefined;
+      const layer = layers.flatMap(item => 'layers' in item ? item.layers : item).find(l => l.id === layerId) as VectorMapLayer | undefined;
       if (!layer) return;
   
       const olLayer = layer.olLayer;
@@ -704,12 +743,15 @@ export const useLayerManager = ({
       olLayer.setStyle(finalStyle);
       olLayer.set('originalStyle', olLayer.getStyle());
   
-      setLayers(prev => prev.map(l => l.id === layerId ? { ...l, categorizedSymbology: symbology, graduatedSymbology: undefined } : l));
+      setLayers(prev => prev.map(l => {
+        if ('layers' in l) return l;
+        return l.id === layerId ? { ...l, categorizedSymbology: symbology, graduatedSymbology: undefined } : l;
+      }));
       setTimeout(() => toast({ description: `Simbología por categorías aplicada a "${layer.name}".` }), 0);
   }, [layers, toast, setLayers]);
 
   const applyGeoTiffStyle = useCallback((layerId: string, style: GeoTiffStyle) => {
-    const layer = layers.find(l => l.id === layerId);
+    const layer = layers.flatMap(item => 'layers' in item ? item.layers : item).find(l => l.id === layerId);
     if (!layer || !(layer.olLayer instanceof WebGLTileLayer)) return;
     
     const olLayer = layer.olLayer as WebGLTileLayer;
@@ -742,13 +784,16 @@ export const useLayerManager = ({
         color: colorExpression,
     });
 
-    setLayers(prev => prev.map(l => l.id === layerId ? { ...l, geoTiffStyle: style } : l));
+    setLayers(prev => prev.map(l => {
+      if ('layers' in l) return l;
+      return l.id === layerId ? { ...l, geoTiffStyle: style } : l;
+    }));
     toast({ description: `Estilo aplicado a la capa "${layer.name}".` });
   }, [layers, toast, setLayers]);
 
   const zoomToLayerExtent = useCallback((layerId: string) => {
     if (!mapRef.current) return;
-    const layer = layers.find(l => l.id === layerId);
+    const layer = layers.flatMap(item => 'layers' in item ? item.layers : item).find(l => l.id === layerId);
     if (!layer) return;
 
     let extent: number[] | undefined;
@@ -783,7 +828,7 @@ export const useLayerManager = ({
   }, [mapRef, layers, toast]);
 
   const handleShowLayerTable = useCallback((layerId: string) => {
-    const layer = layers.find(l => l.id === layerId);
+    const layer = layers.flatMap(item => 'layers' in item ? item.layers : item).find(l => l.id === layerId);
     if (!layer) {
       setTimeout(() => toast({ description: "No se pudo encontrar la capa." }), 0);
       return;
@@ -816,141 +861,126 @@ export const useLayerManager = ({
     }
   }, [layers, onShowTableRequest, toast]);
 
-  const renameLayer = useCallback((layerId: string, newName: string) => {
+  const renameLayer = useCallback((itemId: string, newName: string) => {
     setLayers(prev =>
-      prev.map(l => {
-        if (l.id === layerId) {
-          return { ...l, name: newName };
+      prev.map(item => {
+        if (item.id === itemId) {
+          return { ...item, name: newName };
         }
-        return l;
+        return item;
       })
     );
     setTimeout(() => {
-      toast({ description: `Capa renombrada a "${newName}"` });
+      toast({ description: `Item renombrado a "${newName}"` });
     }, 0);
   }, [toast, setLayers]);
   
   const handleExtractByPolygon = useCallback((layerIdToExtract: string, onSuccess?: () => void) => {
-    setLayers(prevLayers => {
-        const targetLayer = prevLayers.find(l => l.id === layerIdToExtract) as VectorMapLayer | undefined;
-        const drawingFeatures = drawingSourceRef.current?.getFeatures() ?? [];
-        const polygonFeature = drawingFeatures.find(f => f.getGeometry()?.getType() === 'Polygon');
-    
-        if (!targetLayer || !polygonFeature) {
-            setTimeout(() => toast({ description: "Se requiere una capa vectorial y un polígono dibujado." }), 0);
-            return prevLayers;
-        }
-        const polygonGeometry = polygonFeature.getGeometry();
-        if (!polygonGeometry) return prevLayers;
-    
-        const targetSource = targetLayer.olLayer.getSource();
-        if (!targetSource) return prevLayers;
-    
-        const intersectingFeatures = targetSource.getFeatures().filter(feature => {
-            const featureGeometry = feature.getGeometry();
-            return featureGeometry && polygonGeometry.intersectsExtent(featureGeometry.getExtent());
-        });
-    
-        if (intersectingFeatures.length === 0) {
-            setTimeout(() => toast({ description: "No se encontraron entidades dentro del polígono." }), 0);
-            return prevLayers;
-        }
-        
-        const newSourceName = `Extracción de ${targetLayer.name}`;
-        const newSource = new VectorSource({ features: intersectingFeatures.map(f => f.clone()) });
-        const newLayerId = `extract-${targetLayer.id}-${nanoid()}`;
-        const newOlLayer = new VectorLayer({
-            source: newSource,
-            properties: {
-                id: newLayerId,
-                name: newSourceName,
-                type: 'vector'
-            },
-            style: targetLayer.olLayer.getStyle()
-        });
-        
-        const newMapLayer: MapLayer = {
-            id: newLayerId,
-            name: newSourceName,
-            olLayer: newOlLayer,
-            visible: true,
-            opacity: 1,
-            type: 'vector'
-        };
+    const targetLayer = layers.flatMap(i => 'layers' in i ? i.layers : i).find(l => l.id === layerIdToExtract) as VectorMapLayer | undefined;
+    const drawingFeatures = drawingSourceRef.current?.getFeatures() ?? [];
+    const polygonFeature = drawingFeatures.find(f => f.getGeometry()?.getType() === 'Polygon');
 
-        mapRef.current?.addLayer(newOlLayer);
-        setTimeout(() => toast({ description: `${intersectingFeatures.length} entidades extraídas a una nueva capa.` }), 0);
-        onSuccess?.();
-        
-        return [newMapLayer, ...prevLayers];
+    if (!targetLayer || !polygonFeature) {
+        setTimeout(() => toast({ description: "Se requiere una capa vectorial y un polígono dibujado." }), 0);
+        return;
+    }
+    const polygonGeometry = polygonFeature.getGeometry();
+    if (!polygonGeometry) return;
+
+    const targetSource = targetLayer.olLayer.getSource();
+    if (!targetSource) return;
+
+    const intersectingFeatures = targetSource.getFeatures().filter(feature => {
+        const featureGeometry = feature.getGeometry();
+        return featureGeometry && polygonGeometry.intersectsExtent(featureGeometry.getExtent());
     });
-  }, [drawingSourceRef, mapRef, toast, setLayers]);
+
+    if (intersectingFeatures.length === 0) {
+        setTimeout(() => toast({ description: "No se encontraron entidades dentro del polígono." }), 0);
+        return;
+    }
+    
+    const newSourceName = `Extracción de ${targetLayer.name}`;
+    const newSource = new VectorSource({ features: intersectingFeatures.map(f => f.clone()) });
+    const newLayerId = `extract-${targetLayer.id}-${nanoid()}`;
+    const newOlLayer = new VectorLayer({
+        source: newSource,
+        properties: { id: newLayerId, name: newSourceName, type: 'vector' },
+        style: targetLayer.olLayer.getStyle()
+    });
+    
+    addLayer({
+        id: newLayerId,
+        name: newSourceName,
+        olLayer: newOlLayer,
+        visible: true,
+        opacity: 1,
+        type: 'vector'
+    }, true);
+
+    setTimeout(() => toast({ description: `${intersectingFeatures.length} entidades extraídas a una nueva capa.` }), 0);
+    onSuccess?.();
+        
+  }, [drawingSourceRef, layers, addLayer, toast]);
   
   const handleExtractBySelection = useCallback((selectedFeaturesForExtraction: Feature<Geometry>[], onSuccess?: () => void) => {
-    setLayers(prevLayers => {
-        if (selectedFeaturesForExtraction.length === 0) {
-            setTimeout(() => toast({ description: "No hay entidades seleccionadas para extraer." }), 0);
-            return prevLayers;
-        }
+    if (selectedFeaturesForExtraction.length === 0) {
+        setTimeout(() => toast({ description: "No hay entidades seleccionadas para extraer." }), 0);
+        return;
+    }
+
+    const clonedFeatures = selectedFeaturesForExtraction.map(f => {
+        const clone = f.clone();
+        clone.setStyle(undefined); // Crucial: Remove the highlight style from the clone
+        if (f.getId()) clone.setId(f.getId());
+        return clone;
+    });
     
-        const clonedFeatures = selectedFeaturesForExtraction.map(f => {
-            const clone = f.clone();
-            clone.setStyle(undefined); // Crucial: Remove the highlight style from the clone
-            // Ensure the clone gets the ID
-            if (f.getId()) {
-                clone.setId(f.getId());
-            }
-            return clone;
-        });
-        
-        let style;
-        let originalLayerName = 'Selección';
-        const firstFeature = selectedFeaturesForExtraction[0];
-    
-        if (firstFeature) {
-          for (const layer of prevLayers) {
-            if (layer.olLayer instanceof VectorLayer) {
-              const source = layer.olLayer.getSource();
-              // Use getFeatureById for robustness, as hasFeature might not work if the feature instance is different
-              if (source && firstFeature.getId() && source.getFeatureById(firstFeature.getId())) {
-                style = layer.olLayer.getStyle();
-                originalLayerName = layer.name;
-                break;
-              }
-            }
+    let style;
+    let originalLayerName = 'Selección';
+    const firstFeature = selectedFeaturesForExtraction[0];
+
+    if (firstFeature) {
+      for (const item of layers) {
+        if ('olLayer' in item) { // It's a MapLayer
+          const layer = item as VectorMapLayer;
+          const source = layer.olLayer.getSource();
+          if (source && firstFeature.getId() && source.getFeatureById(firstFeature.getId())) {
+            style = layer.olLayer.getStyle();
+            originalLayerName = layer.name;
+            break;
           }
         }
-    
-        const newSourceName = `Extraidas_${originalLayerName}`;
-        const newLayerId = `extract-sel-${nanoid()}`;
-        const newSource = new VectorSource({ features: clonedFeatures });
-        const newOlLayer = new VectorLayer({
-            source: newSource,
-            properties: { id: newLayerId, name: newSourceName, type: 'vector' },
-            style: style // Apply the original layer's style, not the highlight style
-        });
-    
-        const newMapLayer: MapLayer = {
-            id: newLayerId,
-            name: newSourceName,
-            olLayer: newOlLayer,
-            visible: true,
-            opacity: 1,
-            type: 'vector'
-        };
-    
-        mapRef.current?.addLayer(newOlLayer);
-        setTimeout(() => toast({ description: `${clonedFeatures.length} entidades extraídas a la capa "${newSourceName}".` }), 0);
-        
-        clearSelectionAfterExtraction();
-        onSuccess?.();
-        
-        return [newMapLayer, ...prevLayers];
+      }
+    }
+
+    const newSourceName = `Extraidas_${originalLayerName}`;
+    const newLayerId = `extract-sel-${nanoid()}`;
+    const newSource = new VectorSource({ features: clonedFeatures });
+    const newOlLayer = new VectorLayer({
+        source: newSource,
+        properties: { id: newLayerId, name: newSourceName, type: 'vector' },
+        style: style
     });
-  }, [mapRef, toast, clearSelectionAfterExtraction, setLayers]);
+
+    addLayer({
+        id: newLayerId,
+        name: newSourceName,
+        olLayer: newOlLayer,
+        visible: true,
+        opacity: 1,
+        type: 'vector'
+    }, true);
+
+    setTimeout(() => toast({ description: `${clonedFeatures.length} entidades extraídas a la capa "${newSourceName}".` }), 0);
+    
+    clearSelectionAfterExtraction();
+    onSuccess?.();
+        
+  }, [addLayer, layers, toast, clearSelectionAfterExtraction]);
   
   const handleExportLayer = useCallback(async (layerId: string, format: 'geojson' | 'kml' | 'shp') => {
-    const layer = layers.find(l => l.id === layerId) as VectorMapLayer | undefined;
+    const layer = layers.flatMap(i => 'layers' in i ? i.layers : i).find(l => l.id === layerId) as VectorMapLayer | undefined;
     if (!layer || !(layer.olLayer instanceof VectorLayer)) {
       setTimeout(() => toast({ description: "Solo se pueden exportar capas vectoriales." }), 0);
       return;
@@ -1017,48 +1047,43 @@ export const useLayerManager = ({
             setTimeout(() => toast({ description: "No se encontraron escenas de Sentinel-2 en la vista actual para el rango de fechas especificado." }), 0);
             return;
         }
-
-        setLayers(prevLayers => {
-            const existingLayer = prevLayers.find(l => l.id === 'sentinel-footprints') as VectorMapLayer | undefined;
-            if (existingLayer) {
-                existingLayer.olLayer.getSource()?.clear();
-                existingLayer.olLayer.getSource()?.addFeatures(features);
-                setTimeout(() => toast({ description: `Capa de Sentinel-2 actualizada con ${features.length} footprints.` }), 0);
-                return [...prevLayers]; // Return a new array to trigger re-render
-            } else {
-                const sentinelSource = new VectorSource({ features });
-                const sentinelLayer = new VectorLayer({
-                    source: sentinelSource,
-                    style: new Style({
-                        stroke: new Stroke({ color: 'rgba(255, 0, 255, 1.0)', width: 2 }),
-                        fill: new Fill({ color: 'rgba(255, 0, 255, 0.1)' }),
-                    }),
-                    properties: { id: 'sentinel-footprints', name: 'Footprints Sentinel-2', type: 'sentinel' }
-                });
-                
-                const newMapLayer = {
-                    id: 'sentinel-footprints',
-                    name: 'Footprints Sentinel-2',
-                    olLayer: sentinelLayer,
-                    visible: true,
-                    opacity: 1,
-                    type: 'sentinel'
-                };
-                mapRef.current?.addLayer(sentinelLayer);
-                setTimeout(() => toast({ description: `${features.length} footprints de Sentinel-2 añadidos al mapa.` }), 0);
-                return [newMapLayer, ...prevLayers];
-            }
-        });
+        
+        let existingLayer = layers.find(l => 'olLayer' in l && l.id === 'sentinel-footprints') as VectorMapLayer | undefined;
+        if (existingLayer) {
+            existingLayer.olLayer.getSource()?.clear();
+            existingLayer.olLayer.getSource()?.addFeatures(features);
+            setTimeout(() => toast({ description: `Capa de Sentinel-2 actualizada con ${features.length} footprints.` }), 0);
+        } else {
+            const sentinelSource = new VectorSource({ features });
+            const sentinelLayer = new VectorLayer({
+                source: sentinelSource,
+                style: new Style({
+                    stroke: new Stroke({ color: 'rgba(255, 0, 255, 1.0)', width: 2 }),
+                    fill: new Fill({ color: 'rgba(255, 0, 255, 0.1)' }),
+                }),
+                properties: { id: 'sentinel-footprints', name: 'Footprints Sentinel-2', type: 'sentinel' }
+            });
+            
+            addLayer({
+                id: 'sentinel-footprints',
+                name: 'Footprints Sentinel-2',
+                olLayer: sentinelLayer,
+                visible: true,
+                opacity: 1,
+                type: 'sentinel'
+            });
+            setTimeout(() => toast({ description: `${features.length} footprints de Sentinel-2 añadidos al mapa.` }), 0);
+        }
     } catch (error: any) {
         console.error("Error finding Sentinel-2 footprints:", error);
         setTimeout(() => toast({ description: `Error al buscar escenas: ${error.message}` }), 0);
     } finally {
         setIsFindingSentinelFootprints(false);
     }
-  }, [mapRef, toast, setLayers]);
+  }, [mapRef, toast, addLayer, layers]);
 
   const clearSentinel2FootprintsLayer = useCallback(() => {
-    const sentinelLayer = layers.find(l => l.id === 'sentinel-footprints');
+    const sentinelLayer = layers.find(l => 'olLayer' in l && l.id === 'sentinel-footprints');
     if (sentinelLayer) {
         removeLayer(sentinelLayer.id);
     } else {
@@ -1079,47 +1104,42 @@ export const useLayerManager = ({
             return;
         }
 
-        setLayers(prevLayers => {
-            const existingLayer = prevLayers.find(l => l.id === 'landsat-footprints') as VectorMapLayer | undefined;
-            if (existingLayer) {
-                existingLayer.olLayer.getSource()?.clear();
-                existingLayer.olLayer.getSource()?.addFeatures(features);
-                setTimeout(() => toast({ description: `Capa de Landsat actualizada con ${features.length} footprints.` }), 0);
-                return [...prevLayers];
-            } else {
-                const landsatSource = new VectorSource({ features });
-                const landsatLayer = new VectorLayer({
-                    source: landsatSource,
-                    style: new Style({
-                        stroke: new Stroke({ color: 'rgba(255, 255, 0, 1.0)', width: 2 }),
-                        fill: new Fill({ color: 'rgba(255, 255, 0, 0.1)' }),
-                    }),
-                    properties: { id: 'landsat-footprints', name: 'Footprints Landsat', type: 'landsat' }
-                });
-    
-                const newMapLayer = {
-                    id: 'landsat-footprints',
-                    name: 'Footprints Landsat',
-                    olLayer: landsatLayer,
-                    visible: true,
-                    opacity: 1,
-                    type: 'landsat'
-                };
-                mapRef.current?.addLayer(landsatLayer);
-                setTimeout(() => toast({ description: `${features.length} footprints de Landsat añadidos al mapa.` }), 0);
-                return [newMapLayer, ...prevLayers];
-            }
-        });
+        let existingLayer = layers.find(l => 'olLayer' in l && l.id === 'landsat-footprints') as VectorMapLayer | undefined;
+        if (existingLayer) {
+            existingLayer.olLayer.getSource()?.clear();
+            existingLayer.olLayer.getSource()?.addFeatures(features);
+            setTimeout(() => toast({ description: `Capa de Landsat actualizada con ${features.length} footprints.` }), 0);
+        } else {
+            const landsatSource = new VectorSource({ features });
+            const landsatLayer = new VectorLayer({
+                source: landsatSource,
+                style: new Style({
+                    stroke: new Stroke({ color: 'rgba(255, 255, 0, 1.0)', width: 2 }),
+                    fill: new Fill({ color: 'rgba(255, 255, 0, 0.1)' }),
+                }),
+                properties: { id: 'landsat-footprints', name: 'Footprints Landsat', type: 'landsat' }
+            });
+
+            addLayer({
+                id: 'landsat-footprints',
+                name: 'Footprints Landsat',
+                olLayer: landsatLayer,
+                visible: true,
+                opacity: 1,
+                type: 'landsat'
+            });
+            setTimeout(() => toast({ description: `${features.length} footprints de Landsat añadidos al mapa.` }), 0);
+        }
     } catch (error: any) {
         console.error("Error finding Landsat footprints:", error);
         setTimeout(() => toast({ description: `Error al buscar escenas de Landsat: ${error.message}` }), 0);
     } finally {
         setIsFindingLandsatFootprints(false);
     }
-  }, [mapRef, toast, setLayers]);
+  }, [mapRef, toast, addLayer, layers]);
 
   const clearLandsatFootprintsLayer = useCallback(() => {
-    const landsatLayer = layers.find(l => l.id === 'landsat-footprints');
+    const landsatLayer = layers.find(l => 'olLayer' in l && l.id === 'landsat-footprints');
     if (landsatLayer) {
         removeLayer(landsatLayer.id);
     } else {
@@ -1128,7 +1148,7 @@ export const useLayerManager = ({
   }, [layers, removeLayer, toast]);
   
   const updateFeatureAttribute = useCallback((featureId: string, key: string, value: any) => {
-      const layer = layers.find(l => 
+      const layer = layers.flatMap(i => 'layers' in i ? i.layers : i).find(l => 
           l.olLayer instanceof VectorLayer && l.olLayer.getSource()?.getFeatureById(featureId)
       ) as VectorMapLayer | undefined;
   
@@ -1143,7 +1163,7 @@ export const useLayerManager = ({
   }, [layers, toast, updateInspectedFeatureData]);
   
   const addFieldToLayer = useCallback((layerId: string, fieldName: string, defaultValue: any) => {
-    const layer = layers.find(l => l.id === layerId) as VectorMapLayer | undefined;
+    const layer = layers.flatMap(i => 'layers' in i ? i.layers : i).find(l => l.id === layerId) as VectorMapLayer | undefined;
     if (layer) {
         const source = layer.olLayer.getSource();
         source?.getFeatures().forEach(feature => {
@@ -1158,7 +1178,7 @@ export const useLayerManager = ({
   }, [layers, toast, handleShowLayerTable]);
   
   const handleExportWmsAsGeotiff = useCallback(async (layerId: string) => {
-    const layer = layers.find(l => l.id === layerId);
+    const layer = layers.flatMap(i => 'layers' in i ? i.layers : i).find(l => l.id === layerId);
     if (!layer || !mapRef.current) return;
 
     if (layer.type === 'gee') {

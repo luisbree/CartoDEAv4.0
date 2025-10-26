@@ -24,7 +24,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Slider } from "@/components/ui/slider"; 
-import { Eye, EyeOff, Settings2, ZoomIn, Table2, Trash2, Scissors, Percent, GripVertical, CopyPlus, Download, Edit, Palette, Tags, Waypoints, AppWindow, BarChartHorizontal, Target, Image as ImageIcon, Info } from 'lucide-react';
+import { Eye, EyeOff, Settings2, ZoomIn, Table2, Trash2, Scissors, Percent, GripVertical, CopyPlus, Download, Edit, Palette, Tags, Waypoints, AppWindow, BarChartHorizontal, Target, Image as ImageIcon, Info, Check, Dot } from 'lucide-react';
 import type { CategorizedSymbology, GeoTiffStyle, GraduatedSymbology, InteractionToolId, LabelOptions, MapLayer, VectorMapLayer } from '@/lib/types';
 import VectorLayer from 'ol/layer/Vector'; 
 import WebGLTileLayer from 'ol/layer/WebGLTile';
@@ -37,12 +37,13 @@ import CategorizedSymbologyDialog from './CategorizedSymbologyDialog';
 import { useLayerManager } from '@/hooks/layer-manager/useLayerManager';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { RadioGroup, RadioGroupItem } from '../ui/radio-group';
 
 
 interface LayerItemProps {
   layer: MapLayer;
   allLayers: MapLayer[]; // For the "Select by Layer" submenu
-  onToggleVisibility: (layerId: string) => void;
+  onToggleVisibility: (layerId: string, groupId?: string) => void;
   onZoomToExtent: (layerId: string) => void;
   onShowLayerTable: (layerId: string) => void;
   onShowStatistics: (layerId: string) => void;
@@ -83,6 +84,9 @@ interface LayerItemProps {
   onToggleEditing: (tool: InteractionToolId) => void;
   
   isSharedView?: boolean;
+  
+  // Group context
+  groupDisplayMode?: 'single' | 'multiple';
 }
 
 const LayerItem: React.FC<LayerItemProps> = ({
@@ -122,6 +126,7 @@ const LayerItem: React.FC<LayerItemProps> = ({
   activeTool,
   onToggleEditing,
   isSharedView = false,
+  groupDisplayMode,
 }) => {
   const isVectorLayer = layer.olLayer instanceof VectorLayer;
   const isWfsLayer = layer.type === 'wfs';
@@ -265,16 +270,22 @@ const LayerItem: React.FC<LayerItemProps> = ({
       >
         {isDraggable && <GripVertical className="h-4 w-4 text-gray-500 mr-1 flex-shrink-0 cursor-grab" />}
         
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={(e) => { e.stopPropagation(); onToggleVisibility(layer.id); }}
-          className="h-6 w-6 text-white hover:bg-gray-600/80 p-0 mr-2 flex-shrink-0"
-          aria-label={`Alternar visibilidad para ${layer.name}`}
-          title={layer.visible ? "Ocultar capa" : "Mostrar capa"}
-        >
-          {layer.visible ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
-        </Button>
+        {groupDisplayMode === 'single' ? (
+            <RadioGroup value={layer.visible ? layer.id : ''} onValueChange={() => onToggleVisibility(layer.id, layer.groupId)} className="flex items-center">
+                <RadioGroupItem value={layer.id} id={`vis-${layer.id}`} className="h-3.5 w-3.5" />
+            </RadioGroup>
+        ) : (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={(e) => { e.stopPropagation(); onToggleVisibility(layer.id); }}
+              className="h-6 w-6 text-white hover:bg-gray-600/80 p-0 mr-1 flex-shrink-0"
+              aria-label={`Alternar visibilidad para ${layer.name}`}
+              title={layer.visible ? "Ocultar capa" : "Mostrar capa"}
+            >
+              {layer.visible ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+            </Button>
+        )}
 
         {isEditing ? (
           <Input
@@ -284,20 +295,22 @@ const LayerItem: React.FC<LayerItemProps> = ({
               onChange={handleNameChange}
               onBlur={handleNameSubmit}
               onKeyDown={handleKeyDown}
-              className="h-6 text-xs p-1 bg-gray-900/80 border-primary focus-visible:ring-primary/50"
+              className="h-6 text-xs p-1 bg-gray-900/80 border-primary focus-visible:ring-primary/50 ml-1"
               onClick={(e) => e.stopPropagation()} // Prevent list item click handler from firing
             />
         ) : (
-          <span
+          <label
+            htmlFor={`vis-${layer.id}`}
             className={cn(
               "flex-1 cursor-pointer text-xs font-medium truncate min-w-0 select-none",
+              groupDisplayMode === 'single' ? 'ml-2' : '',
               layer.visible ? "text-white" : "text-gray-400"
             )}
             title={layer.name}
             onDoubleClick={handleDoubleClick}
           >
             {layer.name}
-          </span>
+          </label>
         )}
         
         <div className="flex items-center space-x-0.5 flex-shrink-0">
@@ -563,3 +576,4 @@ export default LayerItem;
 
 
     
+

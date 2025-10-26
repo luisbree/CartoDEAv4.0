@@ -4,13 +4,17 @@
 
 import React, { useRef, useState } from 'react';
 import LayerItem from './LayerItem';
-import type { CategorizedSymbology, GeoTiffStyle, GraduatedSymbology, InteractionToolId, LabelOptions, MapLayer } from '@/lib/types';
+import LayerGroupItem from './LayerGroupItem';
+import type { CategorizedSymbology, GeoTiffStyle, GraduatedSymbology, InteractionToolId, LabelOptions, MapLayer, LayerGroup } from '@/lib/types';
 import { Layers } from 'lucide-react';
 import type { StyleOptions } from './StyleEditorDialog';
+import type Feature from 'ol/Feature';
+import type { Geometry } from 'ol/geom';
+
 
 interface LayerListProps {
-  layers: MapLayer[];
-  onToggleVisibility: (layerId: string) => void;
+  layers: (MapLayer | LayerGroup)[]; // The list can contain layers or groups
+  onToggleVisibility: (layerId: string, groupId?: string) => void;
   onZoomToExtent: (layerId: string) => void; 
   onShowLayerTable: (layerId: string) => void;
   onShowStatistics: (layerId: string) => void;
@@ -33,14 +37,23 @@ interface LayerListProps {
   onToggleWmsStyle: (layerId: string) => void;
 
   // Selection props
-  selectedLayerIds: string[];
-  onLayerClick: (index: number, event: React.MouseEvent<HTMLLIElement>) => void;
+  selectedItemIds: string[]; // Can be layer or group IDs
+  onItemClick: (itemId: string, itemType: 'layer' | 'group', event: React.MouseEvent<HTMLLIElement>) => void;
 
   // Editing props
   activeTool: InteractionToolId | null;
   onToggleEditing: (tool: InteractionToolId) => void;
   
   isSharedView?: boolean;
+
+  // Group props
+  onToggleGroupExpanded: (groupId: string) => void;
+  onSetGroupDisplayMode: (groupId: string, mode: 'single' | 'multiple') => void;
+  onUngroup: (groupId: string) => void;
+  onRenameGroup: (groupId: string, newName: string) => void;
+  
+  allLayersForSelection: MapLayer[];
+  selectedFeaturesForSelection: Feature<Geometry>[];
 }
 
 const LayerList: React.FC<LayerListProps> = ({
@@ -66,56 +79,59 @@ const LayerList: React.FC<LayerListProps> = ({
   onApplyCategorizedSymbology,
   onApplyGeoTiffStyle,
   onToggleWmsStyle,
-  selectedLayerIds,
-  onLayerClick,
+  selectedItemIds,
+  onItemClick,
   activeTool,
   onToggleEditing,
   isSharedView = false,
+  onToggleGroupExpanded,
+  onSetGroupDisplayMode,
+  onUngroup,
+  onRenameGroup,
+  allLayersForSelection,
+  selectedFeaturesForSelection,
 }) => {
-  const dragItemIndex = useRef<number | null>(null);
-  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const dragItemId = useRef<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
 
-  const handleDragStart = (e: React.DragEvent<HTMLLIElement>, index: number) => {
-      dragItemIndex.current = index;
+  const handleDragStart = (e: React.DragEvent<HTMLLIElement>, id: string) => {
+      dragItemId.current = id;
       e.dataTransfer.effectAllowed = 'move';
   };
 
-  const handleDragEnter = (e: React.DragEvent<HTMLLIElement>, index: number) => {
+  const handleDragEnter = (e: React.DragEvent<HTMLLIElement>, id: string) => {
       e.preventDefault();
-      setDragOverIndex(index);
+      setDragOverId(id);
   };
   
   const handleDragLeave = (e: React.DragEvent<HTMLLIElement>) => {
       e.preventDefault();
-      setDragOverIndex(null);
+      setDragOverId(null);
   };
   
-  const handleDrop = (e: React.DragEvent<HTMLLIElement>, dropIndex: number) => {
+  const handleDrop = (e: React.DragEvent<HTMLLIElement>, dropId: string) => {
     e.preventDefault();
-    if (dragItemIndex.current === null || !onReorderLayers) return;
+    if (dragItemId.current === null || !onReorderLayers) return;
 
-    const draggedItem = layers[dragItemIndex.current];
-    const dropTargetItem = layers[dropIndex];
-    
-    const isMultiDrag = selectedLayerIds.includes(draggedItem.id);
-    const draggedIds = isMultiDrag ? selectedLayerIds : [draggedItem.id];
+    const isMultiDrag = selectedItemIds.includes(dragItemId.current);
+    const draggedIds = isMultiDrag ? selectedItemIds : [dragItemId.current];
 
-    if (draggedIds.includes(dropTargetItem.id)) {
-        dragItemIndex.current = null;
-        setDragOverIndex(null);
+    if (draggedIds.includes(dropId)) {
+        dragItemId.current = null;
+        setDragOverId(null);
         return;
     }
     
-    onReorderLayers(draggedIds, dropTargetItem.id);
+    onReorderLayers(draggedIds, dropId);
   
-    dragItemIndex.current = null;
-    setDragOverIndex(null);
+    dragItemId.current = null;
+    setDragOverId(null);
   };
   
   const handleDragEnd = (e: React.DragEvent<HTMLLIElement>) => {
       e.preventDefault();
-      dragItemIndex.current = null;
-      setDragOverIndex(null);
+      dragItemId.current = null;
+      setDragOverId(null);
   };
 
   if (layers.length === 0) {
@@ -132,47 +148,100 @@ const LayerList: React.FC<LayerListProps> = ({
 
   return (
     <ul className="space-y-1.5">
-      {layers.map((layer, index) => (
-        <LayerItem
-          key={layer.id}
-          layer={layer}
-          allLayers={layers}
-          onToggleVisibility={onToggleVisibility}
-          onZoomToExtent={onZoomToExtent}
-          onShowLayerTable={onShowLayerTable}
-          onShowStatistics={onShowStatistics}
-          onRemove={onRemoveLayer}
-          onExtractByPolygon={onExtractByPolygon}
-          onExtractBySelection={onExtractBySelection}
-          onSelectByLayer={onSelectByLayer}
-          onExportLayer={onExportLayer}
-          onExportWmsAsGeotiff={onExportWmsAsGeotiff}
-          onRenameLayer={onRenameLayer}
-          onChangeLayerStyle={onChangeLayerStyle}
-          onChangeLayerLabels={onChangeLayerLabels}
-          onApplyGraduatedSymbology={onApplyGraduatedSymbology}
-          onApplyCategorizedSymbology={onApplyCategorizedSymbology}
-          onApplyGeoTiffStyle={onApplyGeoTiffStyle}
-          onToggleWmsStyle={onToggleWmsStyle}
-          isDrawingSourceEmptyOrNotPolygon={isDrawingSourceEmptyOrNotPolygon}
-          isSelectionEmpty={isSelectionEmpty}
-          onSetLayerOpacity={onSetLayerOpacity}
-          isDraggable={!isSharedView} // Dragging is disabled in shared view
-          onDragStart={(e) => handleDragStart(e, index)}
-          onDragEnter={(e) => handleDragEnter(e, index)}
-          onDragLeave={handleDragLeave}
-          onDrop={(e) => handleDrop(e, index)}
-          onDragEnd={handleDragEnd}
-          onDragOver={(e) => e.preventDefault()}
-          isDragging={dragItemIndex.current === index}
-          isDragOver={dragOverIndex === index}
-          isSelected={selectedLayerIds.includes(layer.id)}
-          onClick={(e) => onLayerClick(index, e)}
-          activeTool={activeTool}
-          onToggleEditing={onToggleEditing}
-          isSharedView={isSharedView}
-        />
-      ))}
+      {layers.map((item, index) => {
+        if ('layers' in item) { // It's a LayerGroup
+            return (
+                <LayerGroupItem
+                    key={item.id}
+                    group={item}
+                    allLayers={allLayersForSelection}
+                    onToggleVisibility={onToggleVisibility}
+                    onZoomToExtent={onZoomToExtent}
+                    onShowLayerTable={onShowLayerTable}
+                    onShowStatistics={onShowStatistics}
+                    onRemoveLayer={onRemoveLayer}
+                    onExtractByPolygon={onExtractByPolygon}
+                    onExtractBySelection={onExtractBySelection}
+                    onSelectByLayer={onSelectByLayer}
+                    onExportLayer={onExportLayer}
+                    onExportWmsAsGeotiff={onExportWmsAsGeotiff}
+                    onRenameLayer={onRenameLayer}
+                    onChangeLayerStyle={onChangeLayerStyle}
+                    onChangeLayerLabels={onChangeLayerLabels}
+                    onApplyGraduatedSymbology={onApplyGraduatedSymbology}
+                    onApplyCategorizedSymbology={onApplyCategorizedSymbology}
+                    onApplyGeoTiffStyle={onApplyGeoTiffStyle}
+                    onToggleWmsStyle={onToggleWmsStyle}
+                    isDrawingSourceEmptyOrNotPolygon={isDrawingSourceEmptyOrNotPolygon}
+                    isSelectionEmpty={isSelectionEmpty}
+                    onSetLayerOpacity={onSetLayerOpacity}
+                    onReorderLayers={onReorderLayers}
+                    selectedItemIds={selectedItemIds}
+                    onItemClick={(childId, childType, e) => onItemClick(childId, childType, e)}
+                    activeTool={activeTool}
+                    onToggleEditing={onToggleEditing}
+                    isSharedView={isSharedView}
+                    onToggleGroupExpanded={onToggleGroupExpanded}
+                    onSetGroupDisplayMode={onSetGroupDisplayMode}
+                    onUngroup={onUngroup}
+                    onRenameGroup={onRenameGroup}
+                    selectedFeaturesForSelection={selectedFeaturesForSelection}
+                    // Drag and Drop for the group itself
+                    isDraggable={!isSharedView}
+                    onDragStart={(e) => handleDragStart(e, item.id)}
+                    onDragEnter={(e) => handleDragEnter(e, item.id)}
+                    onDragLeave={handleDragLeave}
+                    onDrop={(e) => handleDrop(e, item.id)}
+                    onDragEnd={handleDragEnd}
+                    onDragOver={(e) => e.preventDefault()}
+                    isDragging={dragItemId.current === item.id}
+                    isDragOver={dragOverId === item.id}
+                />
+            );
+        } else { // It's a MapLayer
+          return (
+            <LayerItem
+              key={item.id}
+              layer={item}
+              allLayers={allLayersForSelection}
+              onToggleVisibility={onToggleVisibility}
+              onZoomToExtent={onZoomToExtent}
+              onShowLayerTable={onShowLayerTable}
+              onShowStatistics={onShowStatistics}
+              onRemove={onRemoveLayer}
+              onExtractByPolygon={onExtractByPolygon}
+              onExtractBySelection={onExtractBySelection}
+              onSelectByLayer={onSelectByLayer}
+              onExportLayer={onExportLayer}
+              onExportWmsAsGeotiff={onExportWmsAsGeotiff}
+              onRenameLayer={onRenameLayer}
+              onChangeLayerStyle={onChangeLayerStyle}
+              onChangeLayerLabels={onChangeLayerLabels}
+              onApplyGraduatedSymbology={onApplyGraduatedSymbology}
+              onApplyCategorizedSymbology={onApplyCategorizedSymbology}
+              onApplyGeoTiffStyle={onApplyGeoTiffStyle}
+              onToggleWmsStyle={onToggleWmsStyle}
+              isDrawingSourceEmptyOrNotPolygon={isDrawingSourceEmptyOrNotPolygon}
+              isSelectionEmpty={isSelectionEmpty}
+              onSetLayerOpacity={onSetLayerOpacity}
+              isDraggable={!isSharedView}
+              onDragStart={(e) => handleDragStart(e, item.id)}
+              onDragEnter={(e) => handleDragEnter(e, item.id)}
+              onDragLeave={handleDragLeave}
+              onDrop={(e) => handleDrop(e, item.id)}
+              onDragEnd={handleDragEnd}
+              onDragOver={(e) => e.preventDefault()}
+              isDragging={dragItemId.current === item.id}
+              isDragOver={dragOverId === item.id}
+              isSelected={selectedItemIds.includes(item.id)}
+              onClick={(e) => onItemClick(item.id, 'layer', e)}
+              activeTool={activeTool}
+              onToggleEditing={onToggleEditing}
+              isSharedView={isSharedView}
+            />
+          );
+        }
+      })}
     </ul>
   );
 };
