@@ -20,12 +20,14 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
-import { Edit, GripVertical, Layers, Trash2, Ungroup, Settings2 } from 'lucide-react';
+import { Edit, GripVertical, Layers, Trash2, Ungroup, Settings2, Play, Pause, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { MapLayer, LayerGroup, LabelOptions, GraduatedSymbology, CategorizedSymbology, GeoTiffStyle, InteractionToolId } from '@/lib/types';
 import type { StyleOptions } from './StyleEditorDialog';
 import type Feature from 'ol/Feature';
 import type { Geometry } from 'ol/geom';
+import { Slider } from '../ui/slider';
+import { Label } from '../ui/label';
 
 
 interface LayerGroupItemProps {
@@ -61,6 +63,8 @@ interface LayerGroupItemProps {
     onSetGroupDisplayMode: (groupId: string, mode: 'single' | 'multiple') => void;
     onUngroup: (groupId: string) => void;
     onRenameGroup: (groupId: string, newName: string) => void;
+    onToggleGroupPlayback: (groupId: string) => void;
+    onSetGroupPlaySpeed: (groupId: string, speed: number) => void;
     selectedFeaturesForSelection: Feature<Geometry>[];
     isDraggable: boolean;
     onDragStart?: ((e: React.DragEvent<HTMLLIElement>) => void) | undefined;
@@ -92,6 +96,8 @@ const LayerGroupItem: React.FC<LayerGroupItemProps> = ({
     onSetGroupDisplayMode,
     onUngroup,
     onRenameGroup,
+    onToggleGroupPlayback,
+    onSetGroupPlaySpeed,
     ...layerItemProps
 }) => {
 
@@ -164,6 +170,36 @@ const LayerGroupItem: React.FC<LayerGroupItemProps> = ({
                             <DropdownMenuRadioItem value="multiple" className="text-xs">Múltiple (Checkboxes)</DropdownMenuRadioItem>
                             <DropdownMenuRadioItem value="single" className="text-xs">Única (Radio Buttons)</DropdownMenuRadioItem>
                         </DropdownMenuRadioGroup>
+                         {group.displayMode === 'single' && (
+                            <>
+                                <DropdownMenuSeparator className="bg-gray-500/50" />
+                                <DropdownMenuLabel className="text-xs px-2 py-1">Reproductor</DropdownMenuLabel>
+                                <div className="px-2 py-1 space-y-2">
+                                    <Button
+                                        onClick={() => onToggleGroupPlayback(group.id)}
+                                        variant="outline"
+                                        className="w-full h-8 text-xs bg-black/20 hover:bg-black/40"
+                                    >
+                                        {group.isPlaying ? <Pause className="mr-2 h-4 w-4" /> : <Play className="mr-2 h-4 w-4" />}
+                                        {group.isPlaying ? 'Pausar' : 'Reproducir'}
+                                    </Button>
+                                    <div className="space-y-1 pt-1">
+                                        <Label htmlFor={`speed-slider-${group.id}`} className="text-xs flex items-center gap-2">
+                                            <Clock className="h-3 w-3" />
+                                            Velocidad ({group.playSpeed || 1000} ms)
+                                        </Label>
+                                        <Slider
+                                            id={`speed-slider-${group.id}`}
+                                            min={100}
+                                            max={5000}
+                                            step={100}
+                                            value={[group.playSpeed || 1000]}
+                                            onValueChange={(value) => onSetGroupPlaySpeed(group.id, value[0])}
+                                        />
+                                    </div>
+                                </div>
+                            </>
+                         )}
                         <DropdownMenuSeparator className="bg-gray-500/50" />
                         <DropdownMenuItem onSelect={() => onUngroup(group.id)} className="text-xs">
                            <Ungroup className="mr-2 h-3.5 w-3.5" /> Desagrupar

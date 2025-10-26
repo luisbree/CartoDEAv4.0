@@ -67,6 +67,8 @@ export interface LayerGroup {
   layers: MapLayer[];
   isExpanded: boolean;
   displayMode: 'single' | 'multiple'; // 'single' for radio, 'multiple' for checkbox
+  isPlaying?: boolean; // Is the player active for this group?
+  playSpeed?: number; // Delay in milliseconds between frames
 }
 
 

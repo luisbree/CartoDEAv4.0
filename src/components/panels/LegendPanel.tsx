@@ -67,6 +67,8 @@ interface LegendPanelProps {
   onSetGroupDisplayMode: (groupId: string, mode: 'single' | 'multiple') => void;
   onUngroup: (groupId: string) => void;
   onRenameGroup: (groupId: string, newName: string) => void;
+  onToggleGroupPlayback: (groupId: string) => void;
+  onSetGroupPlaySpeed: (groupId: string, speed: number) => void;
 
   onAddLayer: (layer: MapLayer) => void;
 
@@ -102,7 +104,7 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
   panelRef, isCollapsed, onToggleCollapse, onClosePanel, onMouseDownHeader,
   layers, onToggleLayerVisibility, onRemoveLayer, onRemoveLayers, onZoomToLayerExtent, onShowLayerTable, onShowStatistics,
   onExtractByPolygon, onExtractBySelection, onSelectByLayer, onExportLayer, onExportWmsAsGeotiff, isDrawingSourceEmptyOrNotPolygon, isSelectionEmpty, onSetLayerOpacity, onReorderLayers, onRenameLayer,
-  onChangeLayerStyle, onChangeLayerLabels, onApplyGraduatedSymbology, onApplyCategorizedSymbology, onApplyGeoTiffStyle, onToggleWmsStyle, onGroupLayers, onToggleGroupExpanded, onSetGroupDisplayMode, onUngroup, onRenameGroup,
+  onChangeLayerStyle, onChangeLayerLabels, onApplyGraduatedSymbology, onApplyCategorizedSymbology, onApplyGeoTiffStyle, onToggleWmsStyle, onGroupLayers, onToggleGroupExpanded, onSetGroupDisplayMode, onUngroup, onRenameGroup, onToggleGroupPlayback, onSetGroupPlaySpeed,
   onAddLayer, 
   activeTool, onSetActiveTool, onClearSelection,
   discoveredDeasLayers, onAddDeasLayer, isFetchingDeasLayers, onReloadDeasLayers,
@@ -341,6 +343,8 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
                             onSetGroupDisplayMode={onSetGroupDisplayMode}
                             onUngroup={onUngroup}
                             onRenameGroup={onRenameGroup}
+                            onToggleGroupPlayback={onToggleGroupPlayback}
+                            onSetGroupPlaySpeed={onSetGroupPlaySpeed}
                             allLayersForSelection={allLayersForSelection}
                             selectedFeaturesForSelection={selectedFeaturesForSelection}
                         />
