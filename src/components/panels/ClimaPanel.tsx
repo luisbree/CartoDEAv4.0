@@ -71,6 +71,7 @@ const ClimaPanel: React.FC<ClimaPanelProps> = ({
                     const goesLayer = new TileLayer({
                         source: new XYZ({ url: result.tileUrl, crossOrigin: 'anonymous' }),
                         properties: { id: layerId, name: layerName, type: 'gee', geeParams: { bandCombination: 'GOES_CLOUDTOP', metadata: result.metadata } },
+                        opacity: 0.6,
                     });
                     onAddLayer({ id: layerId, name: layerName, olLayer: goesLayer, visible: true, opacity: 0.6, type: 'gee' }, true);
                 } else {
@@ -90,6 +91,7 @@ const ClimaPanel: React.FC<ClimaPanelProps> = ({
                         const goesLayer = new TileLayer({
                             source: new XYZ({ url: result.tileUrl, crossOrigin: 'anonymous' }),
                             visible: isVisible,
+                            opacity: 0.6,
                             properties: { id: layerId, name: layerName, type: 'gee', geeParams: { bandCombination: 'GOES_CLOUDTOP', metadata: result.metadata } },
                         });
                         
