@@ -69,24 +69,21 @@ function hexToRgb(hex: string): [number, number, number] {
         : [0, 0, 0];
 }
 
-function generateColorRamp(startHex: string, endHex: string): (string | number)[] {
-    const startRgb = hexToRgb(startHex);
-    const endRgb = hexToRgb(endHex);
-    
-    // Format for ol/style/expressions: ['interpolate', ['linear'], ['band', 1], min, [r,g,b], max, [r,g,b]]
-    // We just need the color arrays
-    return [
-      ...startRgb, 1,
-      ...endRgb, 1,
-    ];
-}
+const SMN_CLOUDTOP_PALETTE = [
+    '#ffffff', '#e0e0e0', '#c0c0c0', '#a0a0a0', '#808080',
+    '#ff0000', '#ff4500', '#ffa500', '#ffff00',
+    '#adff2f', '#00ff00',
+    '#00ffff', '#1e90ff', '#0000ff',
+    '#dcdcdc', '#f5f5f5', '#ffffff'
+];
 
-const COLOR_RAMP_DEFINITIONS: Record<Exclude<any, 'custom'>, { start: string, end: string }> = {
+const COLOR_RAMP_DEFINITIONS: Record<Exclude<any, 'custom'>, { start: string, end: string, isFullPalette?: boolean }> = {
   reds: { start: '#fee5d9', end: '#a50f15' },
   blues: { start: '#eff3ff', end: '#08519c' },
   greens: { start: '#edf8e9', end: '#006d2c' },
   viridis: { start: '#440154', end: '#fde725' },
   pinks: { start: '#ffcce1', end: '#c70063'},
+  'smn-cloudtop': { start: 'smn-cloudtop', end: '', isFullPalette: true },
 };
 
 
@@ -786,30 +783,56 @@ export const useLayerManager = ({
     
     const olLayer = layer.olLayer as WebGLTileLayer;
     
-    let startColor = '#ffffff', endColor = '#000000';
-    if (style.colorRamp === 'custom' && style.customColors) {
-        startColor = style.customColors.start;
-        endColor = style.customColors.end;
-    } else if (style.colorRamp !== 'custom') {
-        startColor = COLOR_RAMP_DEFINITIONS[style.colorRamp].start;
-        endColor = COLOR_RAMP_DEFINITIONS[style.colorRamp].end;
+    let colorExpression: (string | number | (string | number)[])[] = [];
+
+    if (style.colorRamp === 'smn-cloudtop') {
+        const steps = style.breaks.length + 1;
+        const colors = SMN_CLOUDTOP_PALETTE;
+        const colorStops: (string | number | (string | number)[])[] = [];
+
+        // Add a transparent color for values below the min
+        colorStops.push(['<', ['band', style.band], style.min], [0, 0, 0, 0]);
+        
+        for(let i=0; i < style.breaks.length; i++) {
+            const stopValue = style.breaks[i];
+            const color = hexToRgb(colors[Math.min(i, colors.length - 1)]);
+            colorStops.push(['<=', ['band', style.band], stopValue], color);
+        }
+        
+        // Add the final color for values above the last break
+        colorStops.push(hexToRgb(colors[Math.min(style.breaks.length, colors.length - 1)]));
+
+        colorExpression = ['case', ...colorStops];
+
+    } else {
+        let startColor = '#ffffff', endColor = '#000000';
+        if (style.colorRamp === 'custom' && style.customColors) {
+            startColor = style.customColors.start;
+            endColor = style.customColors.end;
+        } else if (style.colorRamp !== 'custom') {
+            const rampDef = COLOR_RAMP_DEFINITIONS[style.colorRamp];
+            if (rampDef) {
+                startColor = rampDef.start;
+                endColor = rampDef.end;
+            }
+        }
+        
+        colorExpression = [
+            'case',
+            ['==', ['band', style.band], 0], // Check for nodata value (assuming it's 0)
+            [0, 0, 0, 0], // Output transparent if nodata
+            [   // Else, apply the color ramp
+                'interpolate',
+                ['linear'],
+                ['band', style.band],
+                style.min,
+                hexToRgb(startColor),
+                style.max,
+                hexToRgb(endColor),
+            ]
+        ];
     }
     
-    const colorExpression = [
-        'case',
-        ['==', ['band', style.band], 0], // Check for nodata value (assuming it's 0)
-        [0, 0, 0, 0], // Output transparent if nodata
-        [   // Else, apply the color ramp
-            'interpolate',
-            ['linear'],
-            ['band', style.band],
-            style.min,
-            hexToRgb(startColor),
-            style.max,
-            hexToRgb(endColor),
-        ]
-    ];
-
     olLayer.setStyle({
         color: colorExpression,
     });
@@ -1504,4 +1527,5 @@ const groupLayers = useCallback((layerIds: string[], groupName: string) => {
     
 
     
+
 
