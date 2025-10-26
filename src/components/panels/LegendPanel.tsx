@@ -8,8 +8,8 @@ import LayerList from '@/components/layer-manager/LayerList';
 import FileUploadControl from '@/components/layer-manager/FileUploadControl';
 import FeatureInteractionToolbar from '@/components/feature-inspection/FeatureInteractionToolbar';
 import { Separator } from '@/components/ui/separator';
-import type { MapLayer, GeoServerDiscoveredLayer, LabelOptions, GraduatedSymbology, CategorizedSymbology, VectorMapLayer, GeoTiffStyle } from '@/lib/types';
-import { ListTree, Trash2, Database, Search, X as ClearIcon, RefreshCw, Loader2, Undo2, Target } from 'lucide-react'; 
+import type { MapLayer, GeoServerDiscoveredLayer, LabelOptions, GraduatedSymbology, CategorizedSymbology, VectorMapLayer, GeoTiffStyle, LayerGroup } from '@/lib/types';
+import { ListTree, Trash2, Database, Search, X as ClearIcon, RefreshCw, Loader2, Undo2, Target, Group } from 'lucide-react'; 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -39,8 +39,8 @@ interface LegendPanelProps {
   onClosePanel: () => void;
   onMouseDownHeader: (e: React.MouseEvent<HTMLDivElement>) => void;
 
-  layers: MapLayer[];
-  onToggleLayerVisibility: (layerId: string) => void;
+  layers: (MapLayer | LayerGroup)[];
+  onToggleLayerVisibility: (layerId: string, groupId?: string) => void;
   onRemoveLayer: (layerId: string) => void;
   onRemoveLayers: (layerIds: string[]) => void;
   onZoomToLayerExtent: (layerId: string) => void;
@@ -62,6 +62,11 @@ interface LegendPanelProps {
   onApplyCategorizedSymbology: (layerId: string, symbology: CategorizedSymbology) => void;
   onApplyGeoTiffStyle: (layerId: string, style: GeoTiffStyle) => void;
   onToggleWmsStyle: (layerId: string) => void;
+  onGroupLayers: (layerIds: string[], groupName: string) => void;
+  onToggleGroupExpanded: (groupId: string) => void;
+  onSetGroupDisplayMode: (groupId: string, mode: 'single' | 'multiple') => void;
+  onUngroup: (groupId: string) => void;
+  onRenameGroup: (groupId: string, newName: string) => void;
 
   onAddLayer: (layer: MapLayer) => void;
 
@@ -97,7 +102,7 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
   panelRef, isCollapsed, onToggleCollapse, onClosePanel, onMouseDownHeader,
   layers, onToggleLayerVisibility, onRemoveLayer, onRemoveLayers, onZoomToLayerExtent, onShowLayerTable, onShowStatistics,
   onExtractByPolygon, onExtractBySelection, onSelectByLayer, onExportLayer, onExportWmsAsGeotiff, isDrawingSourceEmptyOrNotPolygon, isSelectionEmpty, onSetLayerOpacity, onReorderLayers, onRenameLayer,
-  onChangeLayerStyle, onChangeLayerLabels, onApplyGraduatedSymbology, onApplyCategorizedSymbology, onApplyGeoTiffStyle, onToggleWmsStyle,
+  onChangeLayerStyle, onChangeLayerLabels, onApplyGraduatedSymbology, onApplyCategorizedSymbology, onApplyGeoTiffStyle, onToggleWmsStyle, onGroupLayers, onToggleGroupExpanded, onSetGroupDisplayMode, onUngroup, onRenameGroup,
   onAddLayer, 
   activeTool, onSetActiveTool, onClearSelection,
   discoveredDeasLayers, onAddDeasLayer, isFetchingDeasLayers, onReloadDeasLayers,
@@ -106,9 +111,14 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
   isSharedView,
   style,
 }) => {
-  const [selectedLayerIds, setSelectedLayerIds] = useState<string[]>([]);
+  const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
   const [lastClickedIndex, setLastClickedIndex] = useState<number | null>(null);
   const [deasSearchTerm, setDeasSearchTerm] = useState('');
+  
+  const allLayersForSelection = useMemo(() => {
+    return layers.flatMap(item => 'layers' in item ? item.layers : item);
+  }, [layers]);
+
 
   const hierarchicalDeasLayers = useMemo(() => {
     const lowercasedFilter = deasSearchTerm.toLowerCase();
@@ -154,37 +164,48 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
   }, [discoveredDeasLayers, deasSearchTerm]);
 
 
-  const handleLayerClick = (clickedIndex: number, event: React.MouseEvent<HTMLLIElement>) => {
-    const clickedLayerId = layers[clickedIndex].id;
-
+  const handleItemClick = (clickedId: string, itemType: 'layer' | 'group', event: React.MouseEvent<HTMLLIElement>) => {
+    const clickedIndex = layers.findIndex(l => l.id === clickedId);
+    
     if (event.ctrlKey || event.metaKey) { // Ctrl/Cmd click
-      setSelectedLayerIds(prev =>
-        prev.includes(clickedLayerId)
-          ? prev.filter(id => id !== clickedLayerId) // Deselect if already selected
-          : [...prev, clickedLayerId] // Select if not selected
+      setSelectedItemIds(prev =>
+        prev.includes(clickedId)
+          ? prev.filter(id => id !== clickedId) // Deselect if already selected
+          : [...prev, clickedId] // Select if not selected
       );
     } else if (event.shiftKey && lastClickedIndex !== null) { // Shift click
       const start = Math.min(lastClickedIndex, clickedIndex);
       const end = Math.max(lastClickedIndex, clickedIndex);
       const rangeIds = layers.slice(start, end + 1).map(l => l.id);
-      setSelectedLayerIds(rangeIds);
+      setSelectedItemIds(rangeIds);
     } else { // Normal click
-      setSelectedLayerIds([clickedLayerId]);
+      setSelectedItemIds([clickedId]);
     }
     setLastClickedIndex(clickedIndex);
   };
   
   const handleDeleteSelected = () => {
-    if (selectedLayerIds.length > 0) {
-      onRemoveLayers(selectedLayerIds);
-      setSelectedLayerIds([]);
+    if (selectedItemIds.length > 0) {
+      onRemoveLayers(selectedItemIds);
+      setSelectedItemIds([]);
       setLastClickedIndex(null);
     }
   };
 
-  const clearLayerSelection = () => {
-    setSelectedLayerIds([]);
+  const handleGroupSelected = () => {
+    const layerIdsToGroup = selectedItemIds.filter(id => layers.find(l => l.id === id && !('layers' in l)));
+    if (layerIdsToGroup.length > 1) {
+        onGroupLayers(layerIdsToGroup, "Nuevo Grupo");
+        setSelectedItemIds([]);
+        setLastClickedIndex(null);
+    }
+  };
+
+
+  const handleClearSelection = () => {
+    setSelectedItemIds([]);
     setLastClickedIndex(null);
+    onClearSelection(); // This clears the feature selection on the map
   };
 
   const handleToggleEditing = (tool: InteractionToolId) => {
@@ -215,6 +236,25 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
             <div className="flex items-center gap-1 p-1 bg-white/5 rounded-md"> 
               <FileUploadControl onAddLayer={onAddLayer} uniqueIdPrefix="legendpanel-upload" />
               <TooltipProvider delayDuration={300}>
+                   <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-8 w-8 bg-black/20 hover:bg-white/10 border border-white/30 text-white/90 disabled:opacity-50 disabled:bg-black/20 disabled:text-white/50"
+                            onClick={handleGroupSelected}
+                            disabled={selectedItemIds.filter(id => !layers.find(l => l.id === id && 'layers' in l)).length < 2}
+                            aria-label="Agrupar capas seleccionadas"
+                          >
+                            <Group className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TooltipTrigger>
+                       <TooltipContent side="bottom" className="bg-gray-700 text-white border-gray-600">
+                        <p className="text-xs">Agrupar Seleccionadas</p>
+                      </TooltipContent>
+                  </Tooltip>
                   <Tooltip>
                       <TooltipTrigger asChild>
                         <div> {/* Wrapper for disabled button */}
@@ -242,7 +282,7 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
                           size="icon"
                           className="h-8 w-8 bg-red-700/30 hover:bg-red-600/50 border border-red-500/50 text-white/90 disabled:opacity-50 disabled:bg-black/20 disabled:text-white/90 disabled:border-white/30"
                           onClick={handleDeleteSelected}
-                          disabled={selectedLayerIds.length === 0}
+                          disabled={selectedItemIds.length === 0}
                           aria-label="Eliminar capas seleccionadas"
                         >
                           <Trash2 className="h-4 w-4" />
@@ -257,7 +297,7 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
               <FeatureInteractionToolbar
                 activeTool={activeTool}
                 onSetActiveTool={onSetActiveTool}
-                onClearSelection={onClearSelection}
+                onClearSelection={handleClearSelection}
               />
             </div>
           </div>
@@ -292,11 +332,17 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
                             isSelectionEmpty={isSelectionEmpty}
                             onSetLayerOpacity={onSetLayerOpacity}
                             onReorderLayers={onReorderLayers}
-                            selectedLayerIds={selectedLayerIds}
-                            onLayerClick={handleLayerClick}
+                            selectedItemIds={selectedItemIds}
+                            onItemClick={handleItemClick}
                             activeTool={activeTool}
                             onToggleEditing={handleToggleEditing}
                             isSharedView={isSharedView}
+                            onToggleGroupExpanded={onToggleGroupExpanded}
+                            onSetGroupDisplayMode={onSetGroupDisplayMode}
+                            onUngroup={onUngroup}
+                            onRenameGroup={onRenameGroup}
+                            allLayersForSelection={allLayersForSelection}
+                            selectedFeaturesForSelection={selectedFeaturesForSelection}
                         />
                     </div>
                 </ScrollArea>
