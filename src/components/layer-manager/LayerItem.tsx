@@ -15,7 +15,19 @@ import {
   ContextMenuSubContent,
   ContextMenuSubTrigger, 
   ContextMenuCheckboxItem,
+  ContextMenuPortal,
 } from "@/components/ui/context-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import {
   Tooltip,
   TooltipContent,
@@ -37,105 +49,6 @@ import { useLayerManager } from '@/hooks/layer-manager/useLayerManager';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { RadioGroup, RadioGroupItem } from '../ui/radio-group';
-
-interface LayerItemContentProps {
-  layer: MapLayer;
-  isEditing: boolean;
-  editingName: string;
-  isDraggable: boolean;
-  groupDisplayMode?: 'single' | 'multiple';
-  onToggleVisibility: (layerId: string, groupId?: string) => void;
-  onNameChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  onNameSubmit: () => void;
-  onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => void;
-  onDoubleClick: () => void;
-  inputRef: React.RefObject<HTMLInputElement>;
-}
-
-const LayerItemContent: React.FC<LayerItemContentProps> = ({
-    layer, isEditing, editingName, isDraggable, groupDisplayMode, 
-    onToggleVisibility, onNameChange, onNameSubmit, onKeyDown, onDoubleClick, inputRef
-}) => {
-    
-    const GoesMetadataTooltip = () => {
-        const isGoesLayer = (layer.type === 'geotiff' || layer.type === 'gee') && layer.olLayer.get('geeParams')?.bandCombination === 'GOES_CLOUDTOP';
-        const metadata = layer.olLayer.get('geeParams')?.metadata;
-        if (!isGoesLayer || !metadata) return null;
-
-        const timestamp = metadata.timestamp ? format(new Date(metadata.timestamp), "dd/MM/yyyy HH:mm:ss 'UTC'", { locale: es }) : 'N/D';
-        const satellite = metadata.satellite || 'N/D';
-        const sceneId = metadata.scene_id || 'N/D';
-
-        return (
-            <Tooltip>
-                <TooltipTrigger asChild>
-                    <Info className="h-3 w-3 text-gray-400 hover:text-white ml-2 flex-shrink-0" />
-                </TooltipTrigger>
-                <TooltipContent side="right" className="bg-gray-700 text-white border-gray-600 text-xs">
-                    <div className="space-y-1">
-                        <p><strong>Fecha:</strong> {timestamp}</p>
-                        <p><strong>Satélite:</strong> {satellite}</p>
-                        <p><strong>ID Escena:</strong> <span className="break-all">{sceneId}</span></p>
-                    </div>
-                </TooltipContent>
-            </Tooltip>
-        );
-    };
-
-    return (
-        <div className="flex items-center w-full">
-            {isDraggable && <GripVertical className="h-4 w-4 text-gray-500 mr-1 flex-shrink-0 cursor-grab" />}
-                
-            {groupDisplayMode === 'single' ? (
-                <RadioGroup value={layer.visible ? layer.id : ''} onValueChange={() => onToggleVisibility(layer.id, layer.groupId)} className="flex items-center">
-                    <RadioGroupItem value={layer.id} id={`vis-${layer.id}`} className="h-3.5 w-3.5" />
-                </RadioGroup>
-            ) : (
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={(e) => { e.stopPropagation(); onToggleVisibility(layer.id); }}
-                    className="h-6 w-6 text-white hover:bg-gray-600/80 p-0 mr-1 flex-shrink-0"
-                    aria-label={`Alternar visibilidad para ${layer.name}`}
-                    title={layer.visible ? "Ocultar capa" : "Mostrar capa"}
-                >
-                    {layer.visible ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
-                </Button>
-            )}
-
-            {isEditing ? (
-                <Input
-                    ref={inputRef}
-                    type="text"
-                    value={editingName}
-                    onChange={onNameChange}
-                    onBlur={onNameSubmit}
-                    onKeyDown={onKeyDown}
-                    className="h-6 text-xs p-1 bg-gray-900/80 border-primary focus-visible:ring-primary/50 ml-1"
-                    onClick={(e) => e.stopPropagation()}
-                />
-            ) : (
-                <label
-                    htmlFor={`vis-${layer.id}`}
-                    className={cn(
-                        "flex-1 cursor-pointer text-xs font-medium truncate min-w-0 select-none",
-                        groupDisplayMode === 'single' ? 'ml-2' : '',
-                        layer.visible ? "text-white" : "text-gray-400"
-                    )}
-                    title={layer.name}
-                    onDoubleClick={onDoubleClick}
-                >
-                    {layer.name}
-                </label>
-            )}
-            
-            <div className="flex items-center space-x-0.5 flex-shrink-0">
-                <GoesMetadataTooltip />
-            </div>
-        </div>
-    );
-};
-
 
 interface LayerItemProps {
   layer: MapLayer;
@@ -200,53 +113,26 @@ const LayerItem: React.FC<LayerItemProps> = ({
 }) => {
   const isVectorLayer = layer.olLayer instanceof VectorLayer;
 
-  const [isEditing, setIsEditing] = useState(false);
+  const [isRenameDialogOpen, setIsRenameDialogOpen] = useState(false);
   const [editingName, setEditingName] = useState(layer.name);
+  
   const [isStyleEditorOpen, setIsStyleEditorOpen] = useState(false);
   const [isLabelEditorOpen, setIsLabelEditorOpen] = useState(false);
   const [isGraduatedEditorOpen, setIsGraduatedEditorOpen] = useState(false);
   const [isCategorizedEditorOpen, setIsCategorizedEditorOpen] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-  
-  useEffect(() => {
-    if (isEditing) {
-      setTimeout(() => {
-        if (inputRef.current) {
-          inputRef.current.focus();
-          inputRef.current.select();
-        }
-      }, 0);
-    }
-  }, [isEditing]);
-  
-  const handleDoubleClick = () => {
-    if (props.isSharedView) return;
-    setIsEditing(true);
-  };
-  
-  const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setEditingName(e.target.value);
-  };
 
-  const handleNameSubmit = () => {
+  useEffect(() => {
+    // Reset editing name when dialog opens
+    if (isRenameDialogOpen) {
+      setEditingName(layer.name);
+    }
+  }, [isRenameDialogOpen, layer.name]);
+
+  const handleRenameSubmit = () => {
     if (editingName.trim() && editingName.trim() !== layer.name) {
       onRenameLayer(layer.id, editingName.trim());
     }
-    setIsEditing(false);
-  };
-  
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      handleNameSubmit();
-    } else if (e.key === 'Escape') {
-      setEditingName(layer.name);
-      setIsEditing(false);
-    }
-  };
-
-  const handleRenameSelect = (e: Event) => {
-    e.preventDefault();
-    setIsEditing(true);
+    setIsRenameDialogOpen(false);
   };
 
   const handleStyleChange = (styleOptions: StyleOptions) => {
@@ -273,6 +159,31 @@ const LayerItem: React.FC<LayerItemProps> = ({
     setIsCategorizedEditorOpen(false);
   };
   
+  const GoesMetadataTooltip = () => {
+    const isGoesLayer = (layer.type === 'geotiff' || layer.type === 'gee') && layer.olLayer.get('geeParams')?.bandCombination === 'GOES_CLOUDTOP';
+    const metadata = layer.olLayer.get('geeParams')?.metadata;
+    if (!isGoesLayer || !metadata) return null;
+
+    const timestamp = metadata.timestamp ? format(new Date(metadata.timestamp), "dd/MM/yyyy HH:mm:ss 'UTC'", { locale: es }) : 'N/D';
+    const satellite = metadata.satellite || 'N/D';
+    const sceneId = metadata.scene_id || 'N/D';
+
+    return (
+        <Tooltip>
+            <TooltipTrigger asChild>
+                <Info className="h-3 w-3 text-gray-400 hover:text-white ml-2 flex-shrink-0" />
+            </TooltipTrigger>
+            <TooltipContent side="right" className="bg-gray-700 text-white border-gray-600 text-xs">
+                <div className="space-y-1">
+                    <p><strong>Fecha:</strong> {timestamp}</p>
+                    <p><strong>Satélite:</strong> {satellite}</p>
+                    <p><strong>ID Escena:</strong> <span className="break-all">{sceneId}</span></p>
+                </div>
+            </TooltipContent>
+        </Tooltip>
+    );
+  };
+
   return (
     <>
     <TooltipProvider>
@@ -296,21 +207,45 @@ const LayerItem: React.FC<LayerItemProps> = ({
             onDrop={onDrop}
             onClick={onClick}
           >
-            <LayerItemContent
-                layer={layer}
-                isEditing={isEditing}
-                editingName={editingName}
-                isDraggable={isDraggable}
-                groupDisplayMode={props.groupDisplayMode}
-                onToggleVisibility={props.onToggleVisibility}
-                onNameChange={handleNameChange}
-                onNameSubmit={handleNameSubmit}
-                onKeyDown={handleKeyDown}
-                onDoubleClick={handleDoubleClick}
-                inputRef={inputRef}
-            />
+            <div className="flex items-center w-full">
+                {isDraggable && <GripVertical className="h-4 w-4 text-gray-500 mr-1 flex-shrink-0 cursor-grab" />}
+                    
+                {props.groupDisplayMode === 'single' ? (
+                    <RadioGroup value={layer.visible ? layer.id : ''} onValueChange={() => props.onToggleVisibility(layer.id, layer.groupId)} className="flex items-center">
+                        <RadioGroupItem value={layer.id} id={`vis-${layer.id}`} className="h-3.5 w-3.5" />
+                    </RadioGroup>
+                ) : (
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={(e) => { e.stopPropagation(); props.onToggleVisibility(layer.id); }}
+                        className="h-6 w-6 text-white hover:bg-gray-600/80 p-0 mr-1 flex-shrink-0"
+                        aria-label={`Alternar visibilidad para ${layer.name}`}
+                        title={layer.visible ? "Ocultar capa" : "Mostrar capa"}
+                    >
+                        {layer.visible ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+                    </Button>
+                )}
+
+                <label
+                    htmlFor={`vis-${layer.id}`}
+                    className={cn(
+                        "flex-1 cursor-pointer text-xs font-medium truncate min-w-0 select-none",
+                        props.groupDisplayMode === 'single' ? 'ml-2' : '',
+                        layer.visible ? "text-white" : "text-gray-400"
+                    )}
+                    title={layer.name}
+                >
+                    {layer.name}
+                </label>
+                
+                <div className="flex items-center space-x-0.5 flex-shrink-0">
+                    <GoesMetadataTooltip />
+                </div>
+            </div>
           </li>
         </ContextMenuTrigger>
+        <ContextMenuPortal>
         <ContextMenuContent onOpenAutoFocus={(e) => e.preventDefault()} side="right" align="start" className="bg-gray-700 text-white border-gray-600 w-56">
           <ContextMenuItem
             className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer"
@@ -322,13 +257,35 @@ const LayerItem: React.FC<LayerItemProps> = ({
         
         {!props.isSharedView ? (
           <>
-            <ContextMenuItem
-              className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer"
-              onSelect={handleRenameSelect}
-            >
-              <Edit className="mr-2 h-3.5 w-3.5" />
-              Renombrar Capa
-            </ContextMenuItem>
+            <AlertDialog open={isRenameDialogOpen} onOpenChange={setIsRenameDialogOpen}>
+              <AlertDialogTrigger asChild>
+                <ContextMenuItem
+                  className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer"
+                  onSelect={(e) => e.preventDefault()}
+                >
+                  <Edit className="mr-2 h-3.5 w-3.5" />
+                  Renombrar Capa
+                </ContextMenuItem>
+              </AlertDialogTrigger>
+              <AlertDialogContent onOpenAutoFocus={(e) => e.preventDefault()}>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Renombrar Capa</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Ingrese el nuevo nombre para la capa "{layer.name}".
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <Input
+                  value={editingName}
+                  onChange={(e) => setEditingName(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleRenameSubmit()}
+                  autoFocus
+                />
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleRenameSubmit}>Guardar</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
     
             {isVectorLayer && (
               <ContextMenuItem
@@ -348,7 +305,7 @@ const LayerItem: React.FC<LayerItemProps> = ({
                     <Palette className="mr-2 h-3.5 w-3.5" />
                     <span>Simbología</span>
                 </ContextMenuSubTrigger>
-                {(isVectorLayer || layer.type === 'geotiff' || layer.type === 'gee') && (
+                <ContextMenuPortal>
                   <ContextMenuSubContent className="bg-gray-700 text-white border-gray-600">
                     {isVectorLayer && (
                       <ContextMenuItem onSelect={(e) => { e.preventDefault(); setIsStyleEditorOpen(true); }} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">
@@ -360,9 +317,11 @@ const LayerItem: React.FC<LayerItemProps> = ({
                           <AppWindow className="mr-2 h-3.5 w-3.5" /> Por Categorías
                         </ContextMenuItem>
                     )}
-                    <ContextMenuItem onSelect={(e) => { e.preventDefault(); setIsGraduatedEditorOpen(true); }} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">
-                      <Waypoints className="mr-2 h-3.5 w-3.5" /> Graduada
-                    </ContextMenuItem>
+                    {(isVectorLayer || layer.type === 'geotiff' || layer.type === 'gee') && (
+                      <ContextMenuItem onSelect={(e) => { e.preventDefault(); setIsGraduatedEditorOpen(true); }} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">
+                        <Waypoints className="mr-2 h-3.5 w-3.5" /> Graduada
+                      </ContextMenuItem>
+                    )}
                     {layer.type === 'wfs' && (
                       <>
                         <ContextMenuSeparator className="bg-gray-500/50 my-1" />
@@ -379,7 +338,7 @@ const LayerItem: React.FC<LayerItemProps> = ({
                       </>
                     )}
                   </ContextMenuSubContent>
-                )}
+                </ContextMenuPortal>
             </ContextMenuSub>
     
     
@@ -419,13 +378,15 @@ const LayerItem: React.FC<LayerItemProps> = ({
                       <Target className="mr-2 h-3.5 w-3.5" />
                       <span>Seleccionar por Capa</span>
                   </ContextMenuSubTrigger>
-                  <ContextMenuSubContent className="bg-gray-700 text-white border-gray-600">
-                      {props.allLayers.filter((l): l is VectorMapLayer => l.id !== layer.id && l.olLayer instanceof VectorLayer).map(selectorLayer => (
-                          <ContextMenuItem key={selectorLayer.id} onSelect={() => props.onSelectByLayer(layer.id, selectorLayer.id)} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">
-                              {selectorLayer.name}
-                          </ContextMenuItem>
-                      ))}
-                  </ContextMenuSubContent>
+                  <ContextMenuPortal>
+                    <ContextMenuSubContent className="bg-gray-700 text-white border-gray-600">
+                        {props.allLayers.filter((l): l is VectorMapLayer => l.id !== layer.id && l.olLayer instanceof VectorLayer).map(selectorLayer => (
+                            <ContextMenuItem key={selectorLayer.id} onSelect={() => props.onSelectByLayer(layer.id, selectorLayer.id)} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">
+                                {selectorLayer.name}
+                            </ContextMenuItem>
+                        ))}
+                    </ContextMenuSubContent>
+                  </ContextMenuPortal>
               </ContextMenuSub>
             )}
     
@@ -435,12 +396,14 @@ const LayerItem: React.FC<LayerItemProps> = ({
                   <Download className="mr-2 h-3.5 w-3.5" />
                   <span>Exportar Capa</span>
                 </ContextMenuSubTrigger>
-                <ContextMenuSubContent className="bg-gray-700 text-white border-gray-600">
-                  {isVectorLayer && <ContextMenuItem onSelect={() => props.onExportLayer(layer.id, 'geojson')} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">GeoJSON</ContextMenuItem>}
-                  {isVectorLayer && <ContextMenuItem onSelect={() => props.onExportLayer(layer.id, 'kml')} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">KML</ContextMenuItem>}
-                  {isVectorLayer && <ContextMenuItem onSelect={() => props.onExportLayer(layer.id, 'shp')} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">Shapefile (.zip)</ContextMenuItem>}
-                  {(layer.type === 'wms' || layer.type === 'geotiff' || layer.type === 'gee') && <ContextMenuItem onSelect={() => props.onExportWmsAsGeotiff(layer.id)} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">GeoTIFF (Vista Actual)</ContextMenuItem>}
-                </ContextMenuSubContent>
+                <ContextMenuPortal>
+                  <ContextMenuSubContent className="bg-gray-700 text-white border-gray-600">
+                    {isVectorLayer && <ContextMenuItem onSelect={() => props.onExportLayer(layer.id, 'geojson')} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">GeoJSON</ContextMenuItem>}
+                    {isVectorLayer && <ContextMenuItem onSelect={() => props.onExportLayer(layer.id, 'kml')} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">KML</ContextMenuItem>}
+                    {isVectorLayer && <ContextMenuItem onSelect={() => props.onExportLayer(layer.id, 'shp')} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">Shapefile (.zip)</ContextMenuItem>}
+                    {(layer.type === 'wms' || layer.type === 'geotiff' || layer.type === 'gee') && <ContextMenuItem onSelect={() => props.onExportWmsAsGeotiff(layer.id)} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">GeoTIFF (Vista Actual)</ContextMenuItem>}
+                  </ContextMenuSubContent>
+                </ContextMenuPortal>
               </ContextMenuSub>
             )}
     
@@ -502,6 +465,7 @@ const LayerItem: React.FC<LayerItemProps> = ({
           </>
         )}
         </ContextMenuContent>
+        </ContextMenuPortal>
       </ContextMenu>
       </TooltipProvider>
       {!props.isSharedView && (

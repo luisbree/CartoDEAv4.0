@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState } from 'react';
@@ -20,6 +21,17 @@ import {
   ContextMenuRadioItem,
   ContextMenuLabel,
 } from "@/components/ui/context-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Edit, GripVertical, Layers, Trash2, Ungroup, Settings2, Play, Pause, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { MapLayer, LayerGroup, LabelOptions, GraduatedSymbology, CategorizedSymbology, GeoTiffStyle, InteractionToolId } from '@/lib/types';
@@ -101,21 +113,20 @@ const LayerGroupItem: React.FC<LayerGroupItemProps> = ({
     ...layerItemProps
 }) => {
 
-    const [isEditingName, setIsEditingName] = useState(false);
+    const [isRenameDialogOpen, setIsRenameDialogOpen] = useState(false);
     const [editingName, setEditingName] = useState(group.name);
 
-    const handleNameSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
+    const handleNameSubmit = () => {
         if (editingName.trim() && editingName.trim() !== group.name) {
             onRenameGroup(group.id, editingName.trim());
         }
-        setIsEditingName(false);
+        setIsRenameDialogOpen(false);
     };
 
     const isSelected = selectedItemIds.includes(group.id);
 
     return (
-      <ContextMenu>
+      <ContextMenu onOpenChange={(open) => { if (!open) setIsRenameDialogOpen(false); }}>
         <ContextMenuTrigger asChild>
           <li
             className={cn(
@@ -140,20 +151,7 @@ const LayerGroupItem: React.FC<LayerGroupItemProps> = ({
                       <div className="flex items-center gap-2 w-full">
                         {isDraggable && <GripVertical className="h-4 w-4 text-gray-500 cursor-grab flex-shrink-0" />}
                         <Layers className="h-4 w-4 text-primary" />
-                        {isEditingName ? (
-                            <form onSubmit={handleNameSubmit} className="flex-1">
-                                <Input 
-                                    value={editingName} 
-                                    onChange={(e) => setEditingName(e.target.value)}
-                                    onBlur={() => setIsEditingName(false)}
-                                    autoFocus
-                                    className="h-6 text-xs bg-black/50"
-                                    onClick={(e) => e.stopPropagation()} // Prevent accordion from toggling
-                                />
-                            </form>
-                        ) : (
-                            <span className="text-xs font-semibold truncate flex-1 text-left" title={group.name}>{group.name}</span>
-                        )}
+                        <span className="text-xs font-semibold truncate flex-1 text-left" title={group.name}>{group.name}</span>
                       </div>
                     </AccordionTrigger>
                   </div>
@@ -168,7 +166,7 @@ const LayerGroupItem: React.FC<LayerGroupItemProps> = ({
                         groupDisplayMode={group.displayMode}
                         isSelected={selectedItemIds.includes(layer.id)}
                         onClick={(e) => onItemClick(layer.id, 'layer', e)}
-                        onDragStart={undefined} // Prevent dragging of individual items in group for now
+                        onDragStart={undefined} 
                         isDraggable={false}
                       />
                     ))}
@@ -180,9 +178,31 @@ const LayerGroupItem: React.FC<LayerGroupItemProps> = ({
         </ContextMenuTrigger>
         <ContextMenuPortal>
             <ContextMenuContent onClick={(e) => e.stopPropagation()} side="right" align="start" className="bg-gray-700 text-white border-gray-600">
-                <ContextMenuItem onSelect={() => setIsEditingName(true)} className="text-xs">
-                   <Edit className="mr-2 h-3.5 w-3.5" /> Renombrar Grupo
-                </ContextMenuItem>
+                <AlertDialog open={isRenameDialogOpen} onOpenChange={setIsRenameDialogOpen}>
+                  <AlertDialogTrigger asChild>
+                    <ContextMenuItem onSelect={(e) => { e.preventDefault(); setIsRenameDialogOpen(true); }} className="text-xs">
+                       <Edit className="mr-2 h-3.5 w-3.5" /> Renombrar Grupo
+                    </ContextMenuItem>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent onOpenAutoFocus={(e) => e.preventDefault()}>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Renombrar Grupo</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Ingrese el nuevo nombre para el grupo "{group.name}".
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <Input
+                      value={editingName}
+                      onChange={(e) => setEditingName(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleNameSubmit()}
+                      autoFocus
+                    />
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                      <AlertDialogAction onClick={handleNameSubmit}>Guardar</AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
                  <ContextMenuSeparator className="bg-gray-500/50" />
                  <ContextMenuLabel className="text-xs px-2 py-1">Modo de Visibilidad</ContextMenuLabel>
                  <ContextMenuRadioGroup value={group.displayMode} onValueChange={(mode) => onSetGroupDisplayMode(group.id, mode as 'single' | 'multiple')}>
