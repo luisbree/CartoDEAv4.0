@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
@@ -294,15 +295,20 @@ export const useLayerManager = ({
       };
   }, []);
 
-  const addLayer = useCallback((newLayer: MapLayer, bringToTop: boolean = true) => {
+  const addLayer = useCallback((newItem: MapLayer | LayerGroup, bringToTop: boolean = true) => {
     if (!mapRef.current) return;
-    mapRef.current.addLayer(newLayer.olLayer);
+    
+    if ('layers' in newItem) { // It's a group
+        newItem.layers.forEach(layer => mapRef.current!.addLayer(layer.olLayer));
+    } else { // It's a layer
+        mapRef.current.addLayer(newItem.olLayer);
+    }
     
     setLayers(prev => {
         if (bringToTop) {
-            return [newLayer, ...prev];
+            return [newItem, ...prev];
         } else {
-            return [...prev, newLayer];
+            return [...prev, newItem];
         }
     });
 
@@ -1107,7 +1113,7 @@ export const useLayerManager = ({
                 visible: true,
                 opacity: 1,
                 type: 'sentinel'
-            });
+            }, true);
             setTimeout(() => toast({ description: `${features.length} footprints de Sentinel-2 añadidos al mapa.` }), 0);
         }
     } catch (error: any) {
@@ -1163,7 +1169,7 @@ export const useLayerManager = ({
                 visible: true,
                 opacity: 1,
                 type: 'landsat'
-            });
+            }, true);
             setTimeout(() => toast({ description: `${features.length} footprints de Landsat añadidos al mapa.` }), 0);
         }
     } catch (error: any) {
@@ -1498,3 +1504,4 @@ const groupLayers = useCallback((layerIds: string[], groupName: string) => {
     
 
     
+
