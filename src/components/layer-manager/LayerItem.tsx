@@ -89,44 +89,36 @@ interface LayerItemProps {
   groupDisplayMode?: 'single' | 'multiple';
 }
 
-const LayerItem: React.FC<LayerItemProps> = ({
-  layer,
-  allLayers,
-  onToggleVisibility,
-  onZoomToExtent,
-  onShowLayerTable,
-  onShowStatistics,
-  onRemove,
-  onExtractByPolygon,
-  onExtractBySelection,
-  onSelectByLayer,
-  onExportLayer,
-  onExportWmsAsGeotiff,
-  onRenameLayer,
-  onChangeLayerStyle,
-  onChangeLayerLabels,
-  onApplyGraduatedSymbology,
-  onApplyCategorizedSymbology,
-  onApplyGeoTiffStyle,
-  onToggleWmsStyle,
-  isDrawingSourceEmptyOrNotPolygon,
-  isSelectionEmpty,
-  onSetLayerOpacity,
-  isDraggable,
-  onDragStart,
-  onDragEnd,
-  onDragOver,
-  onDragEnter,
-  onDragLeave,
-  onDrop,
-  isDragging,
-  isDragOver,
-  isSelected,
-  onClick,
-  activeTool,
-  onToggleEditing,
-  isSharedView = false,
-  groupDisplayMode,
+const LayerItemContextMenuContent: React.FC<Omit<LayerItemProps, 'isDraggable' | 'onDragStart' | 'onDragEnd' | 'onDragOver' | 'onDragEnter' | 'onDragLeave' | 'onDrop' | 'isDragging' | 'isDragOver' | 'isSelected' | 'onClick' | 'groupDisplayMode'> & {
+    onRenameSelect: (e: Event) => void;
+    onStyleEditorOpen: () => void;
+    onLabelEditorOpen: () => void;
+    onGraduatedEditorOpen: () => void;
+    onCategorizedEditorOpen: () => void;
+}> = React.memo(({
+    layer,
+    allLayers,
+    onZoomToExtent,
+    onShowLayerTable,
+    onShowStatistics,
+    onRemove,
+    onExtractByPolygon,
+    onExtractBySelection,
+    onSelectByLayer,
+    onExportLayer,
+    onExportWmsAsGeotiff,
+    onToggleWmsStyle,
+    isDrawingSourceEmptyOrNotPolygon,
+    isSelectionEmpty,
+    onSetLayerOpacity,
+    activeTool,
+    onToggleEditing,
+    isSharedView,
+    onRenameSelect,
+    onStyleEditorOpen,
+    onLabelEditorOpen,
+    onGraduatedEditorOpen,
+    onCategorizedEditorOpen,
 }) => {
   const isVectorLayer = layer.olLayer instanceof VectorLayer;
   const isWfsLayer = layer.type === 'wfs';
@@ -135,15 +127,6 @@ const LayerItem: React.FC<LayerItemProps> = ({
   const isWmsLayer = layer.type === 'wms';
   const currentOpacityPercentage = Math.round(layer.opacity * 100);
 
-  const [isEditing, setIsEditing] = useState(false);
-  const [editingName, setEditingName] = useState(layer.name);
-  const [isStyleEditorOpen, setIsStyleEditorOpen] = useState(false);
-  const [isLabelEditorOpen, setIsLabelEditorOpen] = useState(false);
-  const [isGraduatedEditorOpen, setIsGraduatedEditorOpen] = useState(false);
-  const [isCategorizedEditorOpen, setIsCategorizedEditorOpen] = useState(false);
-  const [isContextMenuOpen, setIsContextMenuOpen] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-  
   const polygonLayersForSelection = allLayers.filter(
     (l): l is VectorMapLayer =>
       l.id !== layer.id &&
@@ -154,100 +137,7 @@ const LayerItem: React.FC<LayerItemProps> = ({
       })
   );
 
-  useEffect(() => {
-    if (isEditing) {
-      setTimeout(() => {
-        if (inputRef.current) {
-          inputRef.current.focus();
-          inputRef.current.select();
-        }
-      }, 0);
-    }
-  }, [isEditing]);
-  
-  const handleDoubleClick = () => {
-    if (isSharedView) return;
-    setIsEditing(true);
-  };
-  
-  const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setEditingName(e.target.value);
-  };
-
-  const handleNameSubmit = () => {
-    if (editingName.trim() && editingName.trim() !== layer.name) {
-      onRenameLayer(layer.id, editingName.trim());
-    }
-    setIsEditing(false);
-  };
-  
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      handleNameSubmit();
-    } else if (e.key === 'Escape') {
-      setEditingName(layer.name);
-      setIsEditing(false);
-    }
-  };
-
-  const handleRenameSelect = (e: Event) => {
-    e.preventDefault();
-    setIsEditing(true);
-  };
-
-  const handleStyleChange = (styleOptions: StyleOptions) => {
-    onChangeLayerStyle(layer.id, styleOptions);
-    setIsStyleEditorOpen(false);
-    setIsContextMenuOpen(false); // Close the main context menu
-  };
-  
-  const handleLabelChange = (labelOptions: LabelOptions) => {
-    onChangeLayerLabels(layer.id, labelOptions);
-    setIsLabelEditorOpen(false);
-    setIsContextMenuOpen(false);
-  };
-
-  const handleGraduatedSymbologyApply = (symbology: GraduatedSymbology) => {
-    if (isGeoTiffLayer) {
-        onApplyGeoTiffStyle(layer.id, symbology as GeoTiffStyle);
-    } else {
-        onApplyGraduatedSymbology(layer.id, symbology);
-    }
-    setIsGraduatedEditorOpen(false);
-    setIsContextMenuOpen(false);
-  };
-  
-  const handleCategorizedSymbologyApply = (symbology: CategorizedSymbology) => {
-    onApplyCategorizedSymbology(layer.id, symbology);
-    setIsCategorizedEditorOpen(false);
-    setIsContextMenuOpen(false);
-  };
-  
-  const GoesMetadataTooltip = () => {
-    const metadata = layer.olLayer.get('geeParams')?.metadata;
-    if (!isGoesLayer || !metadata) return null;
-
-    const timestamp = metadata.timestamp ? format(new Date(metadata.timestamp), "dd/MM/yyyy HH:mm:ss 'UTC'", { locale: es }) : 'N/D';
-    const satellite = metadata.satellite || 'N/D';
-    const sceneId = metadata.scene_id || 'N/D';
-
-    return (
-        <Tooltip>
-            <TooltipTrigger asChild>
-                <Info className="h-3 w-3 text-gray-400 hover:text-white ml-2 flex-shrink-0" />
-            </TooltipTrigger>
-            <TooltipContent side="right" className="bg-gray-700 text-white border-gray-600 text-xs">
-                <div className="space-y-1">
-                    <p><strong>Fecha:</strong> {timestamp}</p>
-                    <p><strong>Satélite:</strong> {satellite}</p>
-                    <p><strong>ID Escena:</strong> <span className="break-all">{sceneId}</span></p>
-                </div>
-            </TooltipContent>
-        </Tooltip>
-    );
-  };
-
-  const contextMenuContent = (
+  return (
     <ContextMenuContent onOpenAutoFocus={(e) => e.preventDefault()} side="right" align="start" className="bg-gray-700 text-white border-gray-600 w-56">
       <ContextMenuItem
         className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer"
@@ -261,7 +151,7 @@ const LayerItem: React.FC<LayerItemProps> = ({
       <>
         <ContextMenuItem
           className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer"
-          onSelect={handleRenameSelect}
+          onSelect={onRenameSelect}
         >
           <Edit className="mr-2 h-3.5 w-3.5" />
           Renombrar Capa
@@ -290,16 +180,16 @@ const LayerItem: React.FC<LayerItemProps> = ({
                 <ContextMenuPortal>
                   <ContextMenuSubContent className="bg-gray-700 text-white border-gray-600">
                     {isVectorLayer && (
-                      <ContextMenuItem onSelect={(e) => { e.preventDefault(); setIsStyleEditorOpen(true); }} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">
+                      <ContextMenuItem onSelect={(e) => { e.preventDefault(); onStyleEditorOpen(); }} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">
                           <Palette className="mr-2 h-3.5 w-3.5" /> Simple
                       </ContextMenuItem>
                     )}
                     {isVectorLayer && (
-                        <ContextMenuItem onSelect={(e) => { e.preventDefault(); setIsCategorizedEditorOpen(true); }} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">
+                        <ContextMenuItem onSelect={(e) => { e.preventDefault(); onCategorizedEditorOpen(); }} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">
                           <AppWindow className="mr-2 h-3.5 w-3.5" /> Por Categorías
                         </ContextMenuItem>
                     )}
-                    <ContextMenuItem onSelect={(e) => { e.preventDefault(); setIsGraduatedEditorOpen(true); }} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">
+                    <ContextMenuItem onSelect={(e) => { e.preventDefault(); onGraduatedEditorOpen(); }} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">
                       <Waypoints className="mr-2 h-3.5 w-3.5" /> Graduada
                     </ContextMenuItem>
                     {isVectorLayer && (
@@ -328,7 +218,7 @@ const LayerItem: React.FC<LayerItemProps> = ({
         {isVectorLayer && (
           <ContextMenuItem
               className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer"
-              onSelect={(e) => { e.preventDefault(); setIsLabelEditorOpen(true); }}
+              onSelect={(e) => { e.preventDefault(); onLabelEditorOpen(); }}
             >
               <Tags className="mr-2 h-3.5 w-3.5" />
               Etiquetar
@@ -449,6 +339,129 @@ const LayerItem: React.FC<LayerItemProps> = ({
     )}
   </ContextMenuContent>
   );
+});
+LayerItemContextMenuContent.displayName = 'LayerItemContextMenuContent';
+
+const LayerItem: React.FC<LayerItemProps> = ({
+  layer,
+  isDraggable,
+  onDragStart,
+  onDragEnd,
+  onDragOver,
+  onDragEnter,
+  onDragLeave,
+  onDrop,
+  isDragging,
+  isDragOver,
+  isSelected,
+  onClick,
+  onRenameLayer,
+  ...props
+}) => {
+  const isVectorLayer = layer.olLayer instanceof VectorLayer;
+
+  const [isEditing, setIsEditing] = useState(false);
+  const [editingName, setEditingName] = useState(layer.name);
+  const [isStyleEditorOpen, setIsStyleEditorOpen] = useState(false);
+  const [isLabelEditorOpen, setIsLabelEditorOpen] = useState(false);
+  const [isGraduatedEditorOpen, setIsGraduatedEditorOpen] = useState(false);
+  const [isCategorizedEditorOpen, setIsCategorizedEditorOpen] = useState(false);
+  const [isContextMenuOpen, setIsContextMenuOpen] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  
+  useEffect(() => {
+    if (isEditing) {
+      setTimeout(() => {
+        if (inputRef.current) {
+          inputRef.current.focus();
+          inputRef.current.select();
+        }
+      }, 0);
+    }
+  }, [isEditing]);
+  
+  const handleDoubleClick = () => {
+    if (props.isSharedView) return;
+    setIsEditing(true);
+  };
+  
+  const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setEditingName(e.target.value);
+  };
+
+  const handleNameSubmit = () => {
+    if (editingName.trim() && editingName.trim() !== layer.name) {
+      onRenameLayer(layer.id, editingName.trim());
+    }
+    setIsEditing(false);
+  };
+  
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      handleNameSubmit();
+    } else if (e.key === 'Escape') {
+      setEditingName(layer.name);
+      setIsEditing(false);
+    }
+  };
+
+  const handleRenameSelect = (e: Event) => {
+    e.preventDefault();
+    setIsEditing(true);
+  };
+
+  const handleStyleChange = (styleOptions: StyleOptions) => {
+    props.onChangeLayerStyle(layer.id, styleOptions);
+    setIsStyleEditorOpen(false);
+    setIsContextMenuOpen(false); // Close the main context menu
+  };
+  
+  const handleLabelChange = (labelOptions: LabelOptions) => {
+    props.onChangeLayerLabels(layer.id, labelOptions);
+    setIsLabelEditorOpen(false);
+    setIsContextMenuOpen(false);
+  };
+
+  const handleGraduatedSymbologyApply = (symbology: GraduatedSymbology) => {
+    if (layer.type === 'geotiff' || layer.type === 'gee') {
+        props.onApplyGeoTiffStyle(layer.id, symbology as GeoTiffStyle);
+    } else {
+        props.onApplyGraduatedSymbology(layer.id, symbology);
+    }
+    setIsGraduatedEditorOpen(false);
+    setIsContextMenuOpen(false);
+  };
+  
+  const handleCategorizedSymbologyApply = (symbology: CategorizedSymbology) => {
+    props.onApplyCategorizedSymbology(layer.id, symbology);
+    setIsCategorizedEditorOpen(false);
+    setIsContextMenuOpen(false);
+  };
+  
+  const GoesMetadataTooltip = () => {
+    const isGoesLayer = (layer.type === 'geotiff' || layer.type === 'gee') && layer.olLayer.get('geeParams')?.bandCombination === 'GOES_CLOUDTOP';
+    const metadata = layer.olLayer.get('geeParams')?.metadata;
+    if (!isGoesLayer || !metadata) return null;
+
+    const timestamp = metadata.timestamp ? format(new Date(metadata.timestamp), "dd/MM/yyyy HH:mm:ss 'UTC'", { locale: es }) : 'N/D';
+    const satellite = metadata.satellite || 'N/D';
+    const sceneId = metadata.scene_id || 'N/D';
+
+    return (
+        <Tooltip>
+            <TooltipTrigger asChild>
+                <Info className="h-3 w-3 text-gray-400 hover:text-white ml-2 flex-shrink-0" />
+            </TooltipTrigger>
+            <TooltipContent side="right" className="bg-gray-700 text-white border-gray-600 text-xs">
+                <div className="space-y-1">
+                    <p><strong>Fecha:</strong> {timestamp}</p>
+                    <p><strong>Satélite:</strong> {satellite}</p>
+                    <p><strong>ID Escena:</strong> <span className="break-all">{sceneId}</span></p>
+                </div>
+            </TooltipContent>
+        </Tooltip>
+    );
+  };
 
   return (
     <>
@@ -459,7 +472,7 @@ const LayerItem: React.FC<LayerItemProps> = ({
             className={cn(
               "flex items-center px-1.5 py-1 transition-all overflow-hidden relative",
               "hover:bg-gray-700/30",
-              isSelected && !isSharedView ? "bg-primary/20 ring-1 ring-primary/70 rounded-md" : "",
+              isSelected && !props.isSharedView ? "bg-primary/20 ring-1 ring-primary/70 rounded-md" : "",
               isDraggable && "cursor-grab",
               isDragging && "opacity-50 bg-primary/30",
               isDragOver && "border-t-2 border-accent"
@@ -475,15 +488,15 @@ const LayerItem: React.FC<LayerItemProps> = ({
           >
             {isDraggable && <GripVertical className="h-4 w-4 text-gray-500 mr-1 flex-shrink-0 cursor-grab" />}
             
-            {groupDisplayMode === 'single' ? (
-                <RadioGroup value={layer.visible ? layer.id : ''} onValueChange={() => onToggleVisibility(layer.id, layer.groupId)} className="flex items-center">
+            {props.groupDisplayMode === 'single' ? (
+                <RadioGroup value={layer.visible ? layer.id : ''} onValueChange={() => props.onToggleVisibility(layer.id, layer.groupId)} className="flex items-center">
                     <RadioGroupItem value={layer.id} id={`vis-${layer.id}`} className="h-3.5 w-3.5" />
                 </RadioGroup>
             ) : (
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={(e) => { e.stopPropagation(); onToggleVisibility(layer.id); }}
+                  onClick={(e) => { e.stopPropagation(); props.onToggleVisibility(layer.id); }}
                   className="h-6 w-6 text-white hover:bg-gray-600/80 p-0 mr-1 flex-shrink-0"
                   aria-label={`Alternar visibilidad para ${layer.name}`}
                   title={layer.visible ? "Ocultar capa" : "Mostrar capa"}
@@ -508,7 +521,7 @@ const LayerItem: React.FC<LayerItemProps> = ({
                 htmlFor={`vis-${layer.id}`}
                 className={cn(
                   "flex-1 cursor-pointer text-xs font-medium truncate min-w-0 select-none",
-                  groupDisplayMode === 'single' ? 'ml-2' : '',
+                  props.groupDisplayMode === 'single' ? 'ml-2' : '',
                   layer.visible ? "text-white" : "text-gray-400"
                 )}
                 title={layer.name}
@@ -523,10 +536,19 @@ const LayerItem: React.FC<LayerItemProps> = ({
             </div>
           </li>
         </ContextMenuTrigger>
-        {contextMenuContent}
+        <LayerItemContextMenuContent 
+            {...props} 
+            layer={layer} 
+            onRenameLayer={onRenameLayer}
+            onRenameSelect={handleRenameSelect}
+            onStyleEditorOpen={() => setIsStyleEditorOpen(true)}
+            onLabelEditorOpen={() => setIsLabelEditorOpen(true)}
+            onGraduatedEditorOpen={() => setIsGraduatedEditorOpen(true)}
+            onCategorizedEditorOpen={() => setIsCategorizedEditorOpen(true)}
+        />
       </ContextMenu>
       </TooltipProvider>
-      {!isSharedView && (
+      {!props.isSharedView && (
         <>
           {isVectorLayer && (
             <StyleEditorDialog
@@ -544,7 +566,7 @@ const LayerItem: React.FC<LayerItemProps> = ({
                 layer={layer as any}
             />
            )}
-           {(isVectorLayer || isGeoTiffLayer) && (
+           {(isVectorLayer || layer.type === 'geotiff' || layer.type === 'gee') && (
             <GraduatedSymbologyDialog
                 isOpen={isGraduatedEditorOpen}
                 onClose={() => setIsGraduatedEditorOpen(false)}
