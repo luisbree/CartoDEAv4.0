@@ -127,24 +127,27 @@ const LayerGroupItem: React.FC<LayerGroupItemProps> = ({
       >
         <Accordion type="single" value={group.isExpanded ? "group-content" : ""} onValueChange={() => onToggleGroupExpanded(group.id)} collapsible>
           <AccordionItem value="group-content" className="border-b-0">
-            <AccordionTrigger className="p-1.5 hover:no-underline hover:bg-gray-700/50 rounded-t-md data-[state=open]:rounded-b-none">
-              <div className="flex items-center gap-2 w-full">
-                {isDraggable && <GripVertical className="h-4 w-4 text-gray-500 cursor-grab flex-shrink-0" />}
-                <Layers className="h-4 w-4 text-primary" />
-                {isEditingName ? (
-                    <form onSubmit={handleNameSubmit} className="flex-1">
-                        <Input 
-                            value={editingName} 
-                            onChange={(e) => setEditingName(e.target.value)}
-                            onBlur={() => setIsEditingName(false)}
-                            autoFocus
-                            className="h-6 text-xs bg-black/50"
-                            onClick={(e) => e.stopPropagation()} // Prevent accordion from toggling
-                        />
-                    </form>
-                ) : (
-                    <span className="text-xs font-semibold truncate flex-1 text-left" title={group.name}>{group.name}</span>
-                )}
+             <div className="flex items-center p-1.5 hover:bg-gray-700/50 rounded-t-md data-[state=open]:rounded-b-none">
+                <AccordionTrigger className="p-0 flex-1 hover:no-underline">
+                  <div className="flex items-center gap-2 w-full">
+                    {isDraggable && <GripVertical className="h-4 w-4 text-gray-500 cursor-grab flex-shrink-0" />}
+                    <Layers className="h-4 w-4 text-primary" />
+                    {isEditingName ? (
+                        <form onSubmit={handleNameSubmit} className="flex-1">
+                            <Input 
+                                value={editingName} 
+                                onChange={(e) => setEditingName(e.target.value)}
+                                onBlur={() => setIsEditingName(false)}
+                                autoFocus
+                                className="h-6 text-xs bg-black/50"
+                                onClick={(e) => e.stopPropagation()} // Prevent accordion from toggling
+                            />
+                        </form>
+                    ) : (
+                        <span className="text-xs font-semibold truncate flex-1 text-left" title={group.name}>{group.name}</span>
+                    )}
+                  </div>
+                </AccordionTrigger>
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="icon" className="h-6 w-6 ml-auto" onClick={(e) => e.stopPropagation()}>
@@ -171,7 +174,6 @@ const LayerGroupItem: React.FC<LayerGroupItemProps> = ({
                     </DropdownMenuContent>
                 </DropdownMenu>
               </div>
-            </AccordionTrigger>
             <AccordionContent className="p-1.5 border-t border-gray-700/50">
               <ul className="space-y-1">
                 {group.layers.map(layer => (
