@@ -238,6 +238,7 @@ const LayerList: React.FC<LayerListProps> = ({
               activeTool={activeTool}
               onToggleEditing={onToggleEditing}
               isSharedView={isSharedView}
+              selectedFeaturesForSelection={selectedFeaturesForSelection}
             />
           );
         }
