@@ -151,14 +151,14 @@ const LayerGroupItem: React.FC<LayerGroupItemProps> = ({
                   </div>
                 </AccordionTrigger>
 
-                <DropdownMenu onOpenChange={(open) => { if (!open) setIsRenameDialogOpen(false); }}>
+                <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                       <Button variant="ghost" size="icon" className="h-6 w-6 text-white/70 hover:bg-white/10" onClick={e => e.stopPropagation()}>
                           <MoreVertical className="h-4 w-4" />
                       </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent onClick={(e) => e.stopPropagation()} side="right" align="start" className="bg-gray-700 text-white border-gray-600">
-                    <DropdownMenuItem onSelect={() => { setIsRenameDialogOpen(true); }} className="text-xs">
+                    <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setIsRenameDialogOpen(true); }} className="text-xs">
                        <Edit className="mr-2 h-3.5 w-3.5" /> Renombrar Grupo
                     </DropdownMenuItem>
                     <DropdownMenuSeparator className="bg-gray-500/50" />

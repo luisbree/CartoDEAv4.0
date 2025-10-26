@@ -238,7 +238,7 @@ const LayerItem: React.FC<LayerItemProps> = ({
                 <div className="flex items-center space-x-0.5 flex-shrink-0">
                     <GoesMetadataTooltip />
                     {!props.isSharedView && (
-                        <DropdownMenu onOpenChange={(open) => { if (!open) setIsRenameDialogOpen(false); }}>
+                        <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                                 <Button variant="ghost" size="icon" className="h-6 w-6 text-white/70 hover:bg-white/10" onClick={e => e.stopPropagation()}>
                                     <Settings2 className="h-4 w-4" />
@@ -248,7 +248,7 @@ const LayerItem: React.FC<LayerItemProps> = ({
                                 <DropdownMenuItem onSelect={() => props.onZoomToExtent(layer.id)} className="text-xs">
                                   <ZoomIn className="mr-2 h-3.5 w-3.5" /> Ir a la extensión
                                 </DropdownMenuItem>
-                                <DropdownMenuItem onSelect={() => setIsRenameDialogOpen(true)} className="text-xs">
+                                <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setIsRenameDialogOpen(true); }} className="text-xs">
                                   <Edit className="mr-2 h-3.5 w-3.5" /> Renombrar Capa
                                 </DropdownMenuItem>
                                 
