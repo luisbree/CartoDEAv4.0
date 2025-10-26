@@ -23,7 +23,7 @@ const BaseLayerSelector: React.FC<BaseLayerSelectorProps> = ({
     <div className="w-full">
       {/* <Label htmlFor={`${uniqueIdPrefix}-select`} className="text-xs font-medium text-white/90 mb-1 block">Capa Base</Label> */}
       <Select value={activeBaseLayerId} onValueChange={onChangeBaseLayer}>
-        <SelectTrigger id={`${uniqueIdPrefix}-select`} className="w-full text-xs h-8 border-white/30 bg-black/20 text-white/90 focus:ring-primary">
+        <SelectTrigger id={`${uniqueIdPrefix}-select`} className="w-full text-xs h-8 border-0 bg-black/20 text-white/90 focus:ring-primary">
           <SelectValue placeholder="Seleccionar capa base" />
         </SelectTrigger>
         <SelectContent className="bg-gray-700 text-white border-gray-600">

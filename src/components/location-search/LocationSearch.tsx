@@ -125,7 +125,7 @@ const LocationSearch: React.FC<LocationSearchProps> = ({ onLocationSelect, class
                   setIsSuggestionsVisible(true);
                 }
               }}
-              className="text-xs h-8 pl-7 pr-7 border-white/30 bg-black/20 text-white/90 focus:ring-primary placeholder:text-gray-400/70"
+              className="text-xs h-8 pl-7 pr-7 border-0 bg-black/20 text-white/90 focus:ring-primary placeholder:text-gray-400/70"
             />
             {searchTerm && !isLoading && (
               <button

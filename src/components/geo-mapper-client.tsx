@@ -889,10 +889,10 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
               <Button
                 variant={"outline"}
                 size="icon"
-                className={`h-8 w-8 focus-visible:ring-primary flex-shrink-0 ${
+                className={`h-8 w-8 focus-visible:ring-primary flex-shrink-0 border-0 ${
                   !panels.legend.isMinimized
-                    ? 'bg-primary text-primary-foreground hover:bg-primary/90 border-primary/80'
-                    : 'bg-gray-700/80 text-white hover:bg-gray-600/90 border-gray-600/70'
+                    ? 'bg-primary text-primary-foreground hover:bg-primary/90'
+                    : 'bg-gray-700/80 text-white hover:bg-gray-600/90'
                 }`}
                 onClick={() => togglePanelMinimize('legend')}
                 aria-label={"Capas"}
@@ -922,10 +922,10 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
                     <Button
                         variant="outline"
                         size="icon"
-                        className="h-8 w-8 flex-shrink-0 bg-black/20 hover:bg-black/40 border border-white/30 text-white/90"
+                        className="h-8 w-8 flex-shrink-0 bg-black/20 hover:bg-black/40 border-0 text-white/90"
                         title="Más herramientas del mapa"
                     >
-                        <MapPinned className="h-4 w-4" />
+                        <MapPin className="h-4 w-4" />
                     </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent
@@ -957,7 +957,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
                 onClick={mapNavigationHook.toggleZoomToArea}
                 variant="outline"
                 size="icon"
-                className={cn("h-8 w-8 flex-shrink-0 bg-black/20 hover:bg-black/40 border border-white/30 text-white/90", mapNavigationHook.activeTool === 'zoomToArea' && 'bg-primary hover:bg-primary/90')}
+                className={cn("h-8 w-8 flex-shrink-0 bg-black/20 hover:bg-black/40 border-0 text-white/90", mapNavigationHook.activeTool === 'zoomToArea' && 'bg-primary hover:bg-primary/90')}
                 title="Zoom a Área"
             >
                 <ZoomIn className="h-4 w-4" />
@@ -1007,10 +1007,10 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
                     <Button
                       variant={"outline"}
                       size="icon"
-                      className={`h-8 w-8 focus-visible:ring-primary ${
+                      className={`h-8 w-8 focus-visible:ring-primary border-0 ${
                         isPanelOpen
-                          ? 'bg-primary text-primary-foreground hover:bg-primary/90 border-primary/80'
-                          : 'bg-gray-700/80 text-white hover:bg-gray-600/90 border-gray-600/70'
+                          ? 'bg-primary text-primary-foreground hover:bg-primary/90'
+                          : 'bg-gray-700/80 text-white hover:bg-gray-600/90'
                       }`}
                       onClick={() => {
                         if (panelConfig.id === 'printComposer') {
