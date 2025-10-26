@@ -544,27 +544,31 @@ export const useLayerManager = ({
   }, [toast, setLayers]);
   
  const toggleLayerVisibility = useCallback((layerId: string, groupId?: string) => {
-    setLayers(prevItems => {
-        return prevItems.map(item => {
-            // Case 1: Item is a LayerGroup and we clicked a layer inside it
+    setLayers(currentItems => {
+        const newItems = currentItems.map(item => {
+            // Standalone layer
+            if (!groupId && item.id === layerId && !('layers' in item)) {
+                const newVisibility = !item.visible;
+                item.olLayer.setVisible(newVisibility);
+                const visualLayer = item.olLayer.get('visualLayer');
+                if (visualLayer) {
+                    visualLayer.setVisible(newVisibility && (item.wmsStyleEnabled ?? true));
+                }
+                return { ...item, visible: newVisibility };
+            }
+
+            // Layer within a group
             if (groupId && item.id === groupId && 'layers' in item) {
                 const group = item as LayerGroup;
                 const newLayers = group.layers.map(layerInGroup => {
                     let newVisibility: boolean;
 
                     if (group.displayMode === 'single') {
-                        // Radio button logic: only the clicked layer becomes visible
-                        newVisibility = layerInGroup.id === layerId;
-                    } else {
-                        // Checkbox logic: toggle the clicked layer
-                        if (layerInGroup.id === layerId) {
-                            newVisibility = !layerInGroup.visible;
-                        } else {
-                            newVisibility = layerInGroup.visible; // Keep others as they are
-                        }
+                        newVisibility = layerInGroup.id === layerId; // Turn on only the clicked one
+                    } else { // 'multiple'
+                        newVisibility = layerInGroup.id === layerId ? !layerInGroup.visible : layerInGroup.visible;
                     }
-
-                    // Apply visibility changes to the OpenLayers layer
+                    
                     layerInGroup.olLayer.setVisible(newVisibility);
                     const visualLayer = layerInGroup.olLayer.get('visualLayer');
                     if (visualLayer) {
@@ -575,21 +579,10 @@ export const useLayerManager = ({
                 });
                 return { ...group, layers: newLayers };
             }
-            
-            // Case 2: Item is a standalone layer
-            if (!groupId && !('layers' in item) && item.id === layerId) {
-                const newVisibility = !item.visible;
-                item.olLayer.setVisible(newVisibility);
-                const visualLayer = item.olLayer.get('visualLayer');
-                if (visualLayer) {
-                    visualLayer.setVisible(newVisibility && (item.wmsStyleEnabled ?? true));
-                }
-                return { ...item, visible: newVisibility };
-            }
 
-            // Otherwise, return the item unchanged
             return item;
         });
+        return newItems;
     });
 }, [setLayers]);
 
