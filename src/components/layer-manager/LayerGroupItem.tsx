@@ -7,19 +7,19 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Button } from '@/components/ui/button';
 import { Input } from '../ui/input';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger, 
-  DropdownMenuPortal,
-  DropdownMenuSeparator,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuLabel,
-} from "@/components/ui/dropdown-menu";
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger, 
+  ContextMenuPortal,
+  ContextMenuSeparator,
+  ContextMenuRadioGroup,
+  ContextMenuRadioItem,
+  ContextMenuLabel,
+} from "@/components/ui/context-menu";
 import { Edit, GripVertical, Layers, Trash2, Ungroup, Settings2, Play, Pause, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { MapLayer, LayerGroup, LabelOptions, GraduatedSymbology, CategorizedSymbology, GeoTiffStyle, InteractionToolId } from '@/lib/types';
@@ -115,121 +115,124 @@ const LayerGroupItem: React.FC<LayerGroupItemProps> = ({
     const isSelected = selectedItemIds.includes(group.id);
 
     return (
-      <li
-        className={cn(
-            "bg-gray-800/30 rounded-md border border-gray-700/60",
-            isSelected && !layerItemProps.isSharedView ? "ring-2 ring-primary/80" : "",
-            isDragging && "opacity-50 bg-primary/30",
-            isDragOver && "border-t-2 border-accent"
-        )}
-        draggable={isDraggable}
-        onDragStart={onDragStart}
-        onDragEnd={onDragEnd}
-        onDragOver={onDragOver}
-        onDragEnter={onDragEnter}
-        onDragLeave={onDragLeave}
-        onDrop={onDrop}
-        onClick={(e) => onItemClick(group.id, 'group', e)}
-      >
-        <Accordion type="single" value={group.isExpanded ? "group-content" : ""} onValueChange={() => onToggleGroupExpanded(group.id)} collapsible>
-          <AccordionItem value="group-content" className="border-b-0">
-             <div className="flex items-center p-1.5 hover:bg-gray-700/50 rounded-t-md data-[state=open]:rounded-b-none">
-                <AccordionTrigger className="p-0 flex-1 hover:no-underline">
-                  <div className="flex items-center gap-2 w-full">
-                    {isDraggable && <GripVertical className="h-4 w-4 text-gray-500 cursor-grab flex-shrink-0" />}
-                    <Layers className="h-4 w-4 text-primary" />
-                    {isEditingName ? (
-                        <form onSubmit={handleNameSubmit} className="flex-1">
-                            <Input 
-                                value={editingName} 
-                                onChange={(e) => setEditingName(e.target.value)}
-                                onBlur={() => setIsEditingName(false)}
-                                autoFocus
-                                className="h-6 text-xs bg-black/50"
-                                onClick={(e) => e.stopPropagation()} // Prevent accordion from toggling
-                            />
-                        </form>
-                    ) : (
-                        <span className="text-xs font-semibold truncate flex-1 text-left" title={group.name}>{group.name}</span>
-                    )}
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          <li
+            className={cn(
+                "bg-gray-800/30 rounded-md border border-gray-700/60",
+                isSelected && !layerItemProps.isSharedView ? "ring-2 ring-primary/80" : "",
+                isDragging && "opacity-50 bg-primary/30",
+                isDragOver && "border-t-2 border-accent"
+            )}
+            draggable={isDraggable}
+            onDragStart={onDragStart}
+            onDragEnd={onDragEnd}
+            onDragOver={onDragOver}
+            onDragEnter={onDragEnter}
+            onDragLeave={onDragLeave}
+            onDrop={onDrop}
+            onClick={(e) => onItemClick(group.id, 'group', e)}
+          >
+            <Accordion type="single" value={group.isExpanded ? "group-content" : ""} onValueChange={() => onToggleGroupExpanded(group.id)} collapsible>
+              <AccordionItem value="group-content" className="border-b-0">
+                 <div className="flex items-center p-1.5 hover:bg-gray-700/50 rounded-t-md data-[state=open]:rounded-b-none">
+                    <AccordionTrigger className="p-0 flex-1 hover:no-underline">
+                      <div className="flex items-center gap-2 w-full">
+                        {isDraggable && <GripVertical className="h-4 w-4 text-gray-500 cursor-grab flex-shrink-0" />}
+                        <Layers className="h-4 w-4 text-primary" />
+                        {isEditingName ? (
+                            <form onSubmit={handleNameSubmit} className="flex-1">
+                                <Input 
+                                    value={editingName} 
+                                    onChange={(e) => setEditingName(e.target.value)}
+                                    onBlur={() => setIsEditingName(false)}
+                                    autoFocus
+                                    className="h-6 text-xs bg-black/50"
+                                    onClick={(e) => e.stopPropagation()} // Prevent accordion from toggling
+                                />
+                            </form>
+                        ) : (
+                            <span className="text-xs font-semibold truncate flex-1 text-left" title={group.name}>{group.name}</span>
+                        )}
+                      </div>
+                    </AccordionTrigger>
                   </div>
-                </AccordionTrigger>
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-6 w-6 ml-auto" onClick={(e) => e.stopPropagation()}>
-                            <Settings2 className="h-3.5 w-3.5" />
+                <AccordionContent className="p-1.5 border-t border-gray-700/50">
+                  <ul className="space-y-1">
+                    {group.layers.map(layer => (
+                      <LayerItem 
+                        key={layer.id} 
+                        layer={layer} 
+                        allLayers={allLayers}
+                        {...layerItemProps}
+                        groupDisplayMode={group.displayMode}
+                        isSelected={selectedItemIds.includes(layer.id)}
+                        onClick={(e) => onItemClick(layer.id, 'layer', e)}
+                        onDragStart={undefined} // Prevent dragging of individual items in group for now
+                        isDraggable={false}
+                      />
+                    ))}
+                  </ul>
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
+          </li>
+        </ContextMenuTrigger>
+        <ContextMenuContent onClick={(e) => e.stopPropagation()} side="right" align="start" className="bg-gray-700 text-white border-gray-600">
+            <ContextMenuItem onSelect={() => setIsEditingName(true)} className="text-xs">
+               <Edit className="mr-2 h-3.5 w-3.5" /> Renombrar Grupo
+            </ContextMenuItem>
+             <ContextMenuSeparator className="bg-gray-500/50" />
+             <ContextMenuLabel className="text-xs px-2 py-1">Modo de Visibilidad</ContextMenuLabel>
+             <ContextMenuRadioGroup value={group.displayMode} onValueChange={(mode) => onSetGroupDisplayMode(group.id, mode as 'single' | 'multiple')}>
+                <ContextMenuItem onSelect={(e) => e.preventDefault()} className="p-0">
+                    <ContextMenuRadioItem value="multiple" className="text-xs w-full">Múltiple (Checkboxes)</ContextMenuRadioItem>
+                </ContextMenuItem>
+                <ContextMenuItem onSelect={(e) => e.preventDefault()} className="p-0">
+                    <ContextMenuRadioItem value="single" className="text-xs w-full">Única (Radio Buttons)</ContextMenuRadioItem>
+                </ContextMenuItem>
+            </ContextMenuRadioGroup>
+             {group.displayMode === 'single' && (
+                <>
+                    <ContextMenuSeparator className="bg-gray-500/50" />
+                    <ContextMenuLabel className="text-xs px-2 py-1">Reproductor</ContextMenuLabel>
+                    <div className="px-2 py-1 space-y-2">
+                        <Button
+                            onClick={() => onToggleGroupPlayback(group.id)}
+                            variant="outline"
+                            className="w-full h-8 text-xs bg-black/20 hover:bg-black/40"
+                        >
+                            {group.isPlaying ? <Pause className="mr-2 h-4 w-4" /> : <Play className="mr-2 h-4 w-4" />}
+                            {group.isPlaying ? 'Pausar' : 'Reproducir'}
                         </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent onClick={(e) => e.stopPropagation()} side="right" align="start" className="bg-gray-700 text-white border-gray-600">
-                        <DropdownMenuItem onSelect={() => setIsEditingName(true)} className="text-xs">
-                           <Edit className="mr-2 h-3.5 w-3.5" /> Renombrar Grupo
-                        </DropdownMenuItem>
-                         <DropdownMenuSeparator className="bg-gray-500/50" />
-                         <DropdownMenuLabel className="text-xs px-2 py-1">Modo de Visibilidad</DropdownMenuLabel>
-                         <DropdownMenuRadioGroup value={group.displayMode} onValueChange={(mode) => onSetGroupDisplayMode(group.id, mode as 'single' | 'multiple')}>
-                            <DropdownMenuRadioItem value="multiple" className="text-xs">Múltiple (Checkboxes)</DropdownMenuRadioItem>
-                            <DropdownMenuRadioItem value="single" className="text-xs">Única (Radio Buttons)</DropdownMenuRadioItem>
-                        </DropdownMenuRadioGroup>
-                         {group.displayMode === 'single' && (
-                            <>
-                                <DropdownMenuSeparator className="bg-gray-500/50" />
-                                <DropdownMenuLabel className="text-xs px-2 py-1">Reproductor</DropdownMenuLabel>
-                                <div className="px-2 py-1 space-y-2">
-                                    <Button
-                                        onClick={() => onToggleGroupPlayback(group.id)}
-                                        variant="outline"
-                                        className="w-full h-8 text-xs bg-black/20 hover:bg-black/40"
-                                    >
-                                        {group.isPlaying ? <Pause className="mr-2 h-4 w-4" /> : <Play className="mr-2 h-4 w-4" />}
-                                        {group.isPlaying ? 'Pausar' : 'Reproducir'}
-                                    </Button>
-                                    <div className="space-y-1 pt-1">
-                                        <Label htmlFor={`speed-slider-${group.id}`} className="text-xs flex items-center gap-2">
-                                            <Clock className="h-3 w-3" />
-                                            Velocidad ({group.playSpeed || 1000} ms)
-                                        </Label>
-                                        <Slider
-                                            id={`speed-slider-${group.id}`}
-                                            min={100}
-                                            max={5000}
-                                            step={100}
-                                            value={[group.playSpeed || 1000]}
-                                            onValueChange={(value) => onSetGroupPlaySpeed(group.id, value[0])}
-                                        />
-                                    </div>
-                                </div>
-                            </>
-                         )}
-                        <DropdownMenuSeparator className="bg-gray-500/50" />
-                        <DropdownMenuItem onSelect={() => onUngroup(group.id)} className="text-xs">
-                           <Ungroup className="mr-2 h-3.5 w-3.5" /> Desagrupar
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onSelect={() => layerItemProps.onRemoveLayer(group.id)} className="text-xs text-red-300 focus:bg-red-500/40 focus:text-red-200">
-                           <Trash2 className="mr-2 h-3.5 w-3.5" /> Eliminar Grupo
-                        </DropdownMenuItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            <AccordionContent className="p-1.5 border-t border-gray-700/50">
-              <ul className="space-y-1">
-                {group.layers.map(layer => (
-                  <LayerItem 
-                    key={layer.id} 
-                    layer={layer} 
-                    allLayers={allLayers}
-                    {...layerItemProps}
-                    groupDisplayMode={group.displayMode}
-                    isSelected={selectedItemIds.includes(layer.id)}
-                    onClick={(e) => onItemClick(layer.id, 'layer', e)}
-                    onDragStart={undefined} // Prevent dragging of individual items in group for now
-                    isDraggable={false}
-                  />
-                ))}
-              </ul>
-            </AccordionContent>
-          </AccordionItem>
-        </Accordion>
-      </li>
+                        <div className="space-y-1 pt-1">
+                            <Label htmlFor={`speed-slider-${group.id}`} className="text-xs flex items-center gap-2">
+                                <Clock className="h-3 w-3" />
+                                Velocidad ({group.playSpeed || 1000} ms)
+                            </Label>
+                            <ContextMenuItem onSelect={e => e.preventDefault()} className="p-0 focus:bg-transparent">
+                                <Slider
+                                    id={`speed-slider-${group.id}`}
+                                    min={100}
+                                    max={5000}
+                                    step={100}
+                                    value={[group.playSpeed || 1000]}
+                                    onValueChange={(value) => onSetGroupPlaySpeed(group.id, value[0])}
+                                />
+                            </ContextMenuItem>
+                        </div>
+                    </div>
+                </>
+             )}
+            <ContextMenuSeparator className="bg-gray-500/50" />
+            <ContextMenuItem onSelect={() => onUngroup(group.id)} className="text-xs">
+               <Ungroup className="mr-2 h-3.5 w-3.5" /> Desagrupar
+            </ContextMenuItem>
+            <ContextMenuItem onSelect={() => layerItemProps.onRemoveLayer(group.id)} className="text-xs text-red-300 focus:bg-red-500/40 focus:text-red-200">
+               <Trash2 className="mr-2 h-3.5 w-3.5" /> Eliminar Grupo
+            </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
     );
 };
 
