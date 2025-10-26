@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
@@ -545,17 +546,7 @@ export const useLayerManager = ({
   const toggleLayerVisibility = useCallback((layerId: string, groupId?: string) => {
       setLayers(prevItems => {
           return prevItems.map(item => {
-              if (item.id === layerId && !('layers' in item)) {
-                  // This is a single layer
-                  const newVisibility = !item.visible;
-                  item.olLayer.setVisible(newVisibility);
-                  const visualLayer = item.olLayer.get('visualLayer');
-                  if (visualLayer) {
-                      visualLayer.setVisible(newVisibility && (item.wmsStyleEnabled ?? true));
-                  }
-                  return { ...item, visible: newVisibility };
-              } else if (item.id === groupId && 'layers' in item) {
-                  // This is a group, and a radio button inside it was clicked
+              if (item.id === groupId && 'layers' in item) { // A radio button in a 'single' mode group was clicked
                   const updatedGroupLayers = item.layers.map(layerInGroup => {
                       const isTargetLayer = layerInGroup.id === layerId;
                       layerInGroup.olLayer.setVisible(isTargetLayer);
@@ -566,6 +557,14 @@ export const useLayerManager = ({
                       return { ...layerInGroup, visible: isTargetLayer };
                   });
                   return { ...item, layers: updatedGroupLayers };
+              } else if (!('layers' in item) && item.id === layerId) { // This is a single layer (not in a group or in a 'multiple' mode group)
+                  const newVisibility = !item.visible;
+                  item.olLayer.setVisible(newVisibility);
+                  const visualLayer = item.olLayer.get('visualLayer');
+                  if (visualLayer) {
+                      visualLayer.setVisible(newVisibility && (item.wmsStyleEnabled ?? true));
+                  }
+                  return { ...item, visible: newVisibility };
               }
               return item;
           });
@@ -861,18 +860,30 @@ export const useLayerManager = ({
     }
   }, [layers, onShowTableRequest, toast]);
 
-  const renameLayer = useCallback((itemId: string, newName: string) => {
-    setLayers(prev =>
-      prev.map(item => {
-        if (item.id === itemId) {
-          return { ...item, name: newName };
-        }
-        return item;
-      })
-    );
-    setTimeout(() => {
-      toast({ description: `Item renombrado a "${newName}"` });
-    }, 0);
+  const renameLayer = useCallback((layerId: string, newName: string) => {
+      setLayers(prev =>
+          prev.map(item => {
+              if (item.id === layerId && !('layers' in item)) {
+                  item.olLayer.set('name', newName);
+                  return { ...item, name: newName };
+              } else if ('layers' in item) { // Check inside groups
+                  return {
+                      ...item,
+                      layers: item.layers.map(layer => {
+                          if (layer.id === layerId) {
+                              layer.olLayer.set('name', newName);
+                              return { ...layer, name: newName };
+                          }
+                          return layer;
+                      })
+                  };
+              }
+              return item;
+          })
+      );
+      setTimeout(() => {
+          toast({ description: `Capa renombrada a "${newName}"` });
+      }, 0);
   }, [toast, setLayers]);
   
   const handleExtractByPolygon = useCallback((layerIdToExtract: string, onSuccess?: () => void) => {
