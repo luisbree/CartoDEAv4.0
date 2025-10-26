@@ -545,7 +545,7 @@ export const useLayerManager = ({
   const toggleLayerVisibility = useCallback((layerId: string, groupId?: string) => {
       setLayers(prevItems => {
           return prevItems.map(item => {
-              if (item.id === layerId) {
+              if (item.id === layerId && !('layers' in item)) {
                   // This is a single layer
                   const newVisibility = !item.visible;
                   item.olLayer.setVisible(newVisibility);
@@ -1247,6 +1247,41 @@ const groupLayers = useCallback((layerIds: string[], groupName: string) => {
     });
   }, [setLayers]);
 
+  const ungroupLayer = useCallback((groupId: string) => {
+    setLayers(prevItems => {
+        const newItems: (MapLayer | LayerGroup)[] = [];
+        const groupToUngroup = prevItems.find(item => item.id === groupId) as LayerGroup | undefined;
+
+        if (!groupToUngroup) return prevItems;
+
+        prevItems.forEach(item => {
+            if (item.id === groupId) {
+                newItems.push(...groupToUngroup.layers);
+            } else {
+                newItems.push(item);
+            }
+        });
+        return newItems;
+    });
+    toast({ description: `Grupo "${(layers.find(l => l.id === groupId) as LayerGroup)?.name}" desagrupado.` });
+  }, [layers, setLayers, toast]);
+
+  const toggleGroupExpanded = useCallback((groupId: string) => {
+    setLayers(prev => prev.map(item =>
+        item.id === groupId && 'layers' in item
+            ? { ...item, isExpanded: !item.isExpanded }
+            : item
+    ));
+  }, [setLayers]);
+
+  const setGroupDisplayMode = useCallback((groupId: string, mode: 'single' | 'multiple') => {
+      setLayers(prev => prev.map(item =>
+          item.id === groupId && 'layers' in item
+              ? { ...item, displayMode: mode }
+              : item
+      ));
+  }, [setLayers]);
+
 
   return {
     layers,
@@ -1284,5 +1319,8 @@ const groupLayers = useCallback((layerIds: string[], groupName: string) => {
     updateFeatureAttribute,
     addFieldToLayer,
     groupLayers,
+    ungroupLayer,
+    toggleGroupExpanded,
+    setGroupDisplayMode,
   };
 };

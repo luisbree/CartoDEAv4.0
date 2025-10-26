@@ -261,7 +261,7 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
                           <Button
                             variant="outline"
                             size="icon"
-                            className="h-8 w-8 bg-black/20 hover:bg-white/10 border border-white/30 text-white/90 disabled:opacity-50 disabled:bg-black/20 disabled:text-white/50"
+                            className="h-8 w-8 bg-black/20 hover:bg-white/10 border border-white/30 text-white/90 disabled:opacity-50 disabled:bg-black/20 disabled:text-white/90 disabled:border-white/30"
                             onClick={onUndoRemove}
                             disabled={!canUndoRemove}
                             aria-label="Deshacer última eliminación"

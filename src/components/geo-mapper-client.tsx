@@ -505,6 +505,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
     if (action.layersToRemove && action.layersToRemove.length > 0) {
         action.layersToRemove.forEach(layerNameToRemove => {
             const layerToRemove = layerManagerHook.layers.find(l => {
+                if ('layers' in l) return false;
                 const machineName = l.olLayer.get('gsLayerName') || l.name;
                 return machineName === layerNameToRemove;
             });
@@ -518,6 +519,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
 
     if (action.zoomToLayer) {
       const layerToZoom = layerManagerHook.layers.find(l => {
+          if ('layers' in l) return false;
           const machineName = l.olLayer.get('gsLayerName') || l.name;
           return machineName === action.zoomToLayer;
       });
@@ -531,6 +533,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
     if (action.layersToStyle && action.layersToStyle.length > 0) {
         action.layersToStyle.forEach(styleRequest => {
             const layerToStyle = layerManagerHook.layers.find(l => {
+                if ('layers' in l) return false;
                 const machineName = l.olLayer.get('gsLayerName') || l.name;
                 return machineName === styleRequest.layerName;
             });
@@ -550,6 +553,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
 
     if (action.showTableForLayer) {
         const layerToShowTable = layerManagerHook.layers.find(l => {
+            if ('layers' in l) return false;
             const machineName = l.olLayer.get('gsLayerName') || l.name;
             return machineName === action.showTableForLayer;
         });
