@@ -1128,6 +1128,11 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
             onApplyCategorizedSymbology={layerManagerHook.applyCategorizedSymbology}
             onApplyGeoTiffStyle={layerManagerHook.applyGeoTiffStyle}
             onToggleWmsStyle={layerManagerHook.toggleWmsStyle}
+            onGroupLayers={layerManagerHook.groupLayers}
+            onToggleGroupExpanded={layerManagerHook.toggleGroupExpanded}
+            onSetGroupDisplayMode={layerManagerHook.setGroupDisplayMode}
+            onUngroup={layerManagerHook.ungroupLayer}
+            onRenameGroup={layerManagerHook.renameGroup}
             isDrawingSourceEmptyOrNotPolygon={layerManagerHook.isDrawingSourceEmptyOrNotPolygon}
             isSelectionEmpty={featureInspectionHook.selectedFeatures.length === 0}
             onSetLayerOpacity={layerManagerHook.setLayerOpacity}

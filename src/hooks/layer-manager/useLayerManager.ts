@@ -1222,6 +1222,31 @@ export const useLayerManager = ({
     }
 }, [layers, mapRef, toast]);
 
+const groupLayers = useCallback((layerIds: string[], groupName: string) => {
+    setLayers(prevItems => {
+        const layersToGroup: MapLayer[] = [];
+        const remainingItems = prevItems.filter(item => {
+            if (layerIds.includes(item.id) && !('layers' in item)) {
+                layersToGroup.push(item);
+                return false;
+            }
+            return true;
+        });
+
+        if (layersToGroup.length > 0) {
+            const newGroup: LayerGroup = {
+                id: `group-${nanoid()}`,
+                name: groupName,
+                layers: layersToGroup,
+                isExpanded: true,
+                displayMode: 'multiple',
+            };
+            return [newGroup, ...remainingItems];
+        }
+        return prevItems;
+    });
+  }, [setLayers]);
+
 
   return {
     layers,
@@ -1258,5 +1283,6 @@ export const useLayerManager = ({
     isWfsLoading,
     updateFeatureAttribute,
     addFieldToLayer,
+    groupLayers,
   };
 };
