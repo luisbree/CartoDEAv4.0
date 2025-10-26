@@ -137,17 +137,7 @@ export async function getGoesLayers(input: { numberOfImages: number }): Promise<
         .filterDate(ee.Date(Date.now()).advance(-12, 'hour'), ee.Date(Date.now()))
         .sort('system:time_start', false) // Sort descending to get the latest
         .limit(input.numberOfImages);
-    
-    const imageList = collection.toList(input.numberOfImages);
 
-    const getMapUrlAsync = promisify((image: ee.Image, visParams: any, callback: (mapDetails: any, error: string) => void) => {
-        image.getMap(visParams, callback);
-    });
-
-    const getMetadataAsync = promisify((dict: ee.Dictionary, callback: (metadata: any, error: string) => void) => {
-        dict.evaluate(callback);
-    });
-    
     const applyScaleAndOffset = (image: ee.Image) => {
         const bandName = 'CMI_C13';
         const offset = ee.Number(image.get(bandName + '_offset'));
@@ -164,40 +154,48 @@ export async function getGoesLayers(input: { numberOfImages: number }): Promise<
     ];
     const visParams = { min: 183.15, max: 323.15, palette: SMN_CLOUDTOP_PALETTE };
 
-    const layersData: GeeTileLayerOutput[] = [];
-    
-    const count = (await promisify(imageList.size().evaluate).call(imageList.size())) as number;
-    if (count === 0) {
+    // Server-side mapping function
+    const getLayerData = (image: ee.Image): ee.Feature => {
+        const scaledImage = applyScaleAndOffset(image);
+        const mapDetails = scaledImage.getMap(visParams);
+        
+        const metadata = ee.Dictionary({
+            timestamp: image.get('system:time_start'),
+            satellite: image.get('satellite'),
+            scene_id: image.get('scene_id'),
+        });
+
+        // Use ee.Feature to wrap the dictionary, making it easier to evaluate
+        return ee.Feature(null, {
+            tileUrl: mapDetails.urlFormat,
+            metadata: metadata
+        });
+    };
+
+    // Apply the mapping function on the server
+    const processedCollection = collection.map(getLayerData);
+
+    // Evaluate the entire collection in a single call
+    const evaluatedFeatures = await new Promise<any[]>((resolve, reject) => {
+        processedCollection.toList(input.numberOfImages).evaluate((result: any, error?: string) => {
+            if (error) {
+                console.error("GEE evaluate error:", error);
+                reject(new Error(`Error procesando la colección de GOES: ${error}`));
+            } else {
+                resolve(result);
+            }
+        });
+    });
+
+    if (!evaluatedFeatures || evaluatedFeatures.length === 0) {
         throw new Error('No se encontraron imágenes de GOES en las últimas 12 horas.');
     }
-    
-    for (let i = 0; i < count; i++) {
-        const image = ee.Image(imageList.get(i));
-        const scaledImage = applyScaleAndOffset(image);
 
-        try {
-            const mapDetails = await getMapUrlAsync(scaledImage, visParams);
-            if (!mapDetails || !mapDetails.urlFormat) {
-                console.warn(`No se pudo obtener el mapa para la imagen ${i}. Saltando...`);
-                continue;
-            }
-
-            const tileUrl = mapDetails.urlFormat.replace('{x}', '{x}').replace('{y}', '{y}').replace('{z}', '{z}');
-
-            const metadataDict = ee.Dictionary({
-                timestamp: image.get('system:time_start'),
-                satellite: image.get('satellite'),
-                scene_id: image.get('scene_id'),
-            });
-            const metadata = await getMetadataAsync(metadataDict);
-
-            layersData.push({ tileUrl, metadata });
-
-        } catch (error) {
-            console.error(`Error procesando la imagen ${i} de GOES:`, error);
-            // Continue to the next image instead of failing the whole request
-        }
-    }
+    // Format the results into the expected output structure
+    const layersData: GeeTileLayerOutput[] = evaluatedFeatures.map(feature => ({
+        tileUrl: feature.properties.tileUrl.replace('{x}', '{x}').replace('{y}', '{y}').replace('{z}', '{z}'),
+        metadata: feature.properties.metadata
+    }));
     
     // Return in chronological order (oldest first)
     return layersData.reverse();
