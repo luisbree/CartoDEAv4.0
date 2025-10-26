@@ -213,7 +213,7 @@ const LayerList: React.FC<LayerListProps> = ({
               onZoomToExtent={onZoomToExtent}
               onShowLayerTable={onShowLayerTable}
               onShowStatistics={onShowStatistics}
-              onRemove={onRemoveLayer}
+              onRemoveLayer={onRemoveLayer}
               onExtractByPolygon={onExtractByPolygon}
               onExtractBySelection={onExtractBySelection}
               onSelectByLayer={onSelectByLayer}
@@ -253,5 +253,3 @@ const LayerList: React.FC<LayerListProps> = ({
 };
 
 export default LayerList;
-
-    
