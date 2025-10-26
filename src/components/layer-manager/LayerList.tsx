@@ -51,6 +51,8 @@ interface LayerListProps {
   onSetGroupDisplayMode: (groupId: string, mode: 'single' | 'multiple') => void;
   onUngroup: (groupId: string) => void;
   onRenameGroup: (groupId: string, newName: string) => void;
+  onToggleGroupPlayback: (groupId: string) => void;
+  onSetGroupPlaySpeed: (groupId: string, speed: number) => void;
   
   allLayersForSelection: MapLayer[];
   selectedFeaturesForSelection: Feature<Geometry>[];
@@ -88,6 +90,8 @@ const LayerList: React.FC<LayerListProps> = ({
   onSetGroupDisplayMode,
   onUngroup,
   onRenameGroup,
+  onToggleGroupPlayback,
+  onSetGroupPlaySpeed,
   allLayersForSelection,
   selectedFeaturesForSelection,
 }) => {
@@ -185,6 +189,8 @@ const LayerList: React.FC<LayerListProps> = ({
                     onSetGroupDisplayMode={onSetGroupDisplayMode}
                     onUngroup={onUngroup}
                     onRenameGroup={onRenameGroup}
+                    onToggleGroupPlayback={onToggleGroupPlayback}
+                    onSetGroupPlaySpeed={onSetGroupPlaySpeed}
                     selectedFeaturesForSelection={selectedFeaturesForSelection}
                     // Drag and Drop for the group itself
                     isDraggable={!isSharedView}
