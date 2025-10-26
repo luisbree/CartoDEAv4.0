@@ -14,7 +14,6 @@ import {
   ContextMenuSub,
   ContextMenuSubContent,
   ContextMenuSubTrigger, 
-  ContextMenuPortal,
   ContextMenuCheckboxItem,
 } from "@/components/ui/context-menu";
 import {
@@ -39,10 +38,108 @@ import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { RadioGroup, RadioGroupItem } from '../ui/radio-group';
 
+interface LayerItemContentProps {
+  layer: MapLayer;
+  isEditing: boolean;
+  editingName: string;
+  isDraggable: boolean;
+  groupDisplayMode?: 'single' | 'multiple';
+  onToggleVisibility: (layerId: string, groupId?: string) => void;
+  onNameChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onNameSubmit: () => void;
+  onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => void;
+  onDoubleClick: () => void;
+  inputRef: React.RefObject<HTMLInputElement>;
+}
+
+const LayerItemContent: React.FC<LayerItemContentProps> = ({
+    layer, isEditing, editingName, isDraggable, groupDisplayMode, 
+    onToggleVisibility, onNameChange, onNameSubmit, onKeyDown, onDoubleClick, inputRef
+}) => {
+    
+    const GoesMetadataTooltip = () => {
+        const isGoesLayer = (layer.type === 'geotiff' || layer.type === 'gee') && layer.olLayer.get('geeParams')?.bandCombination === 'GOES_CLOUDTOP';
+        const metadata = layer.olLayer.get('geeParams')?.metadata;
+        if (!isGoesLayer || !metadata) return null;
+
+        const timestamp = metadata.timestamp ? format(new Date(metadata.timestamp), "dd/MM/yyyy HH:mm:ss 'UTC'", { locale: es }) : 'N/D';
+        const satellite = metadata.satellite || 'N/D';
+        const sceneId = metadata.scene_id || 'N/D';
+
+        return (
+            <Tooltip>
+                <TooltipTrigger asChild>
+                    <Info className="h-3 w-3 text-gray-400 hover:text-white ml-2 flex-shrink-0" />
+                </TooltipTrigger>
+                <TooltipContent side="right" className="bg-gray-700 text-white border-gray-600 text-xs">
+                    <div className="space-y-1">
+                        <p><strong>Fecha:</strong> {timestamp}</p>
+                        <p><strong>Satélite:</strong> {satellite}</p>
+                        <p><strong>ID Escena:</strong> <span className="break-all">{sceneId}</span></p>
+                    </div>
+                </TooltipContent>
+            </Tooltip>
+        );
+    };
+
+    return (
+        <div className="flex items-center w-full">
+            {isDraggable && <GripVertical className="h-4 w-4 text-gray-500 mr-1 flex-shrink-0 cursor-grab" />}
+                
+            {groupDisplayMode === 'single' ? (
+                <RadioGroup value={layer.visible ? layer.id : ''} onValueChange={() => onToggleVisibility(layer.id, layer.groupId)} className="flex items-center">
+                    <RadioGroupItem value={layer.id} id={`vis-${layer.id}`} className="h-3.5 w-3.5" />
+                </RadioGroup>
+            ) : (
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={(e) => { e.stopPropagation(); onToggleVisibility(layer.id); }}
+                    className="h-6 w-6 text-white hover:bg-gray-600/80 p-0 mr-1 flex-shrink-0"
+                    aria-label={`Alternar visibilidad para ${layer.name}`}
+                    title={layer.visible ? "Ocultar capa" : "Mostrar capa"}
+                >
+                    {layer.visible ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+                </Button>
+            )}
+
+            {isEditing ? (
+                <Input
+                    ref={inputRef}
+                    type="text"
+                    value={editingName}
+                    onChange={onNameChange}
+                    onBlur={onNameSubmit}
+                    onKeyDown={onKeyDown}
+                    className="h-6 text-xs p-1 bg-gray-900/80 border-primary focus-visible:ring-primary/50 ml-1"
+                    onClick={(e) => e.stopPropagation()}
+                />
+            ) : (
+                <label
+                    htmlFor={`vis-${layer.id}`}
+                    className={cn(
+                        "flex-1 cursor-pointer text-xs font-medium truncate min-w-0 select-none",
+                        groupDisplayMode === 'single' ? 'ml-2' : '',
+                        layer.visible ? "text-white" : "text-gray-400"
+                    )}
+                    title={layer.name}
+                    onDoubleClick={onDoubleClick}
+                >
+                    {layer.name}
+                </label>
+            )}
+            
+            <div className="flex items-center space-x-0.5 flex-shrink-0">
+                <GoesMetadataTooltip />
+            </div>
+        </div>
+    );
+};
+
 
 interface LayerItemProps {
   layer: MapLayer;
-  allLayers: MapLayer[]; // For the "Select by Layer" submenu
+  allLayers: MapLayer[];
   onToggleVisibility: (layerId: string, groupId?: string) => void;
   onZoomToExtent: (layerId: string) => void;
   onShowLayerTable: (layerId: string) => void;
@@ -64,7 +161,6 @@ interface LayerItemProps {
   isSelectionEmpty: boolean;
   onSetLayerOpacity: (layerId: string, opacity: number) => void;
   
-  // Drag and Drop props
   isDraggable: boolean;
   onDragStart?: (e: React.DragEvent<HTMLLIElement>) => void;
   onDragEnd?: (e: React.DragEvent<HTMLLIElement>) => void;
@@ -75,17 +171,14 @@ interface LayerItemProps {
   isDragging?: boolean;
   isDragOver?: boolean;
 
-  // Selection props
   isSelected?: boolean;
   onClick?: (event: React.MouseEvent<HTMLLIElement>) => void;
 
-  // Editing props
   activeTool: InteractionToolId | null;
   onToggleEditing: (tool: InteractionToolId) => void;
   
   isSharedView?: boolean;
   
-  // Group context
   groupDisplayMode?: 'single' | 'multiple';
 }
 
@@ -180,31 +273,6 @@ const LayerItem: React.FC<LayerItemProps> = ({
     setIsCategorizedEditorOpen(false);
   };
   
-  const GoesMetadataTooltip = () => {
-    const isGoesLayer = (layer.type === 'geotiff' || layer.type === 'gee') && layer.olLayer.get('geeParams')?.bandCombination === 'GOES_CLOUDTOP';
-    const metadata = layer.olLayer.get('geeParams')?.metadata;
-    if (!isGoesLayer || !metadata) return null;
-
-    const timestamp = metadata.timestamp ? format(new Date(metadata.timestamp), "dd/MM/yyyy HH:mm:ss 'UTC'", { locale: es }) : 'N/D';
-    const satellite = metadata.satellite || 'N/D';
-    const sceneId = metadata.scene_id || 'N/D';
-
-    return (
-        <Tooltip>
-            <TooltipTrigger asChild>
-                <Info className="h-3 w-3 text-gray-400 hover:text-white ml-2 flex-shrink-0" />
-            </TooltipTrigger>
-            <TooltipContent side="right" className="bg-gray-700 text-white border-gray-600 text-xs">
-                <div className="space-y-1">
-                    <p><strong>Fecha:</strong> {timestamp}</p>
-                    <p><strong>Satélite:</strong> {satellite}</p>
-                    <p><strong>ID Escena:</strong> <span className="break-all">{sceneId}</span></p>
-                </div>
-            </TooltipContent>
-        </Tooltip>
-    );
-  };
-
   return (
     <>
     <TooltipProvider>
@@ -228,255 +296,212 @@ const LayerItem: React.FC<LayerItemProps> = ({
             onDrop={onDrop}
             onClick={onClick}
           >
-            {isDraggable && <GripVertical className="h-4 w-4 text-gray-500 mr-1 flex-shrink-0 cursor-grab" />}
-            
-            {props.groupDisplayMode === 'single' ? (
-                <RadioGroup value={layer.visible ? layer.id : ''} onValueChange={() => props.onToggleVisibility(layer.id, layer.groupId)} className="flex items-center">
-                    <RadioGroupItem value={layer.id} id={`vis-${layer.id}`} className="h-3.5 w-3.5" />
-                </RadioGroup>
-            ) : (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={(e) => { e.stopPropagation(); props.onToggleVisibility(layer.id); }}
-                  className="h-6 w-6 text-white hover:bg-gray-600/80 p-0 mr-1 flex-shrink-0"
-                  aria-label={`Alternar visibilidad para ${layer.name}`}
-                  title={layer.visible ? "Ocultar capa" : "Mostrar capa"}
-                >
-                  {layer.visible ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
-                </Button>
-            )}
-
-            {isEditing ? (
-              <Input
-                  ref={inputRef}
-                  type="text"
-                  value={editingName}
-                  onChange={handleNameChange}
-                  onBlur={handleNameSubmit}
-                  onKeyDown={handleKeyDown}
-                  className="h-6 text-xs p-1 bg-gray-900/80 border-primary focus-visible:ring-primary/50 ml-1"
-                  onClick={(e) => e.stopPropagation()} // Prevent list item click handler from firing
-                />
-            ) : (
-              <label
-                htmlFor={`vis-${layer.id}`}
-                className={cn(
-                  "flex-1 cursor-pointer text-xs font-medium truncate min-w-0 select-none",
-                  props.groupDisplayMode === 'single' ? 'ml-2' : '',
-                  layer.visible ? "text-white" : "text-gray-400"
-                )}
-                title={layer.name}
+            <LayerItemContent
+                layer={layer}
+                isEditing={isEditing}
+                editingName={editingName}
+                isDraggable={isDraggable}
+                groupDisplayMode={props.groupDisplayMode}
+                onToggleVisibility={props.onToggleVisibility}
+                onNameChange={handleNameChange}
+                onNameSubmit={handleNameSubmit}
+                onKeyDown={handleKeyDown}
                 onDoubleClick={handleDoubleClick}
-              >
-                {layer.name}
-              </label>
-            )}
-            
-            <div className="flex items-center space-x-0.5 flex-shrink-0">
-              <GoesMetadataTooltip />
-            </div>
+                inputRef={inputRef}
+            />
           </li>
         </ContextMenuTrigger>
-        <ContextMenuPortal>
-            <ContextMenuContent onOpenAutoFocus={(e) => e.preventDefault()} side="right" align="start" className="bg-gray-700 text-white border-gray-600 w-56">
+        <ContextMenuContent onOpenAutoFocus={(e) => e.preventDefault()} side="right" align="start" className="bg-gray-700 text-white border-gray-600 w-56">
+          <ContextMenuItem
+            className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer"
+            onSelect={() => props.onZoomToExtent(layer.id)}
+          >
+            <ZoomIn className="mr-2 h-3.5 w-3.5" />
+            Ir a la extensión
+          </ContextMenuItem>
+        
+        {!props.isSharedView ? (
+          <>
+            <ContextMenuItem
+              className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer"
+              onSelect={handleRenameSelect}
+            >
+              <Edit className="mr-2 h-3.5 w-3.5" />
+              Renombrar Capa
+            </ContextMenuItem>
+    
+            {isVectorLayer && (
               <ContextMenuItem
-                className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer"
-                onSelect={() => props.onZoomToExtent(layer.id)}
-              >
-                <ZoomIn className="mr-2 h-3.5 w-3.5" />
-                Ir a la extensión
-              </ContextMenuItem>
-            
-            {!props.isSharedView ? (
-              <>
-                <ContextMenuItem
-                  className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer"
-                  onSelect={handleRenameSelect}
+                  className={cn(
+                      "text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer",
+                      props.activeTool === 'modify' && "bg-primary/30"
+                  )}
+                  onSelect={() => props.onToggleEditing('modify')}
                 >
                   <Edit className="mr-2 h-3.5 w-3.5" />
-                  Renombrar Capa
+                  {props.activeTool === 'modify' ? 'Dejar de Editar Geometría' : 'Editar Geometría'}
                 </ContextMenuItem>
-        
-                {isVectorLayer && (
-                  <ContextMenuItem
-                      className={cn(
-                          "text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer",
-                          props.activeTool === 'modify' && "bg-primary/30"
-                      )}
-                      onSelect={() => props.onToggleEditing('modify')}
-                    >
-                      <Edit className="mr-2 h-3.5 w-3.5" />
-                      {props.activeTool === 'modify' ? 'Dejar de Editar Geometría' : 'Editar Geometría'}
-                    </ContextMenuItem>
-                )}
-        
-                <ContextMenuSub>
-                    <ContextMenuSubTrigger className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer data-[state=open]:bg-gray-600">
-                        <Palette className="mr-2 h-3.5 w-3.5" />
-                        <span>Simbología</span>
-                    </ContextMenuSubTrigger>
-                    {(isVectorLayer || layer.type === 'geotiff' || layer.type === 'gee') && (
-                      <ContextMenuPortal>
-                          <ContextMenuSubContent className="bg-gray-700 text-white border-gray-600">
-                            {isVectorLayer && (
-                              <ContextMenuItem onSelect={(e) => { e.preventDefault(); setIsStyleEditorOpen(true); }} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">
-                                  <Palette className="mr-2 h-3.5 w-3.5" /> Simple
-                              </ContextMenuItem>
-                            )}
-                            {isVectorLayer && (
-                                <ContextMenuItem onSelect={(e) => { e.preventDefault(); setIsCategorizedEditorOpen(true); }} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">
-                                  <AppWindow className="mr-2 h-3.5 w-3.5" /> Por Categorías
-                                </ContextMenuItem>
-                            )}
-                            <ContextMenuItem onSelect={(e) => { e.preventDefault(); setIsGraduatedEditorOpen(true); }} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">
-                              <Waypoints className="mr-2 h-3.5 w-3.5" /> Graduada
-                            </ContextMenuItem>
-                            {layer.type === 'wfs' && (
-                              <>
-                                <ContextMenuSeparator className="bg-gray-500/50 my-1" />
-                                <ContextMenuCheckboxItem
-                                  checked={layer.wmsStyleEnabled}
-                                  onSelect={(e) => {
-                                      e.preventDefault();
-                                      props.onToggleWmsStyle(layer.id);
-                                  }}
-                                  className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer"
-                                >
-                                  Usar Estilo del Servidor (WMS)
-                                </ContextMenuCheckboxItem>
-                              </>
-                            )}
-                          </ContextMenuSubContent>
-                      </ContextMenuPortal>
+            )}
+    
+            <ContextMenuSub>
+                <ContextMenuSubTrigger className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer data-[state=open]:bg-gray-600">
+                    <Palette className="mr-2 h-3.5 w-3.5" />
+                    <span>Simbología</span>
+                </ContextMenuSubTrigger>
+                {(isVectorLayer || layer.type === 'geotiff' || layer.type === 'gee') && (
+                  <ContextMenuSubContent className="bg-gray-700 text-white border-gray-600">
+                    {isVectorLayer && (
+                      <ContextMenuItem onSelect={(e) => { e.preventDefault(); setIsStyleEditorOpen(true); }} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">
+                          <Palette className="mr-2 h-3.5 w-3.5" /> Simple
+                      </ContextMenuItem>
                     )}
-                </ContextMenuSub>
-        
-        
-                {isVectorLayer && (
-                  <ContextMenuItem
-                      className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer"
-                      onSelect={(e) => { e.preventDefault(); setIsLabelEditorOpen(true); }}
-                    >
-                      <Tags className="mr-2 h-3.5 w-3.5" />
-                      Etiquetar
+                    {isVectorLayer && (
+                        <ContextMenuItem onSelect={(e) => { e.preventDefault(); setIsCategorizedEditorOpen(true); }} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">
+                          <AppWindow className="mr-2 h-3.5 w-3.5" /> Por Categorías
+                        </ContextMenuItem>
+                    )}
+                    <ContextMenuItem onSelect={(e) => { e.preventDefault(); setIsGraduatedEditorOpen(true); }} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">
+                      <Waypoints className="mr-2 h-3.5 w-3.5" /> Graduada
                     </ContextMenuItem>
+                    {layer.type === 'wfs' && (
+                      <>
+                        <ContextMenuSeparator className="bg-gray-500/50 my-1" />
+                        <ContextMenuCheckboxItem
+                          checked={layer.wmsStyleEnabled}
+                          onSelect={(e) => {
+                              e.preventDefault();
+                              props.onToggleWmsStyle(layer.id);
+                          }}
+                          className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer"
+                        >
+                          Usar Estilo del Servidor (WMS)
+                        </ContextMenuCheckboxItem>
+                      </>
+                    )}
+                  </ContextMenuSubContent>
                 )}
-        
-                {isVectorLayer && (
-                  <ContextMenuItem
-                    className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer"
-                    onSelect={() => props.onShowLayerTable(layer.id)}
-                  >
-                    <Table2 className="mr-2 h-3.5 w-3.5" />
-                    Ver tabla de atributos
-                  </ContextMenuItem>
-                )}
-        
-                {isVectorLayer && (
-                  <ContextMenuItem
-                    className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer"
-                    onSelect={() => props.onShowStatistics(layer.id)}
-                  >
-                    <BarChartHorizontal className="mr-2 h-3.5 w-3.5" />
-                    Estadísticas
-                  </ContextMenuItem>
-                )}
-        
-                {isVectorLayer && (
-                  <ContextMenuSub>
-                      <ContextMenuSubTrigger className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer data-[state=open]:bg-gray-600 disabled:opacity-50" disabled={props.allLayers.filter(l => l.type === 'vector' || l.type === 'wfs' || l.type === 'osm' || l.type === 'drawing').length === 0}>
-                          <Target className="mr-2 h-3.5 w-3.5" />
-                          <span>Seleccionar por Capa</span>
-                      </ContextMenuSubTrigger>
-                      <ContextMenuPortal>
-                          <ContextMenuSubContent className="bg-gray-700 text-white border-gray-600">
-                              {props.allLayers.filter((l): l is VectorMapLayer => l.id !== layer.id && l.olLayer instanceof VectorLayer).map(selectorLayer => (
-                                  <ContextMenuItem key={selectorLayer.id} onSelect={() => props.onSelectByLayer(layer.id, selectorLayer.id)} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">
-                                      {selectorLayer.name}
-                                  </ContextMenuItem>
-                              ))}
-                          </ContextMenuSubContent>
-                      </ContextMenuPortal>
-                  </ContextMenuSub>
-                )}
-        
-                {(isVectorLayer || layer.type === 'wms' || layer.type === 'geotiff' || layer.type === 'gee') && (
-                  <ContextMenuSub>
-                    <ContextMenuSubTrigger className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer data-[state=open]:bg-gray-600">
-                      <Download className="mr-2 h-3.5 w-3.5" />
-                      <span>Exportar Capa</span>
-                    </ContextMenuSubTrigger>
-                    <ContextMenuPortal>
-                      <ContextMenuSubContent className="bg-gray-700 text-white border-gray-600">
-                        {isVectorLayer && <ContextMenuItem onSelect={() => props.onExportLayer(layer.id, 'geojson')} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">GeoJSON</ContextMenuItem>}
-                        {isVectorLayer && <ContextMenuItem onSelect={() => props.onExportLayer(layer.id, 'kml')} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">KML</ContextMenuItem>}
-                        {isVectorLayer && <ContextMenuItem onSelect={() => props.onExportLayer(layer.id, 'shp')} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">Shapefile (.zip)</ContextMenuItem>}
-                        {(layer.type === 'wms' || layer.type === 'geotiff' || layer.type === 'gee') && <ContextMenuItem onSelect={() => props.onExportWmsAsGeotiff(layer.id)} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">GeoTIFF (Vista Actual)</ContextMenuItem>}
-                      </ContextMenuSubContent>
-                    </ContextMenuPortal>
-                  </ContextMenuSub>
-                )}
-        
-                <ContextMenuSeparator className="bg-gray-500/50" />
-        
-                {isVectorLayer && (
-                  <>
-                    <ContextMenuItem
-                      className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                      onSelect={() => props.onExtractByPolygon(layer.id)}
-                      disabled={props.isDrawingSourceEmptyOrNotPolygon}
-                    >
-                      <Scissors className="mr-2 h-3.5 w-3.5" />
-                      <span title={props.isDrawingSourceEmptyOrNotPolygon ? "Dibuje un polígono primero" : `Extraer de ${layer.name} por polígono`}>
-                        Extraer por polígono
-                      </span>
-                    </ContextMenuItem>
-                
-                    <ContextMenuItem
-                      className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                      onSelect={() => props.onExtractBySelection()}
-                      disabled={props.isSelectionEmpty}
-                    >
-                      <CopyPlus className="mr-2 h-3.5 w-3.5" />
-                      <span title={props.isSelectionEmpty ? "Seleccione una o más entidades primero" : `Crear una nueva capa a partir de la selección actual`}>
-                        Crear capa desde selección
-                      </span>
-                    </ContextMenuItem>
-                    <ContextMenuSeparator className="bg-gray-500/50" />
-                  </>
-                )}
-              </>
-            ) : null}
-            
-            <ContextMenuLabel className="text-xs text-gray-300 px-2 py-1 flex items-center">
-                <Percent className="mr-2 h-3.5 w-3.5" /> Opacidad: {Math.round(layer.opacity * 100)}%
-            </ContextMenuLabel>
-            <ContextMenuItem onSelect={(e) => e.preventDefault()} className="focus:bg-transparent hover:bg-transparent cursor-default p-2">
-                <Slider
-                    defaultValue={[layer.opacity * 100]}
-                    max={100}
-                    step={1}
-                    onValueChange={(value) => props.onSetLayerOpacity(layer.id, value[0] / 100)}
-                    className="w-full"
-                    aria-label={`Opacidad para ${layer.name}`}
-                />
-            </ContextMenuItem>
-            
-            {!props.isSharedView && (
-              <>
-                <ContextMenuSeparator className="bg-gray-500/50" />
-                <ContextMenuItem
-                  className="text-xs hover:bg-red-500/30 focus:bg-red-500/40 text-red-300 focus:text-red-200 cursor-pointer"
-                  onSelect={() => props.onRemoveLayer(layer.id)}
+            </ContextMenuSub>
+    
+    
+            {isVectorLayer && (
+              <ContextMenuItem
+                  className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer"
+                  onSelect={(e) => { e.preventDefault(); setIsLabelEditorOpen(true); }}
                 >
-                  <Trash2 className="mr-2 h-3.5 w-3.5" />
-                  Eliminar capa
+                  <Tags className="mr-2 h-3.5 w-3.5" />
+                  Etiquetar
                 </ContextMenuItem>
+            )}
+    
+            {isVectorLayer && (
+              <ContextMenuItem
+                className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer"
+                onSelect={() => props.onShowLayerTable(layer.id)}
+              >
+                <Table2 className="mr-2 h-3.5 w-3.5" />
+                Ver tabla de atributos
+              </ContextMenuItem>
+            )}
+    
+            {isVectorLayer && (
+              <ContextMenuItem
+                className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer"
+                onSelect={() => props.onShowStatistics(layer.id)}
+              >
+                <BarChartHorizontal className="mr-2 h-3.5 w-3.5" />
+                Estadísticas
+              </ContextMenuItem>
+            )}
+    
+            {isVectorLayer && (
+              <ContextMenuSub>
+                  <ContextMenuSubTrigger className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer data-[state=open]:bg-gray-600 disabled:opacity-50" disabled={props.allLayers.filter(l => l.type === 'vector' || l.type === 'wfs' || l.type === 'osm' || l.type === 'drawing').length === 0}>
+                      <Target className="mr-2 h-3.5 w-3.5" />
+                      <span>Seleccionar por Capa</span>
+                  </ContextMenuSubTrigger>
+                  <ContextMenuSubContent className="bg-gray-700 text-white border-gray-600">
+                      {props.allLayers.filter((l): l is VectorMapLayer => l.id !== layer.id && l.olLayer instanceof VectorLayer).map(selectorLayer => (
+                          <ContextMenuItem key={selectorLayer.id} onSelect={() => props.onSelectByLayer(layer.id, selectorLayer.id)} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">
+                              {selectorLayer.name}
+                          </ContextMenuItem>
+                      ))}
+                  </ContextMenuSubContent>
+              </ContextMenuSub>
+            )}
+    
+            {(isVectorLayer || layer.type === 'wms' || layer.type === 'geotiff' || layer.type === 'gee') && (
+              <ContextMenuSub>
+                <ContextMenuSubTrigger className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer data-[state=open]:bg-gray-600">
+                  <Download className="mr-2 h-3.5 w-3.5" />
+                  <span>Exportar Capa</span>
+                </ContextMenuSubTrigger>
+                <ContextMenuSubContent className="bg-gray-700 text-white border-gray-600">
+                  {isVectorLayer && <ContextMenuItem onSelect={() => props.onExportLayer(layer.id, 'geojson')} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">GeoJSON</ContextMenuItem>}
+                  {isVectorLayer && <ContextMenuItem onSelect={() => props.onExportLayer(layer.id, 'kml')} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">KML</ContextMenuItem>}
+                  {isVectorLayer && <ContextMenuItem onSelect={() => props.onExportLayer(layer.id, 'shp')} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">Shapefile (.zip)</ContextMenuItem>}
+                  {(layer.type === 'wms' || layer.type === 'geotiff' || layer.type === 'gee') && <ContextMenuItem onSelect={() => props.onExportWmsAsGeotiff(layer.id)} className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer">GeoTIFF (Vista Actual)</ContextMenuItem>}
+                </ContextMenuSubContent>
+              </ContextMenuSub>
+            )}
+    
+            <ContextMenuSeparator className="bg-gray-500/50" />
+    
+            {isVectorLayer && (
+              <>
+                <ContextMenuItem
+                  className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  onSelect={() => props.onExtractByPolygon(layer.id)}
+                  disabled={props.isDrawingSourceEmptyOrNotPolygon}
+                >
+                  <Scissors className="mr-2 h-3.5 w-3.5" />
+                  <span title={props.isDrawingSourceEmptyOrNotPolygon ? "Dibuje un polígono primero" : `Extraer de ${layer.name} por polígono`}>
+                    Extraer por polígono
+                  </span>
+                </ContextMenuItem>
+            
+                <ContextMenuItem
+                  className="text-xs hover:bg-gray-600 focus:bg-gray-600 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  onSelect={() => props.onExtractBySelection()}
+                  disabled={props.isSelectionEmpty}
+                >
+                  <CopyPlus className="mr-2 h-3.5 w-3.5" />
+                  <span title={props.isSelectionEmpty ? "Seleccione una o más entidades primero" : `Crear una nueva capa a partir de la selección actual`}>
+                    Crear capa desde selección
+                  </span>
+                </ContextMenuItem>
+                <ContextMenuSeparator className="bg-gray-500/50" />
               </>
             )}
-            </ContextMenuContent>
-        </ContextMenuPortal>
+          </>
+        ) : null}
+        
+        <ContextMenuLabel className="text-xs text-gray-300 px-2 py-1 flex items-center">
+            <Percent className="mr-2 h-3.5 w-3.5" /> Opacidad: {Math.round(layer.opacity * 100)}%
+        </ContextMenuLabel>
+        <ContextMenuItem onSelect={(e) => e.preventDefault()} className="focus:bg-transparent hover:bg-transparent cursor-default p-2">
+            <Slider
+                defaultValue={[layer.opacity * 100]}
+                max={100}
+                step={1}
+                onValueChange={(value) => props.onSetLayerOpacity(layer.id, value[0] / 100)}
+                className="w-full"
+                aria-label={`Opacidad para ${layer.name}`}
+            />
+        </ContextMenuItem>
+        
+        {!props.isSharedView && (
+          <>
+            <ContextMenuSeparator className="bg-gray-500/50" />
+            <ContextMenuItem
+              className="text-xs hover:bg-red-500/30 focus:bg-red-500/40 text-red-300 focus:text-red-200 cursor-pointer"
+              onSelect={() => props.onRemoveLayer(layer.id)}
+            >
+              <Trash2 className="mr-2 h-3.5 w-3.5" />
+              Eliminar capa
+            </ContextMenuItem>
+          </>
+        )}
+        </ContextMenuContent>
       </ContextMenu>
       </TooltipProvider>
       {!props.isSharedView && (
