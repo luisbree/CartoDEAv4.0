@@ -36,7 +36,7 @@ interface UseLayerManagerProps {
   isMapReady: boolean;
   drawingSourceRef: React.RefObject<VectorSource>;
   onShowTableRequest: (plainData: PlainFeatureData[], layerName: string, layerId: string) => void;
-  updateGeoServerDiscoveredLayerState: (layerName: string, added: boolean, type: 'wms' | 'wfs') => void;
+  updateGeoServerDiscoveredLayerState: (layerName: string, added: boolean, type: 'wfs' | 'wms') => void;
   clearSelectionAfterExtraction: () => void;
   updateInspectedFeatureData: (featureId: string, key: string, value: any) => void;
 }
@@ -543,33 +543,55 @@ export const useLayerManager = ({
     });
   }, [toast, setLayers]);
   
-  const toggleLayerVisibility = useCallback((layerId: string, groupId?: string) => {
-      setLayers(prevItems => {
-          return prevItems.map(item => {
-              if (item.id === groupId && 'layers' in item) { // A radio button in a 'single' mode group was clicked
-                  const updatedGroupLayers = item.layers.map(layerInGroup => {
-                      const isTargetLayer = layerInGroup.id === layerId;
-                      layerInGroup.olLayer.setVisible(isTargetLayer);
-                      const visualLayer = layerInGroup.olLayer.get('visualLayer');
-                      if (visualLayer) {
-                          visualLayer.setVisible(isTargetLayer && (layerInGroup.wmsStyleEnabled ?? true));
-                      }
-                      return { ...layerInGroup, visible: isTargetLayer };
-                  });
-                  return { ...item, layers: updatedGroupLayers };
-              } else if (!('layers' in item) && item.id === layerId) { // This is a single layer (not in a group or in a 'multiple' mode group)
-                  const newVisibility = !item.visible;
-                  item.olLayer.setVisible(newVisibility);
-                  const visualLayer = item.olLayer.get('visualLayer');
-                  if (visualLayer) {
-                      visualLayer.setVisible(newVisibility && (item.wmsStyleEnabled ?? true));
-                  }
-                  return { ...item, visible: newVisibility };
-              }
-              return item;
-          });
-      });
-  }, [setLayers]);
+ const toggleLayerVisibility = useCallback((layerId: string, groupId?: string) => {
+    setLayers(prevItems => {
+        return prevItems.map(item => {
+            // Case 1: Item is a LayerGroup and we clicked a layer inside it
+            if (groupId && item.id === groupId && 'layers' in item) {
+                const group = item as LayerGroup;
+                const newLayers = group.layers.map(layerInGroup => {
+                    let newVisibility: boolean;
+
+                    if (group.displayMode === 'single') {
+                        // Radio button logic: only the clicked layer becomes visible
+                        newVisibility = layerInGroup.id === layerId;
+                    } else {
+                        // Checkbox logic: toggle the clicked layer
+                        if (layerInGroup.id === layerId) {
+                            newVisibility = !layerInGroup.visible;
+                        } else {
+                            newVisibility = layerInGroup.visible; // Keep others as they are
+                        }
+                    }
+
+                    // Apply visibility changes to the OpenLayers layer
+                    layerInGroup.olLayer.setVisible(newVisibility);
+                    const visualLayer = layerInGroup.olLayer.get('visualLayer');
+                    if (visualLayer) {
+                        visualLayer.setVisible(newVisibility && (layerInGroup.wmsStyleEnabled ?? true));
+                    }
+                    
+                    return { ...layerInGroup, visible: newVisibility };
+                });
+                return { ...group, layers: newLayers };
+            }
+            
+            // Case 2: Item is a standalone layer
+            if (!groupId && !('layers' in item) && item.id === layerId) {
+                const newVisibility = !item.visible;
+                item.olLayer.setVisible(newVisibility);
+                const visualLayer = item.olLayer.get('visualLayer');
+                if (visualLayer) {
+                    visualLayer.setVisible(newVisibility && (item.wmsStyleEnabled ?? true));
+                }
+                return { ...item, visible: newVisibility };
+            }
+
+            // Otherwise, return the item unchanged
+            return item;
+        });
+    });
+}, [setLayers]);
 
 
   const toggleWmsStyle = useCallback((layerId: string) => {
@@ -1293,6 +1315,15 @@ const groupLayers = useCallback((layerIds: string[], groupName: string) => {
       ));
   }, [setLayers]);
 
+   const renameGroup = useCallback((groupId: string, newName: string) => {
+        setLayers(prev => prev.map(item =>
+            (item.id === groupId && 'layers' in item)
+                ? { ...item, name: newName }
+                : item
+        ));
+        toast({ description: `Grupo renombrado a "${newName}"` });
+    }, [setLayers, toast]);
+
 
   return {
     layers,
@@ -1333,5 +1364,6 @@ const groupLayers = useCallback((layerIds: string[], groupName: string) => {
     ungroupLayer,
     toggleGroupExpanded,
     setGroupDisplayMode,
+    renameGroup,
   };
 };
