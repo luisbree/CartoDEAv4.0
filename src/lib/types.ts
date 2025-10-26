@@ -8,7 +8,7 @@ import type { Geometry } from 'ol/geom';
 import { nanoid } from 'nanoid';
 import type { GeeTileLayerInput } from '@/ai/flows/gee-types';
 
-export type ColorRampId = 'reds' | 'blues' | 'greens' | 'viridis' | 'pinks' | 'custom';
+export type ColorRampId = 'reds' | 'blues' | 'greens' | 'viridis' | 'pinks' | 'custom' | 'smn-cloudtop';
 export type ClassificationMethod = 'quantiles' | 'natural-breaks';
 
 export interface GeoTiffStyle {

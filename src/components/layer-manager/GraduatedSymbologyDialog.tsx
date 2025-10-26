@@ -46,9 +46,29 @@ function interpolateColors(color1: [number, number, number], color2: [number, nu
     return result;
 }
 
-function generateColorRamp(startHex: string, endHex: string, count: number): string[] {
-    if (count <= 1) return [startHex];
-    const startRgb = hexToRgb(startHex);
+// SMN palette for GOES cloud tops
+const SMN_CLOUDTOP_PALETTE = [
+    '#ffffff', '#e0e0e0', '#c0c0c0', '#a0a0a0', '#808080',
+    '#ff0000', '#ff4500', '#ffa500', '#ffff00',
+    '#adff2f', '#00ff00',
+    '#00ffff', '#1e90ff', '#0000ff',
+    '#dcdcdc', '#f5f5f5', '#ffffff'
+];
+
+
+function generateColorRamp(startHexOrPalette: string, endHex: string, count: number): string[] {
+    if (startHexOrPalette === 'smn-cloudtop') {
+        // Distribute the SMN palette across the number of classes
+        if (count <= 1) return [SMN_CLOUDTOP_PALETTE[0]];
+        const ramp: string[] = [];
+        for (let i = 0; i < count; i++) {
+            const index = Math.floor((i / (count - 1)) * (SMN_CLOUDTOP_PALETTE.length - 1));
+            ramp.push(SMN_CLOUDTOP_PALETTE[index]);
+        }
+        return ramp;
+    }
+    if (count <= 1) return [startHexOrPalette];
+    const startRgb = hexToRgb(startHexOrPalette);
     const endRgb = hexToRgb(endHex);
     const ramp: string[] = [];
     for (let i = 0; i < count; i++) {
@@ -118,13 +138,15 @@ function jenks(data: number[], n_classes: number): number[] {
 
 
 // Define ramps by start and end colors for interpolation
-const COLOR_RAMP_DEFINITIONS: Record<Exclude<ColorRampId, 'custom'>, { start: string, end: string }> = {
+const COLOR_RAMP_DEFINITIONS: Record<Exclude<ColorRampId, 'custom'>, { start: string, end: string, isFullPalette?: boolean }> = {
   reds: { start: '#fee5d9', end: '#a50f15' },
   blues: { start: '#eff3ff', end: '#08519c' },
   greens: { start: '#edf8e9', end: '#006d2c' },
   viridis: { start: '#440154', end: '#fde725' },
   pinks: { start: '#ffcce1', end: '#c70063'},
+  'smn-cloudtop': { start: 'smn-cloudtop', end: '', isFullPalette: true },
 };
+
 
 const isValidHex = (color: string) => /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/.test(color);
 
@@ -207,6 +229,7 @@ const GraduatedSymbologyDialog: React.FC<GraduatedSymbologyDialogProps> = ({
           // Default range for GOES (Kelvin)
           if (layer.type === 'gee' && layer.olLayer.get('geeParams')?.bandCombination === 'GOES_CLOUDTOP') {
               setRange({ min: 183, max: 323 });
+              setColorRamp('smn-cloudtop');
           } else {
               setRange({ min: 0, max: 255 }); // Default for generic 8-bit
           }
@@ -400,11 +423,17 @@ const GraduatedSymbologyDialog: React.FC<GraduatedSymbologyDialogProps> = ({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="bg-gray-700 text-white border-gray-600">
-                    {Object.entries(COLOR_RAMP_DEFINITIONS).map(([rampId, {start, end}]) => (
+                    {Object.entries(COLOR_RAMP_DEFINITIONS).map(([rampId, {start, end, isFullPalette}]) => (
                       <SelectItem key={rampId} value={rampId} className="text-xs">
                         <div className="flex items-center gap-2">
-                          <div className="flex h-4 w-16 rounded-sm overflow-hidden" style={{ background: `linear-gradient(to right, ${start}, ${end})` }} />
-                          {rampId.charAt(0).toUpperCase() + rampId.slice(1)}
+                          <div
+                            className="flex h-4 w-16 rounded-sm overflow-hidden"
+                            style={isFullPalette
+                                ? { background: `linear-gradient(to right, ${SMN_CLOUDTOP_PALETTE.join(',')})` }
+                                : { background: `linear-gradient(to right, ${start}, ${end})` }
+                            }
+                          />
+                          {rampId === 'smn-cloudtop' ? 'SMN Topes Nubosos' : rampId.charAt(0).toUpperCase() + rampId.slice(1)}
                         </div>
                       </SelectItem>
                     ))}
