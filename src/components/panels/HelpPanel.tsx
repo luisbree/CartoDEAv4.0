@@ -9,7 +9,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { LifeBuoy, Map, Layers, Wrench, Sparkles, ClipboardCheck, Library, MousePointerClick, Square, CloudDownload, Plus, Trash2, Server, BrainCircuit, Printer, Ruler } from 'lucide-react';
+import { LifeBuoy, Map, Layers, Wrench, Sparkles, Server, BrainCircuit, Printer, Ruler, MousePointerClick, CloudRain, DraftingCompass, LineChart, Group, Palette } from 'lucide-react';
 
 interface HelpPanelProps {
   panelRef: React.RefObject<HTMLDivElement>;
@@ -59,42 +59,69 @@ const HelpPanel: React.FC<HelpPanelProps> = ({
               <HelpSectionTrigger icon={Map} title="Navegación y Vista" />
             </AccordionTrigger>
             <AccordionContent className="space-y-2 pl-4">
-              <p>Manejá la vista del mapa y los datos de fondo desde la <strong>barra de herramientas de arriba</strong>:</p>
+              <p>Manejá la vista del mapa y los datos de fondo desde la <strong>barra de herramientas superior</strong>:</p>
               <ul className="list-disc list-inside space-y-2 pl-2 text-xs text-gray-300">
-                <li><strong>Buscador de lugares:</strong> Escribí el nombre de una ciudad o un punto de interés para centrar el mapa ahí.</li>
-                <li><strong>Selector de mapa de fondo:</strong> Cambiá el mapa base entre vistas como OpenStreetMap, Satelital (color posta, falso color) y otras.</li>
-                <li><strong>Ajustes del mapa de fondo:</strong> Regulá la opacidad, el brillo y el contraste del mapa que tenés de base.</li>
+                <li><strong>Buscador de lugares:</strong> Escribí el nombre de una ciudad o punto de interés para centrar el mapa ahí.</li>
+                <li><strong>Selector de mapa de fondo:</strong> Cambiá el mapa base entre vistas como OpenStreetMap, Satelital (ESRI) y otras.</li>
+                <li><strong>Menú de Herramientas del Mapa (<span className="inline-flex items-center"><Map className="h-3 w-3 mx-1"/></span>):</strong> Ajustá la opacidad/brillo del mapa base, abrí la ubicación en Google Street View, descargá una imagen del mapa o compartí tu sesión.</li>
               </ul>
             </AccordionContent>
           </AccordionItem>
 
           <AccordionItem value="layers">
             <AccordionTrigger>
-              <HelpSectionTrigger icon={Layers} title="Manejo de Capas" />
+              <HelpSectionTrigger icon={Layers} title="Panel de Capas" />
             </AccordionTrigger>
             <AccordionContent className="space-y-2 pl-4">
-              <p>El <strong>Panel de Capas</strong> es tu centro de comando para todos los datos:</p>
+              <p>Es tu centro de comando para todos los datos. Desde aquí podés:</p>
               <ul className="list-disc list-inside space-y-2 pl-2 text-xs text-gray-300">
-                <li><Plus className="inline-block h-4 w-4 mr-1" /><strong>Importar Capa:</strong> Cargá archivos desde tu compu (KML, GeoJSON, Shapefiles en .zip, GeoTIFF).</li>
-                <li><Trash2 className="inline-block h-4 w-4 mr-1" /><strong>Borrar Selección:</strong> Eliminá una o varias capas que hayas seleccionado de la lista.</li>
-                <li><MousePointerClick className="inline-block h-4 w-4 mr-1" /><strong>Inspección/Selección:</strong> Activá el modo interactivo para hacer clic en las cosas del mapa, chusmear sus datos o elegirlas para otras acciones.</li>
-                <li><strong>Arrastrar y soltar:</strong> Reordená las capas a tu gusto, simplemente arrastrándolas en la lista.</li>
-                <li><strong>Menú de Capa (la ruedita):</strong> Accedé a opciones más pro como hacer zoom, ver la tabla de datos, cambiar el estilo, la opacidad o extraer info.</li>
-                <li><strong>Extracción de Datos:</strong> Creá capas nuevas a partir de los datos que caen adentro de un polígono que dibujaste o desde una selección que hiciste a mano.</li>
+                <li><strong>Importar Capas:</strong> Cargá archivos desde tu computadora (KML, GeoJSON, Shapefiles en .zip, GeoTIFF).</li>
+                <li><strong>Agrupar (<Group className="inline-block h-3 w-3"/>):</strong> Seleccioná varias capas (con Ctrl/Cmd o Shift) y agrupalas para mantener el orden.</li>
+                <li><strong>Inspeccionar/Seleccionar (<MousePointerClick className="inline-block h-3 w-3"/>):</strong> Activá estas herramientas para hacer clic en el mapa, ver atributos de una entidad o seleccionar múltiples para otras acciones.</li>
+                <li><strong>Arrastrar y Soltar:</strong> Reordená las capas y grupos arrastrándolos en la lista.</li>
+                <li><strong>Menú de Acciones (la ruedita <span className="inline-flex items-center"><Palette className="h-3 w-3 mx-1"/></span>):</strong> Accedé a un mundo de opciones por capa: zoom, tabla de atributos, estadísticas, exportación, renombrar, y lo más importante, la **simbología** (simple, por categorías o graduada) y el **etiquetado**.</li>
               </ul>
             </AccordionContent>
           </AccordionItem>
-
-          <AccordionItem value="tools">
+          
+           <AccordionItem value="analysis">
             <AccordionTrigger>
-              <HelpSectionTrigger icon={Wrench} title="Herramientas de Dibujo y Análisis" />
+              <HelpSectionTrigger icon={DraftingCompass} title="Panel de Análisis Espacial" />
             </AccordionTrigger>
             <AccordionContent className="space-y-2 pl-4">
-              <p>El <strong>Panel de Herramientas</strong> te da un par de funciones para crear y analizar:</p>
+              <p>Aquí se encuentran las herramientas de geoprocesamiento más potentes:</p>
               <ul className="list-disc list-inside space-y-2 pl-2 text-xs text-gray-300">
-                <li><Square className="inline-block h-4 w-4 mr-1" /><strong>Dibujo Vectorial:</strong> Dibujá polígonos, rectángulos, líneas o puntos en el mapa. Podés guardar lo que hiciste como un archivo KML.</li>
-                 <li><Ruler className="inline-block h-4 w-4 mr-1" /><strong>Medición:</strong> Medí distancias (con líneas) o áreas (con polígonos) al toque sobre el mapa. Los resultados se actualizan en vivo mientras dibujás.</li>
-                <li><CloudDownload className="inline-block h-4 w-4 mr-1" /><strong>Datos de OpenStreetMap (OSM):</strong> Dibujá un polígono y después usá esta herramienta para bajarte datos de OSM (como ríos, calles, etc.) de esa zona específica. También podés hacer consultas puntuales.</li>
+                <li><strong>Perfil Topográfico:</strong> Dibujá o seleccioná una línea para generar un perfil de elevación, ocurrencia de agua y más, usando datos de GEE.</li>
+                <li><strong>Herramientas de Superposición:</strong> Realizá operaciones clásicas como **Recorte (Clip)** y **Diferencia (Erase)** entre capas.</li>
+                <li><strong>Herramientas de Proximidad:</strong> Creá **Áreas de Influencia (Buffers)** y generá **Perfiles Transversales** a lo largo de una línea.</li>
+                <li><strong>Herramientas de Geometría:</strong> Generá una **Envolvente Convexa o Cóncava** para un grupo de entidades o suavizá las líneas y polígonos con **Suavizado Bezier**.</li>
+                <li><strong>Herramientas de Agregación:</strong> **Uní** varias capas en una sola o **Disolvé** las geometrías internas de una capa para crear una sola entidad.</li>
+              </ul>
+            </AccordionContent>
+          </AccordionItem>
+          
+          <AccordionItem value="clima-gee">
+            <AccordionTrigger>
+              <HelpSectionTrigger icon={BrainCircuit} title="Paneles de Clima y GEE" />
+            </AccordionTrigger>
+            <AccordionContent className="space-y-2 pl-4">
+              <p>Conectate con el poder de Google Earth Engine y datos climáticos:</p>
+              <ul className="list-disc list-inside space-y-2 pl-2 text-xs text-gray-300">
+                  <li><strong>Panel de Clima (<CloudRain className="inline-block h-3 w-3"/>):</strong> Cargá la última imagen de topes nubosos del satélite **GOES-19** o detectá y vectorizá **núcleos de tormenta** basados en un umbral de temperatura.</li>
+                  <li><strong>Panel de GEE (<BrainCircuit className="inline-block h-3 w-3"/>):</strong> Generá capas al vuelo usando Google Earth Engine. Elegí índices (NDVI, BSI), combinaciones de bandas, modelos de elevación, o la capa de cobertura del suelo **Dynamic World**. También podés exportar estas capas como GeoTIFF o vectorizar la cobertura del suelo.</li>
+              </ul>
+            </AccordionContent>
+          </AccordionItem>
+          
+          <AccordionItem value="tools">
+            <AccordionTrigger>
+              <HelpSectionTrigger icon={Wrench} title="Panel de Herramientas" />
+            </AccordionTrigger>
+            <AccordionContent className="space-y-2 pl-4">
+              <p>Aquí encontrarás utilidades de dibujo, medición y consulta de datos abiertos:</p>
+              <ul className="list-disc list-inside space-y-2 pl-2 text-xs text-gray-300">
+                <li><strong>Dibujo y Medición (<Ruler className="inline-block h-3 w-3"/>):</strong> Dibujá geometrías simples o medí distancias y áreas directamente sobre el mapa.</li>
+                <li><strong>OpenStreetMap (OSM):</strong> Usá un polígono dibujado o la vista actual para descargar datos de OSM por categorías (ríos, calles, etc.). También podés hacer consultas personalizadas por clave/valor.</li>
               </ul>
             </AccordionContent>
           </AccordionItem>
@@ -104,42 +131,23 @@ const HelpPanel: React.FC<HelpPanelProps> = ({
               <HelpSectionTrigger icon={Server} title="Datos Externos e Integraciones" />
             </AccordionTrigger>
             <AccordionContent className="space-y-2 pl-4">
-              <p>Conectá la aplicación con servicios y servidores de afuera:</p>
               <ul className="list-disc list-inside space-y-2 pl-2 text-xs text-gray-300">
-                <li><Server className="inline-block h-4 w-4 mr-1" /><strong>Capas Predefinidas (DEAS):</strong> Chusmeá el catálogo de capas del servidor de DEAS y sumalas como datos vectoriales (WFS) con su estilo original.</li>
-                <li><Library className="inline-block h-4 w-4 mr-1" /><strong>Biblioteca de Servidores:</strong> Conectate a otros servidores WMS/WFS para traer capas desde cualquier fuente externa.</li>
-                 <li><BrainCircuit className="inline-block h-4 w-4 mr-1" /><strong>Procesamiento GEE:</strong> Generá capas al vuelo usando Google Earth Engine. Elegí un índice (como BSI o NDVI) o una combinación de bandas, definí un rango de fechas y obtené una capa nueva para la vista actual.</li>
-                <li><ClipboardCheck className="inline-block h-4 w-4 mr-1" /><strong>Trello:</strong> Buscá tarjetas que ya existan en tus tableros de Trello.</li>
+                <li><strong>Capas Predefinidas (DEAS):</strong> El catálogo en el Panel de Capas te permite añadir datos vectoriales del servidor de DEAS directamente al mapa.</li>
+                <li><strong>Biblioteca de Servidores:</strong> Conectate a cualquier servidor WMS/WFS externo para traer capas a tu proyecto.</li>
+                <li><strong>Trello:</strong> Buscá tarjetas existentes en tus tableros y abrilos para gestionar tus proyectos.</li>
               </ul>
             </AccordionContent>
           </AccordionItem>
 
-          <AccordionItem value="ai">
+          <AccordionItem value="ai-print">
             <AccordionTrigger>
-              <HelpSectionTrigger icon={Sparkles} title="Asistente Drax (IA)" />
+              <HelpSectionTrigger icon={Sparkles} title="Asistente, Impresión y Otros" />
             </AccordionTrigger>
             <AccordionContent className="space-y-2 pl-4">
-              <p>Chateá con <strong>Drax</strong> para manejar el mapa hablando normal. Es ideal para acelerar algunas tareas. Probá con pedidos como:</p>
               <ul className="list-disc list-inside space-y-2 pl-2 text-xs text-gray-300">
-                <li>"Cargame la capa de cuencas como WFS"</li>
-                <li>"Pintá el borde de las rutas de color rojo y más grueso"</li>
-                <li>"Sacá todas las capas de hidrografía"</li>
-                <li>"Buscá la tarjeta de Trello sobre el análisis de suelo"</li>
-                <li>"Llevame a la Torre Eiffel y buscá los hospitales de OSM"</li>
-              </ul>
-            </AccordionContent>
-          </AccordionItem>
-          
-           <AccordionItem value="print">
-            <AccordionTrigger>
-              <HelpSectionTrigger icon={Printer} title="Impresión y Exportación" />
-            </AccordionTrigger>
-            <AccordionContent className="space-y-2 pl-4">
-               <p>El <strong>Panel de Impresión</strong> te deja armar un diseño de mapa profesional para exportar.</p>
-              <ul className="list-disc list-inside space-y-2 pl-2 text-xs text-gray-300">
-                <li><strong>Composición Dinámica:</strong> El mapa en el compositor se actualiza solo a medida que te movés en el mapa principal.</li>
-                <li><strong>Personalización:</strong> Editá el título y el subtítulo del mapa.</li>
-                <li><strong>Exportación:</strong> Imprimí tu diseño directamente, guardalo como PDF desde el diálogo de impresión, o bajalo como una imagen JPEG de alta calidad (96, 150 o 300 DPI).</li>
+                <li><strong>Asistente Drax:</strong> Chateá con la IA para realizar acciones rápidamente, desde cargar capas y cambiar estilos hasta buscar lugares y ejecutar análisis.</li>
+                <li><strong>Compositor de Impresión (<Printer className="inline-block h-3 w-3"/>):</strong> Prepará un layout de mapa con título, subtítulo y leyenda para exportar como PDF o JPEG en alta calidad.</li>
+                <li><strong>Bloc de Notas (<span className="inline-flex items-center"><Layers className="h-3 w-3 mx-1"/></span>):</strong> Usa el anotador en la esquina inferior derecha para guardar ideas o recordatorios persistentes para tu proyecto.</li>
               </ul>
             </AccordionContent>
           </AccordionItem>
