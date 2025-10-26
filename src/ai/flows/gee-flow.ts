@@ -130,29 +130,23 @@ export async function getValuesForPoints({
 }
 
 
-export async function getGoesLayer(): Promise<GeeTileLayerOutput> {
+export async function getGoesLayers(input: { numberOfImages: number }): Promise<GeeTileLayerOutput[]> {
     await initializeEe();
 
     const collection = ee.ImageCollection('NOAA/GOES/19/MCMIPF')
-        .filterDate(ee.Date(Date.now()).advance(-2, 'hour'), ee.Date(Date.now()));
-        
-    const latestImage = ee.Image(collection.first());
+        .filterDate(ee.Date(Date.now()).advance(-12, 'hour'), ee.Date(Date.now()))
+        .sort('system:time_start', false) // Sort descending to get the latest
+        .limit(input.numberOfImages);
     
-    // Check if an image was found
-    const imageExists = await new Promise((resolve, reject) => {
-        latestImage.get('system:id').evaluate((id, error) => {
-            if (error) {
-                console.error("Error checking for GOES image:", error);
-                reject(new Error("Error al verificar la existencia de la imagen GOES."));
-            } else {
-                resolve(!!id);
-            }
-        });
+    const imageList = collection.toList(input.numberOfImages);
+
+    const getMapUrlAsync = promisify((image: ee.Image, visParams: any, callback: (mapDetails: any, error: string) => void) => {
+        image.getMap(visParams, callback);
     });
 
-    if (!imageExists) {
-        throw new Error('No se encontraron imágenes de GOES en el catálogo en este momento.');
-    }
+    const getMetadataAsync = promisify((dict: ee.Dictionary, callback: (metadata: any, error: string) => void) => {
+        dict.evaluate(callback);
+    });
     
     const applyScaleAndOffset = (image: ee.Image) => {
         const bandName = 'CMI_C13';
@@ -161,44 +155,52 @@ export async function getGoesLayer(): Promise<GeeTileLayerOutput> {
         return image.select(bandName).multiply(scale).add(offset);
     };
 
-    const scaledImage = applyScaleAndOffset(latestImage);
-    const metadata = { 
-        timestamp: latestImage.get('system:time_start'),
-        satellite: latestImage.get('satellite'),
-        platform_id: latestImage.get('platform_id'),
-        scene_id: latestImage.get('scene_id'),
-    };
-    
-    // Final correct palette
     const SMN_CLOUDTOP_PALETTE = [
-        '#ffffff', '#e0e0e0', '#c0c0c0', '#a0a0a0', '#808080', // -90 to -80°C (White to Gray)
-        '#ff0000', '#ff4500', '#ffa500', '#ffff00', // -80 to -70°C (Reds to Yellow)
-        '#adff2f', '#00ff00', // -70 to -65°C (Greens)
-        '#00ffff', '#1e90ff', '#0000ff', // -65 to -50°C (Cyans to Blues)
-        '#dcdcdc', '#f5f5f5', '#ffffff'  // -50 and warmer (Light Grays to White)
+        '#ffffff', '#e0e0e0', '#c0c0c0', '#a0a0a0', '#808080',
+        '#ff0000', '#ff4500', '#ffa500', '#ffff00',
+        '#adff2f', '#00ff00',
+        '#00ffff', '#1e90ff', '#0000ff',
+        '#dcdcdc', '#f5f5f5', '#ffffff'
     ];
-
-    // Temperatures from -90°C to 50°C in Kelvin
     const visParams = { min: 183.15, max: 323.15, palette: SMN_CLOUDTOP_PALETTE };
 
-    return new Promise((resolve, reject) => {
-        scaledImage.getMap(visParams, (mapDetails: any, error: string) => {
-            if (error || !mapDetails?.urlFormat) {
-                console.error("Earth Engine getMap Error for GOES:", error);
-                reject(new Error(`Ocurrió un error al generar la capa de GOES: ${error || 'Respuesta inválida'}`));
-            } else {
-                const tileUrl = mapDetails.urlFormat.replace('{x}', '{x}').replace('{y}', '{y}').replace('{z}', '{z}');
-                ee.Dictionary(metadata).evaluate((evaluatedMetadata, evalError) => {
-                    if (evalError) {
-                        console.error("Error evaluating GOES metadata:", evalError);
-                        resolve({ tileUrl }); // Resolve with URL even if metadata fails
-                    } else {
-                        resolve({ tileUrl, metadata: evaluatedMetadata });
-                    }
-                });
+    const layersData: GeeTileLayerOutput[] = [];
+    
+    const count = (await promisify(imageList.size)()) as number;
+    if (count === 0) {
+        throw new Error('No se encontraron imágenes de GOES en las últimas 12 horas.');
+    }
+    
+    for (let i = 0; i < count; i++) {
+        const image = ee.Image(imageList.get(i));
+        const scaledImage = applyScaleAndOffset(image);
+
+        try {
+            const mapDetails = await getMapUrlAsync(scaledImage, visParams);
+            if (!mapDetails || !mapDetails.urlFormat) {
+                console.warn(`No se pudo obtener el mapa para la imagen ${i}. Saltando...`);
+                continue;
             }
-        });
-    });
+
+            const tileUrl = mapDetails.urlFormat.replace('{x}', '{x}').replace('{y}', '{y}').replace('{z}', '{z}');
+
+            const metadataDict = ee.Dictionary({
+                timestamp: image.get('system:time_start'),
+                satellite: image.get('satellite'),
+                scene_id: image.get('scene_id'),
+            });
+            const metadata = await getMetadataAsync(metadataDict);
+
+            layersData.push({ tileUrl, metadata });
+
+        } catch (error) {
+            console.error(`Error procesando la imagen ${i} de GOES:`, error);
+            // Continue to the next image instead of failing the whole request
+        }
+    }
+    
+    // Return in chronological order (oldest first)
+    return layersData.reverse();
 }
 
 
@@ -365,9 +367,6 @@ const geeTileLayerFlow = ai.defineFlow(
   },
   async (input) => {
     await initializeEe();
-    
-    // GOES logic is now handled by the dedicated getGoesLayer function
-    // and is only called from ClimaPanel, not here.
     
     const { finalImage, visParams, metadata } = getImageForProcessing(input);
 

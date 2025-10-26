@@ -1,16 +1,16 @@
 
 
-"use client";
+'use client';
 
 import React, { useState } from 'react';
 import DraggablePanel from './DraggablePanel';
 import { CloudRain, RadioTower, Satellite, Loader2, Zap } from 'lucide-react';
 import { Button } from '../ui/button';
 import { useToast } from '@/hooks/use-toast';
-import type { MapLayer } from '@/lib/types';
+import type { MapLayer, LayerGroup } from '@/lib/types';
 import TileLayer from 'ol/layer/Tile';
 import VectorLayer from 'ol/layer/Vector';
-import { getGoesLayer, getGoesStormCores } from '@/ai/flows/gee-flow';
+import { getGoesLayers, getGoesStormCores } from '@/ai/flows/gee-flow';
 import { nanoid } from 'nanoid';
 import XYZ from 'ol/source/XYZ';
 import { format } from 'date-fns';
@@ -30,7 +30,7 @@ interface ClimaPanelProps {
   onToggleCollapse: () => void;
   onClosePanel: () => void;
   onMouseDownHeader: (e: React.MouseEvent<HTMLDivElement>) => void;
-  onAddLayer: (layer: MapLayer, bringToTop?: boolean) => void;
+  onAddLayer: (layer: MapLayer | LayerGroup, bringToTop?: boolean) => void;
   style?: React.CSSProperties;
   mapRef: React.RefObject<Map | null>;
 }
@@ -48,67 +48,77 @@ const ClimaPanel: React.FC<ClimaPanelProps> = ({
     const [isLoading, setIsLoading] = useState(false);
     const [isDetecting, setIsDetecting] = useState(false);
     const [tempThreshold, setTempThreshold] = useState(-65);
+    const [numberOfImages, setNumberOfImages] = useState(1);
     const { toast } = useToast();
 
-    const handleAddGoesLayer = async () => {
+    const handleAddGoesLayers = async () => {
         setIsLoading(true);
-        toast({ description: "Buscando la última imagen de GOES-19..." });
+        toast({ description: `Buscando las últimas ${numberOfImages} imágenes de GOES-19...` });
 
         try {
-            const result = await getGoesLayer();
+            const results = await getGoesLayers({ numberOfImages });
             
-            if (result && result.tileUrl) {
-                const layerId = `goes-c13-layer-${nanoid()}`;
-                let layerName = 'GOES-19 Topes Nubosos';
-                
-                if (result.metadata?.timestamp) {
-                    const imageDate = new Date(result.metadata.timestamp);
-                     const formattedDate = format(imageDate, "dd/MM/yyyy HH:mm 'UTC'", { locale: es });
-                     layerName = `GOES-19 (${formattedDate})`;
-                }
-
-                const goesSource = new XYZ({
-                    url: result.tileUrl,
-                    crossOrigin: 'anonymous',
-                });
-
-                const geeParams = {
-                    bandCombination: 'GOES_CLOUDTOP',
-                    metadata: result.metadata, // Store all metadata
-                };
-
-                const goesLayer = new TileLayer({
-                    source: goesSource,
-                    opacity: 0.6,
-                    properties: {
-                        id: layerId,
-                        name: layerName,
-                        type: 'gee',
-                        isGoesLayer: true, // Custom flag
-                        geeParams: geeParams
+            if (results && results.length > 0) {
+                 if (results.length === 1) {
+                    // Handle single layer case
+                    const result = results[0];
+                    const layerId = `goes-c13-layer-${nanoid()}`;
+                    let layerName = 'GOES-19 Topes Nubosos';
+                    if (result.metadata?.timestamp) {
+                        const imageDate = new Date(result.metadata.timestamp);
+                        layerName = `GOES-19 (${format(imageDate, "dd/MM HH:mm", { locale: es })})`;
                     }
-                });
+                    const goesLayer = new TileLayer({
+                        source: new XYZ({ url: result.tileUrl, crossOrigin: 'anonymous' }),
+                        properties: { id: layerId, name: layerName, type: 'gee', geeParams: { bandCombination: 'GOES_CLOUDTOP', metadata: result.metadata } },
+                    });
+                    onAddLayer({ id: layerId, name: layerName, olLayer: goesLayer, visible: true, opacity: 0.6, type: 'gee' }, true);
+                } else {
+                    // Handle multiple layers by creating a group
+                    const groupName = `Secuencia GOES-19 (${results.length} imágenes)`;
+                    const groupId = `goes-group-${nanoid()}`;
+                    
+                    const mapLayers: MapLayer[] = results.map((result, index) => {
+                        const layerId = `goes-c13-layer-${nanoid()}`;
+                        let layerName = `GOES #${index + 1}`;
+                        if (result.metadata?.timestamp) {
+                            const imageDate = new Date(result.metadata.timestamp);
+                            layerName = `GOES (${format(imageDate, "dd/MM HH:mm", { locale: es })})`;
+                        }
+                        const isVisible = index === results.length - 1; // Only last one is visible initially
+                        
+                        const goesLayer = new TileLayer({
+                            source: new XYZ({ url: result.tileUrl, crossOrigin: 'anonymous' }),
+                            visible: isVisible,
+                            properties: { id: layerId, name: layerName, type: 'gee', geeParams: { bandCombination: 'GOES_CLOUDTOP', metadata: result.metadata } },
+                        });
+                        
+                        return { id: layerId, name: layerName, olLayer: goesLayer, visible: isVisible, opacity: 0.6, type: 'gee', groupId: groupId };
+                    });
 
-                onAddLayer({
-                    id: layerId,
-                    name: layerName,
-                    olLayer: goesLayer,
-                    visible: true,
-                    opacity: 0.6,
-                    type: 'gee'
-                }, true);
-
-                toast({ description: `Capa "${layerName}" añadida.` });
-
+                    const layerGroup: LayerGroup = {
+                        id: groupId,
+                        name: groupName,
+                        layers: mapLayers,
+                        isExpanded: true,
+                        displayMode: 'single', // Set to single for playback
+                        isPlaying: true, // Auto-play
+                        playSpeed: 1000,
+                    };
+                    
+                    onAddLayer(layerGroup, true);
+                }
+                
+                toast({ description: `Se añadieron ${results.length} capas de GOES.` });
             } else {
-                 throw new Error("No se recibió una URL válida del servidor de GEE.");
+                 throw new Error("No se recibieron capas válidas del servidor de GEE.");
             }
 
         } catch (error: any) {
-            console.error("Error adding GOES layer:", error);
+            console.error("Error adding GOES layers:", error);
             toast({
-                title: "Error al obtener capa GOES",
-                description: error.message || "No se pudo añadir la capa de GOES.",
+                title: "Error al obtener capas GOES",
+                description: error.message || "No se pudieron añadir las capas de GOES.",
                 variant: "destructive",
             });
         } finally {
@@ -196,18 +206,30 @@ const ClimaPanel: React.FC<ClimaPanelProps> = ({
       initialSize={{ width: 380, height: "auto" }}
     >
       <div className="p-3 space-y-4">
-        <div className="space-y-2">
+        <div className="space-y-3">
             <h3 className="text-sm font-semibold">Satélite GOES-19 (Topes Nubosos)</h3>
+             <div className="space-y-2">
+                <Label htmlFor="num-images" className="text-xs">Número de imágenes a cargar: <span className="font-bold">{numberOfImages}</span></Label>
+                <Slider
+                    id="num-images"
+                    min={1}
+                    max={12}
+                    step={1}
+                    value={[numberOfImages]}
+                    onValueChange={(value) => setNumberOfImages(value[0])}
+                    disabled={isLoading}
+                />
+            </div>
             <p className="text-xs text-gray-400">
-                Visualiza la temperatura de los topes nubosos captada por el satélite GOES-19. Las áreas más frías (rojas/negras) indican nubes de mayor desarrollo vertical, asociadas a posibles tormentas.
+                Visualiza la temperatura de los topes nubosos. Cargar más de una imagen las agrupará para reproducir la secuencia.
             </p>
-            <Button className="w-full" onClick={handleAddGoesLayer} disabled={isLoading}>
+            <Button className="w-full" onClick={handleAddGoesLayers} disabled={isLoading}>
                 {isLoading ? (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : (
                     <Satellite className="mr-2 h-4 w-4" />
                 )}
-                Añadir / Actualizar Capa GOES
+                Añadir / Actualizar Capa(s) GOES
             </Button>
         </div>
 
