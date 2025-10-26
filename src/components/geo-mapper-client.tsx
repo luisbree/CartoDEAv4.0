@@ -246,8 +246,8 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
     isMapReady,
     activeTool: activeTool.type === 'interaction' ? activeTool.id : null,
     setActiveTool: (id) => handleSetActiveTool({ type: 'interaction', id }),
-    onNewSelection: () => {
-      // This is now handled by the function that initiates the table display
+    onNewSelection: (plainData, layerName, layerId) => {
+      featureInspectionHook.processAndDisplayFeatures(plainData, layerName, layerId);
     }
   });
 
@@ -1303,5 +1303,3 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
     </div>
   );
 }
-
-    

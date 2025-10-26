@@ -89,6 +89,13 @@ const AttributesPanelComponent: React.FC<AttributesPanelComponentProps> = ({
         if (valA === null || valA === undefined) return 1;
         if (valB === null || valB === undefined) return -1;
         
+        // Locale-aware string comparison for text, numeric for numbers
+        if (typeof valA === 'string' && typeof valB === 'string') {
+            return sortConfig.direction === 'ascending'
+                ? valA.localeCompare(valB, undefined, { numeric: true })
+                : valB.localeCompare(valA, undefined, { numeric: true });
+        }
+        
         if (valA < valB) return sortConfig.direction === 'ascending' ? -1 : 1;
         if (valA > valB) return sortConfig.direction === 'ascending' ? 1 : -1;
         

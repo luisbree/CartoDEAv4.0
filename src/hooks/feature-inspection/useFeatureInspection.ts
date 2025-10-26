@@ -34,7 +34,7 @@ interface UseFeatureInspectionProps {
   isMapReady: boolean;
   activeTool: InteractionToolId | null;
   setActiveTool: (toolId: InteractionToolId | null) => void;
-  onNewSelection: () => void;
+  onNewSelection: (plainData: PlainFeatureData[], layerName: string, layerId: string | null) => void;
 }
 
 const highlightStyle = new Style({
@@ -125,15 +125,14 @@ export const useFeatureInspection = ({
   }, [onNewSelection]);
 
   const processAndDisplayFeatures = useCallback((plainData: PlainFeatureData[], layerName: string, layerId: string | null = null) => {
-      setInspectedFeatureData(plainData); // Set the raw, unsorted data
-      setCurrentInspectedLayerName(layerName);
-      setCurrentInspectedLayerId(layerId);
-      setSortConfig(null); // Reset sort config on new data
-  
-      if (plainData && plainData.length > 0) {
-          setTimeout(() => toast({ description: `${plainData.length} entidad(es) de "${layerName}" cargada(s) en la tabla.` }), 0);
-          onNewSelectionRef.current();
-      }
+    setInspectedFeatureData(plainData); // Set the raw, unsorted data
+    setCurrentInspectedLayerName(layerName);
+    setCurrentInspectedLayerId(layerId);
+    setSortConfig(null); // Reset sort config on new data
+
+    if (plainData && plainData.length > 0) {
+        setTimeout(() => toast({ description: `${plainData.length} entidad(es) de "${layerName}" cargada(s) en la tabla.` }), 0);
+    }
   }, [toast]);
   
   const updateInspectedFeatureData = useCallback((featureId: string, key: string, value: any) => {
@@ -448,7 +447,7 @@ export const useFeatureInspection = ({
                   id: f.getId() as string,
                   attributes: f.getProperties()
               }));
-              processAndDisplayFeatures(plainData, layerName, layerId);
+              onNewSelectionRef.current(plainData, layerName, layerId);
             } else {
               setInspectedFeatureData(null);
               setCurrentInspectedLayerName(null);
@@ -494,7 +493,7 @@ export const useFeatureInspection = ({
                     id: f.getId() as string,
                     attributes: f.getProperties()
                 }));
-                processAndDisplayFeatures(plainData, layerName, layerId);
+                onNewSelectionRef.current(plainData, layerName, layerId);
             } else {
                 setInspectedFeatureData(null);
                 setCurrentInspectedLayerName(null);
@@ -689,7 +688,7 @@ export const useFeatureInspection = ({
             if (mapElementRef.current) mapElementRef.current.style.cursor = 'default';
         }
     };
-  }, [activeTool, isMapReady, mapRef, mapElementRef, processAndDisplayFeatures, toast, clearSelection]);
+  }, [activeTool, isMapReady, mapRef, mapElementRef, toast, clearSelection]);
 
 
   return {
@@ -718,4 +717,5 @@ export const useFeatureInspection = ({
 
 
     
+
 
