@@ -178,60 +178,62 @@ const LayerGroupItem: React.FC<LayerGroupItemProps> = ({
             </Accordion>
           </li>
         </ContextMenuTrigger>
-        <ContextMenuContent onClick={(e) => e.stopPropagation()} side="right" align="start" className="bg-gray-700 text-white border-gray-600">
-            <ContextMenuItem onSelect={() => setIsEditingName(true)} className="text-xs">
-               <Edit className="mr-2 h-3.5 w-3.5" /> Renombrar Grupo
-            </ContextMenuItem>
-             <ContextMenuSeparator className="bg-gray-500/50" />
-             <ContextMenuLabel className="text-xs px-2 py-1">Modo de Visibilidad</ContextMenuLabel>
-             <ContextMenuRadioGroup value={group.displayMode} onValueChange={(mode) => onSetGroupDisplayMode(group.id, mode as 'single' | 'multiple')}>
-                <ContextMenuItem onSelect={(e) => e.preventDefault()} className="p-0">
-                    <ContextMenuRadioItem value="multiple" className="text-xs w-full">Múltiple (Checkboxes)</ContextMenuRadioItem>
+        <ContextMenuPortal>
+            <ContextMenuContent onClick={(e) => e.stopPropagation()} side="right" align="start" className="bg-gray-700 text-white border-gray-600">
+                <ContextMenuItem onSelect={() => setIsEditingName(true)} className="text-xs">
+                   <Edit className="mr-2 h-3.5 w-3.5" /> Renombrar Grupo
                 </ContextMenuItem>
-                <ContextMenuItem onSelect={(e) => e.preventDefault()} className="p-0">
-                    <ContextMenuRadioItem value="single" className="text-xs w-full">Única (Radio Buttons)</ContextMenuRadioItem>
-                </ContextMenuItem>
-            </ContextMenuRadioGroup>
-             {group.displayMode === 'single' && (
-                <>
-                    <ContextMenuSeparator className="bg-gray-500/50" />
-                    <ContextMenuLabel className="text-xs px-2 py-1">Reproductor</ContextMenuLabel>
-                    <div className="px-2 py-1 space-y-2">
-                        <Button
-                            onClick={() => onToggleGroupPlayback(group.id)}
-                            variant="outline"
-                            className="w-full h-8 text-xs bg-black/20 hover:bg-black/40"
-                        >
-                            {group.isPlaying ? <Pause className="mr-2 h-4 w-4" /> : <Play className="mr-2 h-4 w-4" />}
-                            {group.isPlaying ? 'Pausar' : 'Reproducir'}
-                        </Button>
-                        <div className="space-y-1 pt-1">
-                            <Label htmlFor={`speed-slider-${group.id}`} className="text-xs flex items-center gap-2">
-                                <Clock className="h-3 w-3" />
-                                Velocidad ({group.playSpeed || 1000} ms)
-                            </Label>
-                            <ContextMenuItem onSelect={e => e.preventDefault()} className="p-0 focus:bg-transparent">
-                                <Slider
-                                    id={`speed-slider-${group.id}`}
-                                    min={100}
-                                    max={5000}
-                                    step={100}
-                                    value={[group.playSpeed || 1000]}
-                                    onValueChange={(value) => onSetGroupPlaySpeed(group.id, value[0])}
-                                />
-                            </ContextMenuItem>
+                 <ContextMenuSeparator className="bg-gray-500/50" />
+                 <ContextMenuLabel className="text-xs px-2 py-1">Modo de Visibilidad</ContextMenuLabel>
+                 <ContextMenuRadioGroup value={group.displayMode} onValueChange={(mode) => onSetGroupDisplayMode(group.id, mode as 'single' | 'multiple')}>
+                    <ContextMenuItem onSelect={(e) => e.preventDefault()} className="p-0">
+                        <ContextMenuRadioItem value="multiple" className="text-xs w-full">Múltiple (Checkboxes)</ContextMenuRadioItem>
+                    </ContextMenuItem>
+                    <ContextMenuItem onSelect={(e) => e.preventDefault()} className="p-0">
+                        <ContextMenuRadioItem value="single" className="text-xs w-full">Única (Radio Buttons)</ContextMenuRadioItem>
+                    </ContextMenuItem>
+                </ContextMenuRadioGroup>
+                 {group.displayMode === 'single' && (
+                    <>
+                        <ContextMenuSeparator className="bg-gray-500/50" />
+                        <ContextMenuLabel className="text-xs px-2 py-1">Reproductor</ContextMenuLabel>
+                        <div className="px-2 py-1 space-y-2">
+                            <Button
+                                onClick={() => onToggleGroupPlayback(group.id)}
+                                variant="outline"
+                                className="w-full h-8 text-xs bg-black/20 hover:bg-black/40"
+                            >
+                                {group.isPlaying ? <Pause className="mr-2 h-4 w-4" /> : <Play className="mr-2 h-4 w-4" />}
+                                {group.isPlaying ? 'Pausar' : 'Reproducir'}
+                            </Button>
+                            <div className="space-y-1 pt-1">
+                                <Label htmlFor={`speed-slider-${group.id}`} className="text-xs flex items-center gap-2">
+                                    <Clock className="h-3 w-3" />
+                                    Velocidad ({group.playSpeed || 1000} ms)
+                                </Label>
+                                <ContextMenuItem onSelect={e => e.preventDefault()} className="p-0 focus:bg-transparent">
+                                    <Slider
+                                        id={`speed-slider-${group.id}`}
+                                        min={100}
+                                        max={5000}
+                                        step={100}
+                                        value={[group.playSpeed || 1000]}
+                                        onValueChange={(value) => onSetGroupPlaySpeed(group.id, value[0])}
+                                    />
+                                </ContextMenuItem>
+                            </div>
                         </div>
-                    </div>
-                </>
-             )}
-            <ContextMenuSeparator className="bg-gray-500/50" />
-            <ContextMenuItem onSelect={() => onUngroup(group.id)} className="text-xs">
-               <Ungroup className="mr-2 h-3.5 w-3.5" /> Desagrupar
-            </ContextMenuItem>
-            <ContextMenuItem onSelect={() => layerItemProps.onRemoveLayer(group.id)} className="text-xs text-red-300 focus:bg-red-500/40 focus:text-red-200">
-               <Trash2 className="mr-2 h-3.5 w-3.5" /> Eliminar Grupo
-            </ContextMenuItem>
-        </ContextMenuContent>
+                    </>
+                 )}
+                <ContextMenuSeparator className="bg-gray-500/50" />
+                <ContextMenuItem onSelect={() => onUngroup(group.id)} className="text-xs">
+                   <Ungroup className="mr-2 h-3.5 w-3.5" /> Desagrupar
+                </ContextMenuItem>
+                <ContextMenuItem onSelect={() => layerItemProps.onRemoveLayer(group.id)} className="text-xs text-red-300 focus:bg-red-500/40 focus:text-red-200">
+                   <Trash2 className="mr-2 h-3.5 w-3.5" /> Eliminar Grupo
+                </ContextMenuItem>
+            </ContextMenuContent>
+        </ContextMenuPortal>
       </ContextMenu>
     );
 };
