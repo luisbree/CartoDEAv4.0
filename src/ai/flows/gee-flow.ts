@@ -12,7 +12,7 @@
 
 import { ai } from '@/ai/genkit';
 import ee from '@google/earthengine';
-import { promisify } from 'util';
+import { promisify }from 'util';
 import type { Feature as TurfFeature, LineString as TurfLineString } from 'geojson';
 import { length as turfLength, along as turfAlong } from '@turf/turf';
 import type { GeeTileLayerInput, GeeTileLayerOutput, GeeVectorizationInput, GeeValueQueryInput, GeeGeoTiffDownloadInput, GeeHistogramInput, GeeHistogramOutput, GeeProfileInput, GeeProfileOutput, ProfilePoint, TasseledCapOutput, TasseledCapComponent, ElevationPoint, GoesStormCoresInput } from './gee-types';
@@ -166,7 +166,7 @@ export async function getGoesLayers(input: { numberOfImages: number }): Promise<
 
     const layersData: GeeTileLayerOutput[] = [];
     
-    const count = (await promisify(imageList.size)()) as number;
+    const count = (await promisify(imageList.size().evaluate).call(imageList.size())) as number;
     if (count === 0) {
         throw new Error('No se encontraron imágenes de GOES en las últimas 12 horas.');
     }
