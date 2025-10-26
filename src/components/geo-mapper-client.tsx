@@ -248,6 +248,9 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
     setActiveTool: (id) => handleSetActiveTool({ type: 'interaction', id }),
     onNewSelection: (plainData, layerName, layerId) => {
       featureInspectionHook.processAndDisplayFeatures(plainData, layerName, layerId);
+      if (panels.attributes.isMinimized && plainData.length > 0) {
+        togglePanelMinimize('attributes');
+      }
     }
   });
 
