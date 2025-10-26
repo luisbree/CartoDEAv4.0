@@ -1,8 +1,7 @@
-
 "use client";
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { MapPin, Database, Wrench, ListTree, ListChecks, Sparkles, ClipboardCheck, Library, LifeBuoy, Printer, Server, BrainCircuit, Camera, Loader2, SlidersHorizontal, ZoomIn, Undo2, BarChartHorizontal, DraftingCompass, Target, Share2, CloudRain } from 'lucide-react';
+import { MapPin, Database, Wrench, ListTree, ListChecks, Sparkles, ClipboardCheck, Library, LifeBuoy, Printer, Server, BrainCircuit, Camera, Loader2, SlidersHorizontal, ZoomIn, Undo2, BarChartHorizontal, DraftingCompass, Target, Share2, CloudRain, Ellipsis } from 'lucide-react';
 import { Style, Fill, Stroke, Circle as CircleStyle, Text as TextStyle } from 'ol/style';
 import { transform, transformExtent } from 'ol/proj';
 import type { Extent } from 'ol/extent';
@@ -16,6 +15,7 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from './ui/alert-dialog';
@@ -915,35 +915,44 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
                     onChangeBaseLayer={handleChangeBaseLayer}
                 />
             </div>
-             <DropdownMenu>
+            
+            <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                     <Button
                         variant="outline"
                         size="icon"
                         className="h-8 w-8 flex-shrink-0 bg-black/20 hover:bg-black/40 border border-white/30 text-white/90"
-                        title="Ajustes de la capa base"
+                        title="Más herramientas del mapa"
                     >
-                        <SlidersHorizontal className="h-4 w-4" />
+                        <Ellipsis className="h-4 w-4" />
                     </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent
                     className="bg-gray-700/90 text-white border-gray-600 backdrop-blur-sm"
                     onCloseAutoFocus={(e) => e.preventDefault()}
                 >
-                    <BaseLayerControls settings={baseLayerSettings} onChange={handleBaseLayerSettingsChange} />
+                    <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="focus:bg-transparent p-0">
+                         <div className="p-2 w-full">
+                           <p className="text-xs font-medium text-white/90 mb-1">Ajustes de Capa Base</p>
+                           <BaseLayerControls settings={baseLayerSettings} onChange={handleBaseLayerSettingsChange} />
+                         </div>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={handleOpenStreetView} className="text-xs">
+                        <StreetViewIcon className="h-5 w-5 mr-2" />
+                        Abrir Google Street View
+                    </DropdownMenuItem>
+                     <DropdownMenuItem onSelect={handleCaptureAndDownload} disabled={isCapturing} className="text-xs">
+                         {isCapturing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Camera className="h-4 w-4 mr-2" />}
+                        Capturar Imagen del Mapa
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setIsShareDialogOpen(true)} className="text-xs">
+                        <Share2 className="h-4 w-4 mr-2" />
+                        Compartir Mapa
+                    </DropdownMenuItem>
                 </DropdownMenuContent>
             </DropdownMenu>
 
             <Button
-                onClick={handleOpenStreetView}
-                variant="outline"
-                size="icon"
-                className="h-8 w-8 flex-shrink-0 bg-black/20 hover:bg-black/40 border border-white/30 text-white/90"
-                title="Abrir Google Street View en la ubicación actual"
-            >
-                <StreetViewIcon className="h-5 w-5" />
-            </Button>
-             <Button
                 onClick={mapNavigationHook.toggleZoomToArea}
                 variant="outline"
                 size="icon"
@@ -952,35 +961,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
             >
                 <ZoomIn className="h-4 w-4" />
             </Button>
-            <Button
-                onClick={handleCaptureAndDownload}
-                variant="outline"
-                size="icon"
-                className="h-8 w-8 flex-shrink-0 bg-black/20 hover:bg-black/40 border border-white/30 text-white/90"
-                title="Capturar imagen UHD del mapa base"
-                disabled={isCapturing}
-            >
-              {isCapturing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
-            </Button>
              <AlertDialog open={isShareDialogOpen} onOpenChange={setIsShareDialogOpen}>
-                <TooltipProvider delayDuration={200}>
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                             <Button
-                                onClick={() => setIsShareDialogOpen(true)}
-                                variant="outline"
-                                size="icon"
-                                className="h-8 w-8 flex-shrink-0 bg-black/20 hover:bg-black/40 border border-white/30 text-white/90"
-                                title="Compartir mapa"
-                            >
-                                <Share2 className="h-4 w-4" />
-                            </Button>
-                        </TooltipTrigger>
-                        <TooltipContent side="bottom" className="bg-gray-700 text-white border-gray-600">
-                           <p className="text-xs">Compartir Mapa</p>
-                        </TooltipContent>
-                    </Tooltip>
-                </TooltipProvider>
                 <AlertDialogContent onOpenAutoFocus={(e) => e.preventDefault()}>
                     <AlertDialogHeader>
                         <AlertDialogTitle>Compartir Mapa</AlertDialogTitle>
