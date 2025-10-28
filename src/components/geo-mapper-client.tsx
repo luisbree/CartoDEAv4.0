@@ -53,7 +53,7 @@ import { StreetViewIcon } from '@/components/icons/StreetViewIcon';
 import TrelloCardNotification from '@/components/trello-integration/TrelloCardNotification';
 import { DphLogoIcon } from '@/components/icons/DphLogoIcon';
 import Notepad from '@/components/notepad/Notepad';
-import FirebaseErrorListener from '@/components/FirebaseErrorListener';
+import { FirebaseErrorListener } from '@/components/FirebaseErrorListener';
 
 
 import { useOpenLayersMap } from '@/hooks/map-core/useOpenLayersMap';
@@ -69,7 +69,7 @@ import { useMapCapture } from '@/hooks/map-tools/useMapCapture';
 import { useWfsLibrary } from '@/hooks/wfs-library/useWfsLibrary';
 import { useOsmQuery } from '@/hooks/osm-integration/useOsmQuery';
 import { useToast } from "@/hooks/use-toast";
-import { useFirestore } from '@/firebase';
+import { useFirestore } from '@/firebase/provider';
 import { cn } from '@/lib/utils';
 import { saveMapState, debugReadDocument } from '@/services/sharing-service';
 
@@ -829,7 +829,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
   };
 
   const handleShowStatistics = useCallback((layerId: string) => {
-      const layer = layerManagerHook.layers.flatMap(item => 'layers' in item ? item.layers : [item]).find(l => l.id === layerId) as VectorMapLayer | undefined;
+      const layer = layerManagerHook.layers.flatMap(item => ('layers' in item ? item.layers : [item])).find(l => l.id === layerId) as VectorMapLayer | undefined;
       if (layer) {
           setStatisticsLayer(layer);
           togglePanelMinimize('statistics');

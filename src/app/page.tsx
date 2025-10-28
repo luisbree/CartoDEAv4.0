@@ -1,4 +1,3 @@
-
 "use client";
 
 import { GeoMapperClient } from '@/components/geo-mapper-client';
