@@ -29,19 +29,19 @@ const GamePanel: React.FC<GamePanelProps> = ({
   const user = auth?.currentUser;
 
   const handleSignIn = async () => {
-    if (!auth) return;
-    const provider = new GoogleAuthProvider();
-    try {
-      await signInWithPopup(auth, provider);
-    } catch (error) {
-      console.error("Error signing in with Google: ", error);
-    }
+    // if (!auth) return;
+    // const provider = new GoogleAuthProvider();
+    // try {
+    //   await signInWithPopup(auth, provider);
+    // } catch (error) {
+    //   console.error("Error signing in with Google: ", error);
+    // }
   };
 
   const handleSignOut = async () => {
-    if (auth) {
-      await signOut(auth);
-    }
+    // if (auth) {
+    //   await signOut(auth);
+    // }
   };
 
   return (
@@ -63,13 +63,14 @@ const GamePanel: React.FC<GamePanelProps> = ({
         {user ? (
           <div>
             <p className="text-sm">Bienvenido, Agente {user.displayName || 'Desconocido'}.</p>
-            <Button onClick={handleSignOut} className="mt-2">Cerrar Sesión</Button>
+            {/* <Button onClick={handleSignOut} className="mt-2">Cerrar Sesión</Button> */}
             {/* Game content will go here */}
           </div>
         ) : (
           <div className="text-center">
             <p className="text-sm mb-3">Para participar, debes iniciar sesión como Agente.</p>
-            <Button onClick={handleSignIn}>Iniciar Sesión con Google</Button>
+            {/* <Button onClick={handleSignIn}>Iniciar Sesión con Google</Button> */}
+            <p className="text-xs text-muted-foreground mt-2">(Inicio de sesión deshabilitado temporalmente)</p>
           </div>
         )}
       </div>
