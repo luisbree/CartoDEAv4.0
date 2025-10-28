@@ -1,37 +1,39 @@
-
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
 import { errorEmitter } from '@/firebase/error-emitter';
-import type { FirestorePermissionError } from '@/firebase/errors';
+import { FirestorePermissionError } from '@/firebase/errors';
 
-export default function FirebaseErrorListener() {
-    const [error, setError] = useState<FirestorePermissionError | null>(null);
+/**
+ * An invisible component that listens for globally emitted 'permission-error' events.
+ * It throws any received error to be caught by Next.js's global-error.tsx.
+ */
+export function FirebaseErrorListener() {
+  // Use the specific error type for the state for type safety.
+  const [error, setError] = useState<FirestorePermissionError | null>(null);
 
-    useEffect(() => {
-        const handleError = (e: FirestorePermissionError) => {
-            console.error("Caught permission error from emitter:", e);
-            setError(e);
-            
-            // This is a critical part of the Next.js Dev Overlay interaction.
-            // By re-throwing the error, we ensure it's picked up by Next.js's
-            // development error handling, which displays a rich, interactive overlay.
-            // This line MUST NOT be removed in a development environment.
-            if (process.env.NODE_ENV === 'development') {
-                setTimeout(() => {
-                    throw e;
-                }, 0);
-            }
-        };
+  useEffect(() => {
+    // The callback now expects a strongly-typed error, matching the event payload.
+    const handleError = (error: FirestorePermissionError) => {
+      // Set error in state to trigger a re-render.
+      setError(error);
+    };
 
-        errorEmitter.on('permission-error', handleError);
+    // The typed emitter will enforce that the callback for 'permission-error'
+    // matches the expected payload type (FirestorePermissionError).
+    errorEmitter.on('permission-error', handleError);
 
-        return () => {
-            errorEmitter.off('permission-error', handleError);
-        };
-    }, []);
+    // Unsubscribe on unmount to prevent memory leaks.
+    return () => {
+      errorEmitter.off('permission-error', handleError);
+    };
+  }, []);
 
-    // This component does not render anything itself. Its purpose is to listen
-    // for errors and trigger the Next.js development overlay.
-    return null;
+  // On re-render, if an error exists in state, throw it.
+  if (error) {
+    throw error;
+  }
+
+  // This component renders nothing.
+  return null;
 }

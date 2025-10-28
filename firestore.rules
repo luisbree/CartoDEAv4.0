@@ -1,15 +1,96 @@
-
+/**
+ * @fileoverview Firestore Security Rules for CartoDEA v4.0
+ *
+ * Core Philosophy:
+ * This ruleset enforces a strict user-ownership model for user profiles and map layers.
+ * Exploration suggestions are publicly accessible.
+ *
+ * Data Structure:
+ * - User profiles are stored in `/users/{userId}`.
+ * - Map layers belonging to a user are stored in `/users/{userId}/mapLayers/{mapLayerId}`.
+ * - Exploration suggestions are stored in `/explorationSuggestions/{explorationSuggestionId}`.
+ *
+ * Key Security Decisions:
+ * - Users can only read/write their own profile data.
+ * - Users can only read/write map layers they own. MapLayer documents include the `userId` field,
+ *   which is a denormalized copy of the user ID.
+ * - Exploration suggestions are publicly readable.
+ *
+ */
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Rules for shared map states
-    match /sharedMaps/{mapId} {
-      // Allow anyone to read or create a shared map state.
-      // Update/delete is disallowed to prevent modification of shared links.
-      allow read, create: if true;
-      allow update, delete: if false;
+    /**
+     * @description Controls access to user profile documents.
+     * @path /users/{userId}
+     * @allow (create) - User with UID 'user123' can create a profile with id 'user123'.
+     * @deny (create) - User with UID 'user456' cannot create a profile with id 'user123'.
+     * @allow (get, update, delete) - User with UID 'user123' can read/update/delete their own profile.
+     * @deny (get, update, delete) - User with UID 'user456' cannot read/update/delete profile with id 'user123'.
+     * @principle Enforces document ownership for all operations.
+     */
+    match /users/{userId} {
+      function isSignedIn() {
+        return request.auth != null;
+      }
+
+      function isOwner(userId) {
+        return isSignedIn() && request.auth.uid == userId;
+      }
+
+      function isExistingOwner(userId) {
+        return isOwner(userId) && resource != null;
+      }
+
+      allow get: if isOwner(userId);
+      allow list: if false;
+
+      allow create: if isOwner(userId) && request.resource.data.id == userId;
+      allow update: if isExistingOwner(userId) && request.resource.data.id == resource.data.id;
+      allow delete: if isExistingOwner(userId);
+    }
+
+    /**
+     * @description Controls access to map layer documents associated with a user.
+     * @path /users/{userId}/mapLayers/{mapLayerId}
+     * @allow (create) - User with UID 'user123' can create a map layer under their profile.
+     * @deny (create) - User with UID 'user456' cannot create a map layer under user 'user123'.
+     * @allow (get, update, delete) - User with UID 'user123' can read/update/delete their own map layer.
+     * @deny (get, update, delete) - User with UID 'user456' cannot read/update/delete map layer under user 'user123'.
+     * @principle Enforces document ownership for all operations. Relies on denormalized userId in MapLayer documents.
+     */
+    match /users/{userId}/mapLayers/{mapLayerId} {
+       function isSignedIn() {
+        return request.auth != null;
+      }
+
+      function isOwner(userId) {
+        return isSignedIn() && request.auth.uid == userId;
+      }
+
+      function isExistingOwner(userId) {
+        return isOwner(userId) && resource != null;
+      }
+
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
+
+      allow create: if isOwner(userId) && request.resource.data.userId == userId;
+      allow update: if isExistingOwner(userId) && request.resource.data.userId == resource.data.userId;
+      allow delete: if isExistingOwner(userId);
+    }
+
+    /**
+     * @description Controls access to exploration suggestion documents.
+     * @path /explorationSuggestions/{explorationSuggestionId}
+     * @allow (get, list) - Any user (signed in or not) can read/list exploration suggestions.
+     * @deny (create, update, delete) - No user can create/update/delete exploration suggestions.
+     * @principle Allows public read access but restricts write access.
+     */
+    match /explorationSuggestions/{explorationSuggestionId} {
+      allow get, list: if true;
+      allow create, update, delete: if false;
     }
   }
 }

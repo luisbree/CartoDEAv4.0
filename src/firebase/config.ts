@@ -1,12 +1,8 @@
-
-// This configuration is dynamically loaded from environment variables.
-// The values are defined in the `.env` file and made available to the client
-// by the Next.js build process. This is the single source of truth for Firebase config.
 export const firebaseConfig = {
-    apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-    authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-    projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-    storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-    messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-    appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+  "projectId": "cartodea-v40",
+  "appId": "1:711759217446:web:e8c168002887a1eecab7e7",
+  "apiKey": "AIzaSyDTvalEJIrYDvsZd5EnQgqsHvb6P0gUTQU",
+  "authDomain": "cartodea-v40.firebaseapp.com",
+  "measurementId": "",
+  "messagingSenderId": "711759217446"
 };
