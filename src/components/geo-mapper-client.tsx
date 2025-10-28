@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { MapPinned, Database, Wrench, ListTree, ListChecks, Sparkles, ClipboardCheck, Library, LifeBuoy, Printer, Server, BrainCircuit, Camera, Loader2, SlidersHorizontal, ZoomIn, Undo2, BarChartHorizontal, DraftingCompass, Target, Share2, CloudRain, Ellipsis } from 'lucide-react';
+import { MapPinned, Database, Wrench, ListTree, ListChecks, Sparkles, ClipboardCheck, Library, LifeBuoy, Printer, Server, BrainCircuit, Camera, Loader2, SlidersHorizontal, ZoomIn, Undo2, BarChartHorizontal, DraftingCompass, Target, Share2, CloudRain, Ellipsis, Swords } from 'lucide-react';
 import { Style, Fill, Stroke, Circle as CircleStyle, Text as TextStyle } from 'ol/style';
 import { transform, transformExtent } from 'ol/proj';
 import type { Extent } from 'ol/extent';
@@ -44,6 +44,7 @@ import GeeProcessingPanel from '@/components/panels/GeeProcessingPanel';
 import StatisticsPanel from '@/components/panels/StatisticsPanel';
 import AnalysisPanel from '@/components/panels/AnalysisPanel';
 import ClimaPanel from '@/components/panels/ClimaPanel';
+import GamePanel from '@/components/panels/GamePanel'; // Import the new GamePanel
 import WfsLoadingIndicator from '@/components/feedback/WfsLoadingIndicator';
 import LocationSearch from '@/components/location-search/LocationSearch';
 import BaseLayerSelector from '@/components/layer-manager/BaseLayerSelector';
@@ -146,6 +147,7 @@ const panelToggleConfigs = [
   { id: 'trello', IconComponent: ClipboardCheck, name: "Trello" },
   { id: 'printComposer', IconComponent: Printer, name: "Impresión" },
   { id: 'gee', IconComponent: BrainCircuit, name: "Procesamiento GEE" },
+  { id: 'game', IconComponent: Swords, name: "Operación: Despliegue" }, // New Game Panel
   { id: 'ai', IconComponent: Sparkles, name: "Asistente IA" },
   { id: 'help', IconComponent: LifeBuoy, name: "Ayuda" },
 ];
@@ -170,6 +172,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
   const statisticsPanelRef = useRef<HTMLDivElement>(null);
   const analysisPanelRef = useRef<HTMLDivElement>(null);
   const climaPanelRef = useRef<HTMLDivElement>(null);
+  const gamePanelRef = useRef<HTMLDivElement>(null); // New panel ref
   const trelloPopupRef = useRef<Window | null>(null);
   const [isMounted, setIsMounted] = useState(false);
   const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
@@ -205,6 +208,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
     statisticsPanelRef,
     analysisPanelRef,
     climaPanelRef,
+    gamePanelRef, // Add new panel ref
     mapAreaRef,
     panelWidth: PANEL_WIDTH,
     panelPadding: PANEL_PADDING,
@@ -248,7 +252,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
     setActiveTool: (id) => handleSetActiveTool({ type: 'interaction', id }),
     onNewSelection: (plainData, layerName, layerId) => {
       featureInspectionHook.processAndDisplayFeatures(plainData, layerName, layerId);
-      if (panels.attributes.isMinimized && plainData.length > 0) {
+      if (panels.attributes.isMinimized) {
         togglePanelMinimize('attributes');
       }
     }
@@ -825,7 +829,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
   };
 
   const handleShowStatistics = useCallback((layerId: string) => {
-      const layer = layerManagerHook.layers.find(l => l.id === layerId) as VectorMapLayer | undefined;
+      const layer = layerManagerHook.layers.flatMap(item => 'layers' in item ? item.layers : [item]).find(l => l.id === layerId) as VectorMapLayer | undefined;
       if (layer) {
           setStatisticsLayer(layer);
           togglePanelMinimize('statistics');
@@ -1235,6 +1239,17 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
             onAddLayer={layerManagerHook.addLayer}
             style={{ top: `${panels.clima.position.y}px`, left: `${panels.clima.position.x}px`, zIndex: panels.clima.zIndex }}
             mapRef={mapRef}
+          />
+        )}
+        
+        {isMounted && !initialMapState && panels.game && !panels.game.isMinimized && (
+          <GamePanel
+            panelRef={gamePanelRef}
+            isCollapsed={panels.game.isCollapsed}
+            onToggleCollapse={() => togglePanelCollapse('game')}
+            onClosePanel={() => togglePanelMinimize('game')}
+            onMouseDownHeader={(e) => handlePanelMouseDown(e, 'game')}
+            style={{ top: `${panels.game.position.y}px`, left: `${panels.game.position.x}px`, zIndex: panels.game.zIndex }}
           />
         )}
 

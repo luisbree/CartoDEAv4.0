@@ -55,12 +55,50 @@
         }
       },
       "required": ["subject", "layers", "view", "baseLayerId", "createdAt"]
+    },
+    "Agent": {
+      "title": "Agent Profile",
+      "description": "Represents a player in the Cartodea deployment game.",
+      "type": "object",
+      "properties": {
+        "nickname": { "type": "string", "description": "The agent's display name." },
+        "current_cd": { "type": "number", "description": "Deployment Capacity available." },
+        "deployment_center": { "type": "object", "description": "GeoPoint of the agent's base." },
+        "is_deploying": { "type": "boolean", "description": "Flag if the agent is in transit." },
+        "upgrades": { "type": "object", "description": "Object storing agent's upgrades." }
+      },
+      "required": ["nickname", "current_cd", "deployment_center", "is_deploying"]
+    },
+    "Incident": {
+      "title": "Game Incident",
+      "description": "Represents an active incident in the game.",
+      "type": "object",
+      "properties": {
+        "location": { "type": "object", "description": "GeoPoint of the incident." },
+        "type": { "type": "string", "enum": ["Inundación", "Fuego Urbano", "Fuego Rural"], "description": "The type of incident." },
+        "urgency_level": { "type": "string", "enum": ["Bajo", "Medio", "Crítico"], "description": "Urgency of the incident." },
+        "operational_resilience": { "type": "number", "description": "Resource that depletes over time." },
+        "is_resolved": { "type": "boolean", "description": "Flag if the incident is resolved." },
+        "createdAt": { "type": "string", "description": "Timestamp of incident creation." }
+      },
+      "required": ["location", "type", "urgency_level", "operational_resilience", "is_resolved", "createdAt"]
     }
   },
   "auth": {
-    "providers": []
+    "providers": ["google.com"]
   },
   "firestore": {
-    "rules": "firestore.rules"
+    "/sharedMaps/{mapId}": {
+      "schema": { "$ref": "#/entities/SharedMap" },
+      "description": "Stores shared map configurations."
+    },
+    "/agents/{agentId}": {
+      "schema": { "$ref": "#/entities/Agent" },
+      "description": "Stores agent profiles for the game."
+    },
+    "/incidents/{incidentId}": {
+      "schema": { "$ref": "#/entities/Incident" },
+      "description": "Stores active game incidents."
+    }
   }
 }

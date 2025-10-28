@@ -3,7 +3,7 @@
 
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 
-type PanelId = 'tools' | 'legend' | 'attributes' | 'ai' | 'trello' | 'wfsLibrary' | 'help' | 'printComposer' | 'gee' | 'statistics' | 'analysis' | 'clima';
+type PanelId = 'tools' | 'legend' | 'attributes' | 'ai' | 'trello' | 'wfsLibrary' | 'help' | 'printComposer' | 'gee' | 'statistics' | 'analysis' | 'clima' | 'game';
 
 interface PanelState {
   isMinimized: boolean;
@@ -25,6 +25,7 @@ interface UseFloatingPanelsProps {
   statisticsPanelRef: React.RefObject<HTMLDivElement>;
   analysisPanelRef: React.RefObject<HTMLDivElement>;
   climaPanelRef: React.RefObject<HTMLDivElement>;
+  gamePanelRef: React.RefObject<HTMLDivElement>; // New panel ref
   mapAreaRef: React.RefObject<HTMLDivElement>;
   panelWidth: number;
   panelPadding: number;
@@ -44,6 +45,7 @@ const panelCascadeOrder: PanelId[] = [
     'printComposer', 
     'gee',
     'statistics',
+    'game',
     // 'ai' and 'help' are handled separately on the right side
 ];
 
@@ -61,6 +63,7 @@ export const useFloatingPanels = ({
   statisticsPanelRef,
   analysisPanelRef,
   climaPanelRef,
+  gamePanelRef, // Add new panel ref
   mapAreaRef,
   panelWidth,
   panelPadding
@@ -79,7 +82,8 @@ export const useFloatingPanels = ({
     statistics: statisticsPanelRef,
     analysis: analysisPanelRef,
     clima: climaPanelRef,
-  }), [attributesPanelRef, aiPanelRef, legendPanelRef, toolsPanelRef, trelloPanelRef, wfsLibraryPanelRef, helpPanelRef, printComposerPanelRef, geePanelRef, statisticsPanelRef, analysisPanelRef, climaPanelRef]);
+    game: gamePanelRef, // Add new panel ref
+  }), [attributesPanelRef, aiPanelRef, legendPanelRef, toolsPanelRef, trelloPanelRef, wfsLibraryPanelRef, helpPanelRef, printComposerPanelRef, geePanelRef, statisticsPanelRef, analysisPanelRef, climaPanelRef, gamePanelRef]);
   
   const [panels, setPanels] = useState<Record<PanelId, PanelState>>({
       // Start with minimized panels off-screen or at a default position to avoid hydration errors.
@@ -96,6 +100,7 @@ export const useFloatingPanels = ({
       clima: { isMinimized: true, isCollapsed: false, position: { x: -9999, y: -9999 }, zIndex: initialZIndex },
       ai: { isMinimized: false, isCollapsed: false, position: { x: -9999, y: -9999 }, zIndex: initialZIndex + 3 },
       help: { isMinimized: true, isCollapsed: false, position: { x: -9999, y: -9999 }, zIndex: initialZIndex },
+      game: { isMinimized: true, isCollapsed: false, position: { x: -9999, y: -9999 }, zIndex: initialZIndex }, // New panel state
   });
 
 
@@ -121,6 +126,7 @@ export const useFloatingPanels = ({
             statistics: { ...prev.statistics, position: { x: panelPadding, y: panelPadding } },
             analysis: { ...prev.analysis, position: { x: panelPadding, y: panelPadding } },
             clima: { ...prev.clima, position: { x: panelPadding, y: panelPadding } },
+            game: { ...prev.game, position: { x: panelPadding, y: panelPadding } }, // New panel position
             ai: { ...prev.ai, position: { x: aiPanelX, y: panelPadding } },
             help: { ...prev.help, position: { x: aiPanelX, y: panelPadding } },
         }));
