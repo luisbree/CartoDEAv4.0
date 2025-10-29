@@ -44,6 +44,7 @@ const GamePanel: React.FC<GamePanelProps> = ({
       toast({ description: "¡Bienvenido, Agente! Sesión iniciada." });
     } catch (error: any) {
       if (error.code === 'auth/popup-closed-by-user') {
+        // This is a normal user action, not an error to display.
         toast({ description: "Inicio de sesión cancelado." });
       } else {
         console.error("Error signing in:", error);
@@ -65,7 +66,7 @@ const GamePanel: React.FC<GamePanelProps> = ({
     }
     setIsLoading(true);
     try {
-        const agentData = await onboardNewAgent({});
+        const agentData = await onboardNewAgent({ preferredNickname: user.displayName });
         
         const newAgentProfile = {
             nickname: agentData.nickname,
@@ -76,7 +77,6 @@ const GamePanel: React.FC<GamePanelProps> = ({
         };
 
         const agentDocRef = doc(firestore, 'agents', user.uid);
-        // Use setDoc which will create the document (and the collection if it doesn't exist)
         await setDoc(agentDocRef, newAgentProfile);
 
         setAgentProfile(newAgentProfile);
@@ -156,7 +156,7 @@ const GamePanel: React.FC<GamePanelProps> = ({
                  </Button>
                  <Button onClick={handleFetchProfile} disabled={isLoading} className="w-full" variant="secondary">
                     {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <DownloadCloud className="mr-2 h-4 w-4" />}
-                    Cargar Perfil Existente
+                    Ya tengo un perfil, cargar datos
                  </Button>
               </div>
           </div>
