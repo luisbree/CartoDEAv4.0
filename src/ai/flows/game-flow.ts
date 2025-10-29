@@ -1,3 +1,4 @@
+
 'use server';
 /**
  * @fileOverview Game logic flows for "Operación: Despliegue".
@@ -96,7 +97,7 @@ const onboardAgentFlow = ai.defineFlow(
   },
   async ({ preferredNickname }) => {
     
-    const location = await getBuenosAiresTownTool();
+    const location = await getBuenosAiresTownTool({});
     
     // Simple logic for now, but could be expanded.
     const nickname = preferredNickname.split(' ')[0];
@@ -110,3 +111,4 @@ const onboardAgentFlow = ai.defineFlow(
     };
   }
 );
+
