@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
@@ -217,41 +216,41 @@ export const useLayerManager = ({
   const playbackIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const setLayers = useCallback((updater: React.SetStateAction<(MapLayer | LayerGroup)[]>) => {
-      setLayersInternal(prevItems => {
-          const newItems = typeof updater === 'function' ? updater(prevItems) : updater;
-  
-          // Flatten the list to get all operational layers for z-index calculation
-          const operationalLayers: MapLayer[] = [];
-          newItems.forEach(item => {
-              if ('layers' in item) { // It's a group
-                  operationalLayers.push(...item.layers);
-              } else { // It's a layer
-                  operationalLayers.push(item);
-              }
-          });
-  
-          const layer_count = operationalLayers.filter(l => l.type !== 'wms').length;
-  
-          operationalLayers.forEach(layer => {
-              const zIndex = layer.olLayer.getZIndex();
-              let newZIndex = zIndex;
-  
-              if (layer.type === 'wms') {
-                  newZIndex = WMS_LAYER_Z_INDEX;
-              } else {
-                  const operationalIndex = operationalLayers.filter(l => l.type !== 'wms').findIndex(opLayer => opLayer.id === layer.id);
-                  if (operationalIndex !== -1) {
-                      newZIndex = LAYER_START_Z_INDEX + (layer_count - 1 - operationalIndex);
-                  }
-              }
-  
-              if (zIndex !== newZIndex) {
-                  layer.olLayer.setZIndex(newZIndex);
-              }
-          });
-  
-          return newItems;
-      });
+    setLayersInternal(prevItems => {
+        const newItems = typeof updater === 'function' ? updater(prevItems) : updater;
+
+        // Flatten the list to get all operational layers for z-index calculation
+        const operationalLayers: MapLayer[] = [];
+        newItems.forEach(item => {
+            if ('layers' in item) { // It's a group
+                operationalLayers.push(...item.layers);
+            } else { // It's a layer
+                operationalLayers.push(item);
+            }
+        });
+
+        const layer_count = operationalLayers.filter(l => l.type !== 'wms').length;
+
+        operationalLayers.forEach(layer => {
+            const zIndex = layer.olLayer.getZIndex();
+            let newZIndex = zIndex;
+
+            if (layer.type === 'wms') {
+                newZIndex = WMS_LAYER_Z_INDEX;
+            } else {
+                const operationalIndex = operationalLayers.filter(l => l.type !== 'wms').findIndex(opLayer => opLayer.id === layer.id);
+                if (operationalIndex !== -1) {
+                    newZIndex = LAYER_START_Z_INDEX + (layer_count - 1 - operationalIndex);
+                }
+            }
+
+            if (zIndex !== newZIndex) {
+                layer.olLayer.setZIndex(newZIndex);
+            }
+        });
+
+        return newItems;
+    });
   }, []);
 
   // Effect to check the state of the drawing source
@@ -1529,3 +1528,6 @@ const groupLayers = useCallback((layerIds: string[], groupName: string) => {
     
 
 
+
+
+    
