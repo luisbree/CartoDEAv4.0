@@ -43,6 +43,7 @@ import GeeProcessingPanel from '@/components/panels/GeeProcessingPanel';
 import StatisticsPanel from '@/components/panels/StatisticsPanel';
 import AnalysisPanel from '@/components/panels/AnalysisPanel';
 import ClimaPanel from '@/components/panels/ClimaPanel';
+import GamePanel from '@/components/panels/GamePanel'; // Import GamePanel
 import WfsLoadingIndicator from '@/components/feedback/WfsLoadingIndicator';
 import LocationSearch from '@/components/location-search/LocationSearch';
 import BaseLayerSelector from '@/components/layer-manager/BaseLayerSelector';
@@ -51,6 +52,7 @@ import { StreetViewIcon } from '@/components/icons/StreetViewIcon';
 import TrelloCardNotification from '@/components/trello-integration/TrelloCardNotification';
 import { DphLogoIcon } from '@/components/icons/DphLogoIcon';
 import Notepad from '@/components/notepad/Notepad';
+import { FirebaseErrorListener } from '@/components/FirebaseErrorListener';
 
 
 import { useOpenLayersMap } from '@/hooks/map-core/useOpenLayersMap';
@@ -797,6 +799,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
 
   return (
     <div className="flex h-screen w-screen flex-col bg-background text-foreground">
+      <FirebaseErrorListener />
       {!initialMapState && (
       <div className="bg-gray-700/90 backdrop-blur-sm shadow-md p-2 z-20 flex items-center gap-2">
         <DphLogoIcon className="h-8 w-8 flex-shrink-0" />
@@ -945,6 +948,26 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
                 </Tooltip>
               );
             })}
+             <Tooltip>
+                <TooltipTrigger asChild>
+                    <Button
+                        variant={"outline"}
+                        size="icon"
+                        className={`h-8 w-8 focus-visible:ring-primary border-0 ${
+                            !panels.game.isMinimized
+                            ? 'bg-primary text-primary-foreground hover:bg-primary/90'
+                            : 'bg-gray-700/80 text-white hover:bg-gray-600/90'
+                        }`}
+                        onClick={() => togglePanelMinimize('game')}
+                        aria-label="Operación: Despliegue"
+                    >
+                        <Swords className="h-4 w-4" />
+                    </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="bg-gray-700 text-white border-gray-600">
+                    <p className="text-xs">Operación: Despliegue</p>
+                </TooltipContent>
+            </Tooltip>
           </TooltipProvider>
         </div>
       </div>
@@ -1173,6 +1196,17 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
             messages={chatMessages}
             setMessages={setChatMessages}
             style={{ top: `${panels.ai.position.y}px`, left: `${panels.ai.position.x}px`, zIndex: panels.ai.zIndex }}
+          />
+        )}
+        
+        {isMounted && !initialMapState && panels.game && !panels.game.isMinimized && (
+          <GamePanel
+            panelRef={gamePanelRef}
+            isCollapsed={panels.game.isCollapsed}
+            onToggleCollapse={() => togglePanelCollapse('game')}
+            onClosePanel={() => togglePanelMinimize('game')}
+            onMouseDownHeader={(e) => handlePanelMouseDown(e, 'game')}
+            style={{ top: `${panels.game.position.y}px`, left: `${panels.game.position.x}px`, zIndex: panels.game.zIndex }}
           />
         )}
 
