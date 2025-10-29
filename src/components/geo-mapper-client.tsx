@@ -244,26 +244,6 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
     });
   }, []);
 
-  const handleSignIn = async () => {
-    if (!auth) return;
-    try {
-      const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
-      toast({ description: "¡Bienvenido, Agente! Sesión iniciada." });
-      togglePanelMinimize('game'); // Open game panel on successful sign-in
-    } catch (error: any) {
-      if (error.code !== 'auth/popup-closed-by-user') {
-        console.error("Error signing in:", error);
-        toast({
-          title: "Error de Autenticación",
-          description: error.message || "No se pudo iniciar sesión.",
-          variant: "destructive",
-        });
-      }
-    }
-  };
-  
-
   const featureInspectionHook = useFeatureInspection({
     mapRef, 
     mapElementRef, 
@@ -985,13 +965,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
                             ? 'bg-primary text-primary-foreground hover:bg-primary/90'
                             : 'bg-gray-700/80 text-white hover:bg-gray-600/90'
                         }`}
-                        onClick={() => {
-                           if (!user) {
-                             handleSignIn();
-                           } else {
-                             togglePanelMinimize('game');
-                           }
-                        }}
+                        onClick={() => togglePanelMinimize('game')}
                         aria-label="Operación: Despliegue"
                     >
                        {isClientMounted ? (user ? <Swords className="h-4 w-4" /> : <User className="h-4 w-4" />) : <User className="h-4 w-4" />}
@@ -1240,7 +1214,6 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
             onClosePanel={() => togglePanelMinimize('game')}
             onMouseDownHeader={(e) => handlePanelMouseDown(e, 'game')}
             style={{ top: `${panels.game.position.y}px`, left: `${panels.game.position.x}px`, zIndex: panels.game.zIndex }}
-            onSignIn={handleSignIn}
           />
         )}
 
