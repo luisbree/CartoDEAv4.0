@@ -3,8 +3,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore';
-import { Swords, User, Loader2, LogOut, CheckCircle } from 'lucide-react';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { Swords, User, Loader2, LogOut, CheckCircle, UserPlus, DownloadCloud } from 'lucide-react';
 import DraggablePanel from './DraggablePanel';
 import { Button } from '@/components/ui/button';
 import { useAuth, useFirestore, useUser } from '@/firebase';
@@ -65,7 +65,7 @@ const GamePanel: React.FC<GamePanelProps> = ({
     }
     setIsLoading(true);
     try {
-        const agentData = await onboardNewAgent({ preferredNickname: user.displayName });
+        const agentData = await onboardNewAgent({});
         
         const newAgentProfile = {
             nickname: agentData.nickname,
@@ -76,6 +76,7 @@ const GamePanel: React.FC<GamePanelProps> = ({
         };
 
         const agentDocRef = doc(firestore, 'agents', user.uid);
+        // Use setDoc which will create the document (and the collection if it doesn't exist)
         await setDoc(agentDocRef, newAgentProfile);
 
         setAgentProfile(newAgentProfile);
@@ -91,6 +92,32 @@ const GamePanel: React.FC<GamePanelProps> = ({
         setIsLoading(false);
     }
   };
+  
+  const handleFetchProfile = async () => {
+    if (!user) return;
+    setIsLoading(true);
+    try {
+        const agentDocRef = doc(firestore, 'agents', user.uid);
+        const docSnap = await getDoc(agentDocRef);
+
+        if (docSnap.exists()) {
+            setAgentProfile(docSnap.data());
+            toast({ description: "Perfil de agente cargado." });
+        } else {
+            toast({ description: "No se encontró un perfil de agente. ¿Necesitas crear uno?", variant: "destructive" });
+        }
+    } catch (error: any) {
+        console.error("Error fetching agent profile:", error);
+        toast({
+            title: "Error al Cargar Perfil",
+            description: error.message || "No se pudo obtener el perfil.",
+            variant: "destructive",
+        });
+    } finally {
+        setIsLoading(false);
+    }
+  };
+
 
   const handleSignOut = async () => {
     await signOut(auth);
@@ -99,6 +126,7 @@ const GamePanel: React.FC<GamePanelProps> = ({
   };
 
   const renderContent = () => {
+    // Stage 1: Not logged in
     if (!user) {
       return (
         <div className="flex flex-col items-center justify-center gap-4 text-center p-4">
@@ -112,6 +140,7 @@ const GamePanel: React.FC<GamePanelProps> = ({
       );
     }
     
+    // Stage 2: Logged in, but no agent profile loaded
     if (user && !agentProfile) {
       return (
           <div className="flex flex-col items-center justify-center gap-4 text-center p-4">
@@ -119,15 +148,22 @@ const GamePanel: React.FC<GamePanelProps> = ({
                 <CheckCircle className="h-5 w-5" />
                 <p className="text-sm font-semibold">Autenticación Correcta</p>
               </div>
-              <p className="text-xs text-gray-300">Bienvenido, {user.displayName}. Tu siguiente paso es enrolarte oficialmente como agente.</p>
-              <Button onClick={handleCreateAgent} disabled={isLoading} className="w-full">
-                  {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Swords className="mr-2 h-4 w-4" />}
-                  Crear Perfil de Agente
-              </Button>
+              <p className="text-xs text-gray-300">Bienvenido, {user.displayName}. Elige una acción.</p>
+              <div className="w-full space-y-2">
+                 <Button onClick={handleCreateAgent} disabled={isLoading} className="w-full">
+                    {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UserPlus className="mr-2 h-4 w-4" />}
+                    Crear Perfil de Agente
+                 </Button>
+                 <Button onClick={handleFetchProfile} disabled={isLoading} className="w-full" variant="secondary">
+                    {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <DownloadCloud className="mr-2 h-4 w-4" />}
+                    Cargar Perfil Existente
+                 </Button>
+              </div>
           </div>
       );
     }
     
+    // Stage 3: Logged in and agent profile is loaded
     if (user && agentProfile) {
         return (
              <div className="flex flex-col gap-4 text-sm p-2">
