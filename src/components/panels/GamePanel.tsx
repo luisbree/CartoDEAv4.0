@@ -1,9 +1,10 @@
+
 "use client";
 
 import React, { useState, useEffect } from 'react';
 import { GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
-import { Swords, User, Loader2, LogOut, CheckCircle, AlertTriangle } from 'lucide-react';
+import { doc, setDoc } from 'firebase/firestore';
+import { Swords, User, Loader2, LogOut, CheckCircle } from 'lucide-react';
 import DraggablePanel from './DraggablePanel';
 import { Button } from '@/components/ui/button';
 import { useAuth, useFirestore, useUser } from '@/firebase';
@@ -33,34 +34,8 @@ const GamePanel: React.FC<GamePanelProps> = ({
   const { toast } = useToast();
 
   const [isLoading, setIsLoading] = useState(false);
-  const [agentProfile, setAgentProfile] = useState<any>(null);
+  const [agentProfile, setAgentProfile] = useState<any>(null); // Start with no profile
   
-  useEffect(() => {
-    // When user logs in, try to fetch their profile.
-    if (user && !agentProfile) {
-      setIsLoading(true);
-      const agentDocRef = doc(firestore, 'agents', user.uid);
-      getDoc(agentDocRef).then(docSnap => {
-        if (docSnap.exists()) {
-          setAgentProfile(docSnap.data());
-        } else {
-          // User is authenticated but has no agent profile yet.
-          // Set to null to show the creation button.
-          setAgentProfile(null); 
-        }
-      }).catch(error => {
-        // This might happen if rules are still strict, but we handle it gracefully.
-        console.error("Error fetching agent profile:", error);
-        setAgentProfile(null);
-      }).finally(() => {
-        setIsLoading(false);
-      });
-    } else if (!user) {
-      // If user logs out, clear the profile.
-      setAgentProfile(null);
-    }
-  }, [user, firestore, agentProfile]);
-
   const handleSignIn = async () => {
     setIsLoading(true);
     try {
@@ -90,25 +65,19 @@ const GamePanel: React.FC<GamePanelProps> = ({
     }
     setIsLoading(true);
     try {
-        // 1. Get the new agent data from the Genkit flow
         const agentData = await onboardNewAgent({ preferredNickname: user.displayName });
         
-        // 2. Define the full profile object to be saved
         const newAgentProfile = {
             nickname: agentData.nickname,
-            current_cd: 100, // Starting capacity
-            deployment_center: agentData.center, // GeoPoint
+            current_cd: 100,
+            deployment_center: agentData.center,
             is_deploying: false,
             upgrades: {},
         };
 
-        // 3. Create the document reference
         const agentDocRef = doc(firestore, 'agents', user.uid);
-
-        // 4. Use setDoc to create the document. This will also create the collection if it doesn't exist.
         await setDoc(agentDocRef, newAgentProfile);
 
-        // 5. Update the local state to reflect the new profile
         setAgentProfile(newAgentProfile);
         toast({ description: `¡Agente ${agentData.nickname} creado con éxito! Base asignada.` });
     } catch (error: any) {
@@ -130,17 +99,14 @@ const GamePanel: React.FC<GamePanelProps> = ({
   };
 
   const renderContent = () => {
-    if (isLoading) {
-      return <div className="flex justify-center items-center h-full"><Loader2 className="h-8 w-8 animate-spin" /></div>;
-    }
-
     if (!user) {
       return (
         <div className="flex flex-col items-center justify-center gap-4 text-center p-4">
           <h3 className="font-semibold">¡Bienvenido a la Operación: Despliegue!</h3>
           <p className="text-xs text-gray-300">Para participar, debes identificarte como agente de la Dirección Provincial de Hidráulica.</p>
-          <Button onClick={handleSignIn} className="w-full">
-            <User className="mr-2 h-4 w-4" /> Iniciar Sesión con Google
+          <Button onClick={handleSignIn} disabled={isLoading} className="w-full">
+            {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <User className="mr-2 h-4 w-4" />}
+            Iniciar Sesión con Google
           </Button>
         </div>
       );
@@ -187,10 +153,7 @@ const GamePanel: React.FC<GamePanelProps> = ({
     }
 
     return (
-        <div className="flex flex-col items-center justify-center gap-4 text-center p-4 text-red-400">
-            <AlertTriangle className="h-8 w-8" />
-            <p>Ha ocurrido un estado inesperado. Por favor, intente recargar la página.</p>
-        </div>
+        <div className="flex justify-center items-center h-full"><Loader2 className="h-8 w-8 animate-spin" /></div>
     );
   };
 
