@@ -2,94 +2,101 @@
  * @fileoverview Firestore Security Rules for CartoDEA v4.0
  *
  * Core Philosophy:
- * This ruleset enforces a strict user-ownership model for user profiles and map layers.
- * Exploration suggestions are publicly accessible.
+ * This ruleset enforces a strict user-ownership model for user profiles and map layers,
+ * with public read access to exploration suggestions.  All write operations require
+ * authentication and proper authorization.
  *
  * Data Structure:
- * - User profiles are stored in `/users/{userId}`.
- * - Map layers belonging to a user are stored in `/users/{userId}/mapLayers/{mapLayerId}`.
- * - Exploration suggestions are stored in `/explorationSuggestions/{explorationSuggestionId}`.
+ * - User profiles are stored under `/users/{userId}`.
+ * - Map layers are stored as subcollections under `/users/{userId}/mapLayers/{mapLayerId}`.
+ * - Exploration suggestions are stored in the top-level collection `/explorationSuggestions/{explorationSuggestionId}`.
  *
  * Key Security Decisions:
- * - Users can only read/write their own profile data.
- * - Users can only read/write map layers they own. MapLayer documents include the `userId` field,
- *   which is a denormalized copy of the user ID.
- * - Exploration suggestions are publicly readable.
+ * - Users can only read and write their own profile data and map layers.
+ * - Listing of map layers is restricted to the owner.
+ * - Exploration suggestions are publicly readable, but write access is not granted (in this prototype).
  *
+ * Denormalization for Authorization:
+ * - The `MapLayer` entity includes a `userId` field, denormalized from the parent `User` document. This allows
+ *   security rules to validate ownership of map layers directly without additional `get()` calls.
+ *
+ * Structural Segregation:
+ * - User-owned data (profiles and map layers) is stored under `/users/{userId}` to simplify access control.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Controls access to user profile documents.
-     * @path /users/{userId}
-     * @allow (create) - User with UID 'user123' can create a profile with id 'user123'.
-     * @deny (create) - User with UID 'user456' cannot create a profile with id 'user123'.
-     * @allow (get, update, delete) - User with UID 'user123' can read/update/delete their own profile.
-     * @deny (get, update, delete) - User with UID 'user456' cannot read/update/delete profile with id 'user123'.
-     * @principle Enforces document ownership for all operations.
+     * @description Protects against unauthorized access.
+     * @principle  All document paths MUST be secured and explicit.
      */
-    match /users/{userId} {
-      function isSignedIn() {
-        return request.auth != null;
-      }
-
-      function isOwner(userId) {
-        return isSignedIn() && request.auth.uid == userId;
-      }
-
-      function isExistingOwner(userId) {
-        return isOwner(userId) && resource != null;
-      }
-
-      allow get: if isOwner(userId);
-      allow list: if false;
-
-      allow create: if isOwner(userId) && request.resource.data.id == userId;
-      allow update: if isExistingOwner(userId) && request.resource.data.id == resource.data.id;
-      allow delete: if isExistingOwner(userId);
+    match /{document=**} {
+      allow read, write: if false;
     }
 
     /**
-     * @description Controls access to map layer documents associated with a user.
+     * @description Controls access to user profile documents.
+     * @path /users/{userId}
+     * @allow (create) User with ID 'user123' can create their own profile.
+     * @deny (create) User with ID 'user456' cannot create a profile for 'user123'.
+     * @allow (get, update, delete) User with ID 'user123' can read/update/delete their own profile.
+     * @deny (get, update, delete) User with ID 'user456' cannot read/update/delete 'user123's profile.
+     * @principle Enforces document ownership for all operations.
+     */
+    match /users/{userId} {
+      // Helper function to check if the request is made by the owner of the document.
+      function isOwner(userId) {
+        return request.auth != null && request.auth.uid == userId;
+      }
+
+      // Allow a user to create their own profile.
+      allow create: if isOwner(userId) && request.resource.data.id == userId;
+
+      // Allow a user to get, update, and delete their own profile.
+      allow get, update, delete: if isOwner(userId) && resource.data.id == userId;
+
+      // Prevent listing all users.
+      allow list: if false;
+    }
+
+    /**
+     * @description Controls access to map layer documents within a user's profile.
      * @path /users/{userId}/mapLayers/{mapLayerId}
-     * @allow (create) - User with UID 'user123' can create a map layer under their profile.
-     * @deny (create) - User with UID 'user456' cannot create a map layer under user 'user123'.
-     * @allow (get, update, delete) - User with UID 'user123' can read/update/delete their own map layer.
-     * @deny (get, update, delete) - User with UID 'user456' cannot read/update/delete map layer under user 'user123'.
-     * @principle Enforces document ownership for all operations. Relies on denormalized userId in MapLayer documents.
+     * @allow (create) User with ID 'user123' can create a map layer under their profile.
+     * @deny (create) User with ID 'user456' cannot create a map layer under 'user123's profile.
+     * @allow (get, update, delete) User with ID 'user123' can read/update/delete their own map layers.
+     * @deny (get, update, delete) User with ID 'user456' cannot read/update/delete map layers under 'user123's profile.
+     * @principle Enforces document ownership and validates relational integrity.
      */
     match /users/{userId}/mapLayers/{mapLayerId} {
-       function isSignedIn() {
-        return request.auth != null;
-      }
-
+      // Helper function to check if the request is made by the owner of the map layer.
       function isOwner(userId) {
-        return isSignedIn() && request.auth.uid == userId;
+        return request.auth != null && request.auth.uid == userId;
       }
 
-      function isExistingOwner(userId) {
-        return isOwner(userId) && resource != null;
-      }
-
-      allow get: if isOwner(userId);
-      allow list: if isOwner(userId);
-
+      // Only the owner can create a map layer.
       allow create: if isOwner(userId) && request.resource.data.userId == userId;
-      allow update: if isExistingOwner(userId) && request.resource.data.userId == resource.data.userId;
-      allow delete: if isExistingOwner(userId);
+
+      // Only the owner can get, update, or delete the map layer.
+      allow get, update, delete: if isOwner(userId) && resource.data.userId == userId;
+
+      //Only the owner can list mapLayers
+      allow list: if isOwner(userId);
     }
 
     /**
      * @description Controls access to exploration suggestion documents.
      * @path /explorationSuggestions/{explorationSuggestionId}
-     * @allow (get, list) - Any user (signed in or not) can read/list exploration suggestions.
-     * @deny (create, update, delete) - No user can create/update/delete exploration suggestions.
+     * @allow (get, list) Any user can read exploration suggestions.
+     * @deny (create, update, delete) No user can create, update, or delete exploration suggestions (in this prototype).
      * @principle Allows public read access but restricts write access.
      */
     match /explorationSuggestions/{explorationSuggestionId} {
+      // Everyone can read exploration suggestions.
       allow get, list: if true;
+
+      // No one can create, update, or delete exploration suggestions.
       allow create, update, delete: if false;
     }
   }
