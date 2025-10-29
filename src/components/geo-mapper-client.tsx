@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { MapPinned, Database, Wrench, ListTree, ListChecks, Sparkles, ClipboardCheck, Library, LifeBuoy, Printer, Server, BrainCircuit, Camera, Loader2, SlidersHorizontal, ZoomIn, Undo2, BarChartHorizontal, DraftingCompass, Target, Share2, CloudRain, Ellipsis, Swords } from 'lucide-react';
+import { MapPinned, Database, Wrench, ListTree, ListChecks, Sparkles, ClipboardCheck, Library, LifeBuoy, Printer, Server, BrainCircuit, Camera, Loader2, SlidersHorizontal, ZoomIn, Undo2, BarChartHorizontal, DraftingCompass, Target, Share2, CloudRain, Ellipsis, Swords, User } from 'lucide-react';
 import { Style, Fill, Stroke, Circle as CircleStyle, Text as TextStyle } from 'ol/style';
 import { transform, transformExtent } from 'ol/proj';
 import type { Extent } from 'ol/extent';
@@ -70,6 +70,8 @@ import { useOsmQuery } from '@/hooks/osm-integration/useOsmQuery';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from '@/lib/utils';
 import { saveMapState, debugReadDocument } from '@/services/sharing-service';
+import { useAuth, useUser } from '@/firebase';
+import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 
 import type { MapState, OSMCategoryConfig, GeoServerDiscoveredLayer, BaseLayerOptionForSelect, MapLayer, ChatMessage, BaseLayerSettings, NominatimResult, PlainFeatureData, ActiveTool, TrelloCardInfo, GraduatedSymbology, VectorMapLayer, CategorizedSymbology, SerializableMapLayer, RemoteSerializableLayer } from '@/lib/types';
 import { chatWithMapAssistant, type MapAssistantOutput } from '@/ai/flows/find-layer-flow';
@@ -155,6 +157,8 @@ interface GeoMapperClientProps {
 }
 
 export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
+  const auth = useAuth();
+  const user = useUser();
   const mapAreaRef = useRef<HTMLDivElement>(null);
   const toolsPanelRef = useRef<HTMLDivElement>(null);
   const legendPanelRef = useRef<HTMLDivElement>(null);
@@ -235,6 +239,25 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
       return tool; 
     });
   }, []);
+
+  const handleSignIn = async () => {
+    if (!auth) return;
+    try {
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+      toast({ description: "¡Bienvenido, Agente! Sesión iniciada." });
+      togglePanelMinimize('game'); // Open game panel on successful sign-in
+    } catch (error: any) {
+      if (error.code !== 'auth/popup-closed-by-user') {
+        console.error("Error signing in:", error);
+        toast({
+          title: "Error de Autenticación",
+          description: error.message || "No se pudo iniciar sesión.",
+          variant: "destructive",
+        });
+      }
+    }
+  };
   
 
   const featureInspectionHook = useFeatureInspection({
@@ -958,10 +981,16 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
                             ? 'bg-primary text-primary-foreground hover:bg-primary/90'
                             : 'bg-gray-700/80 text-white hover:bg-gray-600/90'
                         }`}
-                        onClick={() => togglePanelMinimize('game')}
+                        onClick={() => {
+                           if (!user) {
+                             handleSignIn();
+                           } else {
+                             togglePanelMinimize('game');
+                           }
+                        }}
                         aria-label="Operación: Despliegue"
                     >
-                        <Swords className="h-4 w-4" />
+                       {user ? <Swords className="h-4 w-4" /> : <User className="h-4 w-4" />}
                     </Button>
                 </TooltipTrigger>
                 <TooltipContent side="bottom" className="bg-gray-700 text-white border-gray-600">
@@ -1207,6 +1236,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
             onClosePanel={() => togglePanelMinimize('game')}
             onMouseDownHeader={(e) => handlePanelMouseDown(e, 'game')}
             style={{ top: `${panels.game.position.y}px`, left: `${panels.game.position.x}px`, zIndex: panels.game.zIndex }}
+            onSignIn={handleSignIn}
           />
         )}
 
