@@ -1,36 +1,22 @@
-
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // Reglas para Agentes del Juego
+
+    // Reglas para perfiles de agentes del juego
     match /agents/{userId} {
       // Un usuario solo puede leer y escribir su propio perfil.
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
-    
-    // Reglas para Incidentes del Juego
-    match /incidents/{incidentId} {
-      // Cualquiera puede leer los incidentes para verlos.
-      allow read;
-      // La creación/actualización de incidentes se debe hacer desde un backend seguro.
-      allow write: if false;
-    }
 
-    // Reglas para Mapas Compartidos
+    // Reglas para mapas compartidos
     match /sharedMaps/{mapId} {
-      // Cualquiera con el enlace puede leer un mapa compartido.
-      allow read;
-      // Cualquiera puede crear un mapa compartido.
-      allow create;
-      // Nadie puede actualizar o borrar un mapa compartido desde el cliente.
+      // Cualquiera puede leer un mapa si tiene el enlace (ID).
+      allow read: if true;
+      // Cualquiera (autenticado o no) puede crear un nuevo mapa compartido.
+      allow create: if true;
+      // Nadie puede modificar o borrar un mapa una vez creado.
       allow update, delete: if false;
-    }
-
-    // Regla de denegación por defecto para cualquier otra colección no definida.
-    match /{document=**} {
-      allow read, write: if false;
     }
   }
 }
