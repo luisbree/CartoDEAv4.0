@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect } from 'react';
@@ -59,6 +60,12 @@ const GamePanel: React.FC<GamePanelProps> = ({
       await signInWithPopup(auth, provider);
       toast({ description: "¡Bienvenido, Agente! Sesión iniciada." });
     } catch (error: any) {
+      // Gracefully handle the user closing the popup
+      if (error.code === 'auth/popup-closed-by-user') {
+        console.log("Sign-in popup closed by user.");
+        toast({ description: "Inicio de sesión cancelado." });
+        return;
+      }
       console.error("Error signing in:", error);
       toast({
         title: "Error de Autenticación",
@@ -111,7 +118,7 @@ const GamePanel: React.FC<GamePanelProps> = ({
   };
 
   const renderContent = () => {
-    if (isLoading) {
+    if (isLoading && !user) { // Only show global loader on initial sign-in attempt
       return <div className="flex justify-center items-center h-full"><Loader2 className="h-8 w-8 animate-spin" /></div>;
     }
 
