@@ -179,8 +179,12 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
   const [mapSubject, setMapSubject] = useState('');
   
   const layerManagerHookRef = useRef<ReturnType<typeof useLayerManager> | null>(null);
+  
+  // State to prevent hydration errors
+  const [isClientMounted, setIsClientMounted] = useState(false);
 
   useEffect(() => {
+    setIsClientMounted(true);
     setIsMounted(true);
   }, []);
   
@@ -990,7 +994,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
                         }}
                         aria-label="Operación: Despliegue"
                     >
-                       {user ? <Swords className="h-4 w-4" /> : <User className="h-4 w-4" />}
+                       {isClientMounted ? (user ? <Swords className="h-4 w-4" /> : <User className="h-4 w-4" />) : <User className="h-4 w-4" />}
                     </Button>
                 </TooltipTrigger>
                 <TooltipContent side="bottom" className="bg-gray-700 text-white border-gray-600">
