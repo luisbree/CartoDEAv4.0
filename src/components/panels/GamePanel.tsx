@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useEffect } from 'react';
@@ -35,23 +34,32 @@ const GamePanel: React.FC<GamePanelProps> = ({
 
   const [isLoading, setIsLoading] = useState(false);
   const [agentProfile, setAgentProfile] = useState<any>(null);
-  const [isCreatingAgent, setIsCreatingAgent] = useState(false);
   
   useEffect(() => {
-    if (user) {
+    // When user logs in, try to fetch their profile.
+    if (user && !agentProfile) {
+      setIsLoading(true);
       const agentDocRef = doc(firestore, 'agents', user.uid);
       getDoc(agentDocRef).then(docSnap => {
         if (docSnap.exists()) {
           setAgentProfile(docSnap.data());
         } else {
-          // User is authenticated but has no agent profile yet
-          setAgentProfile(null);
+          // User is authenticated but has no agent profile yet.
+          // Set to null to show the creation button.
+          setAgentProfile(null); 
         }
+      }).catch(error => {
+        // This might happen if rules are still strict, but we handle it gracefully.
+        console.error("Error fetching agent profile:", error);
+        setAgentProfile(null);
+      }).finally(() => {
+        setIsLoading(false);
       });
-    } else {
+    } else if (!user) {
+      // If user logs out, clear the profile.
       setAgentProfile(null);
     }
-  }, [user, firestore]);
+  }, [user, firestore, agentProfile]);
 
   const handleSignIn = async () => {
     setIsLoading(true);
@@ -60,18 +68,16 @@ const GamePanel: React.FC<GamePanelProps> = ({
       await signInWithPopup(auth, provider);
       toast({ description: "¡Bienvenido, Agente! Sesión iniciada." });
     } catch (error: any) {
-      // Gracefully handle the user closing the popup
       if (error.code === 'auth/popup-closed-by-user') {
-        console.log("Sign-in popup closed by user.");
         toast({ description: "Inicio de sesión cancelado." });
-        return;
+      } else {
+        console.error("Error signing in:", error);
+        toast({
+          title: "Error de Autenticación",
+          description: error.message || "No se pudo iniciar sesión.",
+          variant: "destructive",
+        });
       }
-      console.error("Error signing in:", error);
-      toast({
-        title: "Error de Autenticación",
-        description: error.message || "No se pudo iniciar sesión.",
-        variant: "destructive",
-      });
     } finally {
       setIsLoading(false);
     }
@@ -82,10 +88,12 @@ const GamePanel: React.FC<GamePanelProps> = ({
         toast({ description: "No se puede crear el agente sin un perfil de usuario.", variant: "destructive" });
         return;
     }
-    setIsCreatingAgent(true);
+    setIsLoading(true);
     try {
+        // 1. Get the new agent data from the Genkit flow
         const agentData = await onboardNewAgent({ preferredNickname: user.displayName });
         
+        // 2. Define the full profile object to be saved
         const newAgentProfile = {
             nickname: agentData.nickname,
             current_cd: 100, // Starting capacity
@@ -94,9 +102,13 @@ const GamePanel: React.FC<GamePanelProps> = ({
             upgrades: {},
         };
 
+        // 3. Create the document reference
         const agentDocRef = doc(firestore, 'agents', user.uid);
+
+        // 4. Use setDoc to create the document. This will also create the collection if it doesn't exist.
         await setDoc(agentDocRef, newAgentProfile);
 
+        // 5. Update the local state to reflect the new profile
         setAgentProfile(newAgentProfile);
         toast({ description: `¡Agente ${agentData.nickname} creado con éxito! Base asignada.` });
     } catch (error: any) {
@@ -107,7 +119,7 @@ const GamePanel: React.FC<GamePanelProps> = ({
             variant: "destructive",
         });
     } finally {
-        setIsCreatingAgent(false);
+        setIsLoading(false);
     }
   };
 
@@ -118,7 +130,7 @@ const GamePanel: React.FC<GamePanelProps> = ({
   };
 
   const renderContent = () => {
-    if (isLoading && !user) { // Only show global loader on initial sign-in attempt
+    if (isLoading) {
       return <div className="flex justify-center items-center h-full"><Loader2 className="h-8 w-8 animate-spin" /></div>;
     }
 
@@ -142,8 +154,8 @@ const GamePanel: React.FC<GamePanelProps> = ({
                 <p className="text-sm font-semibold">Autenticación Correcta</p>
               </div>
               <p className="text-xs text-gray-300">Bienvenido, {user.displayName}. Tu siguiente paso es enrolarte oficialmente como agente.</p>
-              <Button onClick={handleCreateAgent} disabled={isCreatingAgent} className="w-full">
-                  {isCreatingAgent ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Swords className="mr-2 h-4 w-4" />}
+              <Button onClick={handleCreateAgent} disabled={isLoading} className="w-full">
+                  {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Swords className="mr-2 h-4 w-4" />}
                   Crear Perfil de Agente
               </Button>
           </div>
