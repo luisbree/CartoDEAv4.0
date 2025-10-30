@@ -14,20 +14,14 @@ const staticFirebaseConfig: FirebaseOptions = {
 
 
 /**
- * Generates the Firebase config. On the client-side, it dynamically
- * sets the authDomain to the current hostname to ensure authentication
- * works correctly in preview and development environments.
+ * Returns the Firebase config. This function ensures that the static configuration
+ * is used, which is the standard and most reliable way when domains are properly
+ * authorized in the Firebase console.
  * @returns The Firebase configuration object.
  */
 export function getFirebaseConfig(): FirebaseOptions {
-    if (typeof window !== 'undefined') {
-        // Client-side execution
-        return {
-            ...staticFirebaseConfig,
-            authDomain: window.location.hostname,
-        };
-    }
-    // Server-side execution
+    // We revert to always using the static config. The dynamic domain should be
+    // handled by adding it to the Firebase console's authorized domains list.
     return staticFirebaseConfig;
 }
 
