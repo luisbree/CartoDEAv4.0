@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, use } from 'react';
 import { getMapState } from '@/services/sharing-service';
 import type { MapState } from '@/lib/types';
 import { useFirestore } from '@/firebase';
@@ -15,7 +15,7 @@ interface SharedMapPageProps {
 }
 
 export default function SharedMapPage({ params }: SharedMapPageProps) {
-    const { mapId } = params;
+    const { mapId } = use(params);
     const firestore = useFirestore();
     const [mapState, setMapState] = useState<MapState | null>(null);
     const [isLoading, setIsLoading] = useState(true);
