@@ -1,10 +1,10 @@
-"use client";
+'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useEffect } from 'react';
 import { FirebaseProvider } from './provider';
 import { initializeFirebase, getFirebaseConfig } from './config';
-import { getAuth, connectAuthEmulator } from "firebase/auth";
-import { getFirestore, connectFirestoreEmulator } from "firebase/firestore";
+import { getAuth, connectAuthEmulator } from 'firebase/auth';
+import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
 import { FirebaseErrorListener } from '@/components/FirebaseErrorListener';
 
 /**
@@ -16,29 +16,42 @@ export function FirebaseClientProvider({
 }: {
   children: React.ReactNode;
 }) {
-  // Use useMemo to initialize Firebase only once per session, with conditional logic.
-  const firebaseApp = useMemo(() => {
+  // Use useMemo to initialize Firebase only once per session.
+  // This part is safe to run on both server and client.
+  const { firebaseApp, auth, firestore } = useMemo(() => {
     const config = getFirebaseConfig();
     const app = initializeFirebase(config);
-    const auth = getAuth(app);
-    const firestore = getFirestore(app);
+    const authInstance = getAuth(app);
+    const firestoreInstance = getFirestore(app);
+    return { firebaseApp: app, auth: authInstance, firestore: firestoreInstance };
+  }, []);
 
-    // Conditional connection to emulators based on hostname.
-    if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
-      console.log("Connecting to local Firebase emulators...");
+  // Use useEffect to run client-side only logic, like connecting to emulators.
+  useEffect(() => {
+    // This code will only run in the browser.
+    console.log(
+      'FirebaseClientProvider: Running client-side effects. Hostname:',
+      window.location.hostname
+    );
+
+    if (
+      window.location.hostname === 'localhost' ||
+      window.location.hostname === '127.0.0.1'
+    ) {
+      console.log('Connecting to local Firebase emulators...');
       // Ensure we don't connect more than once
       if (!(auth as any)._isEmulator) {
-        connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
+        connectAuthEmulator(auth, 'http://127.0.0.1:9099', {
+          disableWarnings: true,
+        });
       }
       if (!(firestore as any)._isEmulator) {
-        connectFirestoreEmulator(firestore, "127.0.0.1", 8080);
+        connectFirestoreEmulator(firestore, '127.0.0.1', 8080);
       }
     } else {
-      console.log("Connecting to cloud Firebase services...");
+      console.log('Connecting to cloud Firebase services...');
     }
-
-    return app;
-  }, []);
+  }, [auth, firestore]); // Depend on auth and firestore instances
 
   return (
     <FirebaseProvider firebaseApp={firebaseApp}>
