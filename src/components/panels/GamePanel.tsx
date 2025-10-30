@@ -6,10 +6,8 @@ import { Swords, User, Loader2 } from 'lucide-react';
 import DraggablePanel from './DraggablePanel';
 import { Button } from '@/components/ui/button';
 import { useAuth, useUser, useFirestore } from '@/firebase';
-import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import { doc, setDoc, getDoc } from "firebase/firestore";
 import { useToast } from '@/hooks/use-toast';
-import type { MapState } from '@/lib/types'; // Assuming Agent profile type will be here
 import { onboardNewAgent } from '@/ai/flows/game-flow';
 
 interface GamePanelProps {
@@ -36,33 +34,11 @@ const GamePanel: React.FC<GamePanelProps> = ({
   onMouseDownHeader,
   style,
 }) => {
-  const auth = useAuth();
   const user = useUser();
   const firestore = useFirestore();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [agentProfile, setAgentProfile] = useState<AgentProfile | null>(null);
-
-  const handleSignIn = async () => {
-    if (!auth) return;
-    setIsLoading(true);
-    try {
-      const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
-      toast({ description: "¡Bienvenido, Agente! Sesión iniciada." });
-    } catch (error: any) {
-      if (error.code !== 'auth/popup-closed-by-user') {
-        console.error("Error signing in:", error);
-        toast({
-          title: "Error de Autenticación",
-          description: error.message || "No se pudo iniciar sesión.",
-          variant: "destructive",
-        });
-      }
-    } finally {
-        setIsLoading(false);
-    }
-  };
 
   const handleCreateAgent = async () => {
       if (!user || !firestore) {
@@ -125,6 +101,16 @@ const GamePanel: React.FC<GamePanelProps> = ({
       }
   };
 
+  // Effect to fetch the profile automatically when the user is available and the panel is open
+  useEffect(() => {
+    if (user && firestore && !isCollapsed) {
+        handleFetchProfile();
+    } else {
+        setAgentProfile(null); // Clear profile if user logs out or panel closes
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, firestore, isCollapsed]);
+
 
   return (
     <DraggablePanel
@@ -145,11 +131,7 @@ const GamePanel: React.FC<GamePanelProps> = ({
             {!user ? (
                 <div className="flex flex-col items-center justify-center gap-4 text-center">
                     <h3 className="font-semibold">¡Bienvenido a la Operación: Despliegue!</h3>
-                    <p className="text-xs text-gray-300">Para participar, debes identificarte como agente.</p>
-                    <Button onClick={handleSignIn} className="w-full" disabled={isLoading}>
-                        {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <User className="mr-2 h-4 w-4" />}
-                        Iniciar Sesión
-                    </Button>
+                    <p className="text-xs text-gray-300">Para participar, debes identificarte como agente iniciando sesión con el botón superior.</p>
                 </div>
             ) : agentProfile ? (
                  <div>
@@ -163,10 +145,6 @@ const GamePanel: React.FC<GamePanelProps> = ({
                     <Button onClick={handleCreateAgent} className="w-full" disabled={isLoading}>
                          {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Swords className="mr-2 h-4 w-4" />}
                         Crear Perfil de Agente
-                    </Button>
-                     <Button onClick={handleFetchProfile} className="w-full" variant="secondary" disabled={isLoading}>
-                         {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <User className="mr-2 h-4 w-4" />}
-                        Ya tengo un perfil, cargar datos
                     </Button>
                 </div>
             )}

@@ -175,7 +175,6 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
   const climaPanelRef = useRef<HTMLDivElement>(null);
   const gamePanelRef = useRef<HTMLDivElement>(null);
   const trelloPopupRef = useRef<Window | null>(null);
-  const [isMounted, setIsMounted] = useState(false);
   const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
   const [mapSubject, setMapSubject] = useState('');
   
@@ -186,7 +185,6 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
 
   useEffect(() => {
     setIsClientMounted(true);
-    setIsMounted(true);
   }, []);
   
   const { mapRef, mapElementRef, setMapInstanceAndElement, isMapReady, drawingSourceRef } = useOpenLayersMap({
@@ -269,6 +267,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
   const [isCapturing, setIsCapturing] = useState(false);
   const [trelloCardNotification, setTrelloCardInfo] = useState<TrelloCardInfo | null>(null);
   const [statisticsLayer, setStatisticsLayer] = useState<VectorMapLayer | null>(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(false);
 
 
   const updateDiscoveredLayerState = useCallback((layerName: string, added: boolean, type: 'wms' | 'wfs') => {
@@ -731,45 +730,58 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
             zoom: currentView.getZoom() || 2
         },
         baseLayerId: activeBaseLayerId,
-        layers: layerManagerHook.layers.map((l): SerializableMapLayer => {
-            const olLayer = l.olLayer;
-            const geeParams = olLayer.get('geeParams');
-            
-            if (l.type === 'gee' && geeParams) {
-                return {
-                    type: 'gee',
-                    name: l.name,
-                    geeParams: {
-                        bandCombination: geeParams.bandCombination,
-                        tileUrl: geeParams.tileUrl,
-                    },
-                    opacity: l.opacity,
-                    visible: l.visible,
-                    url: null,
-                    layerName: null,
-                    wmsStyleEnabled: false,
-                    styleName: null
-                };
-            }
-            if (l.type === 'wfs') {
-                return {
-                    type: 'wfs',
-                    name: l.name,
-                    url: olLayer.get('serverUrl'),
-                    layerName: olLayer.get('gsLayerName'),
-                    opacity: l.opacity,
-                    visible: l.visible,
-                    wmsStyleEnabled: (l as VectorMapLayer).wmsStyleEnabled ?? false,
-                    styleName: olLayer.get('styleName'),
-                    geeParams: null
-                };
-            }
-            // For any other type (drawing, osm, local files), create a placeholder.
-            return {
-                type: 'local-placeholder',
-                name: l.name
+        layers: layerManagerHook.layers.flatMap((item): SerializableMapLayer[] => {
+            const mapItemToSerializable = (l: MapLayer): SerializableMapLayer | null => {
+                const olLayer = l.olLayer;
+                const geeParams = olLayer.get('geeParams');
+                
+                if (l.type === 'gee' && geeParams) {
+                    return {
+                        type: 'gee',
+                        name: l.name,
+                        geeParams: {
+                            bandCombination: geeParams.bandCombination,
+                            tileUrl: geeParams.tileUrl,
+                        },
+                        opacity: l.opacity,
+                        visible: l.visible,
+                        url: null,
+                        layerName: null,
+                        wmsStyleEnabled: false,
+                        styleName: null
+                    };
+                }
+                if (l.type === 'wfs') {
+                    return {
+                        type: 'wfs',
+                        name: l.name,
+                        url: olLayer.get('serverUrl'),
+                        layerName: olLayer.get('gsLayerName'),
+                        opacity: l.opacity,
+                        visible: l.visible,
+                        wmsStyleEnabled: (l as VectorMapLayer).wmsStyleEnabled ?? false,
+                        styleName: olLayer.get('styleName'),
+                        geeParams: null
+                    };
+                }
+                // Filter out local, drawing, analysis, sentinel, landsat layers.
+                if (['drawing', 'vector', 'analysis', 'sentinel', 'landsat', 'osm'].includes(l.type)) {
+                    return {
+                        type: 'local-placeholder',
+                        name: l.name
+                    };
+                }
+                return null;
             };
-        }).filter(l => l.type !== 'local-placeholder' || (l.type === 'local-placeholder' && !l.name.startsWith('Footprints'))) // Filter out footprint layers
+
+            if ('layers' in item) { // It's a group
+                // Process layers within a group
+                return item.layers.map(mapItemToSerializable).filter((l): l is SerializableMapLayer => l !== null);
+            } else { // It's a standalone layer
+                const serializable = mapItemToSerializable(item);
+                return serializable ? [serializable] : [];
+            }
+        }),
     };
 
     try {
@@ -876,6 +888,27 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
     loadSharedMap();
   
   }, [initialMapState, isMapReady, mapRef, toast]);
+
+  const handleSignIn = async () => {
+    if (!auth) return;
+    setIsAuthLoading(true);
+    try {
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+      toast({ description: "¡Bienvenido, Agente! Sesión iniciada." });
+    } catch (error: any) {
+      if (error.code !== 'auth/popup-closed-by-user') {
+        console.error("Error signing in:", error);
+        toast({
+          title: "Error de Autenticación",
+          description: error.message || "No se pudo iniciar sesión.",
+          variant: "destructive",
+        });
+      }
+    } finally {
+        setIsAuthLoading(false);
+    }
+  };
 
 
   return (
@@ -1039,14 +1072,20 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
                             ? 'bg-primary text-primary-foreground hover:bg-primary/90'
                             : 'bg-gray-700/80 text-white hover:bg-gray-600/90'
                         }`}
-                        onClick={() => togglePanelMinimize('game')}
-                        aria-label="Operación: Despliegue"
+                        onClick={() => {
+                          if (!user) {
+                            handleSignIn();
+                          } else {
+                            togglePanelMinimize('game');
+                          }
+                        }}
+                        aria-label="Operación: Despliegue / Iniciar Sesión"
                     >
-                       {isClientMounted ? (user ? <Swords className="h-4 w-4" /> : <User className="h-4 w-4" />) : <User className="h-4 w-4" />}
+                       {isAuthLoading ? <Loader2 className="h-4 w-4 animate-spin"/> : (isClientMounted && user ? <Swords className="h-4 w-4" /> : <User className="h-4 w-4" />)}
                     </Button>
                 </TooltipTrigger>
                 <TooltipContent side="bottom" className="bg-gray-700 text-white border-gray-600">
-                    <p className="text-xs">Operación: Despliegue</p>
+                    <p className="text-xs">{isClientMounted && user ? "Operación: Despliegue" : "Iniciar Sesión"}</p>
                 </TooltipContent>
             </Tooltip>
           </TooltipProvider>
@@ -1080,7 +1119,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
         
         {!initialMapState && <Notepad />}
 
-        {isMounted && !initialMapState && panels.tools && !panels.tools.isMinimized && (
+        {isClientMounted && !initialMapState && panels.tools && !panels.tools.isMinimized && (
           <ToolsPanel
             panelRef={toolsPanelRef}
             isCollapsed={panels.tools.isCollapsed}
@@ -1105,7 +1144,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
           />
         )}
 
-        {isMounted && panels.legend && !panels.legend.isMinimized && (
+        {isClientMounted && panels.legend && !panels.legend.isMinimized && (
           <LegendPanel
             panelRef={legendPanelRef}
             isCollapsed={panels.legend.isCollapsed}
@@ -1158,7 +1197,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
           />
         )}
 
-        {isMounted && !initialMapState && panels.attributes && !panels.attributes.isMinimized && (
+        {isClientMounted && !initialMapState && panels.attributes && !panels.attributes.isMinimized && (
           <AttributesPanelComponent
             panelRef={attributesPanelRef}
             isCollapsed={panels.attributes.isCollapsed}
@@ -1181,7 +1220,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
           />
         )}
         
-        {isMounted && !initialMapState && panels.printComposer && !panels.printComposer.isMinimized && printLayoutImage && (
+        {isClientMounted && !initialMapState && panels.printComposer && !panels.printComposer.isMinimized && printLayoutImage && (
             <PrintComposerPanel
                 mapImage={printLayoutImage}
                 panelRef={printComposerPanelRef}
@@ -1193,7 +1232,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
             />
         )}
 
-        {isMounted && !initialMapState && panels.gee && !panels.gee.isMinimized && (
+        {isClientMounted && !initialMapState && panels.gee && !panels.gee.isMinimized && (
           <GeeProcessingPanel
             panelRef={geePanelRef}
             isCollapsed={panels.gee.isCollapsed}
@@ -1208,7 +1247,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
           />
         )}
 
-        {isMounted && !initialMapState && panels.statistics && !panels.statistics.isMinimized && statisticsLayer && (
+        {isClientMounted && !initialMapState && panels.statistics && !panels.statistics.isMinimized && statisticsLayer && (
             <StatisticsPanel
                 layer={statisticsLayer}
                 allLayers={layerManagerHook.layers.flatMap(item => ('layers' in item ? item.layers : [item]))}
@@ -1226,7 +1265,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
             />
         )}
 
-        {isMounted && !initialMapState && panels.analysis && !panels.analysis.isMinimized && (
+        {isClientMounted && !initialMapState && panels.analysis && !panels.analysis.isMinimized && (
           <AnalysisPanel
             panelRef={analysisPanelRef}
             isCollapsed={panels.analysis.isCollapsed}
@@ -1241,7 +1280,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
           />
         )}
 
-        {isMounted && !initialMapState && panels.clima && !panels.clima.isMinimized && (
+        {isClientMounted && !initialMapState && panels.clima && !panels.clima.isMinimized && (
           <ClimaPanel
             panelRef={climaPanelRef}
             isCollapsed={panels.clima.isCollapsed}
@@ -1254,7 +1293,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
           />
         )}
         
-        {isMounted && !initialMapState && panels.ai && !panels.ai.isMinimized && (
+        {isClientMounted && !initialMapState && panels.ai && !panels.ai.isMinimized && (
           <AIPanel
             panelRef={aiPanelRef}
             isCollapsed={panels.ai.isCollapsed}
@@ -1280,7 +1319,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
           />
         )}
         
-        {isMounted && !initialMapState && panels.game && !panels.game.isMinimized && (
+        {isClientMounted && !initialMapState && panels.game && !panels.game.isMinimized && (
           <GamePanel
             panelRef={gamePanelRef}
             isCollapsed={panels.game.isCollapsed}
@@ -1291,7 +1330,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
           />
         )}
 
-        {isMounted && !initialMapState && panels.trello && !panels.trello.isMinimized && (
+        {isClientMounted && !initialMapState && panels.trello && !panels.trello.isMinimized && (
           <TrelloPanel
             panelRef={trelloPanelRef}
             isCollapsed={panels.trello.isCollapsed}
@@ -1303,7 +1342,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
           />
         )}
 
-        {isMounted && !initialMapState && panels.wfsLibrary && !panels.wfsLibrary.isMinimized && (
+        {isClientMounted && !initialMapState && panels.wfsLibrary && !panels.wfsLibrary.isMinimized && (
           <WfsLibraryPanel
             panelRef={wfsLibraryPanelRef}
             isCollapsed={panels.wfsLibrary.isCollapsed}
@@ -1319,7 +1358,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
           />
         )}
 
-        {isMounted && !initialMapState && panels.help && !panels.help.isMinimized && (
+        {isClientMounted && !initialMapState && panels.help && !panels.help.isMinimized && (
           <HelpPanel
             panelRef={helpPanelRef}
             isCollapsed={panels.help.isCollapsed}
