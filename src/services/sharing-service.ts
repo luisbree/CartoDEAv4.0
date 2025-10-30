@@ -14,39 +14,25 @@ const SHARED_MAPS_COLLECTION = 'sharedMaps';
  * @param mapState The map state object to save, including the subject.
  * @returns A promise that resolves to the new document ID, or rejects on error.
  */
-export function saveMapState(db: Firestore, mapState: MapState): Promise<string> {
-    return new Promise((resolve, reject) => {
-        if (!db) {
-            console.error("Firestore instance not provided to saveMapState.");
-            const err = new FirestorePermissionError({
-                path: `/${SHARED_MAPS_COLLECTION}/{new_doc_id}`,
-                operation: 'create',
-                requestResourceData: {},
-            });
-            errorEmitter.emit('permission-error', err);
-            return reject(err);
-        }
+export async function saveMapState(db: Firestore, mapState: MapState): Promise<string> {
+    if (!db) {
+        throw new Error("Firestore instance not provided to saveMapState.");
+    }
 
-        const dataToSend = {
-            ...mapState,
-            createdAt: serverTimestamp(),
-        };
+    const dataToSend = {
+        ...mapState,
+        createdAt: serverTimestamp(),
+    };
 
-        addDoc(collection(db, SHARED_MAPS_COLLECTION), dataToSend)
-            .then(docRef => {
-                resolve(docRef.id); // Resolve the promise with the new document ID
-            })
-            .catch(serverError => {
-                console.error("Caught error during addDoc:", serverError);
-                const permissionError = new FirestorePermissionError({
-                    path: `/${SHARED_MAPS_COLLECTION}/{new_doc_id}`,
-                    operation: 'create',
-                    requestResourceData: dataToSend,
-                });
-                errorEmitter.emit('permission-error', permissionError);
-                reject(permissionError);
-            });
-    });
+    try {
+        const docRef = await addDoc(collection(db, SHARED_MAPS_COLLECTION), dataToSend);
+        return docRef.id;
+    } catch (serverError: any) {
+        console.error("Error writing document to Firestore:", serverError);
+        // Here you can still create and throw a more detailed error if you wish,
+        // or just re-throw the original error.
+        throw new Error(`Could not save map state: ${serverError.message}`);
+    }
 }
 
 

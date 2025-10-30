@@ -70,7 +70,7 @@ import { useOsmQuery } from '@/hooks/osm-integration/useOsmQuery';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from '@/lib/utils';
 import { saveMapState, debugReadDocument } from '@/services/sharing-service';
-import { useAuth, useUser } from '@/firebase';
+import { useAuth, useUser, useFirestore } from '@/firebase';
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 
 import type { MapState, OSMCategoryConfig, GeoServerDiscoveredLayer, BaseLayerOptionForSelect, MapLayer, ChatMessage, BaseLayerSettings, NominatimResult, PlainFeatureData, ActiveTool, TrelloCardInfo, GraduatedSymbology, VectorMapLayer, CategorizedSymbology, SerializableMapLayer, RemoteSerializableLayer } from '@/lib/types';
@@ -158,6 +158,7 @@ interface GeoMapperClientProps {
 
 export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
   const auth = useAuth();
+  const firestore = useFirestore();
   const user = useUser();
   const mapAreaRef = useRef<HTMLDivElement>(null);
   const toolsPanelRef = useRef<HTMLDivElement>(null);
@@ -715,8 +716,81 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
   }, [mapRef, isCapturing, toast, activeBaseLayerId]);
   
   const handleShareMap = useCallback(async () => {
+    if (!mapRef.current || !firestore) {
+        toast({ title: 'Error', description: 'El mapa o la base de datos no están listos.', variant: 'destructive' });
+        return;
+    }
     
-  }, []);
+    toast({ description: 'Guardando estado del mapa...' });
+
+    const currentView = mapRef.current.getView();
+    const mapState: MapState = {
+        subject: mapSubject || "Mapa sin título",
+        view: {
+            center: transform(currentView.getCenter() || [0, 0], 'EPSG:3857', 'EPSG:4326'),
+            zoom: currentView.getZoom() || 2
+        },
+        baseLayerId: activeBaseLayerId,
+        layers: layerManagerHook.layers.map((l): SerializableMapLayer => {
+            const olLayer = l.olLayer;
+            const geeParams = olLayer.get('geeParams');
+            
+            if (l.type === 'gee' && geeParams) {
+                return {
+                    type: 'gee',
+                    name: l.name,
+                    geeParams: {
+                        bandCombination: geeParams.bandCombination,
+                        tileUrl: geeParams.tileUrl,
+                    },
+                    opacity: l.opacity,
+                    visible: l.visible,
+                    url: null,
+                    layerName: null,
+                    wmsStyleEnabled: false,
+                    styleName: null
+                };
+            }
+            if (l.type === 'wfs') {
+                return {
+                    type: 'wfs',
+                    name: l.name,
+                    url: olLayer.get('serverUrl'),
+                    layerName: olLayer.get('gsLayerName'),
+                    opacity: l.opacity,
+                    visible: l.visible,
+                    wmsStyleEnabled: (l as VectorMapLayer).wmsStyleEnabled ?? false,
+                    styleName: olLayer.get('styleName'),
+                    geeParams: null
+                };
+            }
+            // For any other type (drawing, osm, local files), create a placeholder.
+            return {
+                type: 'local-placeholder',
+                name: l.name
+            };
+        }).filter(l => l.type !== 'local-placeholder' || (l.type === 'local-placeholder' && !l.name.startsWith('Footprints'))) // Filter out footprint layers
+    };
+
+    try {
+        const mapId = await saveMapState(firestore, mapState);
+        const shareUrl = `${window.location.origin}/share/${mapId}`;
+        await navigator.clipboard.writeText(shareUrl);
+        toast({
+            title: '¡Mapa Guardado!',
+            description: 'El enlace para compartir ha sido copiado a tu portapapeles.',
+        });
+        setIsShareDialogOpen(false);
+        setMapSubject('');
+    } catch (error) {
+        console.error("Failed to save map state:", error);
+        toast({
+            title: 'Error al Guardar',
+            description: 'No se pudo guardar el estado del mapa. Verifica tu conexión y los permisos de Firestore.',
+            variant: 'destructive',
+        });
+    }
+  }, [mapRef, firestore, mapSubject, activeBaseLayerId, layerManagerHook.layers, toast]);
 
   useEffect(() => {
     const mapEl = mapElementRef.current;
