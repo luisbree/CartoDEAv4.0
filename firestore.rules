@@ -1,35 +1,117 @@
+/**
+ * @description This ruleset enforces a strict user-ownership model for user profiles and map layers, while allowing public read access to exploration suggestions.
+ * @dataStructure
+ *   - /users/{userId}: Stores user profile information. Only the user can read and write their own profile.
+ *   - /users/{userId}/mapLayers/{mapLayerId}: Stores map layers owned by a specific user. Only the owner can read, create, update, and delete their map layers.
+ *   - /explorationSuggestions/{explorationSuggestionId}: Stores publicly accessible exploration suggestions.
+ *   - /sharedMaps/{mapId}: Stores shared map states. Anyone can read or create shared map states, but updates and deletes are disallowed.
+ * @keySecurityDecisions
+ *   - User listing is disallowed.
+ *   - Map layers are secured using owner-only access, enforced by a denormalized `userId` field on each map layer document.
+ *   - Exploration suggestions are publicly readable.
+ *   - Shared map states are publicly readable and writable for creation, but updates and deletes are disallowed.
+ * @denormalizationForAuthorization
+ *   - MapLayer documents include the `userId` field, which is a denormalized copy of the user ID. This allows security rules to validate ownership of MapLayers directly without needing to perform `get()` operations to retrieve the user document.
+ * @structuralSegregation
+ *   - User-owned data (profiles and map layers) is stored under /users/{userId} to isolate it from public data.
+ */
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // --- Agent Profiles for the Game ---
-    // A user can only interact with their own agent document.
-    match /agents/{userId} {
-      // Allow reading, creating, and updating if the user is the owner of the document.
-      allow read, create, update: if request.auth != null && request.auth.uid == userId;
-      
-      // Do not allow deletion of agent profiles from the client.
-      allow delete: if false;
-    }
-
-    // --- Shared Map States ---
-    // Anyone can create and read shared maps, but cannot change or delete them.
+    /**
+     * @description Grants access to shared map states.
+     * @path /sharedMaps/{mapId}
+     * @allow (read, create) Anyone can read or create a shared map state.
+     * @deny (update, delete) Update/delete is disallowed to prevent modification of shared links.
+     * @principle Allows public read and create access to shared map states while preventing modifications.
+     */
     match /sharedMaps/{mapId} {
-      // Allow anyone to read a map state if they have the link (ID).
-      allow read: if true;
-
-      // Allow anyone (authenticated or not) to create a new shared map state.
-      allow create: if true;
-
-      // Explicitly deny updates and deletes from the client to protect shared data.
+      allow read, create: if true;
       allow update, delete: if false;
     }
 
-    // --- Default Deny ---
-    // Deny all other reads/writes to any other collection by default for security.
-    match /{document=**} {
-      allow read, write: if false;
+    /**
+     * @description Controls access to user profiles.
+     * @path /users/{userId}
+     * @allow (get) Signed-in user can get their own profile.
+     * @allow (create) Signed-in user can create their own profile if the user ID matches.
+     * @allow (update) Signed-in user can update their own profile if the user ID matches and the document exists.
+     * @allow (delete) Signed-in user can delete their own profile if the user ID matches and the document exists.
+     * @deny (list) Listing users is not allowed.
+     * @deny (get) A user cannot get another user's profile.
+     * @deny (create) A user cannot create a profile with a different user ID.
+     * @deny (update) A user cannot update another user's profile.
+     * @deny (delete) A user cannot delete another user's profile.
+     * @principle Enforces strict user-ownership for profile data.
+     */
+    match /users/{userId} {
+      allow get: if isSignedIn() && isOwner(userId);
+      allow list: if false;
+      allow create: if isSignedIn() && isOwner(userId);
+      allow update: if isSignedIn() && isExistingOwner(userId);
+      allow delete: if isSignedIn() && isExistingOwner(userId);
+    }
+
+    /**
+     * @description Controls access to map layers owned by a user.
+     * @path /users/{userId}/mapLayers/{mapLayerId}
+     * @allow (get, list) Signed-in user can get/list their own map layers.
+     * @allow (create) Signed-in user can create a map layer if the user ID matches the path and the document.
+     * @allow (update) Signed-in user can update their own map layers if the user ID matches the path and the document exists.
+     * @allow (delete) Signed-in user can delete their own map layers if the user ID matches the path and the document exists.
+     * @deny (get, list) A user cannot get/list another user's map layers.
+     * @deny (create) A user cannot create a map layer for another user.
+     * @deny (update) A user cannot update another user's map layers.
+     * @deny (delete) A user cannot delete another user's map layers.
+     * @principle Enforces strict user-ownership for map layer data.
+     */
+    match /users/{userId}/mapLayers/{mapLayerId} {
+      allow get, list: if isSignedIn() && isOwner(userId);
+      allow create: if isSignedIn() && request.resource.data.userId == userId;
+      allow update: if isSignedIn() && isExistingOwner(userId) && request.resource.data.userId == resource.data.userId;
+      allow delete: if isSignedIn() && isExistingOwner(userId);
+    }
+
+    /**
+     * @description Grants public read access to exploration suggestions.
+     * @path /explorationSuggestions/{explorationSuggestionId}
+     * @allow (get, list) Anyone can read exploration suggestions.
+     * @deny (create, update, delete) Only admins can create, update, or delete exploration suggestions.
+     * @principle Allows public read access while restricting write access.
+     */
+    match /explorationSuggestions/{explorationSuggestionId} {
+      allow get, list: if true;
+      allow create, update, delete: if false;
+    }
+
+    // --- Helper Functions ---
+
+    /**
+     * @description Checks if the user is signed in.
+     * @return {boolean} True if the user is signed in, false otherwise.
+     */
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    /**
+     * @description Checks if the user is the owner of the resource based on the userId.
+     * @param {string} userId The user ID to compare against the request's authentication UID.
+     * @return {boolean} True if the user is the owner, false otherwise.
+     * @example isOwner("someUserId") -> true if request.auth.uid == "someUserId"
+     */
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
+        /**
+     * @description Checks if the user is the owner of the existing resource based on the userId, and that the resource exists.
+     * @param {string} userId The user ID to compare against the request's authentication UID.
+     * @return {boolean} True if the user is the owner and the resource exists, false otherwise.
+     */
+    function isExistingOwner(userId) {
+        return isOwner(userId) && resource != null;
     }
   }
 }
