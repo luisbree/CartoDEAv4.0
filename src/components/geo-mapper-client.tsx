@@ -1,7 +1,8 @@
+
 "use client";
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { MapPinned, Database, Wrench, ListTree, ListChecks, Sparkles, ClipboardCheck, Library, LifeBuoy, Printer, Server, BrainCircuit, Camera, Loader2, SlidersHorizontal, ZoomIn, Undo2, BarChartHorizontal, DraftingCompass, Target, Share2, CloudRain, Ellipsis, Swords, User } from 'lucide-react';
+import { MapPinned, Database, Wrench, ListTree, ListChecks, Sparkles, ClipboardCheck, Library, LifeBuoy, Printer, Server, BrainCircuit, Camera, Loader2, SlidersHorizontal, ZoomIn, Undo2, BarChartHorizontal, DraftingCompass, Target, Share2, CloudRain, Ellipsis, Swords, User, LogOut } from 'lucide-react';
 import { Style, Fill, Stroke, Circle as CircleStyle, Text as TextStyle } from 'ol/style';
 import { transform, transformExtent } from 'ol/proj';
 import type { Extent } from 'ol/extent';
@@ -17,6 +18,8 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from './ui/alert-dialog';
 import { Label } from './ui/label';
@@ -71,7 +74,7 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from '@/lib/utils';
 import { saveMapState, debugReadDocument } from '@/services/sharing-service';
 import { useAuth, useUser, useFirestore } from '@/firebase';
-import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
 
 import type { MapState, OSMCategoryConfig, GeoServerDiscoveredLayer, BaseLayerOptionForSelect, MapLayer, ChatMessage, BaseLayerSettings, NominatimResult, PlainFeatureData, ActiveTool, TrelloCardInfo, GraduatedSymbology, VectorMapLayer, CategorizedSymbology, SerializableMapLayer, RemoteSerializableLayer } from '@/lib/types';
 import { chatWithMapAssistant, type MapAssistantOutput } from '@/ai/flows/find-layer-flow';
@@ -180,7 +183,6 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
   
   const layerManagerHookRef = useRef<ReturnType<typeof useLayerManager> | null>(null);
   
-  // State to prevent hydration errors
   const [isClientMounted, setIsClientMounted] = useState(false);
 
   useEffect(() => {
@@ -764,7 +766,6 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
                         geeParams: null
                     };
                 }
-                // Filter out local, drawing, analysis, sentinel, landsat layers.
                 if (['drawing', 'vector', 'analysis', 'sentinel', 'landsat', 'osm'].includes(l.type)) {
                     return {
                         type: 'local-placeholder',
@@ -774,10 +775,9 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
                 return null;
             };
 
-            if ('layers' in item) { // It's a group
-                // Process layers within a group
+            if ('layers' in item) {
                 return item.layers.map(mapItemToSerializable).filter((l): l is SerializableMapLayer => l !== null);
-            } else { // It's a standalone layer
+            } else {
                 const serializable = mapItemToSerializable(item);
                 return serializable ? [serializable] : [];
             }
@@ -909,6 +909,24 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
         setIsAuthLoading(false);
     }
   };
+  
+  const handleSignOut = async () => {
+      if (!auth) return;
+      setIsAuthLoading(true);
+      try {
+          await signOut(auth);
+          toast({ description: "Sesión cerrada correctamente." });
+      } catch (error: any) {
+           console.error("Error signing out:", error);
+            toast({
+              title: "Error al Cerrar Sesión",
+              description: error.message || "No se pudo cerrar la sesión.",
+              variant: "destructive",
+            });
+      } finally {
+          setIsAuthLoading(false);
+      }
+  }
 
 
   return (
@@ -938,158 +956,195 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
               <p className="text-xs">{"Capas"}</p>
             </TooltipContent>
           </Tooltip>
-        </TooltipProvider>
 
-        <div className="flex-grow flex items-center gap-2 min-w-0">
-            <LocationSearch onLocationSelect={handleLocationSelection} className="flex-shrink min-w-[150px] w-full max-w-sm" />
-            <div className="flex-shrink-0 w-full max-w-[220px]">
-                <BaseLayerSelector
-                    availableBaseLayers={availableBaseLayersForSelect}
-                    activeBaseLayerId={activeBaseLayerId}
-                    onChangeBaseLayer={handleChangeBaseLayer}
-                />
-            </div>
-            
-            <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                    <Button
-                        variant="outline"
-                        size="icon"
-                        className="h-8 w-8 flex-shrink-0 bg-black/20 hover:bg-black/40 border-0 text-white/90"
-                        title="Más herramientas del mapa"
-                    >
-                        <MapPinned className="h-4 w-4" />
-                    </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                    className="bg-gray-700/90 text-white border-gray-600 backdrop-blur-sm"
-                    onCloseAutoFocus={(e) => e.preventDefault()}
-                >
-                    <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="focus:bg-transparent p-0">
-                         <div className="p-2 w-full">
-                           <p className="text-xs font-medium text-white/90 mb-1">Ajustes de Capa Base</p>
-                           <BaseLayerControls settings={baseLayerSettings} onChange={handleBaseLayerSettingsChange} />
-                         </div>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onSelect={handleOpenStreetView} className="text-xs">
-                        <StreetViewIcon className="h-5 w-5 mr-2" />
-                        Abrir Google Street View
-                    </DropdownMenuItem>
-                     <DropdownMenuItem onSelect={handleCaptureAndDownload} disabled={isCapturing} className="text-xs">
-                         {isCapturing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Camera className="h-4 w-4 mr-2" />}
-                        Capturar Imagen del Mapa
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => setIsShareDialogOpen(true)} className="text-xs">
-                        <Share2 className="h-4 w-4 mr-2" />
-                        Compartir Mapa
-                    </DropdownMenuItem>
-                </DropdownMenuContent>
-            </DropdownMenu>
-
-            <Button
-                onClick={mapNavigationHook.toggleZoomToArea}
-                variant="outline"
-                size="icon"
-                className={cn("h-8 w-8 flex-shrink-0 bg-black/20 hover:bg-black/40 border-0 text-white/90", mapNavigationHook.activeTool === 'zoomToArea' && 'bg-primary hover:bg-primary/90')}
-                title="Zoom a Área"
-            >
-                <ZoomIn className="h-4 w-4" />
-            </Button>
-             <AlertDialog open={isShareDialogOpen} onOpenChange={setIsShareDialogOpen}>
-                <AlertDialogContent onOpenAutoFocus={(e) => e.preventDefault()}>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>Compartir Mapa</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            Ingrese un asunto o título para identificar este mapa compartido.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <div className="grid gap-2">
-                        <Label htmlFor="map-subject" className="text-left">Asunto</Label>
-                        <Input
-                            id="map-subject"
-                            value={mapSubject}
-                            onChange={(e) => setMapSubject(e.target.value)}
-                            placeholder="Ej: Análisis de cuencas en Buenos Aires"
-                            autoFocus
-                        />
-                    </div>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel onClick={() => setMapSubject('')}>Cancelar</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleShareMap} disabled={!mapSubject.trim()}>
-                            Guardar y Copiar Enlace
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
-        </div>
-
-
-        <div className="flex flex-row space-x-1 ml-auto flex-shrink-0">
-          <TooltipProvider delayDuration={200}>
-            {panelToggleConfigs.map((panelConfig) => {
-              const panelState = panels[panelConfig.id as keyof typeof panels];
-              if (!panelState) return null;
-
-              const isPanelOpen = !panelState.isMinimized;
-              const tooltipText = panelConfig.name;
+          <div className="flex-grow flex items-center gap-2 min-w-0">
+              <LocationSearch onLocationSelect={handleLocationSelection} className="flex-shrink min-w-[150px] w-full max-w-sm" />
+              <div className="flex-shrink-0 w-full max-w-[220px]">
+                  <BaseLayerSelector
+                      availableBaseLayers={availableBaseLayersForSelect}
+                      activeBaseLayerId={activeBaseLayerId}
+                      onChangeBaseLayer={handleChangeBaseLayer}
+                  />
+              </div>
               
-              return (
-                <Tooltip key={panelConfig.id}>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant={"outline"}
-                      size="icon"
-                      className={`h-8 w-8 focus-visible:ring-primary border-0 ${
-                        isPanelOpen
-                          ? 'bg-primary text-primary-foreground hover:bg-primary/90'
-                          : 'bg-gray-700/80 text-white hover:bg-gray-600/90'
-                      }`}
-                      onClick={() => {
-                        if (panelConfig.id === 'printComposer') {
-                          handleTogglePrintComposer();
-                        } else {
-                          togglePanelMinimize(panelConfig.id as any);
-                        }
-                      }}
-                      aria-label={tooltipText}
-                    >
-                      <panelConfig.IconComponent className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom" className="bg-gray-700 text-white border-gray-600">
-                    <p className="text-xs">{tooltipText}</p>
-                  </TooltipContent>
-                </Tooltip>
-              );
-            })}
-             <Tooltip>
-                <TooltipTrigger asChild>
-                    <Button
+              <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                      <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-8 w-8 flex-shrink-0 bg-black/20 hover:bg-black/40 border-0 text-white/90"
+                          title="Más herramientas del mapa"
+                      >
+                          <MapPinned className="h-4 w-4" />
+                      </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                      className="bg-gray-700/90 text-white border-gray-600 backdrop-blur-sm"
+                      onCloseAutoFocus={(e) => e.preventDefault()}
+                  >
+                      <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="focus:bg-transparent p-0">
+                          <div className="p-2 w-full">
+                            <p className="text-xs font-medium text-white/90 mb-1">Ajustes de Capa Base</p>
+                            <BaseLayerControls settings={baseLayerSettings} onChange={handleBaseLayerSettingsChange} />
+                          </div>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onSelect={handleOpenStreetView} className="text-xs">
+                          <StreetViewIcon className="h-5 w-5 mr-2" />
+                          Abrir Google Street View
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onSelect={handleCaptureAndDownload} disabled={isCapturing} className="text-xs">
+                          {isCapturing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Camera className="h-4 w-4 mr-2" />}
+                          Capturar Imagen del Mapa
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onSelect={() => setIsShareDialogOpen(true)} className="text-xs">
+                          <Share2 className="h-4 w-4 mr-2" />
+                          Compartir Mapa
+                      </DropdownMenuItem>
+                  </DropdownMenuContent>
+              </DropdownMenu>
+
+              <Button
+                  onClick={mapNavigationHook.toggleZoomToArea}
+                  variant="outline"
+                  size="icon"
+                  className={cn("h-8 w-8 flex-shrink-0 bg-black/20 hover:bg-black/40 border-0 text-white/90", mapNavigationHook.activeTool === 'zoomToArea' && 'bg-primary hover:bg-primary/90')}
+                  title="Zoom a Área"
+              >
+                  <ZoomIn className="h-4 w-4" />
+              </Button>
+              <AlertDialog open={isShareDialogOpen} onOpenChange={setIsShareDialogOpen}>
+                  <AlertDialogContent onOpenAutoFocus={(e) => e.preventDefault()}>
+                      <AlertDialogHeader>
+                          <AlertDialogTitle>Compartir Mapa</AlertDialogTitle>
+                          <AlertDialogDescription>
+                              Ingrese un asunto o título para identificar este mapa compartido.
+                          </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <div className="grid gap-2">
+                          <Label htmlFor="map-subject" className="text-left">Asunto</Label>
+                          <Input
+                              id="map-subject"
+                              value={mapSubject}
+                              onChange={(e) => setMapSubject(e.target.value)}
+                              placeholder="Ej: Análisis de cuencas en Buenos Aires"
+                              autoFocus
+                          />
+                      </div>
+                      <AlertDialogFooter>
+                          <AlertDialogCancel onClick={() => setMapSubject('')}>Cancelar</AlertDialogCancel>
+                          <AlertDialogAction onClick={handleShareMap} disabled={!mapSubject.trim()}>
+                              Guardar y Copiar Enlace
+                          </AlertDialogAction>
+                      </AlertDialogFooter>
+                  </AlertDialogContent>
+              </AlertDialog>
+          </div>
+
+          <div className="flex flex-row space-x-1 ml-auto flex-shrink-0">
+              {panelToggleConfigs.map((panelConfig) => {
+                const panelState = panels[panelConfig.id as keyof typeof panels];
+                if (!panelState) return null;
+
+                const isPanelOpen = !panelState.isMinimized;
+                const tooltipText = panelConfig.name;
+                
+                return (
+                  <Tooltip key={panelConfig.id}>
+                    <TooltipTrigger asChild>
+                      <Button
                         variant={"outline"}
                         size="icon"
                         className={`h-8 w-8 focus-visible:ring-primary border-0 ${
-                            !panels.game.isMinimized
+                          isPanelOpen
                             ? 'bg-primary text-primary-foreground hover:bg-primary/90'
                             : 'bg-gray-700/80 text-white hover:bg-gray-600/90'
                         }`}
                         onClick={() => {
-                          if (!user) {
-                            handleSignIn();
+                          if (panelConfig.id === 'printComposer') {
+                            handleTogglePrintComposer();
                           } else {
-                            togglePanelMinimize('game');
+                            togglePanelMinimize(panelConfig.id as any);
                           }
                         }}
-                        aria-label="Operación: Despliegue / Iniciar Sesión"
-                    >
-                       {isAuthLoading ? <Loader2 className="h-4 w-4 animate-spin"/> : (isClientMounted && user ? <Swords className="h-4 w-4" /> : <User className="h-4 w-4" />)}
-                    </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="bg-gray-700 text-white border-gray-600">
-                    <p className="text-xs">{isClientMounted && user ? "Operación: Despliegue" : "Iniciar Sesión"}</p>
-                </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        </div>
+                        aria-label={tooltipText}
+                      >
+                        <panelConfig.IconComponent className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="bg-gray-700 text-white border-gray-600">
+                      <p className="text-xs">{tooltipText}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                );
+              })}
+              <Tooltip>
+                  <TooltipTrigger asChild>
+                      <Button
+                          variant={"outline"}
+                          size="icon"
+                          className={`h-8 w-8 focus-visible:ring-primary border-0 ${
+                              !panels.game.isMinimized
+                              ? 'bg-primary text-primary-foreground hover:bg-primary/90'
+                              : 'bg-gray-700/80 text-white hover:bg-gray-600/90'
+                          }`}
+                          onClick={() => togglePanelMinimize('game')}
+                          aria-label="Operación: Despliegue"
+                      >
+                        <Swords className="h-4 w-4" />
+                      </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="bg-gray-700 text-white border-gray-600">
+                      <p className="text-xs">Operación: Despliegue</p>
+                  </TooltipContent>
+              </Tooltip>
+
+              {isClientMounted && user ? (
+                  <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                          <Button
+                              variant="outline"
+                              size="icon"
+                              className="h-8 w-8 flex-shrink-0 bg-green-600/30 hover:bg-green-600/50 border-0 text-white/90"
+                              title="Menú de usuario"
+                          >
+                              <User className="h-4 w-4" />
+                          </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent className="bg-gray-700 text-white border-gray-600" align="end">
+                          <DropdownMenuLabel className="font-normal">
+                              <div className="flex flex-col space-y-1">
+                                <p className="text-sm font-medium leading-none">{user.displayName}</p>
+                                <p className="text-xs leading-none text-muted-foreground">{user.email}</p>
+                              </div>
+                          </DropdownMenuLabel>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem onSelect={handleSignOut} disabled={isAuthLoading}>
+                              <LogOut className="mr-2 h-4 w-4" />
+                              <span>Cerrar sesión</span>
+                          </DropdownMenuItem>
+                      </DropdownMenuContent>
+                  </DropdownMenu>
+              ) : (
+                  <Tooltip>
+                      <TooltipTrigger asChild>
+                          <Button
+                              variant="outline"
+                              size="icon"
+                              onClick={handleSignIn}
+                              disabled={isAuthLoading}
+                              className="h-8 w-8 flex-shrink-0 bg-gray-700/80 text-white hover:bg-gray-600/90 border-0"
+                              aria-label="Iniciar Sesión"
+                          >
+                              {isAuthLoading ? <Loader2 className="h-4 w-4 animate-spin"/> : <User className="h-4 w-4" />}
+                          </Button>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom" className="bg-gray-700 text-white border-gray-600">
+                          <p className="text-xs">Iniciar Sesión</p>
+                      </TooltipContent>
+                  </Tooltip>
+              )}
+          </div>
+        </TooltipProvider>
       </div>
       )}
 

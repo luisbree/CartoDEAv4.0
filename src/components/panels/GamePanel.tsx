@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useEffect } from 'react';
@@ -19,7 +18,6 @@ interface GamePanelProps {
   style?: React.CSSProperties;
 }
 
-// Define a simple type for the agent profile for now
 interface AgentProfile {
     nickname: string;
     center: { lat: number; lon: number };
@@ -47,13 +45,9 @@ const GamePanel: React.FC<GamePanelProps> = ({
       }
       setIsLoading(true);
       try {
-          // 1. Call the Genkit flow to get the initial agent data
           const newAgentData = await onboardNewAgent({ preferredNickname: user.displayName || 'Agente' });
-
-          // 2. Get a reference to the document for the current user
           const agentDocRef = doc(firestore, 'agents', user.uid);
           
-          // 3. Use setDoc to create the document. This will also create the collection if it doesn't exist.
           await setDoc(agentDocRef, newAgentData);
           
           setAgentProfile(newAgentData);
@@ -86,7 +80,6 @@ const GamePanel: React.FC<GamePanelProps> = ({
               setAgentProfile(profile);
               toast({ description: "Perfil de agente cargado." });
           } else {
-              toast({ description: "No se encontró un perfil de agente para tu usuario. Puedes crear uno.", variant: "destructive" });
               setAgentProfile(null);
           }
       } catch (error: any) {
@@ -101,12 +94,11 @@ const GamePanel: React.FC<GamePanelProps> = ({
       }
   };
 
-  // Effect to fetch the profile automatically when the user is available and the panel is open
   useEffect(() => {
     if (user && firestore && !isCollapsed) {
         handleFetchProfile();
     } else {
-        setAgentProfile(null); // Clear profile if user logs out or panel closes
+        setAgentProfile(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, firestore, isCollapsed]);
@@ -137,11 +129,10 @@ const GamePanel: React.FC<GamePanelProps> = ({
                  <div>
                     <h3 className="font-semibold">Bienvenido, Agente {agentProfile.nickname}</h3>
                     <p className="text-xs text-gray-300">Base de operaciones: Lat {agentProfile.center.lat.toFixed(4)}, Lon {agentProfile.center.lon.toFixed(4)}</p>
-                    {/* Future game content will go here */}
                 </div>
             ) : (
                 <div className="space-y-3">
-                     <p className="text-xs text-gray-300 text-center">¡Autenticación exitosa! Ahora crea tu perfil de agente o carga uno existente.</p>
+                     <p className="text-xs text-gray-300 text-center">¡Autenticación exitosa! Ahora crea tu perfil de agente para comenzar.</p>
                     <Button onClick={handleCreateAgent} className="w-full" disabled={isLoading}>
                          {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Swords className="mr-2 h-4 w-4" />}
                         Crear Perfil de Agente
