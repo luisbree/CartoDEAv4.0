@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react';
 import { FirebaseProvider } from './provider';
-import { initializeFirebase } from './config';
+import { initializeFirebase, getFirebaseConfig } from './config';
 import { FirebaseErrorListener } from '@/components/FirebaseErrorListener';
 
 /**
@@ -15,7 +15,11 @@ export function FirebaseClientProvider({
   children: React.ReactNode;
 }) {
   // Use useMemo to initialize Firebase only once per session.
-  const firebaseApp = useMemo(() => initializeFirebase(), []);
+  // It now dynamically gets the config, which is crucial for client-side execution.
+  const firebaseApp = useMemo(() => {
+    const config = getFirebaseConfig();
+    return initializeFirebase(config);
+  }, []);
 
   return (
     <FirebaseProvider firebaseApp={firebaseApp}>
