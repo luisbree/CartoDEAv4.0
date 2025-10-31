@@ -110,7 +110,7 @@ import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { saveMapState, debugReadDocument } from '@/services/sharing-service';
 import { useAuth, useUser, useFirestore } from '@/firebase';
-import { GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
+import { GoogleAuthProvider, signInWithRedirect, signOut, getRedirectResult } from 'firebase/auth';
 
 import type {
   MapState,
@@ -1153,27 +1153,35 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
   const handleSignIn = async () => {
     if (!auth) return;
     setIsAuthLoading(true);
-    // DEBUG: Log before sign-in attempt
-    console.log('handleSignIn: Attempting to sign in with popup.');
-    try {
-      const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
-      toast({ description: '¡Bienvenido, Agente! Sesión iniciada.' });
-    } catch (error: any) {
-      // DEBUG: Log the full error object
-      console.error('handleSignIn Error:', error);
-      if (error.code !== 'auth/popup-closed-by-user') {
-        toast({
-          title: 'Error de Autenticación',
-          description: `Code: ${error.code}. Message: ${error.message}`,
-          variant: 'destructive',
-          duration: 10000, // Show for longer
-        });
-      }
-    } finally {
-      setIsAuthLoading(false);
-    }
+    const provider = new GoogleAuthProvider();
+    await signInWithRedirect(auth, provider);
   };
+  
+  // Check for redirect result on component mount
+  useEffect(() => {
+      if (!auth) return;
+      setIsAuthLoading(true);
+      getRedirectResult(auth)
+          .then((result) => {
+              if (result) {
+                  toast({ description: '¡Bienvenido, Agente! Sesión iniciada.' });
+              }
+          })
+          .catch((error) => {
+              if (error.code !== 'auth/popup-closed-by-user' && error.code !== 'auth/cancelled-popup-request') {
+                  console.error('handleSignIn Error:', error);
+                  toast({
+                      title: 'Error de Autenticación',
+                      description: `Code: ${error.code}. Message: ${error.message}`,
+                      variant: 'destructive',
+                      duration: 10000,
+                  });
+              }
+          })
+          .finally(() => {
+              setIsAuthLoading(false);
+          });
+  }, [auth, toast]);
 
   const handleSignOut = async () => {
     if (!auth) return;
