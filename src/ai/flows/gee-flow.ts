@@ -141,7 +141,7 @@ export async function getGoesLayers(input: { numberOfImages: number }): Promise<
     const imageListInfo = await new Promise<any[]>((resolve, reject) => {
         // Evaluate the list to get IDs and properties on the Node.js server side.
         // We select the properties we need to avoid transferring unnecessary data.
-        collection.select(['CMI_C13', 'CMI_C13_offset', 'CMI_C13_scale', 'satellite', 'scene_id', 'system:time_start'])
+        collection.select(['CMI_C13'], ['satellite', 'scene_id', 'system:time_start'])
             .toList(input.numberOfImages)
             .evaluate((result: any, error?: string) => {
                 if (error) reject(new Error(`Error obteniendo la lista de imágenes de GOES: ${error}`));
@@ -170,10 +170,10 @@ export async function getGoesLayers(input: { numberOfImages: number }): Promise<
                 
                 // Get scale and offset from the properties we already fetched
                 const bandName = 'CMI_C13';
-                const offset = ee.Number(imgInfo.properties[bandName + '_offset']);
-                const scale = ee.Number(imgInfo.properties[bandName + '_scale']);
+                const offset = image.get(bandName + '_offset');
+                const scale = image.get(bandName + '_scale');
 
-                const scaledImage = image.select(bandName).multiply(scale).add(offset);
+                const scaledImage = image.select(bandName).multiply(scale as ee.Image).add(offset as ee.Image);
                 
                 scaledImage.getMap(visParams, (mapDetails, error) => {
                     if (error || !mapDetails) {
