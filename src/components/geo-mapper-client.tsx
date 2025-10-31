@@ -1151,43 +1151,24 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
   }, [initialMapState, isMapReady, mapRef, toast]);
 
   const handleSignIn = async () => {
-    if (!auth) return;
     setIsAuthLoading(true);
-    const provider = new GoogleAuthProvider();
-    await signInWithRedirect(auth, provider);
+    // This will redirect the user to the sign-in page
+    window.location.href = '/api/auth/signin';
   };
   
-  // Check for redirect result on component mount
+  // This will now be handled by the server-side callback
+  // No need for getRedirectResult on the client
   useEffect(() => {
-      if (!auth) return;
-      setIsAuthLoading(true);
-      getRedirectResult(auth)
-          .then((result) => {
-              if (result) {
-                  toast({ description: '¡Bienvenido, Agente! Sesión iniciada.' });
-              }
-          })
-          .catch((error) => {
-              if (error.code !== 'auth/popup-closed-by-user' && error.code !== 'auth/cancelled-popup-request') {
-                  console.error('handleSignIn Error:', error);
-                  toast({
-                      title: 'Error de Autenticación',
-                      description: `Code: ${error.code}. Message: ${error.message}`,
-                      variant: 'destructive',
-                      duration: 10000,
-                  });
-              }
-          })
-          .finally(() => {
-              setIsAuthLoading(false);
-          });
-  }, [auth, toast]);
+    if (user) {
+      setIsAuthLoading(false);
+    }
+  }, [user]);
 
   const handleSignOut = async () => {
-    if (!auth) return;
     setIsAuthLoading(true);
     try {
-      await signOut(auth);
+      await fetch('/api/auth/signout');
+      // This will trigger a re-render as the `useUser` hook will update
       toast({ description: 'Sesión cerrada correctamente.' });
     } catch (error: any) {
       console.error('Error signing out:', error);
@@ -1197,7 +1178,8 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
         variant: 'destructive',
       });
     } finally {
-      setIsAuthLoading(false);
+        // A page reload might be necessary to fully clear client-side state
+        window.location.reload();
     }
   };
 
