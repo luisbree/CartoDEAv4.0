@@ -139,9 +139,7 @@ export async function getGoesLayers(input: { numberOfImages: number }): Promise<
         .limit(input.numberOfImages);
 
     const imageListInfo = await new Promise<any[]>((resolve, reject) => {
-        // Evaluate the list to get IDs and properties on the Node.js server side.
-        // We select the properties we need to avoid transferring unnecessary data.
-        collection.select(['CMI_C13'])
+        collection
             .toList(input.numberOfImages)
             .evaluate((result: any, error?: string) => {
                 if (error) reject(new Error(`Error obteniendo la lista de imágenes de GOES: ${error}`));
@@ -160,7 +158,7 @@ export async function getGoesLayers(input: { numberOfImages: number }): Promise<
         '#00ffff', '#1e90ff', '#0000ff',
         '#dcdcdc', '#f5f5f5', '#ffffff'
     ];
-    const visParams = { min: 183.15, max: 323.15, palette: SMN_CLOUDTOP_PALETTE };
+    const visParams = { min: 183.15, max: 323.15, palette: SMN_CLOUDTOP_PALETTE, bands: ['temp'] };
 
     const layersDataPromises = imageListInfo.map(imgInfo => {
         return new Promise<GeeTileLayerOutput>(async (resolve, reject) => {
@@ -170,17 +168,28 @@ export async function getGoesLayers(input: { numberOfImages: number }): Promise<
                 
                 // Get scale and offset from the properties we already fetched
                 const bandName = 'CMI_C13';
-                const offset = image.get(bandName + '_offset');
-                const scale = image.get(bandName + '_scale');
+                const offset = imgInfo.properties[bandName + '_offset'];
+                const scale = imgInfo.properties[bandName + '_scale'];
 
-                const scaledImage = image.select(bandName).multiply(scale as ee.Image).add(offset as ee.Image);
+                if (offset === undefined || scale === undefined) {
+                  throw new Error(`Las propiedades de escala y offset no se encontraron en la imagen ${imgInfo.id}`);
+                }
+
+                // Apply the scaling using a mathematical expression
+                const scaledImage = image.expression(
+                    'temp = CMI_C13 * scale + offset',
+                    {
+                        'CMI_C13': image.select(bandName),
+                        'scale': scale,
+                        'offset': offset,
+                    }
+                );
                 
                 scaledImage.getMap(visParams, (mapDetails, error) => {
                     if (error || !mapDetails) {
                         return reject(new Error(`Error generando la URL del mapa para la imagen ${imgInfo.id}: ${error}`));
                     }
 
-                    // Metadata is already client-side from the initial evaluate
                     const metadata = {
                         timestamp: imgInfo.properties['system:time_start'],
                         satellite: imgInfo.properties['satellite'],
@@ -818,3 +827,5 @@ function initializeEe(): Promise<void> {
   }
   return eeInitialized;
 }
+
+    
