@@ -153,6 +153,7 @@ export type TasseledCapOutput = z.infer<typeof TasseledCapOutputSchema>;
 
 // New schema for GOES storm core vectorization
 export const GoesStormCoresInputSchema = z.object({
+    imageId: z.string().describe("The GEE image ID of the specific GOES image to analyze."),
     temperatureThreshold: z.number().describe("The cloud top temperature threshold in Celsius to define a storm core."),
     aoi: GeeAoiSchema.describe("The Area of Interest as a bounding box for vectorization."),
 });

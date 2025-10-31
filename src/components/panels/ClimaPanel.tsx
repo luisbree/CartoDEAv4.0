@@ -2,7 +2,7 @@
 
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import DraggablePanel from './DraggablePanel';
 import { CloudRain, RadioTower, Satellite, Loader2, Zap } from 'lucide-react';
 import { Button } from '../ui/button';
@@ -22,6 +22,7 @@ import GeoJSON from 'ol/format/GeoJSON';
 import VectorSource from 'ol/source/Vector';
 import type { Map } from 'ol';
 import { transformExtent } from 'ol/proj';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 
 interface ClimaPanelProps {
@@ -33,6 +34,7 @@ interface ClimaPanelProps {
   onAddLayer: (layer: MapLayer | LayerGroup, bringToTop?: boolean) => void;
   style?: React.CSSProperties;
   mapRef: React.RefObject<Map | null>;
+  allLayers: (MapLayer | LayerGroup)[];
 }
 
 const ClimaPanel: React.FC<ClimaPanelProps> = ({
@@ -43,13 +45,25 @@ const ClimaPanel: React.FC<ClimaPanelProps> = ({
   onMouseDownHeader,
   onAddLayer,
   style,
-  mapRef
+  mapRef,
+  allLayers,
 }) => {
     const [isLoading, setIsLoading] = useState(false);
     const [isDetecting, setIsDetecting] = useState(false);
     const [tempThreshold, setTempThreshold] = useState(-65);
     const [numberOfImages, setNumberOfImages] = useState(1);
+    const [selectedGoesLayerId, setSelectedGoesLayerId] = useState<string>('');
     const { toast } = useToast();
+
+    const goesLayers = useMemo(() => {
+        return allLayers
+            .flatMap(item => ('layers' in item ? item.layers : [item]))
+            .filter(layer => 
+                layer.type === 'gee' && 
+                layer.olLayer.get('geeParams')?.bandCombination === 'GOES_CLOUDTOP'
+            ) as MapLayer[];
+    }, [allLayers]);
+
 
     const handleAddGoesLayers = async () => {
         setIsLoading(true);
@@ -70,7 +84,7 @@ const ClimaPanel: React.FC<ClimaPanelProps> = ({
                     }
                     const goesLayer = new TileLayer({
                         source: new XYZ({ url: result.tileUrl, crossOrigin: 'anonymous' }),
-                        properties: { id: layerId, name: layerName, type: 'gee', geeParams: { bandCombination: 'GOES_CLOUDTOP', metadata: result.metadata } },
+                        properties: { id: layerId, name: layerName, type: 'gee', geeParams: { bandCombination: 'GOES_CLOUDTOP', metadata: result.metadata, imageId: result.metadata?.scene_id } },
                         opacity: 0.6,
                     });
                     onAddLayer({ id: layerId, name: layerName, olLayer: goesLayer, visible: true, opacity: 0.6, type: 'gee' }, true);
@@ -92,7 +106,7 @@ const ClimaPanel: React.FC<ClimaPanelProps> = ({
                             source: new XYZ({ url: result.tileUrl, crossOrigin: 'anonymous' }),
                             visible: isVisible,
                             opacity: 0.6,
-                            properties: { id: layerId, name: layerName, type: 'gee', geeParams: { bandCombination: 'GOES_CLOUDTOP', metadata: result.metadata } },
+                            properties: { id: layerId, name: layerName, type: 'gee', geeParams: { bandCombination: 'GOES_CLOUDTOP', metadata: result.metadata, imageId: result.metadata?.scene_id } },
                         });
                         
                         return { id: layerId, name: layerName, olLayer: goesLayer, visible: isVisible, opacity: 0.6, type: 'gee', groupId: groupId };
@@ -133,8 +147,21 @@ const ClimaPanel: React.FC<ClimaPanelProps> = ({
             toast({ description: "El mapa no está listo.", variant: "destructive" });
             return;
         }
+        if (!selectedGoesLayerId) {
+            toast({ description: "Por favor, seleccione una capa GOES para analizar.", variant: "destructive" });
+            return;
+        }
+
+        const selectedLayer = goesLayers.find(l => l.id === selectedGoesLayerId);
+        const imageId = selectedLayer?.olLayer.get('geeParams')?.imageId;
+
+        if (!imageId) {
+            toast({ description: "La capa GOES seleccionada no tiene un ID de imagen válido.", variant: "destructive" });
+            return;
+        }
+
         setIsDetecting(true);
-        toast({ description: `Detectando núcleos de tormenta (T < ${tempThreshold}°C)...` });
+        toast({ description: `Detectando núcleos de tormenta (T < ${tempThreshold}°C) para la capa seleccionada...` });
 
         try {
             const view = mapRef.current.getView();
@@ -143,12 +170,13 @@ const ClimaPanel: React.FC<ClimaPanelProps> = ({
             const aoi = { minLon: extent4326[0], minLat: extent4326[1], maxLon: extent4326[2], maxLat: extent4326[3] };
             
             const result = await getGoesStormCores({ 
+                imageId,
                 temperatureThreshold: tempThreshold,
                 aoi,
             });
             if (result && result.downloadUrl) {
                 const layerId = `storm-cores-${nanoid()}`;
-                const layerName = `Núcleos de Tormenta (${tempThreshold}°C)`;
+                const layerName = `Núcleos (${tempThreshold}°C) de ${selectedLayer.name}`;
                 
                 const vectorSource = new VectorSource({
                     url: result.downloadUrl,
@@ -240,6 +268,17 @@ const ClimaPanel: React.FC<ClimaPanelProps> = ({
         <div className="space-y-3">
             <h3 className="text-sm font-semibold">Detección de Núcleos de Tormenta</h3>
              <div className="space-y-2">
+                <Label htmlFor="goes-layer-select" className="text-xs">Capa GOES a Analizar</Label>
+                <Select value={selectedGoesLayerId} onValueChange={setSelectedGoesLayerId}>
+                  <SelectTrigger id="goes-layer-select" className="h-8 text-xs bg-black/20 w-full" disabled={goesLayers.length === 0}>
+                    <SelectValue placeholder="Seleccionar capa GOES..." />
+                  </SelectTrigger>
+                  <SelectContent className="bg-gray-700 text-white border-gray-600">
+                    {goesLayers.map(l => <SelectItem key={l.id} value={l.id} className="text-xs">{l.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+            </div>
+             <div className="space-y-2">
                 <Label htmlFor="temp-threshold" className="text-xs">Umbral de Temperatura: <span className="font-bold">{tempThreshold}°C</span></Label>
                 <Slider
                     id="temp-threshold"
@@ -252,9 +291,9 @@ const ClimaPanel: React.FC<ClimaPanelProps> = ({
                 />
             </div>
             <p className="text-xs text-gray-400">
-                Vectoriza las áreas de la última imagen GOES que estén por debajo del umbral de temperatura seleccionado.
+                Vectoriza las áreas de la imagen GOES seleccionada que estén por debajo del umbral de temperatura.
             </p>
-            <Button className="w-full" onClick={handleDetectStormCores} disabled={isDetecting || isLoading}>
+            <Button className="w-full" onClick={handleDetectStormCores} disabled={isDetecting || isLoading || !selectedGoesLayerId}>
                 {isDetecting ? (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : (

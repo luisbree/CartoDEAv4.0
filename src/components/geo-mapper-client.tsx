@@ -110,7 +110,7 @@ import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { saveMapState, debugReadDocument } from '@/services/sharing-service';
 import { useAuth, useUser, useFirestore } from '@/firebase';
-import { GoogleAuthProvider, signInWithRedirect, signOut, getRedirectResult } from 'firebase/auth';
+import { GoogleAuthProvider, signInWithPopup, signOut, getRedirectResult, signInWithRedirect } from 'firebase/auth';
 
 import type {
   MapState,
@@ -129,6 +129,7 @@ import type {
   CategorizedSymbology,
   SerializableMapLayer,
   RemoteSerializableLayer,
+  LayerGroup,
 } from '@/lib/types';
 import {
   chatWithMapAssistant,
@@ -1719,6 +1720,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
                 zIndex: panels.clima.zIndex,
               }}
               mapRef={mapRef}
+              allLayers={layerManagerHook.layers}
             />
           )}
 

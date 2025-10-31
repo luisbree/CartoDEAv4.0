@@ -138,24 +138,20 @@ export async function getGoesLayers(input: { numberOfImages: number }): Promise<
         .sort('system:time_start', false) // Sort descending to get the latest
         .limit(input.numberOfImages);
 
-    // Evaluate the image list to get their IDs and metadata on the client (Node.js) side
-    const imageList = await new Promise<any[]>((resolve, reject) => {
-        collection.toList(input.numberOfImages).evaluate((result: any, error?: string) => {
-            if (error) reject(new Error(`Error obteniendo la lista de imágenes de GOES: ${error}`));
-            else resolve(result);
-        });
+    const imageListInfo = await new Promise<any[]>((resolve, reject) => {
+        // Evaluate the list to get IDs and properties on the Node.js server side.
+        // We select the properties we need to avoid transferring unnecessary data.
+        collection.select(['CMI_C13', 'CMI_C13_offset', 'CMI_C13_scale', 'satellite', 'scene_id', 'system:time_start'])
+            .toList(input.numberOfImages)
+            .evaluate((result: any, error?: string) => {
+                if (error) reject(new Error(`Error obteniendo la lista de imágenes de GOES: ${error}`));
+                else resolve(result);
+            });
     });
 
-    if (!imageList || imageList.length === 0) {
+    if (!imageListInfo || imageListInfo.length === 0) {
         throw new Error('No se encontraron imágenes de GOES en las últimas 12 horas.');
     }
-
-    const applyScaleAndOffset = (image: ee.Image) => {
-        const bandName = 'CMI_C13';
-        const offset = ee.Number(image.get(bandName + '_offset'));
-        const scale = ee.Number(image.get(bandName + '_scale'));
-        return image.select(bandName).multiply(scale).add(offset);
-    };
 
     const SMN_CLOUDTOP_PALETTE = [
         '#ffffff', '#e0e0e0', '#c0c0c0', '#a0a0a0', '#808080',
@@ -166,28 +162,39 @@ export async function getGoesLayers(input: { numberOfImages: number }): Promise<
     ];
     const visParams = { min: 183.15, max: 323.15, palette: SMN_CLOUDTOP_PALETTE };
 
-    const layersDataPromises = imageList.map(imgInfo => {
+    const layersDataPromises = imageListInfo.map(imgInfo => {
         return new Promise<GeeTileLayerOutput>(async (resolve, reject) => {
-            const image = ee.Image(imgInfo.id);
-            const scaledImage = applyScaleAndOffset(image);
-
-            scaledImage.getMap(visParams, (mapDetails, error) => {
-                if (error || !mapDetails) {
-                    return reject(new Error(`Error generando la URL del mapa para la imagen ${imgInfo.id}: ${error}`));
-                }
-
-                // Metadata is already client-side from the initial evaluate
-                const metadata = {
-                    timestamp: imgInfo.properties['system:time_start'],
-                    satellite: imgInfo.properties['satellite'],
-                    scene_id: imgInfo.properties['scene_id'],
-                };
+            try {
+                // Reconstruct the image object on the server side using its ID
+                const image = ee.Image(imgInfo.id);
                 
-                resolve({
-                    tileUrl: mapDetails.urlFormat.replace('{x}', '{x}').replace('{y}', '{y}').replace('{z}', '{z}'),
-                    metadata
+                // Get scale and offset from the properties we already fetched
+                const bandName = 'CMI_C13';
+                const offset = ee.Number(imgInfo.properties[bandName + '_offset']);
+                const scale = ee.Number(imgInfo.properties[bandName + '_scale']);
+
+                const scaledImage = image.select(bandName).multiply(scale).add(offset);
+                
+                scaledImage.getMap(visParams, (mapDetails, error) => {
+                    if (error || !mapDetails) {
+                        return reject(new Error(`Error generando la URL del mapa para la imagen ${imgInfo.id}: ${error}`));
+                    }
+
+                    // Metadata is already client-side from the initial evaluate
+                    const metadata = {
+                        timestamp: imgInfo.properties['system:time_start'],
+                        satellite: imgInfo.properties['satellite'],
+                        scene_id: imgInfo.properties['scene_id'],
+                    };
+                    
+                    resolve({
+                        tileUrl: mapDetails.urlFormat.replace('{x}', '{x}').replace('{y}', '{y}').replace('{z}', '{z}'),
+                        metadata
+                    });
                 });
-            });
+            } catch (promiseError) {
+                reject(promiseError);
+            }
         });
     });
 
@@ -714,22 +721,20 @@ const goesStormCoreVectorizationFlow = ai.defineFlow(
     async (input) => {
         await initializeEe();
 
-        const { aoi, temperatureThreshold } = input;
+        const { imageId, temperatureThreshold, aoi } = input;
         const geometry = ee.Geometry.Rectangle([aoi.minLon, aoi.minLat, aoi.maxLon, aoi.maxLat]);
 
-        // 1. Get the latest GOES image
-        const collection = ee.ImageCollection('NOAA/GOES/19/MCMIPF')
-            .filterDate(ee.Date(Date.now()).advance(-2, 'hour'), ee.Date(Date.now()));
-        const latestImage = ee.Image(collection.first());
+        // 1. Get the specified GOES image
+        const image = ee.Image(imageId);
 
         // 2. Apply scale and offset to get temperature in Kelvin
-        const applyScaleAndOffset = (image: ee.Image) => {
+        const applyScaleAndOffset = (img: ee.Image) => {
             const bandName = 'CMI_C13';
-            const offset = ee.Number(image.get(bandName + '_offset'));
-            const scale = ee.Number(image.get(bandName + '_scale'));
-            return image.select(bandName).multiply(scale).add(offset);
+            const offset = ee.Number(img.get(bandName + '_offset'));
+            const scale = ee.Number(img.get(bandName + '_scale'));
+            return img.select(bandName).multiply(scale).add(offset);
         };
-        const tempImageKelvin = applyScaleAndOffset(latestImage);
+        const tempImageKelvin = applyScaleAndOffset(image);
         
         // 3. Convert input Celsius threshold to Kelvin
         const tempThresholdKelvin = temperatureThreshold + 273.15;
