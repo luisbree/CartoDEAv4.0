@@ -141,7 +141,7 @@ export async function getGoesLayers(input: { numberOfImages: number }): Promise<
     const imageListInfo = await new Promise<any[]>((resolve, reject) => {
         // Evaluate the list to get IDs and properties on the Node.js server side.
         // We select the properties we need to avoid transferring unnecessary data.
-        collection.select(['CMI_C13'], ['satellite', 'scene_id', 'system:time_start'])
+        collection.select(['CMI_C13'])
             .toList(input.numberOfImages)
             .evaluate((result: any, error?: string) => {
                 if (error) reject(new Error(`Error obteniendo la lista de imágenes de GOES: ${error}`));
