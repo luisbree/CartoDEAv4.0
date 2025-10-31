@@ -194,6 +194,7 @@ export async function getGoesLayers(input: { numberOfImages: number }): Promise<
                         timestamp: imgInfo.properties['system:time_start'],
                         satellite: imgInfo.properties['satellite'],
                         scene_id: imgInfo.properties['scene_id'],
+                        imageId: imgInfo.properties['scene_id'], // Ensure imageId is set
                     };
                     
                     resolve({
