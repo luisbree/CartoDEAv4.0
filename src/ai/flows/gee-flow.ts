@@ -189,12 +189,13 @@ export async function getGoesLayers(input: { numberOfImages: number }): Promise<
                     if (error || !mapDetails) {
                         return reject(new Error(`Error generando la URL del mapa para la imagen ${imgInfo.id}: ${error}`));
                     }
-
+                    
+                    // Construct metadata object to send to the client
                     const metadata = {
                         timestamp: imgInfo.properties['system:time_start'],
                         satellite: imgInfo.properties['satellite'],
                         scene_id: imgInfo.properties['scene_id'],
-                        imageId: imgInfo.properties['scene_id'], // Ensure imageId is set
+                        imageId: imgInfo.id, // Ensure imageId is the GEE object ID
                     };
                     
                     resolve({

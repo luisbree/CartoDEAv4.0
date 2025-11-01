@@ -350,3 +350,4 @@ const ClimaPanel: React.FC<ClimaPanelProps> = ({
 };
 
 export default ClimaPanel;
+
