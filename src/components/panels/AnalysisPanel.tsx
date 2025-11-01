@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
@@ -14,7 +15,7 @@ import { nanoid } from 'nanoid';
 import GeoJSON from 'ol/format/GeoJSON';
 import VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
-import { intersect, featureCollection, difference, cleanCoords, length as turfLength, along as turfAlong, clustersDbscan, nearestPoint as turfNearestPoint, distance as turfDistance, bearing as turfBearing } from '@turf/turf';
+import { intersect, featureCollection, difference, cleanCoords, length as turfLength, along as turfAlong, clustersDbscan, nearestPoint as turfNearestPoint, distance as turfDistance, bearing as turfBearing, clusterEach } from '@turf/turf';
 import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as TurfMultiPolygon, FeatureCollection as TurfFeatureCollection, Geometry as TurfGeometry, LineString as TurfLineString, Point as TurfPoint } from 'geojson';
 import { multiPolygon, lineString as turfLineString, point as turfPoint, polygon as turfPolygon } from '@turf/helpers';
 import Feature from 'ol/Feature';
@@ -1334,7 +1335,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     const clustered = clustersDbscan(featuresGeoJSON, clusterDistance, { units: 'kilometers', minPoints: 1 });
   
     const clusteredFeatures: Feature[] = [];
-    turf.clusterEach(clustered, 'cluster', (cluster, clusterValue) => {
+    clusterEach(clustered, 'cluster', (cluster, clusterValue) => {
       cluster?.features.forEach(feature => {
         const olFeature = new GeoJSON({ featureProjection: 'EPSG:3857' }).readFeature(feature);
         olFeature.set('cluster_id', clusterValue);
@@ -1390,13 +1391,13 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   
       if (distance <= trajectorySearchRadius) {
         const line = turfLineString([point1.geometry.coordinates, nearest.geometry.coordinates]);
-        const bearing = turfBearing(point1, nearest);
+        const bearingVal = turfBearing(point1, nearest);
         const speed = distance * 60; // Assuming 1 hour between layers, simplistic. km/h.
   
         const olFeature = new GeoJSON({ featureProjection: 'EPSG:3857' }).readFeature(line) as Feature<OlLineString>;
         olFeature.setProperties({
           velocidad_kmh: parseFloat(speed.toFixed(2)),
-          sentido_grados: parseFloat(bearing.toFixed(2)),
+          sentido_grados: parseFloat(bearingVal.toFixed(2)),
           distancia_km: parseFloat(distance.toFixed(2))
         });
         olFeature.setId(nanoid());
