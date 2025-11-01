@@ -26,6 +26,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { getCenter } from 'ol/extent';
 import { Point } from 'ol/geom';
 import type Feature from 'ol/Feature';
+import { Style, Circle as CircleStyle, Fill, Stroke } from 'ol/style';
 
 
 interface ClimaPanelProps {
@@ -39,6 +40,14 @@ interface ClimaPanelProps {
   mapRef: React.RefObject<Map | null>;
   allLayers: (MapLayer | LayerGroup)[];
 }
+
+const centroidStyle = new Style({
+    image: new CircleStyle({
+        radius: 5,
+        fill: new Fill({ color: 'rgba(255, 69, 0, 0.8)' }), // Bright red-orange fill
+        stroke: new Stroke({ color: '#ffffff', width: 1.5 }),
+    }),
+});
 
 const ClimaPanel: React.FC<ClimaPanelProps> = ({
   panelRef,
@@ -227,10 +236,12 @@ const ClimaPanel: React.FC<ClimaPanelProps> = ({
                     format: new GeoJSON(),
                 });
 
-                // Listen for features to load to create centroids
                 vectorSource.on('featuresloadend', (event) => {
                     const polygonFeatures = event.features;
-                    if (!polygonFeatures || polygonFeatures.length === 0) return;
+                    if (!polygonFeatures || polygonFeatures.length === 0) {
+                      toast({ description: "La detección no produjo ningún polígono de núcleo de tormenta." });
+                      return;
+                    }
 
                     const centroidFeatures: Feature<Point>[] = [];
                     polygonFeatures.forEach(polyFeature => {
@@ -240,7 +251,6 @@ const ClimaPanel: React.FC<ClimaPanelProps> = ({
                             const centroidFeature = new Feature({
                                 geometry: new Point(center),
                             });
-                            // Copy properties if needed
                             centroidFeature.setProperties(polyFeature.getProperties());
                             centroidFeatures.push(centroidFeature);
                         }
@@ -253,6 +263,7 @@ const ClimaPanel: React.FC<ClimaPanelProps> = ({
                         const centroidOlLayer = new VectorLayer({
                             source: centroidSource,
                             properties: { id: centroidLayerId, name: centroidLayerName, type: 'analysis' },
+                            style: centroidStyle, // Apply the defined style here
                         });
                         onAddLayer({
                             id: centroidLayerId,
