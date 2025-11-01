@@ -15,9 +15,9 @@ import { nanoid } from 'nanoid';
 import GeoJSON from 'ol/format/GeoJSON';
 import VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
-import { intersect, featureCollection, difference, cleanCoords, length as turfLength, along as turfAlong, clustersDbscan, nearestPoint as turfNearestPoint, distance as turfDistance, bearing as turfBearing, clusterEach } from '@turf/turf';
+import { intersect, featureCollection, difference, cleanCoords, length as turfLength, along as turfAlong, clustersDbscan, nearestPoint as turfNearestPoint, distance as turfDistance, bearing as turfBearing, clusterEach, concave } from '@turf/turf';
 import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as TurfMultiPolygon, FeatureCollection as TurfFeatureCollection, Geometry as TurfGeometry, LineString as TurfLineString, Point as TurfPoint } from 'geojson';
-import { multiPolygon, lineString as turfLineString, point as turfPoint, polygon as turfPolygon } from '@turf/helpers';
+import { multiPolygon, lineString as turfLineString, point as turfPoint, polygon as turfPolygon, convex } from '@turf/helpers';
 import Feature from 'ol/Feature';
 import { type Geometry, type LineString as OlLineString, Point } from 'ol/geom';
 import { getLength as olGetLength } from 'ol/sphere';
@@ -133,10 +133,10 @@ const DATASET_DEFINITIONS: Record<DatasetId, { id: string; band: string; name: s
 };
 
 interface ProfileDataSeries {
-    datasetId: DatasetId;
+    datasetId: string; // Can be a DatasetId or a layer ID
     name: string;
     color: string;
-    unit: 'm' | '%';
+    unit: string;
     points: ProfilePoint[];
     stats: ProfileStats;
 }
@@ -153,8 +153,8 @@ interface CorrelationResult {
     coefficient: number;
     trendline: { slope: number; intercept: number };
     scatterData: { x: number, y: number }[];
-    xDataset: DatasetId;
-    yDataset: DatasetId;
+    xDatasetId: string;
+    yDatasetId: string;
 }
 
 interface CombinedChartDataPoint {
@@ -234,7 +234,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   const [profileData, setProfileData] = useState<ProfileDataSeries[] | null>(null);
   const [activeProfileDrawTool, setActiveProfileDrawTool] = useState<'LineString' | 'FreehandLine' | null>(null);
   const [isGeneratingProfile, setIsGeneratingProfile] = useState(false);
-  const [selectedProfileDatasets, setSelectedProfileDatasets] = useState<DatasetId[]>(['NASADEM_ELEVATION']);
+  const [selectedProfileDatasets, setSelectedProfileDatasets] = useState<string[]>(['NASADEM_ELEVATION']);
   const [profileLayerId, setProfileLayerId] = useState<string>('');
   const [yAxisDomainLeft, setYAxisDomainLeft] = useState<{min: number | 'auto'; max: number | 'auto'}>({min: 'auto', max: 'auto'});
   const [yAxisDomainRight, setYAxisDomainRight] = useState<{min: number | 'auto'; max: number | 'auto'}>({min: 'auto', max: 'auto'});
@@ -245,8 +245,8 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   const liveTooltipElementRef = useRef<HTMLDivElement | null>(null);
   const chartContainerRef = useRef<HTMLDivElement | null>(null);
   const [correlationResult, setCorrelationResult] = useState<CorrelationResult | null>(null);
-  const [corrAxisX, setCorrAxisX] = useState<DatasetId | ''>('');
-  const [corrAxisY, setCorrAxisY] = useState<DatasetId | ''>('');
+  const [corrAxisX, setCorrAxisX] = useState<string>('');
+  const [corrAxisY, setCorrAxisY] = useState<string>('');
   const profileHoverMarkerRef = useRef<Overlay | null>(null);
 
   // State for Trajectory Analysis
@@ -463,11 +463,33 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         const allProfileData: ProfileDataSeries[] = [];
         
         for (const datasetId of selectedProfileDatasets) {
-            const def = DATASET_DEFINITIONS[datasetId];
-            const values = await getValuesForPoints({ points: pointsToQuery, datasetId: def.id, bandName: def.band });
+            const staticDef = DATASET_DEFINITIONS[datasetId as DatasetId];
+            let name, color, unit, band, isGoesLayer = false;
+            let finalDatasetId: string;
+
+            if (staticDef) {
+                // It's a predefined dataset
+                finalDatasetId = staticDef.id;
+                name = staticDef.name;
+                color = staticDef.color;
+                unit = staticDef.unit;
+                band = staticDef.band;
+            } else {
+                // It's a dynamic GOES layer
+                const goesLayer = goesProfileLayers.find(l => l.id === datasetId);
+                if (!goesLayer || !goesLayer.geeParams?.imageId) continue;
+                finalDatasetId = goesLayer.geeParams.imageId;
+                name = goesLayer.name;
+                color = '#ff6b6b'; // Assign a distinct color for GOES profiles
+                unit = '°C';
+                band = 'CMI_C13';
+                isGoesLayer = true;
+            }
+            
+            const values = await getValuesForPoints({ points: pointsToQuery, datasetId: finalDatasetId, bandName: band, isGoesLayer });
             
             if (!values || values.length !== pointsToQuery.length) {
-                throw new Error(`No se obtuvieron datos válidos para ${def.name}.`);
+                throw new Error(`No se obtuvieron datos válidos para ${name}.`);
             }
             
             const points: ProfilePoint[] = pointsToQuery.map((point, index) => ({
@@ -476,7 +498,12 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                 location: [point.lon, point.lat],
             }));
             
-            const validValues = points.map(p => p.value).filter(e => e !== 0); 
+            // For GOES temperature, convert from Kelvin to Celsius for stats
+            const valuesForStats = isGoesLayer
+                ? points.map(p => (p.value !== 0 ? p.value - 273.15 : 0))
+                : points.map(p => p.value);
+            
+            const validValues = valuesForStats.filter(e => e !== 0); 
             let stats: ProfileStats = { min: 0, max: 0, mean: 0, stdDev: 0, jenksBreaks: [] };
             if (validValues.length > 0) {
                 const sum = validValues.reduce((a, b) => a + b, 0);
@@ -488,7 +515,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                 stats.jenksBreaks = jenks(validValues, jenksClasses);
             }
             
-            allProfileData.push({ datasetId, name: def.name, color: def.color, unit: def.unit, points, stats });
+            allProfileData.push({ datasetId, name, color, unit, points, stats });
         }
 
         if (allProfileData.length > 0) {
@@ -532,7 +559,9 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         };
         for (const series of profileData) {
             if (series.points && i < series.points.length) {
-                dataPoint[series.datasetId] = series.points[i].value;
+                // Convert GOES data from K to C for charting
+                const value = series.unit === '°C' ? series.points[i].value - 273.15 : series.points[i].value;
+                dataPoint[series.datasetId] = value;
             }
         }
         combined.push(dataPoint);
@@ -574,7 +603,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 
     const scatterData = valuesX.map((x, i) => ({ x, y: valuesY[i] }));
     
-    setCorrelationResult({ coefficient, trendline: { slope, intercept }, scatterData, xDataset: dataX.datasetId, yDataset: dataY.datasetId });
+    setCorrelationResult({ coefficient, trendline: { slope, intercept }, scatterData, xDatasetId: dataX.datasetId, yDatasetId: dataY.datasetId });
     toast({ description: `Correlación calculada: r = ${coefficient.toFixed(4)}` });
   };
   
@@ -707,6 +736,12 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
           return geomType === 'Point' || geomType === 'MultiPoint';
       });
   }, [vectorLayers]);
+
+  const goesProfileLayers = useMemo(() => {
+    return allLayers.filter((l): l is MapLayer => 
+      l.type === 'gee' && l.geeParams?.bandCombination === 'GOES_CLOUDTOP'
+    );
+  }, [allLayers]);
 
 
   const handleRunClip = () => {
@@ -1521,7 +1556,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                     </div>
                      <div className="space-y-2 p-2 border border-white/10 rounded-md">
                          <div className="space-y-2">
-                            <Label className="text-xs">Datasets de GEE a Perfilar</Label>
+                            <Label className="text-xs">Datasets a Perfilar</Label>
                             {Object.entries(DATASET_DEFINITIONS).map(([id, def]) => (
                                 <div key={id} className="flex items-center space-x-2">
                                     <Checkbox
@@ -1534,6 +1569,21 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                         }}
                                     />
                                     <Label htmlFor={`profile-ds-${id}`} className="text-xs font-normal">{def.name}</Label>
+                                </div>
+                            ))}
+                            {goesProfileLayers.length > 0 && <Separator className="bg-white/10 my-2" />}
+                            {goesProfileLayers.map(layer => (
+                                <div key={layer.id} className="flex items-center space-x-2">
+                                    <Checkbox
+                                        id={`profile-ds-${layer.id}`}
+                                        checked={selectedProfileDatasets.includes(layer.id)}
+                                        onCheckedChange={(checked) => {
+                                            setSelectedProfileDatasets(prev => 
+                                                checked ? [...prev, layer.id] : prev.filter(item => item !== layer.id)
+                                            );
+                                        }}
+                                    />
+                                    <Label htmlFor={`profile-ds-${layer.id}`} className="text-xs font-normal text-amber-300">{layer.name}</Label>
                                 </div>
                             ))}
                         </div>
@@ -1655,13 +1705,13 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                          <div className="space-y-3 pt-3 border-t border-white/10">
                             <Label className="text-xs font-semibold">Análisis de Correlación</Label>
                              <div className="grid grid-cols-2 gap-2">
-                                <Select value={corrAxisX} onValueChange={(v) => setCorrAxisX(v as DatasetId)}>
+                                <Select value={corrAxisX} onValueChange={(v) => setCorrAxisX(v as string)}>
                                     <SelectTrigger className="h-8 text-xs bg-black/20"><SelectValue placeholder="Eje X..." /></SelectTrigger>
                                     <SelectContent className="bg-gray-700 text-white border-gray-600">
                                         {profileData.map(d => <SelectItem key={d.datasetId} value={d.datasetId} className="text-xs">{d.name}</SelectItem>)}
                                     </SelectContent>
                                 </Select>
-                                <Select value={corrAxisY} onValueChange={(v) => setCorrAxisY(v as DatasetId)}>
+                                <Select value={corrAxisY} onValueChange={(v) => setCorrAxisY(v as string)}>
                                     <SelectTrigger className="h-8 text-xs bg-black/20"><SelectValue placeholder="Eje Y..." /></SelectTrigger>
                                     <SelectContent className="bg-gray-700 text-white border-gray-600">
                                         {profileData.map(d => <SelectItem key={d.datasetId} value={d.datasetId} className="text-xs">{d.name}</SelectItem>)}
@@ -1682,8 +1732,8 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                         <ResponsiveContainer>
                                             <ScatterChart margin={{ top: 5, right: 20, left: -25, bottom: 5 }}>
                                                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted-foreground), 0.3)" />
-                                                <XAxis type="number" dataKey="x" name={DATASET_DEFINITIONS[correlationResult.xDataset].name} stroke="hsl(var(--muted-foreground))" fontSize={10} domain={['dataMin', 'dataMax']} tickFormatter={(v) => v.toFixed(1)} />
-                                                <YAxis type="number" dataKey="y" name={DATASET_DEFINITIONS[correlationResult.yDataset].name} stroke="hsl(var(--muted-foreground))" fontSize={10} domain={['dataMin', 'dataMax']} tickFormatter={(v) => v.toFixed(1)} />
+                                                <XAxis type="number" dataKey="x" name={profileData.find(d => d.datasetId === correlationResult.xDatasetId)?.name} stroke="hsl(var(--muted-foreground))" fontSize={10} domain={['dataMin', 'dataMax']} tickFormatter={(v) => v.toFixed(1)} />
+                                                <YAxis type="number" dataKey="y" name={profileData.find(d => d.datasetId === correlationResult.yDatasetId)?.name} stroke="hsl(var(--muted-foreground))" fontSize={10} domain={['dataMin', 'dataMax']} tickFormatter={(v) => v.toFixed(1)} />
                                                 <Tooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', fontSize: '11px' }} />
                                                 <Scatter data={correlationResult.scatterData} fill="#8884d8" shape="circle" fillOpacity={0.5} />
                                                 <Line dataKey="y" data={trendlineData} stroke="#e63946" dot={false} strokeWidth={2} name="Línea de Tendencia" />

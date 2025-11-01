@@ -15,7 +15,7 @@ import ee from '@google/earthengine';
 import { promisify }from 'util';
 import type { Feature as TurfFeature, LineString as TurfLineString } from 'geojson';
 import { length as turfLength, along as turfAlong } from '@turf/turf';
-import type { GeeTileLayerInput, GeeTileLayerOutput, GeeVectorizationInput, GeeValueQueryInput, GeeGeoTiffDownloadInput, GeeHistogramInput, GeeHistogramOutput, GeeProfileInput, GeeProfileOutput, ProfilePoint, TasseledCapOutput, TasseledCapComponent, ElevationPoint, GoesStormCoresInput } from './gee-types';
+import type { GeeTileLayerInput, GeeTileLayerOutput, GeeVectorizationInput, GeeValueQueryInput, GeeGeoTiffDownloadInput, GeeHistogramInput, GeeHistogramOutput, GeeProfileInput, GeeProfileOutput, ProfilePoint, TasseledCapOutput, TasseledCapComponent, ElevationPoint, GoesStormCoresInput, ValuesForPointsParams } from './gee-types';
 import { GeeTileLayerInputSchema, GeeTileLayerOutputSchema, GeeVectorizationInputSchema, GeeValueQueryInputSchema, GeeGeoTiffDownloadInputSchema, GeeHistogramInputSchema, GeeHistogramOutputSchema, GeeProfileInputSchema, GeeProfileOutputSchema, TasseledCapInputSchema, ElevationPointSchema, GoesStormCoresInputSchema } from './gee-types';
 import { z } from 'zod';
 import type { Feature, FeatureCollection } from 'ol';
@@ -68,21 +68,33 @@ export async function authenticateWithGee(): Promise<{ success: boolean; message
 export async function getValuesForPoints({
     points,
     datasetId,
-    bandName
-}: {
-    points: ElevationPoint[];
-    datasetId: string;
-    bandName: string;
-}): Promise<(number | null)[]> {
+    bandName,
+    isGoesLayer = false,
+}: ValuesForPointsParams): Promise<(number | null)[]> {
     await initializeEe();
     
     let image;
-    // Special handling for mosaic collections vs single images
-    if (datasetId === 'JAXA/ALOS/AW3D30/V3_2' || datasetId === 'COPERNICUS/S2_SR_HARMONIZED') {
-        image = ee.ImageCollection(datasetId).select(bandName).mosaic();
+
+    if (isGoesLayer && datasetId) {
+        const goesImage = ee.Image(datasetId);
+        const offset = ee.Number(goesImage.get(bandName + '_offset'));
+        const scale = ee.Number(goesImage.get(bandName + '_scale'));
+        // The result of this expression is an image with one band named 'temp'
+        image = goesImage.expression(
+            'temp = CMI_C13 * scale + offset',
+            { 'CMI_C13': goesImage.select(bandName), 'scale': scale, 'offset': offset }
+        ).rename('first'); // Rename to 'first' to match the reducer output
+    } else if (datasetId) {
+        // Special handling for mosaic collections vs single images
+        if (datasetId === 'JAXA/ALOS/AW3D30/V3_2' || datasetId === 'COPERNICUS/S2_SR_HARMONIZED') {
+            image = ee.ImageCollection(datasetId).select(bandName).mosaic();
+        } else {
+            image = ee.Image(datasetId).select(bandName);
+        }
     } else {
-        image = ee.Image(datasetId).select(bandName);
+        throw new Error("Se requiere un `datasetId` para la consulta de valores.");
     }
+
 
     // Convert the array of points into an ee.FeatureCollection
     const features = points.map((point, index) => {
@@ -96,7 +108,7 @@ export async function getValuesForPoints({
     const values = image.reduceRegions({
         collection: featureCollection,
         reducer: ee.Reducer.first(),
-        scale: 30, // Native resolution is appropriate here
+        scale: 30, // Native resolution is appropriate here for DEMs
     });
 
     // Promisify the evaluate call to use async/await
@@ -829,5 +841,3 @@ function initializeEe(): Promise<void> {
   }
   return eeInitialized;
 }
-
-    

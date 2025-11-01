@@ -158,3 +158,11 @@ export const GoesStormCoresInputSchema = z.object({
     aoi: GeeAoiSchema.describe("The Area of Interest as a bounding box for vectorization."),
 });
 export type GoesStormCoresInput = z.infer<typeof GoesStormCoresInputSchema>;
+
+// New type for getValuesForPoints function params
+export type ValuesForPointsParams = {
+    points: ElevationPoint[];
+    datasetId: string;
+    bandName: string;
+    isGoesLayer?: boolean;
+};
