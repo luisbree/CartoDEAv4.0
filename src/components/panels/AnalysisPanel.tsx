@@ -1608,9 +1608,9 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                         >
                                             <CartesianGrid strokeDasharray="3 3" stroke="rgba(200, 200, 200, 0.2)" />
                                             <XAxis dataKey="distance" type="number" stroke="hsl(var(--muted-foreground))" fontSize={10} tickFormatter={(val) => `${(val / 1000).toFixed(1)} km`} domain={['dataMin', 'dataMax']} />
-                                            <YAxis yAxisId="left" stroke={profileData[0]?.color || '#8884d8'} fontSize={10} domain={[yAxisDomainLeft.min, yAxisDomainLeft.max]} tickFormatter={(val) => `${val.toFixed(0)}${profileData[0]?.unit || ''}`} />
+                                            <YAxis yAxisId="left" stroke={profileData[0]?.color || '#8884d8'} fontSize={10} domain={[yAxisDomainLeft.min, yAxisDomainLeft.max]} tickFormatter={(val) => `${val.toFixed(0)}${profileData[0]?.unit || ''}`} reversed={profileData[0]?.unit === '°C'} />
                                             {profileData.length > 1 && (
-                                                <YAxis yAxisId="right" orientation="right" stroke={profileData[1]?.color || '#82ca9d'} fontSize={10} domain={[yAxisDomainRight.min, yAxisDomainRight.max]} tickFormatter={(val) => `${val.toFixed(0)}${profileData[1]?.unit || ''}`} />
+                                                <YAxis yAxisId="right" orientation="right" stroke={profileData[1]?.color || '#82ca9d'} fontSize={10} domain={[yAxisDomainRight.min, yAxisDomainRight.max]} tickFormatter={(val) => `${val.toFixed(0)}${profileData[1]?.unit || ''}`} reversed={profileData[1]?.unit === '°C'} />
                                             )}
                                             <Tooltip
                                                 contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', color: 'hsl(var(--foreground))' }}
