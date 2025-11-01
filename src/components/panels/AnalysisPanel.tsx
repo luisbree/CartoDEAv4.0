@@ -1,5 +1,3 @@
-
-
 'use client';
 
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
@@ -9,16 +7,16 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DraftingCompass, Scissors, Layers, CircleDotDashed, MinusSquare, BoxSelect, Droplet, Sparkles, Loader2, Combine, Minus, Plus, TrendingUp, Waypoints as CrosshairIcon, Merge, LineChart, PenLine, Eraser, Brush, ZoomIn, Download, FileImage, FileText, CheckCircle, GitCommit } from 'lucide-react';
+import { DraftingCompass, Scissors, Layers, CircleDotDashed, MinusSquare, BoxSelect, Droplet, Sparkles, Loader2, Combine, Minus, Plus, TrendingUp, Waypoints as CrosshairIcon, Merge, LineChart, PenLine, Eraser, Brush, ZoomIn, Download, FileImage, FileText, CheckCircle, GitCommit, GitBranch, Wind } from 'lucide-react';
 import type { MapLayer, VectorMapLayer, ProfilePoint } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { nanoid } from 'nanoid';
 import GeoJSON from 'ol/format/GeoJSON';
 import VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
-import { intersect, featureCollection, difference, cleanCoords, length as turfLength, along as turfAlong } from '@turf/turf';
+import { intersect, featureCollection, difference, cleanCoords, length as turfLength, along as turfAlong, clustersDbscan, nearestPoint as turfNearestPoint, distance as turfDistance, bearing as turfBearing } from '@turf/turf';
 import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as TurfMultiPolygon, FeatureCollection as TurfFeatureCollection, Geometry as TurfGeometry, LineString as TurfLineString, Point as TurfPoint } from 'geojson';
-import { multiPolygon } from '@turf/helpers';
+import { multiPolygon, lineString as turfLineString, point as turfPoint, polygon as turfPolygon } from '@turf/helpers';
 import Feature from 'ol/Feature';
 import { type Geometry, type LineString as OlLineString, Point } from 'ol/geom';
 import { getLength as olGetLength } from 'ol/sphere';
@@ -249,6 +247,15 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   const [corrAxisX, setCorrAxisX] = useState<DatasetId | ''>('');
   const [corrAxisY, setCorrAxisY] = useState<DatasetId | ''>('');
   const profileHoverMarkerRef = useRef<Overlay | null>(null);
+
+  // State for Trajectory Analysis
+  const [clusterInputLayerId, setClusterInputLayerId] = useState('');
+  const [clusterDistance, setClusterDistance] = useState(50);
+  const [clusterOutputName, setClusterOutputName] = useState('');
+  const [trajectoryLayer1Id, setTrajectoryLayer1Id] = useState('');
+  const [trajectoryLayer2Id, setTrajectoryLayer2Id] = useState('');
+  const [trajectorySearchRadius, setTrajectorySearchRadius] = useState(100);
+  const [trajectoryOutputName, setTrajectoryOutputName] = useState('');
 
 
   const { toast } = useToast();
@@ -688,6 +695,18 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         return geomType === 'LineString' || geomType === 'MultiLineString';
     });
   }, [vectorLayers]);
+  
+  const pointLayers = useMemo(() => {
+      return vectorLayers.filter(l => {
+          const source = l.olLayer.getSource();
+          if (!source) return false;
+          const features = source.getFeatures();
+          if (features.length === 0) return false;
+          const geomType = features[0].getGeometry()?.getType();
+          return geomType === 'Point' || geomType === 'MultiPoint';
+      });
+  }, [vectorLayers]);
+
 
   const handleRunClip = () => {
     const inputLayer = vectorLayers.find(l => l.id === clipInputLayerId);
@@ -1294,6 +1313,158 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
       { x: maxX, y: slope * maxX + intercept },
     ];
   }, [correlationResult]);
+  
+  // --- START Trajectory Analysis Logic ---
+  
+  const handleRunClustering = () => {
+    const inputLayer = pointLayers.find(l => l.id === clusterInputLayerId);
+    if (!inputLayer || clusterDistance <= 0) {
+      toast({ description: "Seleccione una capa de puntos y una distancia válida.", variant: 'destructive' });
+      return;
+    }
+    const inputSource = inputLayer.olLayer.getSource();
+    if (!inputSource || inputSource.getFeatures().length === 0) {
+      toast({ description: 'La capa de entrada no tiene entidades.', variant: 'destructive' });
+      return;
+    }
+  
+    const format = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
+    const featuresGeoJSON = format.writeFeaturesObject(inputSource.getFeatures());
+  
+    const clustered = clustersDbscan(featuresGeoJSON, clusterDistance, { units: 'kilometers', minPoints: 1 });
+  
+    const clusteredFeatures: Feature[] = [];
+    turf.clusterEach(clustered, 'cluster', (cluster, clusterValue) => {
+      cluster?.features.forEach(feature => {
+        const olFeature = new GeoJSON({ featureProjection: 'EPSG:3857' }).readFeature(feature);
+        olFeature.set('cluster_id', clusterValue);
+        olFeature.setId(nanoid());
+        clusteredFeatures.push(olFeature);
+      });
+    });
+  
+    const outputName = clusterOutputName.trim() || `Cúmulos de ${inputLayer.name}`;
+    const newLayerId = `cluster-result-${nanoid()}`;
+    const newSource = new VectorSource({ features: clusteredFeatures });
+    const newOlLayer = new VectorLayer({
+      source: newSource,
+      properties: { id: newLayerId, name: outputName, type: 'analysis' },
+    });
+  
+    onAddLayer({
+      id: newLayerId,
+      name: outputName,
+      olLayer: newOlLayer,
+      visible: true,
+      opacity: 1,
+      type: 'analysis',
+    }, true);
+  
+    toast({ description: `Análisis de cúmulos completado. Se creó la capa "${outputName}".` });
+  };
+  
+  const handleRunTrajectory = () => {
+    const layer1 = pointLayers.find(l => l.id === trajectoryLayer1Id);
+    const layer2 = pointLayers.find(l => l.id === trajectoryLayer2Id);
+  
+    if (!layer1 || !layer2 || trajectorySearchRadius <= 0) {
+      toast({ description: "Seleccione dos capas de puntos y un radio de búsqueda válido.", variant: 'destructive' });
+      return;
+    }
+  
+    const source1 = layer1.olLayer.getSource();
+    const source2 = layer2.olLayer.getSource();
+    if (!source1 || !source2 || source1.getFeatures().length === 0 || source2.getFeatures().length === 0) {
+      toast({ description: 'Una o ambas capas no tienen entidades.', variant: 'destructive' });
+      return;
+    }
+  
+    const format = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
+    const features1GeoJSON = format.writeFeaturesObject(source1.getFeatures());
+    const features2GeoJSON = format.writeFeaturesObject(source2.getFeatures());
+  
+    const vectorFeatures: Feature<OlLineString>[] = [];
+    for (const point1 of features1GeoJSON.features) {
+      const nearest = turfNearestPoint(point1, features2GeoJSON);
+      const distance = turfDistance(point1, nearest, { units: 'kilometers' });
+  
+      if (distance <= trajectorySearchRadius) {
+        const line = turfLineString([point1.geometry.coordinates, nearest.geometry.coordinates]);
+        const bearing = turfBearing(point1, nearest);
+        const speed = distance * 60; // Assuming 1 hour between layers, simplistic. km/h.
+  
+        const olFeature = new GeoJSON({ featureProjection: 'EPSG:3857' }).readFeature(line) as Feature<OlLineString>;
+        olFeature.setProperties({
+          velocidad_kmh: parseFloat(speed.toFixed(2)),
+          sentido_grados: parseFloat(bearing.toFixed(2)),
+          distancia_km: parseFloat(distance.toFixed(2))
+        });
+        olFeature.setId(nanoid());
+        vectorFeatures.push(olFeature);
+      }
+    }
+  
+    if (vectorFeatures.length === 0) {
+      toast({ description: "No se encontraron trayectorias entre las capas con los parámetros dados." });
+      return;
+    }
+  
+    const outputName = trajectoryOutputName.trim() || `Trayectoria ${layer1.name} a ${layer2.name}`;
+    const newLayerId = `trajectory-result-${nanoid()}`;
+    const newSource = new VectorSource({ features: vectorFeatures });
+    
+    // Style function to show arrows
+    const vectorStyle = (feature: Feature) => {
+        const speed = feature.get('velocidad_kmh') as number || 0;
+        const bearing = feature.get('sentido_grados') as number || 0;
+        const color = speed > 100 ? '#e63946' : speed > 50 ? '#f4a261' : '#2a9d8f';
+
+        const line = new Style({
+            stroke: new Stroke({ color: color, width: 2 })
+        });
+        
+        const arrow = new Style({
+            geometry: new Point(feature.getGeometry()!.getLastCoordinate()),
+            image: new CircleStyle({
+                fill: new Fill({ color: color }),
+                radius: 3
+            })
+        });
+
+        const label = new Style({
+            geometry: new Point(feature.getGeometry()!.getFlatMidpoint()),
+            text: new TextStyle({
+                text: `${speed.toFixed(1)} km/h`,
+                font: '10px sans-serif',
+                fill: new Fill({ color: '#fff' }),
+                stroke: new Stroke({ color: '#000', width: 2 }),
+                offsetY: -12
+            })
+        });
+
+        return [line, arrow, label];
+    };
+    
+    const newOlLayer = new VectorLayer({
+      source: newSource,
+      properties: { id: newLayerId, name: outputName, type: 'analysis' },
+      style: vectorStyle
+    });
+  
+    onAddLayer({
+      id: newLayerId,
+      name: outputName,
+      olLayer: newOlLayer,
+      visible: true,
+      opacity: 1,
+      type: 'analysis',
+    }, true);
+  
+    toast({ description: `Se generaron ${vectorFeatures.length} vectores de trayectoria.` });
+  };
+
+
+  // --- END Trajectory Analysis Logic ---
 
 
   return (
@@ -1900,24 +2071,77 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                     </div>
                 </AccordionContent>
             </AccordionItem>
+            <AccordionItem value="trajectory-analysis" className="border-b-0 bg-white/5 rounded-md">
+                <AccordionTrigger className="p-3 hover:no-underline hover:bg-white/10 rounded-t-md data-[state=open]:rounded-b-none">
+                    <SectionHeader icon={Wind} title="Análisis de Trayectorias" />
+                </AccordionTrigger>
+                <AccordionContent className="p-3 pt-2 space-y-3 border-t border-white/10 bg-transparent rounded-b-md">
+                    <div className="space-y-1">
+                        <Label className="text-xs font-semibold">Análisis de Cúmulos (Clustering)</Label>
+                        <div className="space-y-2 p-2 border border-white/10 rounded-md">
+                            <div>
+                                <Label htmlFor="cluster-input-layer" className="text-xs">Capa de Puntos de Entrada</Label>
+                                <Select value={clusterInputLayerId} onValueChange={setClusterInputLayerId}>
+                                    <SelectTrigger id="cluster-input-layer" className="h-8 text-xs bg-black/20"><SelectValue placeholder="Seleccionar capa de puntos..." /></SelectTrigger>
+                                    <SelectContent className="bg-gray-700 text-white border-gray-600">
+                                        {pointLayers.map(l => <SelectItem key={l.id} value={l.id} className="text-xs">{l.name}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div>
+                                <Label htmlFor="cluster-distance" className="text-xs">Distancia Máx. del Cúmulo (km)</Label>
+                                <Input id="cluster-distance" type="number" value={clusterDistance} onChange={(e) => setClusterDistance(Number(e.target.value))} min="1" className="h-8 text-xs bg-black/20"/>
+                            </div>
+                            <div>
+                                <Label htmlFor="cluster-output-name" className="text-xs">Nombre de la Capa de Salida</Label>
+                                <Input id="cluster-output-name" value={clusterOutputName} onChange={(e) => setClusterOutputName(e.target.value)} placeholder="Ej: Cumulos_CapaX" className="h-8 text-xs bg-black/20"/>
+                            </div>
+                            <Button onClick={handleRunClustering} size="sm" className="w-full h-8 text-xs" disabled={!clusterInputLayerId}>
+                                <GitBranch className="mr-2 h-3.5 w-3.5" />
+                                Ejecutar Clustering
+                            </Button>
+                        </div>
+                    </div>
+                    <div className="space-y-1">
+                        <Label className="text-xs font-semibold">Cálculo de Vectores de Desplazamiento</Label>
+                        <div className="space-y-2 p-2 border border-white/10 rounded-md">
+                            <div>
+                                <Label htmlFor="traj-layer1" className="text-xs">Capa de Origen (Tiempo 1)</Label>
+                                <Select value={trajectoryLayer1Id} onValueChange={setTrajectoryLayer1Id}>
+                                    <SelectTrigger id="traj-layer1" className="h-8 text-xs bg-black/20"><SelectValue placeholder="Seleccionar capa inicial..." /></SelectTrigger>
+                                    <SelectContent className="bg-gray-700 text-white border-gray-600">
+                                        {pointLayers.map(l => <SelectItem key={l.id} value={l.id} className="text-xs">{l.name}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div>
+                                <Label htmlFor="traj-layer2" className="text-xs">Capa de Destino (Tiempo 2)</Label>
+                                <Select value={trajectoryLayer2Id} onValueChange={setTrajectoryLayer2Id}>
+                                    <SelectTrigger id="traj-layer2" className="h-8 text-xs bg-black/20"><SelectValue placeholder="Seleccionar capa final..." /></SelectTrigger>
+                                    <SelectContent className="bg-gray-700 text-white border-gray-600">
+                                        {pointLayers.map(l => <SelectItem key={l.id} value={l.id} className="text-xs">{l.name}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div>
+                                <Label htmlFor="traj-radius" className="text-xs">Radio Máx. de Búsqueda (km)</Label>
+                                <Input id="traj-radius" type="number" value={trajectorySearchRadius} onChange={(e) => setTrajectorySearchRadius(Number(e.target.value))} min="1" className="h-8 text-xs bg-black/20"/>
+                            </div>
+                             <div>
+                                <Label htmlFor="traj-output-name" className="text-xs">Nombre de la Capa de Salida</Label>
+                                <Input id="traj-output-name" value={trajectoryOutputName} onChange={(e) => setTrajectoryOutputName(e.target.value)} placeholder="Ej: Trayectoria_Nucleos" className="h-8 text-xs bg-black/20"/>
+                            </div>
+                            <Button onClick={handleRunTrajectory} size="sm" className="w-full h-8 text-xs" disabled={!trajectoryLayer1Id || !trajectoryLayer2Id}>
+                                <Wind className="mr-2 h-3.5 w-3.5" />
+                                Calcular Trayectorias
+                            </Button>
+                        </div>
+                    </div>
+                </AccordionContent>
+            </AccordionItem>
         </Accordion>
     </DraggablePanel>
   );
 };
 
 export default AnalysisPanel;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
