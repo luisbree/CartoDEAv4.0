@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
@@ -36,6 +37,7 @@ import { Slider } from '../ui/slider';
 import Overlay from 'ol/Overlay';
 import * as htmlToImage from 'html-to-image';
 import jsPDF from 'jspdf';
+import { Separator } from '../ui/separator';
 
 
 interface AnalysisPanelProps {
@@ -738,9 +740,10 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   }, [vectorLayers]);
 
   const goesProfileLayers = useMemo(() => {
-    return allLayers.filter((l): l is MapLayer => 
-      l.type === 'gee' && l.geeParams?.bandCombination === 'GOES_CLOUDTOP'
-    );
+    return allLayers.flatMap(item => 'layers' in item ? item.layers : [item])
+      .filter((l): l is MapLayer => 
+        l.type === 'gee' && l.geeParams?.bandCombination === 'GOES_CLOUDTOP'
+      );
   }, [allLayers]);
 
 
