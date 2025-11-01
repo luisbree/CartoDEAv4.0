@@ -196,125 +196,114 @@ const ClimaPanel: React.FC<ClimaPanelProps> = ({
         }
     };
     
-    const handleDetectStormCores = async () => {
-        if (!mapRef.current) {
-            toast({ description: "El mapa no está listo.", variant: "destructive" });
-            return;
+const handleDetectStormCores = async () => {
+    if (!mapRef.current) {
+        toast({ description: "El mapa no está listo.", variant: "destructive" });
+        return;
+    }
+    if (!selectedGoesLayerId) {
+        toast({ description: "Por favor, seleccione una capa GOES para analizar.", variant: "destructive" });
+        return;
+    }
+
+    const selectedLayer = goesLayers.find(l => l.id === selectedGoesLayerId);
+    const imageId = selectedLayer?.geeParams?.imageId;
+
+    if (!imageId) {
+        toast({ description: "La capa GOES seleccionada no tiene un ID de imagen válido.", variant: "destructive" });
+        return;
+    }
+
+    setIsDetecting(true);
+    toast({ description: `Detectando núcleos de tormenta (T < ${tempThreshold}°C)...` });
+
+    try {
+        const view = mapRef.current.getView();
+        const extent = view.calculateExtent(mapRef.current.getSize()!);
+        const extent4326 = transformExtent(extent, view.getProjection(), 'EPSG:4326');
+        const aoi = { minLon: extent4326[0], minLat: extent4326[1], maxLon: extent4326[2], maxLat: extent4326[3] };
+
+        const result = await getGoesStormCores({
+            imageId,
+            temperatureThreshold: tempThreshold,
+            aoi,
+        });
+
+        if (!result || !result.downloadUrl) {
+            throw new Error("No se recibió una URL de descarga para los núcleos de tormenta.");
         }
-        if (!selectedGoesLayerId) {
-            toast({ description: "Por favor, seleccione una capa GOES para analizar.", variant: "destructive" });
-            return;
-        }
 
-        const selectedLayer = goesLayers.find(l => l.id === selectedGoesLayerId);
-        const imageId = selectedLayer?.geeParams?.imageId;
+        const layerName = `Núcleos (${tempThreshold}°C) de ${selectedLayer.name}`;
+        const polygonSource = new VectorSource({
+            url: result.downloadUrl,
+            format: new GeoJSON(),
+        });
 
-        if (!imageId) {
-            toast({ description: "La capa GOES seleccionada no tiene un ID de imagen válido.", variant: "destructive" });
-            return;
-        }
-
-        setIsDetecting(true);
-        toast({ description: `Detectando núcleos de tormenta (T < ${tempThreshold}°C) para la capa seleccionada...` });
-
-        try {
-            const view = mapRef.current.getView();
-            const extent = view.calculateExtent(mapRef.current.getSize()!);
-            const extent4326 = transformExtent(extent, view.getProjection(), 'EPSG:4326');
-            const aoi = { minLon: extent4326[0], minLat: extent4326[1], maxLon: extent4326[2], maxLat: extent4326[3] };
-            
-            const result = await getGoesStormCores({ 
-                imageId,
-                temperatureThreshold: tempThreshold,
-                aoi,
-            });
-
-            if (!result || !result.downloadUrl) {
-                throw new Error("No se recibió una URL de descarga para los núcleos de tormenta.");
+        polygonSource.on('featuresloadend', (event) => {
+            const polygonFeatures = event.features;
+            if (!polygonFeatures || polygonFeatures.length === 0) {
+                toast({ description: "La detección no produjo ningún polígono de núcleo de tormenta." });
+                setIsDetecting(false);
+                return;
             }
 
-            const layerName = `Núcleos (${tempThreshold}°C) de ${selectedLayer.name}`;
-            
-            // Create source and layer for storm core polygons
+            // Create polygon layer
             const polygonLayerId = `storm-cores-${nanoid()}`;
-            const polygonSource = new VectorSource({
-                url: result.downloadUrl,
-                format: new GeoJSON(),
-            });
             const polygonLayer = new VectorLayer({
                 source: polygonSource,
                 properties: { id: polygonLayerId, name: layerName, type: 'analysis' },
                 opacity: 0.7
             });
-
-            // Add the polygon layer immediately
             onAddLayer({
-                id: polygonLayerId,
-                name: layerName,
-                olLayer: polygonLayer,
-                visible: true,
-                opacity: 0.7,
-                type: 'analysis'
+                id: polygonLayerId, name: layerName, olLayer: polygonLayer, visible: true, opacity: 0.7, type: 'analysis'
             }, true);
 
-            // Wait for the features to load before creating centroids
-            polygonSource.on('featuresloadend', (event) => {
-                const polygonFeatures = event.features;
-                if (!polygonFeatures || polygonFeatures.length === 0) {
-                  toast({ description: "La detección no produjo ningún polígono de núcleo de tormenta." });
-                  return;
+            // Create centroid layer
+            const centroidFeatures: Feature<Point>[] = [];
+            polygonFeatures.forEach(polyFeature => {
+                const geom = polyFeature.getGeometry();
+                if (geom) {
+                    const center = getCenter(geom.getExtent());
+                    const centroidFeature = new Feature({ geometry: new Point(center) });
+                    centroidFeature.setProperties(polyFeature.getProperties());
+                    centroidFeatures.push(centroidFeature);
                 }
+            });
 
-                // Create centroid features
-                const centroidFeatures: Feature<Point>[] = [];
-                polygonFeatures.forEach(polyFeature => {
-                    const geom = polyFeature.getGeometry();
-                    if (geom) {
-                        const center = getCenter(geom.getExtent());
-                        const centroidFeature = new Feature({ geometry: new Point(center) });
-                        centroidFeature.setProperties(polyFeature.getProperties());
-                        centroidFeatures.push(centroidFeature);
-                    }
+            if (centroidFeatures.length > 0) {
+                const centroidLayerId = `centroids-cores-${nanoid()}`;
+                const centroidLayerName = `Centroides de ${layerName}`;
+                const centroidSource = new VectorSource({ features: centroidFeatures });
+                const centroidOlLayer = new VectorLayer({
+                    source: centroidSource,
+                    properties: { id: centroidLayerId, name: centroidLayerName, type: 'analysis' },
+                    style: centroidStyle,
                 });
-
-                // If centroids were created, add them as a new layer
-                if (centroidFeatures.length > 0) {
-                    const centroidLayerId = `centroids-cores-${nanoid()}`;
-                    const centroidLayerName = `Centroides de ${layerName}`;
-                    const centroidSource = new VectorSource({ features: centroidFeatures });
-                    const centroidOlLayer = new VectorLayer({
-                        source: centroidSource,
-                        properties: { id: centroidLayerId, name: centroidLayerName, type: 'analysis' },
-                        style: centroidStyle,
-                    });
-
-                    onAddLayer({
-                        id: centroidLayerId,
-                        name: centroidLayerName,
-                        olLayer: centroidOlLayer,
-                        visible: true,
-                        opacity: 1,
-                        type: 'analysis'
-                    }, true);
-                }
-                 toast({ description: "Se añadieron los núcleos de tormenta y sus centroides." });
-            });
-            polygonSource.on('featuresloaderror', () => {
-                 toast({ description: "Error al cargar los datos de los polígonos.", variant: "destructive" });
-            });
-
-
-        } catch (error: any) {
-            console.error("Error detecting storm cores:", error);
-            toast({
-                title: "Error en Detección",
-                description: error.message || "No se pudieron detectar los núcleos de tormenta.",
-                variant: "destructive",
-            });
-        } finally {
+                onAddLayer({
+                    id: centroidLayerId, name: centroidLayerName, olLayer: centroidOlLayer, visible: true, opacity: 1, type: 'analysis'
+                }, true);
+            }
+            
+            toast({ description: "Se añadieron los núcleos de tormenta y sus centroides." });
             setIsDetecting(false);
-        }
-    };
+        });
+
+        polygonSource.on('featuresloaderror', () => {
+            toast({ description: "Error al cargar los datos de los polígonos.", variant: "destructive" });
+            setIsDetecting(false);
+        });
+
+    } catch (error: any) {
+        console.error("Error detecting storm cores:", error);
+        toast({
+            title: "Error en Detección",
+            description: error.message || "No se pudieron detectar los núcleos de tormenta.",
+            variant: "destructive",
+        });
+        setIsDetecting(false);
+    }
+};
+
 
 
   return (
@@ -405,3 +394,4 @@ const ClimaPanel: React.FC<ClimaPanelProps> = ({
 };
 
 export default ClimaPanel;
+
