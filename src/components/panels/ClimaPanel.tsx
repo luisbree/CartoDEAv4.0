@@ -50,7 +50,7 @@ const ClimaPanel: React.FC<ClimaPanelProps> = ({
 }) => {
     const [isLoading, setIsLoading] = useState(false);
     const [isDetecting, setIsDetecting] = useState(false);
-    const [tempThreshold, setTempThreshold] = useState(-65);
+    const [tempThreshold, setTempThreshold] = useState(-50);
     const [numberOfImages, setNumberOfImages] = useState(1);
     const [selectedGoesLayerId, setSelectedGoesLayerId] = useState<string>('');
     const { toast } = useToast();
@@ -80,11 +80,20 @@ const ClimaPanel: React.FC<ClimaPanelProps> = ({
                     let layerName = 'GOES-19 Topes Nubosos';
                     if (result.metadata?.timestamp) {
                         const imageDate = new Date(result.metadata.timestamp);
-                        layerName = `GOES-19 (${format(imageDate, "dd/MM HH:mm", { locale: es })})`;
+                        layerName = `GOES (${format(imageDate, "dd/MM HH:mm", { locale: es })})`;
                     }
                     const goesLayer = new TileLayer({
                         source: new XYZ({ url: result.tileUrl, crossOrigin: 'anonymous' }),
-                        properties: { id: layerId, name: layerName, type: 'gee', geeParams: { bandCombination: 'GOES_CLOUDTOP', metadata: result.metadata, imageId: result.metadata?.scene_id } },
+                        properties: { 
+                            id: layerId, 
+                            name: layerName, 
+                            type: 'gee', 
+                            geeParams: { 
+                                bandCombination: 'GOES_CLOUDTOP', 
+                                metadata: result.metadata, 
+                                imageId: result.metadata?.scene_id 
+                            } 
+                        },
                         opacity: 0.6,
                     });
                     onAddLayer({ id: layerId, name: layerName, olLayer: goesLayer, visible: true, opacity: 0.6, type: 'gee' }, true);
@@ -106,7 +115,16 @@ const ClimaPanel: React.FC<ClimaPanelProps> = ({
                             source: new XYZ({ url: result.tileUrl, crossOrigin: 'anonymous' }),
                             visible: isVisible,
                             opacity: 0.6,
-                            properties: { id: layerId, name: layerName, type: 'gee', geeParams: { bandCombination: 'GOES_CLOUDTOP', metadata: result.metadata, imageId: result.metadata?.scene_id } },
+                            properties: { 
+                                id: layerId, 
+                                name: layerName, 
+                                type: 'gee', 
+                                geeParams: { 
+                                    bandCombination: 'GOES_CLOUDTOP', 
+                                    metadata: result.metadata, 
+                                    imageId: result.metadata?.scene_id 
+                                } 
+                            },
                         });
                         
                         return { id: layerId, name: layerName, olLayer: goesLayer, visible: isVisible, opacity: 0.6, type: 'gee', groupId: groupId };
