@@ -3,7 +3,7 @@
 "use client";
 
 import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as TurfMultiPolygon, FeatureCollection as TurfFeatureCollection, Geometry as TurfGeometry, Point as TurfPoint, LineString as TurfLineString } from 'geojson';
-import { area as turfArea, intersect, featureCollection, buffer as turfBuffer, union, convex, concave, nearestPoint, along, length as turfLength, bearing, destination, bezierSpline } from '@turf/turf';
+import { area as turfArea, intersect, featureCollection, buffer as turfBuffer, union, convex, concave, nearestPoint, along, length as turfLength, bearing, destination, bezierSpline, centroid } from '@turf/turf';
 import { multiPolygon, lineString as turfLineString, polygon as turfPolygon } from '@turf/helpers';
 import type Feature from 'ol/Feature';
 import GeoJSON from 'ol/format/GeoJSON';
@@ -546,7 +546,7 @@ export async function performBezierSmoothing({
                         const line = turfLineString(lineCoords);
                         return bezierSpline(line, { resolution }).geometry.coordinates;
                     });
-                    smoothedFeature = {
+                     smoothedFeature = {
                         ...feature,
                         geometry: { type: 'MultiLineString', coordinates: smoothedLines }
                     };
@@ -588,3 +588,4 @@ export async function performBezierSmoothing({
     }
 }
     
+
