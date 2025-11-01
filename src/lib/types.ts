@@ -58,6 +58,12 @@ export interface MapLayer {
   geoTiffStyle?: GeoTiffStyle;
   wmsStyleEnabled?: boolean; // For hybrid WFS/WMS layers
   groupId?: string; // ID of the group this layer belongs to
+  geeParams?: {
+    bandCombination: string | null;
+    tileUrl?: string;
+    imageId?: string;
+    metadata?: any;
+  }
 }
 
 // New type for Layer Groups
