@@ -60,7 +60,7 @@ const ClimaPanel: React.FC<ClimaPanelProps> = ({
             .flatMap(item => ('layers' in item ? item.layers : [item]))
             .filter(layer => 
                 layer.type === 'gee' && 
-                layer.olLayer.get('geeParams')?.bandCombination === 'GOES_CLOUDTOP'
+                (layer as any).geeParams?.bandCombination === 'GOES_CLOUDTOP'
             ) as MapLayer[];
     }, [allLayers]);
 
@@ -82,21 +82,37 @@ const ClimaPanel: React.FC<ClimaPanelProps> = ({
                         const imageDate = new Date(result.metadata.timestamp);
                         layerName = `GOES (${format(imageDate, "dd/MM HH:mm", { locale: es })})`;
                     }
+
+                    const geeParams = {
+                        bandCombination: 'GOES_CLOUDTOP',
+                        metadata: result.metadata,
+                        imageId: result.metadata?.scene_id,
+                    };
+
                     const goesLayer = new TileLayer({
                         source: new XYZ({ url: result.tileUrl, crossOrigin: 'anonymous' }),
                         properties: { 
                             id: layerId, 
                             name: layerName, 
                             type: 'gee', 
-                            geeParams: { 
-                                bandCombination: 'GOES_CLOUDTOP', 
-                                metadata: result.metadata, 
-                                imageId: result.metadata?.scene_id 
-                            } 
+                            geeParams: geeParams
                         },
                         opacity: 0.6,
                     });
-                    onAddLayer({ id: layerId, name: layerName, olLayer: goesLayer, visible: true, opacity: 0.6, type: 'gee' }, true);
+                    
+                    const mapLayerToAdd: MapLayer = { 
+                        id: layerId, 
+                        name: layerName, 
+                        olLayer: goesLayer, 
+                        visible: true, 
+                        opacity: 0.6, 
+                        type: 'gee',
+                        // @ts-ignore
+                        geeParams: geeParams 
+                    };
+
+                    onAddLayer(mapLayerToAdd, true);
+
                 } else {
                     // Handle multiple layers by creating a group
                     const groupName = `Secuencia GOES-19 (${results.length} imágenes)`;
@@ -111,6 +127,12 @@ const ClimaPanel: React.FC<ClimaPanelProps> = ({
                         }
                         const isVisible = index === results.length - 1; // Only last one is visible initially
                         
+                        const geeParams = {
+                            bandCombination: 'GOES_CLOUDTOP',
+                            metadata: result.metadata,
+                            imageId: result.metadata?.scene_id,
+                        };
+
                         const goesLayer = new TileLayer({
                             source: new XYZ({ url: result.tileUrl, crossOrigin: 'anonymous' }),
                             visible: isVisible,
@@ -119,15 +141,21 @@ const ClimaPanel: React.FC<ClimaPanelProps> = ({
                                 id: layerId, 
                                 name: layerName, 
                                 type: 'gee', 
-                                geeParams: { 
-                                    bandCombination: 'GOES_CLOUDTOP', 
-                                    metadata: result.metadata, 
-                                    imageId: result.metadata?.scene_id 
-                                } 
+                                geeParams: geeParams
                             },
                         });
                         
-                        return { id: layerId, name: layerName, olLayer: goesLayer, visible: isVisible, opacity: 0.6, type: 'gee', groupId: groupId };
+                        return { 
+                            id: layerId, 
+                            name: layerName, 
+                            olLayer: goesLayer, 
+                            visible: isVisible, 
+                            opacity: 0.6, 
+                            type: 'gee', 
+                            groupId: groupId,
+                            // @ts-ignore
+                            geeParams: geeParams
+                        };
                     });
 
                     const layerGroup: LayerGroup = {
@@ -170,8 +198,8 @@ const ClimaPanel: React.FC<ClimaPanelProps> = ({
             return;
         }
 
-        const selectedLayer = goesLayers.find(l => l.id === selectedGoesLayerId);
-        const imageId = selectedLayer?.olLayer.get('geeParams')?.imageId;
+        const selectedLayer = goesLayers.find(l => l.id === selectedGoesLayerId) as MapLayer & { geeParams?: { imageId?: string }};
+        const imageId = selectedLayer?.geeParams?.imageId;
 
         if (!imageId) {
             toast({ description: "La capa GOES seleccionada no tiene un ID de imagen válido.", variant: "destructive" });
