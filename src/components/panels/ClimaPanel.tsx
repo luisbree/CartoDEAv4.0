@@ -23,6 +23,9 @@ import VectorSource from 'ol/source/Vector';
 import type { Map } from 'ol';
 import { transformExtent } from 'ol/proj';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { getCenter } from 'ol/extent';
+import { Point } from 'ol/geom';
+import type Feature from 'ol/Feature';
 
 
 interface ClimaPanelProps {
@@ -217,7 +220,6 @@ const ClimaPanel: React.FC<ClimaPanelProps> = ({
                 aoi,
             });
             if (result && result.downloadUrl) {
-                const layerId = `storm-cores-${nanoid()}`;
                 const layerName = `Núcleos (${tempThreshold}°C) de ${selectedLayer.name}`;
                 
                 const vectorSource = new VectorSource({
@@ -225,10 +227,49 @@ const ClimaPanel: React.FC<ClimaPanelProps> = ({
                     format: new GeoJSON(),
                 });
 
+                // Listen for features to load to create centroids
+                vectorSource.on('featuresloadend', (event) => {
+                    const polygonFeatures = event.features;
+                    if (!polygonFeatures || polygonFeatures.length === 0) return;
+
+                    const centroidFeatures: Feature<Point>[] = [];
+                    polygonFeatures.forEach(polyFeature => {
+                        const geom = polyFeature.getGeometry();
+                        if (geom) {
+                            const center = getCenter(geom.getExtent());
+                            const centroidFeature = new Feature({
+                                geometry: new Point(center),
+                            });
+                            // Copy properties if needed
+                            centroidFeature.setProperties(polyFeature.getProperties());
+                            centroidFeatures.push(centroidFeature);
+                        }
+                    });
+
+                    if (centroidFeatures.length > 0) {
+                        const centroidLayerId = `centroids-cores-${nanoid()}`;
+                        const centroidLayerName = `Centroides de ${layerName}`;
+                        const centroidSource = new VectorSource({ features: centroidFeatures });
+                        const centroidOlLayer = new VectorLayer({
+                            source: centroidSource,
+                            properties: { id: centroidLayerId, name: centroidLayerName, type: 'analysis' },
+                        });
+                        onAddLayer({
+                            id: centroidLayerId,
+                            name: centroidLayerName,
+                            olLayer: centroidOlLayer,
+                            visible: true,
+                            opacity: 1,
+                            type: 'analysis'
+                        }, true);
+                    }
+                });
+
+                const polygonLayerId = `storm-cores-${nanoid()}`;
                 const vectorLayer = new VectorLayer({
                     source: vectorSource,
                     properties: {
-                        id: layerId,
+                        id: polygonLayerId,
                         name: layerName,
                         type: 'analysis'
                     },
@@ -236,7 +277,7 @@ const ClimaPanel: React.FC<ClimaPanelProps> = ({
                 });
 
                 onAddLayer({
-                    id: layerId,
+                    id: polygonLayerId,
                     name: layerName,
                     olLayer: vectorLayer,
                     visible: true,
@@ -244,7 +285,7 @@ const ClimaPanel: React.FC<ClimaPanelProps> = ({
                     type: 'analysis'
                 }, true);
 
-                toast({ description: "Se añadieron los núcleos de tormenta como una nueva capa." });
+                toast({ description: "Se añadieron los núcleos de tormenta y sus centroides." });
 
             } else {
                 throw new Error("No se recibió una URL de descarga para los núcleos de tormenta.");
@@ -350,4 +391,3 @@ const ClimaPanel: React.FC<ClimaPanelProps> = ({
 };
 
 export default ClimaPanel;
-
