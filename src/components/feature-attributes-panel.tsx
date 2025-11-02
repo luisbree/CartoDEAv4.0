@@ -83,8 +83,8 @@ const AttributesPanelComponent: React.FC<AttributesPanelComponentProps> = ({
     if (!sortConfig) return plainFeatureData;
 
     return [...plainFeatureData].sort((a, b) => {
-        const valA = a.attributes[sortConfig.key];
-        const valB = b.attributes[sortConfig.key];
+        const valA = sortConfig.key === 'id' ? a.id : a.attributes[sortConfig.key];
+        const valB = sortConfig.key === 'id' ? b.id : b.attributes[sortConfig.key];
 
         if (valA === null || valA === undefined) return 1;
         if (valB === null || valB === undefined) return -1;
@@ -200,8 +200,10 @@ const AttributesPanelComponent: React.FC<AttributesPanelComponentProps> = ({
             return a.localeCompare(b);
         });
         
-    // Always ensure 'id' is the first column
-    sortedKeys.unshift('id');
+    // Always ensure 'id' is the first column, if it doesn't already exist from properties
+    if (!keys.has('id')) {
+        sortedKeys.unshift('id');
+    }
     
     return sortedKeys;
   }, [plainFeatureData]);
