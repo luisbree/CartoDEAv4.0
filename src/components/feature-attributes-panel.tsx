@@ -273,7 +273,8 @@ const AttributesPanelComponent: React.FC<AttributesPanelComponentProps> = ({
           {hasFeatures && allKeys.length > 0 ? (
             <>
                 <div className="flex-grow min-w-0"> 
-                  <Table><TableHeader>
+                  <Table>
+                    <TableHeader>
                       <TableRow className="hover:bg-gray-800/70">
                         {allKeys.map(key => (
                           <TableHead
@@ -292,7 +293,8 @@ const AttributesPanelComponent: React.FC<AttributesPanelComponentProps> = ({
                           </TableHead>
                         ))}
                       </TableRow>
-                    </TableHeader><TableBody>
+                    </TableHeader>
+                    <TableBody>
                       {currentVisibleFeatures.map((item) => {
                         const featureId = item.id;
                         const isSelected = selectedFeatureIds.includes(featureId);
@@ -353,7 +355,8 @@ const AttributesPanelComponent: React.FC<AttributesPanelComponentProps> = ({
                           </TableRow>
                         )
                       })}
-                    </TableBody></Table>
+                    </TableBody>
+                  </Table>
                 </div>
                 {totalPages > 1 && (
                   <div className="flex items-center justify-center p-2 border-t border-gray-700/50 bg-gray-800/50 mt-auto shrink-0 gap-2">
