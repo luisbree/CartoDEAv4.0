@@ -77,6 +77,7 @@ const AttributesPanelComponent: React.FC<AttributesPanelComponentProps> = ({
   const [newFieldDefaultValue, setNewFieldDefaultValue] = useState('');
   const [isAddFieldDialogOpen, setIsAddFieldDialogOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const lastClickedIndexRef = useRef<number | null>(null);
 
   const sortedFeatureData = useMemo(() => {
     if (!plainFeatureData) return [];
@@ -106,6 +107,7 @@ const AttributesPanelComponent: React.FC<AttributesPanelComponentProps> = ({
   useEffect(() => {
     // Reset to page 1 whenever the data or sorting changes
     setCurrentPage(1);
+    lastClickedIndexRef.current = null;
   }, [plainFeatureData, sortConfig]);
 
   useEffect(() => {
@@ -126,8 +128,9 @@ const AttributesPanelComponent: React.FC<AttributesPanelComponentProps> = ({
   const handleNextPage = () => setCurrentPage((prev) => Math.min(prev + 1, totalPages));
   const handlePrevPage = () => setCurrentPage((prev) => Math.max(prev - 1, 1));
   
-  const handleRowClick = useCallback((featureId: string, event: React.MouseEvent) => {
-      onFeatureSelect(featureId, event.ctrlKey || event.metaKey, event.shiftKey);
+  const handleRowClick = useCallback((clickedFeatureId: string, clickIndex: number, event: React.MouseEvent) => {
+      onFeatureSelect(clickedFeatureId, event.ctrlKey || event.metaKey, event.shiftKey);
+      lastClickedIndexRef.current = clickIndex;
   }, [onFeatureSelect]);
 
   const handleCellDoubleClick = (featureId: string, key: string, value: any) => {
@@ -193,7 +196,9 @@ const AttributesPanelComponent: React.FC<AttributesPanelComponentProps> = ({
         });
         
     // Always ensure 'id' is the first column
-    sortedKeys.unshift('id');
+    if (!sortedKeys.includes('id')) {
+      sortedKeys.unshift('id');
+    }
     
     return sortedKeys;
   }, [plainFeatureData]);
@@ -305,7 +310,7 @@ const AttributesPanelComponent: React.FC<AttributesPanelComponentProps> = ({
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {currentVisibleFeatures.map((item) => {
+                      {currentVisibleFeatures.map((item, index) => {
                         const featureId = item.id;
                         const isSelected = selectedFeatureIds.includes(featureId);
                         const attrs = item.attributes || {};
@@ -315,7 +320,7 @@ const AttributesPanelComponent: React.FC<AttributesPanelComponentProps> = ({
                             key={featureId}
                             data-state={isSelected ? "selected" : "unselected"}
                             className="cursor-pointer"
-                            onClick={(e) => handleRowClick(featureId, e)}
+                            onClick={(e) => handleRowClick(featureId, startIndex + index, e)}
                           >
                             {allKeys.map(key => {
                                 const value = key === 'id' ? featureId : attrs[key];
@@ -414,3 +419,4 @@ const AttributesPanelComponent: React.FC<AttributesPanelComponentProps> = ({
 export default AttributesPanelComponent;
 
     
+

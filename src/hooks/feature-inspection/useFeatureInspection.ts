@@ -118,6 +118,7 @@ export const useFeatureInspection = ({
   const modifyInteractionRef = useRef<Modify | null>(null);
   const dragBoxInteractionRef = useRef<DragBox | null>(null);
   const deleteVertexBoxRef = useRef<DragBox | null>(null);
+  const allFeaturesRef = useRef<PlainFeatureData[]>([]);
   
   const onNewSelectionRef = useRef(onNewSelection);
   useEffect(() => {
@@ -125,6 +126,7 @@ export const useFeatureInspection = ({
   }, [onNewSelection]);
 
   const processAndDisplayFeatures = useCallback((plainData: PlainFeatureData[], layerName: string, layerId: string | null = null) => {
+    allFeaturesRef.current = plainData;
     setInspectedFeatureData(plainData); // Set the raw, unsorted data
     setCurrentInspectedLayerName(layerName);
     setCurrentInspectedLayerId(layerId);
@@ -136,17 +138,21 @@ export const useFeatureInspection = ({
   }, [toast]);
   
   const updateInspectedFeatureData = useCallback((featureId: string, key: string, value: any) => {
+    // Update the full dataset
+    const newAllFeatures = allFeaturesRef.current.map(feature => {
+        if (feature.id === featureId) {
+            return { ...feature, attributes: { ...feature.attributes, [key]: value } };
+        }
+        return feature;
+    });
+    allFeaturesRef.current = newAllFeatures;
+
+    // Update the visible data
     setInspectedFeatureData(prevData => {
         if (!prevData) return null;
         return prevData.map(feature => {
             if (feature.id === featureId) {
-                return {
-                    ...feature,
-                    attributes: {
-                        ...feature.attributes,
-                        [key]: value,
-                    },
-                };
+                return { ...feature, attributes: { ...feature.attributes, [key]: value } };
             }
             return feature;
         });
@@ -170,6 +176,7 @@ export const useFeatureInspection = ({
     }
     setSelectedFeatures([]);
     setInspectedFeatureData(null);
+    allFeaturesRef.current = [];
     setCurrentInspectedLayerName(null);
     setCurrentInspectedLayerId(null);
     clearRasterQueryVisuals();
@@ -425,7 +432,8 @@ export const useFeatureInspection = ({
         const select = new Select({
             style: highlightStyle,
             multi: true,
-            condition: singleClick, // Selection happens on single click
+            // Allow selection with single click or box drag, depending on the tool
+            condition: (e) => activeTool === 'inspect' ? singleClick(e) : primaryAction(e),
         });
         selectInteractionRef.current = select;
         map.addInteraction(select);
@@ -707,16 +715,3 @@ export const useFeatureInspection = ({
     selectByLayer,
   };
 };
-
-    
-
-    
-
-
-
-
-
-    
-
-
-
