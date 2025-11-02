@@ -89,7 +89,6 @@ const AttributesPanelComponent: React.FC<AttributesPanelComponentProps> = ({
         if (valA === null || valA === undefined) return 1;
         if (valB === null || valB === undefined) return -1;
         
-        // Locale-aware string comparison for text, numeric for numbers
         if (typeof valA === 'string' && typeof valB === 'string') {
             return sortConfig.direction === 'ascending'
                 ? valA.localeCompare(valB, undefined, { numeric: true })
@@ -105,10 +104,9 @@ const AttributesPanelComponent: React.FC<AttributesPanelComponentProps> = ({
 
 
   useEffect(() => {
-    if (plainFeatureData && plainFeatureData.length > 0) {
-      setCurrentPage(1);
-    }
-  }, [plainFeatureData]);
+    // Reset to page 1 whenever the data or sorting changes
+    setCurrentPage(1);
+  }, [plainFeatureData, sortConfig]);
 
   useEffect(() => {
     if (editingCell) {
@@ -170,13 +168,7 @@ const AttributesPanelComponent: React.FC<AttributesPanelComponentProps> = ({
       return false;
     }
   };
-
-  const hasFeatures = sortedFeatureData.length > 0;
-  const totalPages = Math.ceil(sortedFeatureData.length / ITEMS_PER_PAGE);
-  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-  const endIndex = startIndex + ITEMS_PER_PAGE;
-  const currentVisibleFeatures = sortedFeatureData.slice(startIndex, endIndex);
-
+  
   const allKeys = useMemo(() => {
     if (!plainFeatureData || plainFeatureData.length === 0) return [];
     
@@ -200,17 +192,21 @@ const AttributesPanelComponent: React.FC<AttributesPanelComponentProps> = ({
             return a.localeCompare(b);
         });
         
-    // Always ensure 'id' is the first column, if it doesn't already exist from properties
-    if (!keys.has('id')) {
-        sortedKeys.unshift('id');
-    }
+    // Always ensure 'id' is the first column
+    sortedKeys.unshift('id');
     
     return sortedKeys;
   }, [plainFeatureData]);
+  
+  const hasFeatures = plainFeatureData && plainFeatureData.length > 0;
+  const totalFeatures = sortedFeatureData.length;
+  const totalPages = Math.ceil(totalFeatures / ITEMS_PER_PAGE);
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const currentVisibleFeatures = sortedFeatureData.slice(startIndex, endIndex);
 
-
-  const panelTitle = layerName && plainFeatureData && plainFeatureData.length > 0
-    ? `Atributos: ${layerName} (${plainFeatureData.length})` 
+  const panelTitle = layerName && totalFeatures > 0
+    ? `Atributos: ${layerName} (${totalFeatures})` 
     : 'Atributos';
     
   const addFieldTrigger = hasFeatures ? (
