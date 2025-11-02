@@ -177,22 +177,33 @@ const AttributesPanelComponent: React.FC<AttributesPanelComponentProps> = ({
   const endIndex = startIndex + ITEMS_PER_PAGE;
   const currentVisibleFeatures = sortedFeatureData.slice(startIndex, endIndex);
 
-  const allKeys = useMemo(() => Array.from(
-    new Set(currentVisibleFeatures.flatMap(item => (item.attributes ? Object.keys(item.attributes) : [])))
-  )
-  .filter(key => key !== 'gmlgeometry' && key !== 'geometry')
-  .sort((a, b) => {
-    const order = ['preview_url', 'browser_url']; 
-    const aIsSpecial = order.includes(a);
-    const bIsSpecial = order.includes(b);
+  const allKeys = useMemo(() => {
+    const keys = new Set<string>();
+    currentVisibleFeatures.forEach(item => {
+        if (item.attributes) {
+            Object.keys(item.attributes).forEach(key => keys.add(key));
+        }
+    });
+    
+    const sortedKeys = Array.from(keys)
+        .filter(key => key !== 'gmlgeometry' && key !== 'geometry')
+        .sort((a, b) => {
+            const order = ['id', 'preview_url', 'browser_url'];
+            const aIndex = order.indexOf(a);
+            const bIndex = order.indexOf(b);
 
-    if (aIsSpecial && bIsSpecial) {
-      return order.indexOf(a) - order.indexOf(b);
+            if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex; // Both are special
+            if (aIndex !== -1) return -1; // a is special, b is not
+            if (bIndex !== -1) return 1;  // b is special, a is not
+            return a.localeCompare(b); // Neither is special
+        });
+
+    if (!sortedKeys.includes('id') && currentVisibleFeatures.some(f => f.id)) {
+        sortedKeys.unshift('id');
     }
-    if (aIsSpecial) return 1;
-    if (bIsSpecial) return -1;
-    return a.localeCompare(b);
-  }), [currentVisibleFeatures]);
+
+    return sortedKeys;
+  }, [currentVisibleFeatures]);
 
 
   const panelTitle = layerName && plainFeatureData && plainFeatureData.length > 0
@@ -307,51 +318,54 @@ const AttributesPanelComponent: React.FC<AttributesPanelComponentProps> = ({
                             className="cursor-pointer"
                             onClick={(e) => handleRowClick(featureId, e)}
                           >
-                            {allKeys.map(key => (
-                              <TableCell
-                                key={`${featureId}-${key}`}
-                                className="px-3 py-1.5 text-xs text-slate-200 dark:text-slate-200 border-b border-gray-700/50 whitespace-normal break-words"
-                                onDoubleClick={() => handleCellDoubleClick(featureId, key, attrs[key])}
-                              >
-                                {editingCell?.featureId === featureId && editingCell?.key === key ? (
-                                    <Input
-                                        ref={inputRef}
-                                        type="text"
-                                        value={editingValue}
-                                        onChange={(e) => setEditingValue(e.target.value)}
-                                        onBlur={handleSaveEdit}
-                                        onKeyDown={handleEditKeyDown}
-                                        className="h-6 text-xs bg-black/50"
-                                    />
-                                ) : key === 'preview_url' && attrs[key] && isValidUrl(String(attrs[key])) ? (
-                                  <a
-                                    href={String(attrs[key])}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-blue-400 hover:text-blue-300 underline flex items-center"
-                                    title={`Abrir vista previa`}
-                                    onClick={(e) => e.stopPropagation()}
-                                  >
-                                    <LinkIcon className="h-3 w-3 mr-1" />
-                                    Abrir Vista
-                                  </a>
-                                ) : key === 'browser_url' && attrs[key] && isValidUrl(String(attrs[key])) ? (
-                                  <a
-                                    href={String(attrs[key])}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-green-400 hover:text-green-300 underline flex items-center"
-                                    title={`Ver escena en el navegador de Copernicus`}
-                                    onClick={(e) => e.stopPropagation()}
-                                  >
-                                    <ExternalLink className="h-3 w-3 mr-1" />
-                                    Ver en Navegador
-                                  </a>
-                                ) : (
-                                  String(attrs[key] === null || attrs[key] === undefined ? '' : attrs[key])
-                                )}
-                              </TableCell>
-                            ))}
+                            {allKeys.map(key => {
+                                const value = key === 'id' ? featureId : attrs[key];
+                                return (
+                                <TableCell
+                                    key={`${featureId}-${key}`}
+                                    className="px-3 py-1.5 text-xs text-slate-200 dark:text-slate-200 border-b border-gray-700/50 whitespace-normal break-words"
+                                    onDoubleClick={() => handleCellDoubleClick(featureId, key, value)}
+                                >
+                                    {editingCell?.featureId === featureId && editingCell?.key === key ? (
+                                        <Input
+                                            ref={inputRef}
+                                            type="text"
+                                            value={editingValue}
+                                            onChange={(e) => setEditingValue(e.target.value)}
+                                            onBlur={handleSaveEdit}
+                                            onKeyDown={handleEditKeyDown}
+                                            className="h-6 text-xs bg-black/50"
+                                        />
+                                    ) : key === 'preview_url' && value && isValidUrl(String(value)) ? (
+                                    <a
+                                        href={String(value)}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-blue-400 hover:text-blue-300 underline flex items-center"
+                                        title={`Abrir vista previa`}
+                                        onClick={(e) => e.stopPropagation()}
+                                    >
+                                        <LinkIcon className="h-3 w-3 mr-1" />
+                                        Abrir Vista
+                                    </a>
+                                    ) : key === 'browser_url' && value && isValidUrl(String(value)) ? (
+                                    <a
+                                        href={String(value)}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-green-400 hover:text-green-300 underline flex items-center"
+                                        title={`Ver escena en el navegador de Copernicus`}
+                                        onClick={(e) => e.stopPropagation()}
+                                    >
+                                        <ExternalLink className="h-3 w-3 mr-1" />
+                                        Ver en Navegador
+                                    </a>
+                                    ) : (
+                                    String(value === null || value === undefined ? '' : value)
+                                    )}
+                                </TableCell>
+                                )
+                            })}
                           </TableRow>
                         )
                       })}
