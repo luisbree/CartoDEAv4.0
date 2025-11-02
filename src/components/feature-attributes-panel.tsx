@@ -178,8 +178,10 @@ const AttributesPanelComponent: React.FC<AttributesPanelComponentProps> = ({
   const currentVisibleFeatures = sortedFeatureData.slice(startIndex, endIndex);
 
   const allKeys = useMemo(() => {
+    if (!plainFeatureData || plainFeatureData.length === 0) return [];
+    
     const keys = new Set<string>();
-    currentVisibleFeatures.forEach(item => {
+    plainFeatureData.forEach(item => {
         if (item.attributes) {
             Object.keys(item.attributes).forEach(key => keys.add(key));
         }
@@ -188,22 +190,21 @@ const AttributesPanelComponent: React.FC<AttributesPanelComponentProps> = ({
     const sortedKeys = Array.from(keys)
         .filter(key => key !== 'gmlgeometry' && key !== 'geometry')
         .sort((a, b) => {
-            const order = ['id', 'preview_url', 'browser_url'];
+            const order = ['preview_url', 'browser_url'];
             const aIndex = order.indexOf(a);
             const bIndex = order.indexOf(b);
 
-            if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex; // Both are special
-            if (aIndex !== -1) return -1; // a is special, b is not
-            if (bIndex !== -1) return 1;  // b is special, a is not
-            return a.localeCompare(b); // Neither is special
+            if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
+            if (aIndex !== -1) return -1;
+            if (bIndex !== -1) return 1;
+            return a.localeCompare(b);
         });
-
-    if (!sortedKeys.includes('id') && currentVisibleFeatures.some(f => f.id)) {
-        sortedKeys.unshift('id');
-    }
-
+        
+    // Always ensure 'id' is the first column
+    sortedKeys.unshift('id');
+    
     return sortedKeys;
-  }, [currentVisibleFeatures]);
+  }, [plainFeatureData]);
 
 
   const panelTitle = layerName && plainFeatureData && plainFeatureData.length > 0
