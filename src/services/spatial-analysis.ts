@@ -10,6 +10,87 @@ import GeoJSON from 'ol/format/GeoJSON';
 import type { Geometry, LineString as OlLineString } from 'ol/geom';
 
 
+// --- Jenks Natural Breaks Algorithm (Moved Here) ---
+export function jenks(data: number[], n_classes: number): number[] {
+  if (n_classes > data.length) return [];
+
+  data = data.slice().sort((a, b) => a - b);
+
+  const matrices = (() => {
+    const mat1 = Array(data.length + 1).fill(0).map(() => Array(n_classes + 1).fill(0));
+    const mat2 = Array(data.length + 1).fill(0).map(() => Array(n_classes + 1).fill(0));
+    
+    for (let i = 1; i <= n_classes; i++) {
+        mat1[1][i] = 1;
+        mat2[1][i] = 0;
+        for (let j = 2; j <= data.length; j++) {
+            mat2[j][i] = Infinity;
+        }
+    }
+
+    let v = 0.0;
+    for (let l = 2; l <= data.length; l++) {
+        let s1 = 0.0, s2 = 0.0, w = 0.0;
+        for (let m = 1; m <= l; m++) {
+            const i4 = l - m + 1;
+            const val = data[i4 - 1];
+            w++;
+            s1 += val;
+            s2 += val * val;
+            v = s2 - (s1 * s1) / w;
+            const i3 = i4 - 1;
+            if (i3 !== 0) {
+                for (let j = 2; j <= n_classes; j++) {
+                    if (mat2[l][j] >= (v + mat2[i3][j - 1])) {
+                        mat1[l][j] = i4;
+                        mat2[l][j] = v + mat2[i3][j - 1];
+                    }
+                }
+            }
+        }
+        mat1[l][1] = 1;
+        mat2[l][1] = v;
+    }
+    return { backlinkMatrix: mat1 };
+  })();
+
+  const { backlinkMatrix } = matrices;
+  const breaks = [];
+  let k = data.length;
+  for (let i = n_classes; i > 1; i--) {
+    breaks.push(data[backlinkMatrix[k][i] - 2]);
+    k = backlinkMatrix[k][i] - 1;
+  }
+  
+  return breaks.reverse();
+}
+
+// --- Dataset Definitions (Moved Here) ---
+export const DATASET_DEFINITIONS = {
+    'NASADEM_ELEVATION': {
+        id: 'NASA/NASADEM_HGT/001',
+        name: 'Elevación (NASADEM)',
+        band: 'elevation',
+        color: '#4ade80',
+        unit: 'm'
+    },
+    'ALOS_DSM': {
+        id: 'JAXA/ALOS/AW3D30/V3_2',
+        name: 'DSM (ALOS)',
+        band: 'DSM',
+        color: '#facc15',
+        unit: 'm'
+    },
+    'JRC_WATER_OCCURRENCE': {
+        id: 'JRC/GSW1_4/GlobalSurfaceWater',
+        name: 'Ocurrencia de Agua (JRC)',
+        band: 'occurrence',
+        color: '#38bdf8',
+        unit: '%'
+    }
+};
+
+
 /**
  * Calculates both a surface-weighted average and a proportional sum of a numeric field 
  * based on the intersection with a drawing polygon using Turf.js.
@@ -588,4 +669,3 @@ export async function performBezierSmoothing({
     }
 }
     
-

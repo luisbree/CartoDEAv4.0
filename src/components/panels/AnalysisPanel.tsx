@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
@@ -9,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DraftingCompass, Scissors, Layers, CircleDotDashed, MinusSquare, BoxSelect, Droplet, Sparkles, Loader2, Combine, Minus, Plus, TrendingUp, Waypoints as CrosshairIcon, Merge, LineChart, PenLine, Eraser, Brush, ZoomIn, Download, FileImage, FileText, CheckCircle, GitCommit, GitBranch, Wind } from 'lucide-react';
+import { DraftingCompass, Scissors, Layers, CircleDotDashed, MinusSquare, BoxSelect, Droplet, Sparkles, Loader2, Combine, Minus, Plus, TrendingUp, Waypoints as CrosshairIcon, Merge, LineChart, PenLine, Eraser, Brush, ZoomIn, Download, FileImage, FileText, CheckCircle, GitCommit, GitBranch, Wind, Layers as LayersIcon } from 'lucide-react';
 import type { MapLayer, VectorMapLayer, ProfilePoint } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { nanoid } from 'nanoid';
@@ -22,7 +21,7 @@ import { multiPolygon, lineString as turfLineString, point as turfPoint, polygon
 import Feature from 'ol/Feature';
 import { type Geometry, type LineString as OlLineString, Point } from 'ol/geom';
 import { getLength as olGetLength } from 'ol/sphere';
-import { performBufferAnalysis, performConvexHull, performConcaveHull, calculateOptimalConcavity, projectPopulationGeometric, generateCrossSections, dissolveFeatures, performBezierSmoothing } from '@/services/spatial-analysis';
+import { performBufferAnalysis, performConvexHull, performConcaveHull, calculateOptimalConcavity, projectPopulationGeometric, generateCrossSections, dissolveFeatures, performBezierSmoothing, DATASET_DEFINITIONS, jenks } from '@/services/spatial-analysis';
 import { getValuesForPoints } from '@/ai/flows/gee-flow';
 import { ScrollArea } from '../ui/scroll-area';
 import { Checkbox } from '../ui/checkbox';
@@ -70,69 +69,15 @@ const analysisLayerStyle = new Style({
     }),
 });
 
-// --- Jenks Natural Breaks Algorithm (copied for profile stats) ---
-function jenks(data: number[], n_classes: number): number[] {
-  if (n_classes > data.length || n_classes <= 1) return [];
-
-  data = data.slice().sort((a, b) => a - b);
-
-  const matrices = (() => {
-    const mat1 = Array(data.length + 1).fill(0).map(() => Array(n_classes + 1).fill(0));
-    const mat2 = Array(data.length + 1).fill(0).map(() => Array(n_classes + 1).fill(0));
-    
-    for (let i = 1; i <= n_classes; i++) {
-        mat1[1][i] = 1;
-        mat2[1][i] = 0;
-        for (let j = 2; j <= data.length; j++) {
-            mat2[j][i] = Infinity;
-        }
-    }
-
-    let v = 0.0;
-    for (let l = 2; l <= data.length; l++) {
-        let s1 = 0.0, s2 = 0.0, w = 0.0;
-        for (let m = 1; m <= l; m++) {
-            const i4 = l - m + 1;
-            const val = data[i4 - 1];
-            w++;
-            s1 += val;
-            s2 += val * val;
-            v = s2 - (s1 * s1) / w;
-            const i3 = i4 - 1;
-            if (i3 !== 0) {
-                for (let j = 2; j <= n_classes; j++) {
-                    if (mat2[l][j] >= (v + mat2[i3][j - 1])) {
-                        mat1[l][j] = i4;
-                        mat2[l][j] = v + mat2[i3][j - 1];
-                    }
-                }
-            }
-        }
-        mat1[l][1] = 1;
-        mat2[l][1] = v;
-    }
-    return { backlinkMatrix: mat1 };
-  })();
-
-  const { backlinkMatrix } = matrices;
-  const breaks: number[] = [];
-  let k = data.length;
-  // n_classes - 1 because we want the break points, not the classes themselves
-  for (let i = n_classes; i > 1; i--) {
-    breaks.push(data[backlinkMatrix[k][i] - 2]);
-    k = backlinkMatrix[k][i] - 1;
-  }
-  
-  return breaks.reverse();
-}
+const profilePointsStyle = new Style({
+    image: new CircleStyle({
+        radius: 6,
+        fill: new Fill({ color: 'rgba(255, 107, 107, 0.8)' }), // Red-orange
+        stroke: new Stroke({ color: '#ffffff', width: 1.5 }),
+    }),
+});
 
 type DatasetId = 'NASADEM_ELEVATION' | 'ALOS_DSM' | 'JRC_WATER_OCCURRENCE';
-
-const DATASET_DEFINITIONS: Record<DatasetId, { id: string; band: string; name: string; color: string; unit: 'm' | '%'; }> = {
-    'NASADEM_ELEVATION': { id: 'NASA/NASADEM_HGT/001', band: 'elevation', name: 'Elevación (NASADEM)', color: '#8884d8', unit: 'm' },
-    'ALOS_DSM': { id: 'JAXA/ALOS/AW3D30/V3_2', band: 'DSM', name: 'Superficie (ALOS)', color: '#82ca9d', unit: 'm' },
-    'JRC_WATER_OCCURRENCE': { id: 'JRC/GSW1_4/GlobalSurfaceWater', band: 'occurrence', name: 'Agua Superficial (JRC)', color: '#3a86ff', unit: '%' },
-};
 
 interface ProfileDataSeries {
     datasetId: string; // Can be a DatasetId or a layer ID
@@ -240,17 +185,11 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   const [profileLayerId, setProfileLayerId] = useState<string>('');
   const [yAxisDomainLeft, setYAxisDomainLeft] = useState<{min: number | 'auto'; max: number | 'auto'}>({min: 'auto', max: 'auto'});
   const [yAxisDomainRight, setYAxisDomainRight] = useState<{min: number | 'auto'; max: number | 'auto'}>({min: 'auto', max: 'auto'});
-  const [jenksClasses, setJenksClasses] = useState<number>(3); // New state for Jenks classes
-  const analysisLayerRef = useRef<VectorLayer<VectorSource<Feature<Geometry>>> | null>(null);
-  const drawInteractionRef = useRef<Draw | null>(null);
-  const liveTooltipRef = useRef<Overlay | null>(null);
-  const liveTooltipElementRef = useRef<HTMLDivElement | null>(null);
-  const chartContainerRef = useRef<HTMLDivElement | null>(null);
+  const [jenksClasses, setJenksClasses] = useState<number>(3); 
   const [correlationResult, setCorrelationResult] = useState<CorrelationResult | null>(null);
   const [corrAxisX, setCorrAxisX] = useState<string>('');
   const [corrAxisY, setCorrAxisY] = useState<string>('');
-  const profileHoverMarkerRef = useRef<Overlay | null>(null);
-
+  
   // State for Trajectory Analysis
   const [clusterInputLayerId, setClusterInputLayerId] = useState('');
   const [clusterDistance, setClusterDistance] = useState(50);
@@ -259,7 +198,19 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   const [trajectoryLayer2Id, setTrajectoryLayer2Id] = useState('');
   const [trajectorySearchRadius, setTrajectorySearchRadius] = useState(100);
   const [trajectoryOutputName, setTrajectoryOutputName] = useState('');
+  
+  // State for clicked profile points
+  const [profilePoints, setProfilePoints] = useState<Feature<Point>[]>([]);
+  const profilePointsLayerRef = useRef<VectorLayer<VectorSource<Point>> | null>(null);
+  const profilePointsSourceRef = useRef<VectorSource<Point> | null>(null);
 
+
+  const analysisLayerRef = useRef<VectorLayer<VectorSource<Feature<Geometry>>> | null>(null);
+  const drawInteractionRef = useRef<Draw | null>(null);
+  const liveTooltipRef = useRef<Overlay | null>(null);
+  const liveTooltipElementRef = useRef<HTMLDivElement | null>(null);
+  const chartContainerRef = useRef<HTMLDivElement | null>(null);
+  const profileHoverMarkerRef = useRef<Overlay | null>(null);
 
   const { toast } = useToast();
   
@@ -277,7 +228,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     }
   }, [mapRef]);
 
-  const clearAnalysisGeometries = useCallback(() => {
+  const clearAnalysisGeometries = useCallback((showToast = true) => {
       if (analysisLayerRef.current) {
         analysisLayerRef.current.getSource()?.clear();
       }
@@ -287,8 +238,14 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
       setCorrAxisX('');
       setCorrAxisY('');
       setProfileLayerId('');
+      if (profilePointsSourceRef.current) { // Clear marked points
+          profilePointsSourceRef.current.clear();
+          setProfilePoints([]);
+      }
       stopDrawing();
-      toast({ description: "Línea de perfil eliminada." });
+      if (showToast) {
+        toast({ description: "Análisis de perfil limpiado." });
+      }
   }, [stopDrawing, toast]);
 
   useEffect(() => {
@@ -302,6 +259,19 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
             zIndex: 9999, // High z-index to draw on top
         });
         analysisLayerRef.current = layer;
+        mapRef.current.addLayer(layer);
+    }
+
+    // Ensure clicked points layer exists on mount
+    if (mapRef.current && !profilePointsLayerRef.current) {
+        profilePointsSourceRef.current = new VectorSource();
+        const layer = new VectorLayer({
+            source: profilePointsSourceRef.current,
+            style: profilePointsStyle,
+            properties: { id: 'internal-profile-points-layer' },
+            zIndex: 10000,
+        });
+        profilePointsLayerRef.current = layer;
         mapRef.current.addLayer(layer);
     }
 
@@ -320,14 +290,15 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 
     // Cleanup on unmount
     return () => {
-        if (mapRef.current && analysisLayerRef.current) {
-            mapRef.current.removeLayer(analysisLayerRef.current);
-            analysisLayerRef.current = null;
+        if (mapRef.current) {
+            if (analysisLayerRef.current) mapRef.current.removeLayer(analysisLayerRef.current);
+            if (profilePointsLayerRef.current) mapRef.current.removeLayer(profilePointsLayerRef.current);
+            if (profileHoverMarkerRef.current) mapRef.current.removeOverlay(profileHoverMarkerRef.current);
         }
-        if (mapRef.current && profileHoverMarkerRef.current) {
-            mapRef.current.removeOverlay(profileHoverMarkerRef.current);
-            profileHoverMarkerRef.current = null;
-        }
+        analysisLayerRef.current = null;
+        profilePointsLayerRef.current = null;
+        profilePointsSourceRef.current = null;
+        profileHoverMarkerRef.current = null;
         stopDrawing();
     };
   }, [mapRef, stopDrawing]);
@@ -336,15 +307,15 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     if (!mapRef.current) return;
     
     const isDeactivating = activeProfileDrawTool === tool;
-    stopDrawing(); // Stop any current drawing first
+    stopDrawing(); 
 
     if (isDeactivating) {
         setActiveProfileDrawTool(null);
         return;
     }
 
-    clearAnalysisGeometries();
-    setProfileLayerId(''); // Clear layer selection
+    clearAnalysisGeometries(false);
+    setProfileLayerId(''); 
     setActiveProfileDrawTool(tool);
 
     const toastMessage = tool === 'LineString' ? "Dibuja una línea en el mapa para generar el perfil." : "Dibuja a mano alzada para generar el perfil.";
@@ -394,7 +365,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 
   const handleSelectProfileLayer = useCallback((layerId: string) => {
     setProfileLayerId(layerId);
-    clearAnalysisGeometries(); // Clear any drawn line
+    clearAnalysisGeometries(false); 
 
     if (!layerId) {
         setProfileLine(null);
@@ -421,6 +392,12 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     const feature = features[0] as Feature<OlLineString>;
     if (feature.getGeometry()?.getType().includes('LineString')) {
         setProfileLine(feature);
+        if (analysisLayerRef.current) {
+            const clonedFeature = feature.clone();
+            clonedFeature.setStyle(analysisLayerStyle);
+            analysisLayerRef.current.getSource()?.clear();
+            analysisLayerRef.current.getSource()?.addFeature(clonedFeature);
+        }
         toast({ description: `Línea de la capa "${layer.name}" seleccionada para el perfil.`});
     } else {
         toast({ description: "La entidad de la capa no es una línea.", variant: "destructive"});
@@ -698,6 +675,57 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
           profileHoverMarkerRef.current.setPosition(undefined);
       }
   };
+  
+  const handleChartClick = useCallback((data: any) => {
+    if (data?.activePayload?.[0]?.payload?.location && profilePointsSourceRef.current && mapRef.current) {
+        const [lon, lat] = data.activePayload[0].payload.location;
+        const mapCoords = transform([lon, lat], 'EPSG:4326', 'EPSG:3857');
+        
+        const pointFeature = new Feature({
+            geometry: new Point(mapCoords)
+        });
+        pointFeature.setId(nanoid());
+        pointFeature.setProperties(data.activePayload.reduce((acc: any, payload: any) => {
+            acc[payload.name] = payload.value;
+            return acc;
+        }, {}));
+        
+        profilePointsSourceRef.current.addFeature(pointFeature);
+        setProfilePoints(prev => [...prev, pointFeature]);
+    }
+  }, [mapRef]);
+
+  const onConvertProfilePointsToLayer = useCallback(() => {
+    if (profilePoints.length === 0) {
+        toast({ description: 'No hay puntos marcados para crear una capa.' });
+        return;
+    }
+    const clonedFeatures = profilePoints.map(f => f.clone());
+    
+    const newLayerId = `puntos-perfil-${nanoid()}`;
+    const newLayerName = "Puntos de Perfil";
+    const newSource = new VectorSource({ features: clonedFeatures });
+    const newOlLayer = new VectorLayer({
+        source: newSource,
+        properties: { id: newLayerId, name: newLayerName, type: 'vector' },
+        style: profilePointsStyle
+    });
+
+    onAddLayer({
+        id: newLayerId,
+        name: newLayerName,
+        olLayer: newOlLayer,
+        visible: true,
+        opacity: 1,
+        type: 'vector'
+    }, true);
+    
+    // Clear temporary points
+    profilePointsSourceRef.current?.clear();
+    setProfilePoints([]);
+
+    toast({ description: `Capa "${newLayerName}" creada con ${clonedFeatures.length} puntos.` });
+  }, [profilePoints, onAddLayer, toast]);
   // --- END Profile Logic ---
 
 
@@ -1340,21 +1368,6 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     }
   };
 
-
-  const trendlineData = useMemo(() => {
-    if (!correlationResult) return [];
-    const { slope, intercept, scatterData } = correlationResult;
-    if (scatterData.length === 0) return [];
-    const minX = Math.min(...scatterData.map(d => d.x));
-    const maxX = Math.max(...scatterData.map(d => d.x));
-    return [
-      { x: minX, y: slope * minX + intercept },
-      { x: maxX, y: slope * maxX + intercept },
-    ];
-  }, [correlationResult]);
-  
-  // --- START Trajectory Analysis Logic ---
-  
   const handleRunClustering = () => {
     const inputLayer = pointLayers.find(l => l.id === clusterInputLayerId);
     if (!inputLayer || clusterDistance <= 0) {
@@ -1503,7 +1516,17 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   };
 
 
-  // --- END Trajectory Analysis Logic ---
+  const trendlineData = useMemo(() => {
+    if (!correlationResult) return [];
+    const { slope, intercept, scatterData } = correlationResult;
+    if (scatterData.length === 0) return [];
+    const minX = Math.min(...scatterData.map(d => d.x));
+    const maxX = Math.max(...scatterData.map(d => d.x));
+    return [
+      { x: minX, y: slope * minX + intercept },
+      { x: maxX, y: slope * maxX + intercept },
+    ];
+  }, [correlationResult]);
 
 
   return (
@@ -1543,7 +1566,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                 <Button onClick={() => handleToggleDrawProfile('FreehandLine')} size="icon" className={cn("h-8 w-8 text-xs border-white/30 bg-black/20", activeProfileDrawTool === 'FreehandLine' && "bg-primary hover:bg-primary/90")} title="Dibujar a Mano Alzada">
                                     <Brush className="h-4 w-4" />
                                 </Button>
-                                <Button onClick={() => clearAnalysisGeometries()} size="icon" variant="destructive" className="h-8 w-8 flex-shrink-0">
+                                <Button onClick={() => clearAnalysisGeometries(true)} size="icon" variant="destructive" className="h-8 w-8 flex-shrink-0">
                                     <Eraser className="h-4 w-4" />
                                 </Button>
                             </div>
@@ -1605,6 +1628,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                           margin={{ top: 5, right: 20, left: -25, bottom: 5 }}
                                           onMouseMove={handleChartMouseMove}
                                           onMouseLeave={handleChartMouseLeave}
+                                          onClick={handleChartClick}
                                         >
                                             <CartesianGrid strokeDasharray="3 3" stroke="rgba(200, 200, 200, 0.2)" />
                                             <XAxis dataKey="distance" type="number" stroke="hsl(var(--muted-foreground))" fontSize={10} tickFormatter={(val) => `${(val / 1000).toFixed(1)} km`} domain={['dataMin', 'dataMax']} />
@@ -1669,15 +1693,15 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                 )}
                             </div>
                             <div className="flex items-center gap-2">
-                                <Button onClick={() => handleDownloadProfile('csv')} size="sm" className="h-8 text-xs flex-1" variant="secondary" disabled={!profileData}>
-                                    <Download className="mr-2 h-3.5 w-3.5" /> CSV
-                                </Button>
-                                <Button onClick={() => handleDownloadProfile('jpg')} size="sm" className="h-8 text-xs flex-1" variant="secondary" disabled={!profileData}>
-                                    <FileImage className="mr-2 h-3.5 w-3.5" /> JPG
-                                </Button>
-                                <Button onClick={() => handleDownloadProfile('pdf')} size="sm" className="h-8 text-xs flex-1" variant="secondary" disabled={!profileData}>
-                                    <FileText className="mr-2 h-3.5 w-3.5" /> PDF
-                                </Button>
+                               <Button onClick={onConvertProfilePointsToLayer} disabled={profilePoints.length === 0} size="sm" className="h-8 text-xs flex-grow"><LayersIcon className="mr-2 h-3.5 w-3.5" />Crear Capa desde Puntos</Button>
+                               <DropdownMenu>
+                                 <DropdownMenuTrigger asChild><Button size="sm" variant="outline" className="h-8 text-xs flex-grow" disabled={!profileData}><Download className="mr-2 h-3.5 w-3.5" />Exportar Perfil</Button></DropdownMenuTrigger>
+                                 <DropdownMenuContent className="bg-gray-700 text-white border-gray-600">
+                                   <DropdownMenuItem onSelect={() => handleDownloadProfile('csv')}><FileText className="mr-2 h-4 w-4"/>CSV</DropdownMenuItem>
+                                   <DropdownMenuItem onSelect={() => handleDownloadProfile('jpg')}><FileImage className="mr-2 h-4 w-4"/>JPG</DropdownMenuItem>
+                                   <DropdownMenuItem onSelect={() => handleDownloadProfile('pdf')}><FileImage className="mr-2 h-4 w-4"/>PDF</DropdownMenuItem>
+                                 </DropdownMenuContent>
+                               </DropdownMenu>
                             </div>
                             <ScrollArea className="max-h-48">
                               <div className="grid grid-cols-2 gap-4">
