@@ -36,7 +36,7 @@ import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 import { Style, Text as TextStyle, Fill, Stroke, Circle as CircleStyle } from 'ol/style';
 import type { Map } from 'ol';
 import Draw, { createBox } from 'ol/interaction/Draw';
-import { ResponsiveContainer, XAxis, YAxis, Tooltip, AreaChart, Area, CartesianGrid, ReferenceLine, Legend, ScatterChart, Scatter, Line } from 'recharts';
+import { ResponsiveContainer, XAxis, YAxis, Tooltip, AreaChart, Area, CartesianGrid, ReferenceLine, Legend, ScatterChart, Scatter, Line, BarChart, Bar } from 'recharts';
 import { cn } from '@/lib/utils';
 import { transform } from 'ol/proj';
 import { Slider } from '../ui/slider';
@@ -67,7 +67,7 @@ const SectionHeader: React.FC<{ icon: React.ElementType; title: string; }> = ({ 
 );
 
 const analysisLayerStyle = new Style({
-    stroke: new Stroke({ color: '#f4a261', width: 2.5 }), // Naranja, continuo
+    stroke: new Stroke({ color: '#f4a261', width: 2.5 }),
     fill: new Fill({ color: 'rgba(244, 162, 97, 0.2)' }),
 });
 
@@ -88,6 +88,7 @@ interface ProfileDataSeries {
     unit: string;
     points: ProfilePoint[];
     stats: ProfileStats;
+    histogram: { value: number; count: number }[];
 }
 
 interface ProfileStats {
@@ -479,7 +480,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                 location: [point.lon, point.lat],
             }));
             
-            // For GOES temperature, convert from Kelvin to Celsius for stats
+            // For GOES temperature, convert from Kelvin to Celsius for stats and charting
             const valuesForStats = isGoesLayer
                 ? points.map(p => (p.value !== 0 ? p.value - 273.15 : 0))
                 : points.map(p => p.value);
@@ -495,8 +496,21 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                 stats.stdDev = Math.sqrt(variance);
                 stats.jenksBreaks = jenks(validValues, jenksClasses);
             }
+
+            // --- HISTOGRAM CALCULATION ---
+            const HISTOGRAM_BINS = 30;
+            const histogram: { value: number; count: number }[] = [];
+            if (validValues.length > 1) {
+                const binSize = (stats.max - stats.min) / HISTOGRAM_BINS;
+                for (let i = 0; i < HISTOGRAM_BINS; i++) {
+                    const binMin = stats.min + i * binSize;
+                    const binMax = binMin + binSize;
+                    const count = validValues.filter(v => v >= binMin && v < binMax).length;
+                    histogram.push({ value: (binMin + binMax) / 2, count });
+                }
+            }
             
-            allProfileData.push({ datasetId, name, color, unit, points, stats });
+            allProfileData.push({ datasetId, name, color, unit, points, stats, histogram });
         }
 
         if (allProfileData.length > 0) {
@@ -1636,12 +1650,22 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                           onMouseLeave={handleChartMouseLeave}
                                           onClick={handleChartClick}
                                         >
+                                            <defs>
+                                                {profileData.map((series) => (
+                                                    <linearGradient key={`grad-${series.datasetId}`} id={`gradient-${series.datasetId}`} x1="0" y1="0" x2="0" y2="1">
+                                                        <stop offset="5%" stopColor={series.color} stopOpacity={0.3}/>
+                                                        <stop offset="95%" stopColor={series.color} stopOpacity={0.05}/>
+                                                    </linearGradient>
+                                                ))}
+                                            </defs>
                                             <CartesianGrid strokeDasharray="3 3" stroke="rgba(200, 200, 200, 0.2)" />
                                             <XAxis dataKey="distance" type="number" stroke="hsl(var(--muted-foreground))" fontSize={10} tickFormatter={(val) => `${(val / 1000).toFixed(1)} km`} domain={['dataMin', 'dataMax']} />
+                                            
                                             <YAxis yAxisId="left" stroke={profileData[0]?.color || '#8884d8'} fontSize={10} domain={[yAxisDomainLeft.min, yAxisDomainLeft.max]} tickFormatter={(val) => `${val.toFixed(0)}${profileData[0]?.unit || ''}`} reversed={profileData[0]?.unit === '°C'} />
                                             {profileData.length > 1 && (
                                                 <YAxis yAxisId="right" orientation="right" stroke={profileData[1]?.color || '#82ca9d'} fontSize={10} domain={[yAxisDomainRight.min, yAxisDomainRight.max]} tickFormatter={(val) => `${val.toFixed(0)}${profileData[1]?.unit || ''}`} reversed={profileData[1]?.unit === '°C'} />
                                             )}
+                                            
                                             <Tooltip
                                                 contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', color: 'hsl(var(--foreground))' }}
                                                 itemStyle={{ fontSize: '12px' }}
@@ -1656,9 +1680,20 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                                 }}
                                             />
                                             <Legend wrapperStyle={{fontSize: "10px"}} />
+
                                             {profileData.map((series, index) => (
-                                                <Area key={series.datasetId} yAxisId={index === 0 ? 'left' : 'right'} type="monotone" dataKey={series.datasetId} name={series.name} stroke={series.color} fill={series.color} fillOpacity={0.2} connectNulls />
+                                                 <Area key={series.datasetId} yAxisId={index === 0 ? 'left' : 'right'} type="monotone" dataKey={series.datasetId} name={series.name} stroke={series.color} fill={`url(#gradient-${series.datasetId})`} strokeWidth={2} connectNulls />
                                             ))}
+
+                                            {/* Histograms in the background */}
+                                            {profileData.map((series, index) => (
+                                                <BarChart key={`hist-${series.datasetId}`} data={series.histogram} yAxisId={index === 0 ? 'left' : 'right'} barCategoryGap={0} barGap={0} layout="vertical" margin={{ top: 5, right: 20, left: -25, bottom: 5 }} style={{ position: 'absolute', top: 0, left: 0, zIndex: 0 }}>
+                                                    <XAxis type="number" hide={true} domain={[0, 'dataMax']} />
+                                                    <YAxis type="number" hide={true} domain={[yAxisDomainLeft.min, yAxisDomainLeft.max]} yAxisId={index === 0 ? 'left' : 'right'} />
+                                                    <Bar dataKey="count" fill={series.color} fillOpacity={0.1} isAnimationActive={false} />
+                                                </BarChart>
+                                            ))}
+                                            
                                             {/* Reference Lines for Jenks Breaks */}
                                             {profileData.map((series, index) => (
                                                 series.stats.jenksBreaks.map((breakValue, i) => (
@@ -2228,4 +2263,5 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 export default AnalysisPanel;
 
     
+
 
