@@ -1641,8 +1641,27 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                     {profileData && (
                         <div className="pt-2 border-t border-white/10 flex flex-col gap-3">
                              <div id="profile-chart-to-export" className="bg-background p-2 rounded-md">
-                                <div className="h-[250px] w-full mt-2" ref={chartContainerRef}>
-                                    <ResponsiveContainer>
+                                <div className="h-[250px] w-full mt-2 relative" ref={chartContainerRef}>
+                                    {/* Histograms in the background */}
+                                    <ResponsiveContainer width="100%" height="100%" className="absolute inset-0 z-0">
+                                        <BarChart 
+                                            data={combinedChartData} 
+                                            layout="vertical" 
+                                            margin={{ top: 5, right: 20, left: -25, bottom: 5 }}
+                                            barCategoryGap={0}
+                                        >
+                                            <XAxis type="number" hide={true} domain={[0, 'dataMax']} />
+                                            {profileData.map((series, index) => (
+                                                <YAxis key={`y-hist-${series.datasetId}`} type="number" hide={true} yAxisId={index === 0 ? 'left' : 'right'} domain={[index === 0 ? yAxisDomainLeft.min : yAxisDomainRight.min, index === 0 ? yAxisDomainLeft.max : yAxisDomainRight.max]} />
+                                            ))}
+                                            {profileData.map((series, index) => (
+                                                 <Bar key={`bar-${series.datasetId}`} dataKey={series.datasetId} name={series.name} yAxisId={index === 0 ? 'left' : 'right'} fill={series.color} fillOpacity={0.1} isAnimationActive={false} />
+                                            ))}
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                    
+                                    {/* Main Profile Chart */}
+                                    <ResponsiveContainer width="100%" height="100%" className="absolute inset-0 z-10">
                                         <AreaChart 
                                           data={combinedChartData} 
                                           margin={{ top: 5, right: 20, left: -25, bottom: 5 }}
@@ -1683,15 +1702,6 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 
                                             {profileData.map((series, index) => (
                                                  <Area key={series.datasetId} yAxisId={index === 0 ? 'left' : 'right'} type="monotone" dataKey={series.datasetId} name={series.name} stroke={series.color} fill={`url(#gradient-${series.datasetId})`} strokeWidth={2} connectNulls />
-                                            ))}
-
-                                            {/* Histograms in the background */}
-                                            {profileData.map((series, index) => (
-                                                <BarChart key={`hist-${series.datasetId}`} data={series.histogram} yAxisId={index === 0 ? 'left' : 'right'} barCategoryGap={0} barGap={0} layout="vertical" margin={{ top: 5, right: 20, left: -25, bottom: 5 }} style={{ position: 'absolute', top: 0, left: 0, zIndex: 0 }}>
-                                                    <XAxis type="number" hide={true} domain={[0, 'dataMax']} />
-                                                    <YAxis type="number" hide={true} domain={[yAxisDomainLeft.min, yAxisDomainLeft.max]} yAxisId={index === 0 ? 'left' : 'right'} />
-                                                    <Bar dataKey="count" fill={series.color} fillOpacity={0.1} isAnimationActive={false} />
-                                                </BarChart>
                                             ))}
                                             
                                             {/* Reference Lines for Jenks Breaks */}
@@ -2263,5 +2273,6 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 export default AnalysisPanel;
 
     
+
 
 
