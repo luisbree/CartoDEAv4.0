@@ -22,7 +22,7 @@ import { nanoid } from 'nanoid';
 import GeoJSON from 'ol/format/GeoJSON';
 import VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
-import { intersect, featureCollection, difference, cleanCoords, length as turfLength, along as turfAlong, clustersDbscan, nearestPoint as turfNearestPoint, distance as turfDistance, bearing as turfBearing, clusterEach, concave } from '@turf/turf';
+import { intersect, featureCollection, difference, cleanCoords, length as turfLength, along as turfAlong, clustersDbscan, nearestPoint as turfNearestPoint, distance as turfDistance, bearing as turfBearing, destination, bezierSpline, centroid } from '@turf/turf';
 import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as TurfMultiPolygon, FeatureCollection as TurfFeatureCollection, Geometry as TurfGeometry, LineString as TurfLineString, Point as TurfPoint } from 'geojson';
 import { multiPolygon, lineString as turfLineString, point as turfPoint, polygon as turfPolygon, convex } from '@turf/helpers';
 import Feature from 'ol/Feature';
@@ -67,8 +67,8 @@ const SectionHeader: React.FC<{ icon: React.ElementType; title: string; }> = ({ 
 );
 
 const analysisLayerStyle = new Style({
-    stroke: new Stroke({ color: 'rgba(244, 162, 97, 1)', width: 2.5, }),
-    fill: new Fill({ color: 'rgba(244, 162, 97, 0.2)' }),
+    stroke: new Stroke({ color: 'rgba(233, 196, 106, 1)', width: 2.5, lineDash: [8, 4] }),
+    fill: new Fill({ color: 'rgba(233, 196, 106, 0.2)' }),
 });
 
 const profilePointsStyle = new Style({
@@ -1642,25 +1642,20 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                         <div className="pt-2 border-t border-white/10 flex flex-col gap-3">
                              <div id="profile-chart-to-export" className="bg-background p-2 rounded-md">
                                 <div className="h-[250px] w-full mt-2 relative" ref={chartContainerRef}>
-                                    {/* Histograms in the background */}
+                                    {/* Background Histograms */}
                                     <ResponsiveContainer width="100%" height="100%" className="absolute inset-0 z-0">
-                                        <BarChart 
-                                            data={combinedChartData} 
-                                            layout="vertical" 
-                                            margin={{ top: 5, right: 20, left: -25, bottom: 5 }}
-                                            barCategoryGap={0}
-                                        >
-                                            <XAxis type="number" hide={true} domain={[0, 'dataMax']} />
-                                            {profileData.map((series, index) => (
-                                                <YAxis key={`y-hist-${series.datasetId}`} type="number" hide={true} yAxisId={index === 0 ? 'left' : 'right'} domain={[index === 0 ? yAxisDomainLeft.min : yAxisDomainRight.min, index === 0 ? yAxisDomainLeft.max : yAxisDomainRight.max]} />
-                                            ))}
-                                            {profileData.map((series, index) => (
-                                                 <Bar key={`bar-${series.datasetId}`} dataKey={series.datasetId} name={series.name} yAxisId={index === 0 ? 'left' : 'right'} fill={series.color} fillOpacity={0.1} isAnimationActive={false} />
-                                            ))}
-                                        </BarChart>
+                                      <BarChart layout="vertical" margin={{ top: 5, right: 20, left: -25, bottom: 5 }}>
+                                          <XAxis type="number" hide domain={[0, 'dataMax']} />
+                                          {profileData.map((series, index) => (
+                                              <YAxis key={`y-hist-${series.datasetId}`} type="number" dataKey="value" hide yAxisId={index === 0 ? 'left' : 'right'} domain={[index === 0 ? yAxisDomainLeft.min : yAxisDomainRight.min, index === 0 ? yAxisDomainLeft.max : yAxisDomainRight.max]} />
+                                          ))}
+                                          {profileData.map((series, index) => (
+                                              <Bar key={`bar-${series.datasetId}`} data={series.histogram} dataKey="count" name={series.name} yAxisId={index === 0 ? 'left' : 'right'} fill={series.color} fillOpacity={0.1} isAnimationActive={false} barSize={10} />
+                                          ))}
+                                      </BarChart>
                                     </ResponsiveContainer>
                                     
-                                    {/* Main Profile Chart */}
+                                    {/* Foreground Profile Chart */}
                                     <ResponsiveContainer width="100%" height="100%" className="absolute inset-0 z-10">
                                         <AreaChart 
                                           data={combinedChartData} 
@@ -2273,6 +2268,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 export default AnalysisPanel;
 
     
+
 
 
 
