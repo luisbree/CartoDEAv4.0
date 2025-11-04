@@ -67,7 +67,7 @@ const SectionHeader: React.FC<{ icon: React.ElementType; title: string; }> = ({ 
 );
 
 const analysisLayerStyle = new Style({
-    stroke: new Stroke({ color: '#f4a261', width: 2.5 }),
+    stroke: new Stroke({ color: 'rgba(244, 162, 97, 1)', width: 2.5, }),
     fill: new Fill({ color: 'rgba(244, 162, 97, 0.2)' }),
 });
 
@@ -1701,7 +1701,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                             <Legend wrapperStyle={{fontSize: "10px"}} />
 
                                             {profileData.map((series, index) => (
-                                                 <Area key={series.datasetId} yAxisId={index === 0 ? 'left' : 'right'} type="monotone" dataKey={series.datasetId} name={series.name} stroke={series.color} fill={`url(#gradient-${series.datasetId})`} strokeWidth={2} connectNulls />
+                                                 <Area key={`area-${series.datasetId}`} yAxisId={index === 0 ? 'left' : 'right'} type="monotone" dataKey={series.datasetId} name={series.name} stroke={series.color} fill={`url(#gradient-${series.datasetId})`} strokeWidth={2} connectNulls />
                                             ))}
                                             
                                             {/* Reference Lines for Jenks Breaks */}
@@ -2273,6 +2273,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 export default AnalysisPanel;
 
     
+
 
 
 
