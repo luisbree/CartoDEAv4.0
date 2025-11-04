@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
@@ -66,13 +67,8 @@ const SectionHeader: React.FC<{ icon: React.ElementType; title: string; }> = ({ 
 );
 
 const analysisLayerStyle = new Style({
-    stroke: new Stroke({ color: '#f4a261', width: 2.5 }),
-    fill: new Fill({ color: 'rgba(244, 162, 97, 0.2)' }),
-    image: new CircleStyle({
-        radius: 5,
-        fill: new Fill({ color: 'rgba(244, 162, 97, 0.5)' }),
-        stroke: new Stroke({ color: '#f4a261', width: 1.5 }),
-    }),
+    stroke: new Stroke({ color: 'rgba(0, 255, 255, 1)', width: 2.5, lineDash: [8, 8] }),
+    fill: new Fill({ color: 'rgba(0, 255, 255, 0.2)' }),
 });
 
 const profilePointsStyle = new Style({
@@ -1619,6 +1615,10 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                 </div>
                             ))}
                         </div>
+                        <div className="flex items-center gap-2 pt-2 border-t border-white/10 mt-2">
+                           <Label htmlFor="jenks-classes" className="text-xs whitespace-nowrap">Clases Jenks</Label>
+                           <Input id="jenks-classes" type="number" value={jenksClasses} onChange={(e) => setJenksClasses(Math.max(2, Number(e.target.value)))} className="h-7 w-16 text-xs bg-black/20 p-1 text-center" min="2" max="10"/>
+                        </div>
                         <Button onClick={handleRunProfile} size="sm" className="w-full h-8 text-xs" disabled={!profileLine || selectedProfileDatasets.length === 0 || isGeneratingProfile}>
                             {isGeneratingProfile ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <LineChart className="mr-2 h-3.5 w-3.5" />}
                             Generar Perfil(es)
@@ -1720,10 +1720,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                             <TableRow><TableCell className="text-xs text-gray-300 p-1.5">Promedio</TableCell><TableCell className="text-xs text-white p-1.5 text-right font-mono">{series.stats.mean.toFixed(2)}</TableCell></TableRow>
                                             <TableRow><TableCell className="text-xs text-gray-300 p-1.5">Desv. Est.</TableCell><TableCell className="text-xs text-white p-1.5 text-right font-mono">{series.stats.stdDev.toFixed(2)}</TableCell></TableRow>
                                             <TableRow>
-                                                <TableCell className="text-xs text-gray-300 p-1.5 flex items-center gap-2">
-                                                    Jenks
-                                                    <Input type="number" value={jenksClasses} onChange={(e) => setJenksClasses(Math.max(2, Number(e.target.value)))} className="h-6 w-12 text-xs bg-black/20 p-1 text-center" min="2" max="10"/>
-                                                </TableCell>
+                                                <TableCell className="text-xs text-gray-300 p-1.5">Cortes Jenks</TableCell>
                                                 <TableCell className="text-xs text-white p-1.5 text-right font-mono whitespace-normal">{series.stats.jenksBreaks.map(b => b.toFixed(2)).join(' | ')}</TableCell>
                                             </TableRow>
                                           </TableBody>
