@@ -30,7 +30,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Edit, GripVertical, Layers, Trash2, Ungroup, Settings2, Play, Pause, Clock, MoreVertical } from 'lucide-react';
+import { Edit, GripVertical, Layers, Trash2, Ungroup, Settings2, Play, Pause, Clock, MoreVertical, Eye, EyeOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { MapLayer, LayerGroup, LabelOptions, GraduatedSymbology, CategorizedSymbology, GeoTiffStyle, InteractionToolId } from '@/lib/types';
 import type { StyleOptions } from './StyleEditorDialog';
@@ -43,6 +43,7 @@ import { Label } from '../ui/label';
 interface LayerGroupItemProps {
     group: LayerGroup;
     allLayers: MapLayer[];
+    onToggleGroupVisibility: (groupId: string) => void; // New prop
     onToggleVisibility: (layerId: string, groupId?: string) => void;
     onZoomToExtent: (layerId: string) => void;
     onShowLayerTable: (layerId: string) => void;
@@ -103,6 +104,7 @@ const LayerGroupItem: React.FC<LayerGroupItemProps> = ({
     selectedItemIds,
     onItemClick,
     onToggleGroupExpanded,
+    onToggleGroupVisibility,
     onSetGroupDisplayMode,
     onUngroup,
     onRenameGroup,
@@ -122,6 +124,7 @@ const LayerGroupItem: React.FC<LayerGroupItemProps> = ({
     };
 
     const isSelected = selectedItemIds.includes(group.id);
+    const isAnyLayerVisible = group.layers.some(l => l.visible);
 
     return (
       <li
@@ -143,11 +146,25 @@ const LayerGroupItem: React.FC<LayerGroupItemProps> = ({
         <Accordion type="single" value={group.isExpanded ? "group-content" : ""} onValueChange={() => onToggleGroupExpanded(group.id)} collapsible>
           <AccordionItem value="group-content" className="border-b-0">
              <div className="flex items-center p-1.5 hover:bg-gray-700/50 rounded-t-md data-[state=open]:rounded-b-none">
+                {isDraggable && <GripVertical className="h-4 w-4 text-gray-500 cursor-grab flex-shrink-0 mr-1" />}
+                
+                 <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={(e) => { e.stopPropagation(); onToggleGroupVisibility(group.id); }}
+                    className="h-6 w-6 text-white hover:bg-gray-600/80 p-0 mr-1 flex-shrink-0"
+                    aria-label={`Alternar visibilidad para el grupo ${group.name}`}
+                    title={isAnyLayerVisible ? "Ocultar grupo" : "Mostrar grupo"}
+                >
+                    {isAnyLayerVisible ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5 text-gray-400" />}
+                </Button>
+
                 <AccordionTrigger className="p-0 flex-1 hover:no-underline">
                   <div className="flex items-center gap-2 w-full">
-                    {isDraggable && <GripVertical className="h-4 w-4 text-gray-500 cursor-grab flex-shrink-0" />}
-                    <Layers className="h-4 w-4 text-primary" />
-                    <span className="text-xs font-semibold truncate flex-1 text-left" title={group.name}>{group.name}</span>
+                    <Layers className={cn("h-4 w-4 text-primary", !isAnyLayerVisible && "text-gray-500")} />
+                    <span className={cn("text-xs font-semibold truncate flex-1 text-left", !isAnyLayerVisible && "text-gray-400")} title={group.name}>
+                        {group.name}
+                    </span>
                   </div>
                 </AccordionTrigger>
 

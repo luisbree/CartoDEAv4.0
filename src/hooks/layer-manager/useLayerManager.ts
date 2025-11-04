@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
@@ -598,6 +599,31 @@ export const useLayerManager = ({
     });
 }, [setLayers]);
 
+  const toggleGroupVisibility = useCallback((groupId: string) => {
+    setLayers(prevItems => {
+        const group = prevItems.find(item => item.id === groupId) as LayerGroup | undefined;
+        if (!group) return prevItems;
+
+        const isCurrentlyVisible = group.layers.some(l => l.visible);
+        const newVisibility = !isCurrentlyVisible;
+
+        return prevItems.map(item => {
+            if (item.id === groupId && 'layers' in item) {
+                const updatedLayers = item.layers.map(layer => {
+                    const layerIsVisible = newVisibility;
+                    layer.olLayer.setVisible(layerIsVisible);
+                    const visualLayer = layer.olLayer.get('visualLayer');
+                    if (visualLayer) {
+                        visualLayer.setVisible(layerIsVisible && (layer.wmsStyleEnabled ?? true));
+                    }
+                    return { ...layer, visible: layerIsVisible };
+                });
+                return { ...item, layers: updatedLayers };
+            }
+            return item;
+        });
+    });
+  }, [setLayers]);
 
   const toggleWmsStyle = useCallback((layerId: string) => {
     setLayers(prev => prev.map(l => {
@@ -1489,6 +1515,7 @@ const groupLayers = useCallback((layerIds: string[], groupName: string) => {
     lastRemovedLayers,
     reorderLayers,
     toggleLayerVisibility,
+    toggleGroupVisibility, // Export the new function
     toggleWmsStyle,
     setLayerOpacity,
     changeLayerStyle,
