@@ -67,8 +67,8 @@ const SectionHeader: React.FC<{ icon: React.ElementType; title: string; }> = ({ 
 );
 
 const analysisLayerStyle = new Style({
-    stroke: new Stroke({ color: 'rgba(0, 255, 255, 1)', width: 2.5, lineDash: [8, 8] }),
-    fill: new Fill({ color: 'rgba(0, 255, 255, 0.2)' }),
+    stroke: new Stroke({ color: '#f4a261', width: 2.5 }), // Naranja, continuo
+    fill: new Fill({ color: 'rgba(244, 162, 97, 0.2)' }),
 });
 
 const profilePointsStyle = new Style({
@@ -2228,3 +2228,4 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 export default AnalysisPanel;
 
     
+
