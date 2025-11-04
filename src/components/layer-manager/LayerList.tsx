@@ -46,6 +46,7 @@ interface LayerListProps {
   isSharedView?: boolean;
 
   // Group props
+  onToggleGroupVisibility: (groupId: string) => void;
   onToggleGroupExpanded: (groupId: string) => void;
   onSetGroupDisplayMode: (groupId: string, mode: 'single' | 'multiple') => void;
   onUngroup: (groupId: string) => void;
@@ -85,6 +86,7 @@ const LayerList: React.FC<LayerListProps> = ({
   activeTool,
   onToggleEditing,
   isSharedView = false,
+  onToggleGroupVisibility,
   onToggleGroupExpanded,
   onSetGroupDisplayMode,
   onUngroup,
@@ -184,6 +186,7 @@ const LayerList: React.FC<LayerListProps> = ({
                     activeTool={activeTool}
                     onToggleEditing={onToggleEditing}
                     isSharedView={isSharedView}
+                    onToggleGroupVisibility={onToggleGroupVisibility}
                     onToggleGroupExpanded={onToggleGroupExpanded}
                     onSetGroupDisplayMode={onSetGroupDisplayMode}
                     onUngroup={onUngroup}

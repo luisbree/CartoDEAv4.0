@@ -62,6 +62,7 @@ interface LegendPanelProps {
   onApplyGeoTiffStyle: (layerId: string, style: GeoTiffStyle) => void;
   onToggleWmsStyle: (layerId: string) => void;
   onGroupLayers: (layerIds: string[], groupName: string) => void;
+  onToggleGroupVisibility: (groupId: string) => void;
   onToggleGroupExpanded: (groupId: string) => void;
   onSetGroupDisplayMode: (groupId: string, mode: 'single' | 'multiple') => void;
   onUngroup: (groupId: string) => void;
@@ -103,7 +104,7 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
   panelRef, isCollapsed, onToggleCollapse, onClosePanel, onMouseDownHeader,
   layers, onToggleLayerVisibility, onRemoveLayer, onRemoveLayers, onZoomToLayerExtent, onShowLayerTable, onShowStatistics,
   onExtractByPolygon, onExtractBySelection, onSelectByLayer, onExportLayer, onExportWmsAsGeotiff, isDrawingSourceEmptyOrNotPolygon, isSelectionEmpty, onSetLayerOpacity, onReorderLayers, onRenameLayer,
-  onChangeLayerStyle, onChangeLayerLabels, onApplyGraduatedSymbology, onApplyCategorizedSymbology, onApplyGeoTiffStyle, onToggleWmsStyle, onGroupLayers, onToggleGroupExpanded, onSetGroupDisplayMode, onUngroup, onRenameGroup, onToggleGroupPlayback, onSetGroupPlaySpeed,
+  onChangeLayerStyle, onChangeLayerLabels, onApplyGraduatedSymbology, onApplyCategorizedSymbology, onApplyGeoTiffStyle, onToggleWmsStyle, onGroupLayers, onToggleGroupVisibility, onToggleGroupExpanded, onSetGroupDisplayMode, onUngroup, onRenameGroup, onToggleGroupPlayback, onSetGroupPlaySpeed,
   onAddLayer, 
   activeTool, onSetActiveTool, onClearSelection,
   discoveredDeasLayers, onAddDeasLayer, isFetchingDeasLayers, onReloadDeasLayers,
@@ -338,6 +339,7 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
                             activeTool={activeTool}
                             onToggleEditing={handleToggleEditing}
                             isSharedView={isSharedView}
+                            onToggleGroupVisibility={onToggleGroupVisibility}
                             onToggleGroupExpanded={onToggleGroupExpanded}
                             onSetGroupDisplayMode={onSetGroupDisplayMode}
                             onUngroup={onUngroup}
