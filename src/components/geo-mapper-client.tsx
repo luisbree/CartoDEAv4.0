@@ -852,19 +852,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
 
   const handleAttributeTableFeatureSelect = useCallback(
     (featureId: string, isCtrlOrMeta: boolean, isShift: boolean) => {
-      const currentSelectedIds = featureInspectionHook.selectedFeatures.map(
-        (f) => f.getId() as string
-      );
-      let newSelectedIds: string[];
-
-      if (isCtrlOrMeta) {
-        newSelectedIds = currentSelectedIds.includes(featureId)
-          ? currentSelectedIds.filter((id) => id !== featureId)
-          : [...currentSelectedIds, featureId];
-      } else {
-        newSelectedIds = [featureId];
-      }
-      featureInspectionHook.selectFeaturesById(newSelectedIds);
+      featureInspectionHook.selectFeaturesByIds(featureId, isCtrlOrMeta, isShift);
     },
     [featureInspectionHook]
   );
@@ -1552,6 +1540,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
             onRenameGroup={layerManagerHook.renameGroup}
             onToggleGroupPlayback={layerManagerHook.toggleGroupPlayback}
             onSetGroupPlaySpeed={layerManagerHook.setGroupPlaySpeed}
+            onToggleGroupVisibility={layerManagerHook.toggleGroupVisibility}
             isDrawingSourceEmptyOrNotPolygon={
               layerManagerHook.isDrawingSourceEmptyOrNotPolygon
             }
