@@ -574,6 +574,17 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     }
     return combined;
   }, [profileData]);
+
+  const combinedHistogramData = useMemo(() => {
+    if (!profileData) return [];
+    return profileData.flatMap(series => 
+        series.histogram.map(entry => ({
+            ...entry,
+            name: series.name,
+            color: series.color,
+        }))
+    );
+  }, [profileData]);
   
   const handleCalculateCorrelation = () => {
     if (!profileData || !corrAxisX || !corrAxisY || corrAxisX === corrAxisY) {
@@ -1453,53 +1464,6 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     }
   };
 
-  const handleRunClustering = () => {
-    const inputLayer = pointLayers.find(l => l.id === clusterInputLayerId);
-    if (!inputLayer || clusterDistance <= 0) {
-      toast({ description: "Seleccione una capa de puntos y una distancia válida.", variant: 'destructive' });
-      return;
-    }
-    const inputSource = inputLayer.olLayer.getSource();
-    if (!inputSource || inputSource.getFeatures().length === 0) {
-      toast({ description: 'La capa de entrada no tiene entidades.', variant: 'destructive' });
-      return;
-    }
-  
-    const format = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
-    const featuresGeoJSON = format.writeFeaturesObject(inputSource.getFeatures());
-  
-    const clustered = clustersDbscan(featuresGeoJSON, clusterDistance, { units: 'kilometers', minPoints: 1 });
-  
-    const clusteredFeatures: Feature[] = [];
-    clusterEach(clustered, 'cluster', (cluster, clusterValue) => {
-      cluster?.features.forEach(feature => {
-        const olFeature = new GeoJSON({ featureProjection: 'EPSG:3857' }).readFeature(feature);
-        olFeature.set('cluster_id', clusterValue);
-        olFeature.setId(nanoid());
-        clusteredFeatures.push(olFeature);
-      });
-    });
-  
-    const outputName = clusterOutputName.trim() || `Cúmulos de ${inputLayer.name}`;
-    const newLayerId = `cluster-result-${nanoid()}`;
-    const newSource = new VectorSource({ features: clusteredFeatures });
-    const newOlLayer = new VectorLayer({
-      source: newSource,
-      properties: { id: newLayerId, name: outputName, type: 'analysis' },
-    });
-  
-    onAddLayer({
-      id: newLayerId,
-      name: outputName,
-      olLayer: newOlLayer,
-      visible: true,
-      opacity: 1,
-      type: 'analysis',
-    }, true);
-  
-    toast({ description: `Análisis de cúmulos completado. Se creó la capa "${outputName}".` });
-  };
-  
   const handleRunTrajectory = () => {
     const layer1 = allLayers.find(l => l.id === trajectoryLayer1Id) as VectorMapLayer | undefined;
     const layer2 = allLayers.find(l => l.id === trajectoryLayer2Id) as VectorMapLayer | undefined;
@@ -1871,18 +1835,14 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                 <div className="h-[250px] w-full mt-2 relative" ref={chartContainerRef}>
                                     <div className="absolute inset-0 z-0">
                                          <ResponsiveContainer width="100%" height="100%">
-                                             <BarChart data={combinedChartData} layout="vertical" margin={{ top: 5, right: 20, left: -25, bottom: 5 }}>
+                                             <BarChart data={combinedHistogramData} layout="vertical" margin={{ top: 5, right: 20, left: -25, bottom: 5 }}>
                                                  <XAxis type="number" hide domain={[0, 'dataMax']} />
-                                                 {profileData.map((series, index) => (
-                                                     <YAxis key={`y-hist-${series.datasetId}`} type="number" dataKey={series.datasetId} hide yAxisId={index === 0 ? 'left' : 'right'} domain={[index === 0 ? yAxisDomainLeft.min : yAxisDomainRight.min, index === 0 ? yAxisDomainLeft.max : yAxisDomainRight.max]} />
-                                                 ))}
-                                                 {profileData.map((series, index) => (
-                                                     <Bar key={`bar-${series.datasetId}`} dataKey="count" data={series.histogram} name={series.name} yAxisId={index === 0 ? 'left' : 'right'} isAnimationActive={false}>
-                                                        {series.histogram.map((entry) => (
-                                                          <Cell key={entry.key} fill={series.color} fillOpacity={0.1} />
-                                                        ))}
-                                                     </Bar>
-                                                 ))}
+                                                 <YAxis type="category" dataKey="value" hide />
+                                                 <Bar dataKey="count" isAnimationActive={false}>
+                                                    {combinedHistogramData.map((entry) => (
+                                                        <Cell key={entry.key} fill={entry.color} fillOpacity={0.1} />
+                                                    ))}
+                                                 </Bar>
                                              </BarChart>
                                          </ResponsiveContainer>
                                      </div>
@@ -2548,6 +2508,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
 
 
 
