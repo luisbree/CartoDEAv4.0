@@ -15,7 +15,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { DraftingCompass, Scissors, Layers, CircleDotDashed, MinusSquare, BoxSelect, Droplet, Sparkles, Loader2, Combine, Minus, Plus, TrendingUp, Waypoints as CrosshairIcon, Merge, LineChart, PenLine, Eraser, Brush, ZoomIn, Download, FileImage, FileText, CheckCircle, GitCommit, GitBranch, Wind, Layers as LayersIcon, LocateFixed, Eye } from 'lucide-react';
+import { DraftingCompass, Scissors, Layers, CircleDotDashed, MinusSquare, BoxSelect, Droplet, Sparkles, Loader2, Combine, Minus, Plus, TrendingUp, Waypoints as CrosshairIcon, Merge, LineChart, PenLine, Eraser, Brush, ZoomIn, Download, FileImage, FileText, CheckCircle, GitCommit, GitBranch, Wind, Layers as LayersIcon, LocateFixed, Eye, Activity } from 'lucide-react';
 import type { MapLayer, VectorMapLayer, ProfilePoint } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { nanoid } from 'nanoid';
@@ -67,8 +67,8 @@ const SectionHeader: React.FC<{ icon: React.ElementType; title: string; }> = ({ 
 );
 
 const analysisLayerStyle = new Style({
-    stroke: new Stroke({ color: 'rgba(255, 107, 107, 1)', width: 2.5 }),
-    fill: new Fill({ color: 'rgba(255, 107, 107, 0.2)' }),
+    stroke: new Stroke({ color: 'rgba(255, 120, 0, 1)', width: 2.5 }),
+    fill: new Fill({ color: 'rgba(255, 120, 0, 0.2)' }),
 });
 
 const profilePointsStyle = new Style({
@@ -201,7 +201,8 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   const [trajectoryLayer2Id, setTrajectoryLayer2Id] = useState('');
   const [trajectorySearchRadius, setTrajectorySearchRadius] = useState(100);
   const [trajectoryOutputName, setTrajectoryOutputName] = useState('');
-  
+  const [coherenceLayerId, setCoherenceLayerId] = useState('');
+
   // State for Feature Tracking
   const [trackingIsLoading, setTrackingIsLoading] = useState(false);
   const [trackingLayer1Id, setTrackingLayer1Id] = useState('');
@@ -798,6 +799,10 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
       );
   }, [allLayers]);
   
+    const trajectoryLayers = useMemo(() => {
+        return vectorLayers.filter(l => l.name.toLowerCase().startsWith('trayectoria') || l.name.toLowerCase().startsWith('seguimiento'));
+    }, [vectorLayers]);
+
   const trackingNumericFields = useMemo(() => {
     const layer1 = pointLayers.find(l => l.id === trackingLayer1Id);
     if (!layer1) return [];
@@ -1482,8 +1487,8 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         return;
     }
 
-    const time1 = layer1.olLayer.get('geeParams')?.metadata?.timestamp;
-    const time2 = layer2.olLayer.get('geeParams')?.metadata?.timestamp;
+    const time1 = layer1.geeParams?.metadata?.timestamp;
+    const time2 = layer2.geeParams?.metadata?.timestamp;
 
     if (!time1 || !time2) {
         toast({
@@ -1638,6 +1643,69 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     }
   };
 
+  const handleAnalyzeCoherence = () => {
+    const layer = trajectoryLayers.find(l => l.id === coherenceLayerId) as VectorMapLayer | undefined;
+    if (!layer) {
+        toast({ description: "Por favor, seleccione una capa de trayectorias para analizar.", variant: "destructive" });
+        return;
+    }
+    const source = layer.olLayer.getSource();
+    if (!source || source.getFeatures().length === 0) {
+        toast({ description: 'La capa de trayectorias no tiene entidades.', variant: 'destructive' });
+        return;
+    }
+
+    const features = source.getFeatures();
+    const directions = features.map(f => f.get('sentido_grados')).filter(d => typeof d === 'number') as number[];
+    const speeds = features.map(f => f.get('velocidad_kmh')).filter(s => typeof s === 'number') as number[];
+    
+    if (directions.length === 0 || speeds.length === 0) {
+        toast({ description: 'Las entidades no tienen los atributos "sentido_grados" o "velocidad_kmh".', variant: 'destructive' });
+        return;
+    }
+    
+    const avgSpeed = speeds.reduce((a, b) => a + b, 0) / speeds.length;
+    // Average angle calculation is complex, we use a vector approach
+    const avgX = directions.reduce((sum, d) => sum + Math.cos(d * Math.PI / 180), 0);
+    const avgY = directions.reduce((sum, d) => sum + Math.sin(d * Math.PI / 180), 0);
+    const avgAngleRad = Math.atan2(avgY, avgX);
+    const avgDirection = (avgAngleRad * 180 / Math.PI + 360) % 360;
+
+    const stdDevDirection = Math.sqrt(directions.reduce((sum, d) => sum + Math.pow((d - avgDirection + 360) % 360, 2), 0) / directions.length);
+    const stdDevSpeed = Math.sqrt(speeds.reduce((sum, s) => sum + Math.pow(s - avgSpeed, 2), 0) / speeds.length);
+    
+    features.forEach(f => {
+        const direction = f.get('sentido_grados');
+        const speed = f.get('velocidad_kmh');
+        
+        const dirDiff = Math.abs(direction - avgDirection);
+        const speedDiff = Math.abs(speed - avgSpeed);
+        
+        let coherence = 'Coherente';
+        if (dirDiff > stdDevDirection * 1.5 || speedDiff > stdDevSpeed * 1.5) {
+            coherence = 'Atípico';
+        } else if (dirDiff > stdDevDirection * 0.75 || speedDiff > stdDevSpeed * 0.75) {
+            coherence = 'Moderado';
+        }
+        f.set('coherencia', coherence);
+    });
+
+    layer.olLayer.setStyle((feature) => {
+        const coherence = feature.get('coherencia');
+        let color = '#3b82f6'; // Azul para Coherente
+        if (coherence === 'Moderado') color = '#facc15'; // Amarillo para Moderado
+        if (coherence === 'Atípico') color = '#ef4444'; // Rojo para Atípico
+        
+        return new Style({
+            stroke: new Stroke({ color, width: 2.5 }),
+            image: new CircleStyle({ radius: 4, fill: new Fill({ color }) })
+        });
+    });
+    
+    source.changed(); // Force redraw
+    toast({ description: "Análisis de coherencia completado. Las trayectorias se han coloreado." });
+  };
+
 
   const trendlineData = useMemo(() => {
     if (!correlationResult) return [];
@@ -1749,8 +1817,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                         <div className="pt-2 border-t border-white/10 flex flex-col gap-3">
                              <div id="profile-chart-to-export" className="bg-background p-2 rounded-md">
                                 <div className="h-[250px] w-full mt-2 relative" ref={chartContainerRef}>
-                                     {/* Background Histograms */}
-                                     <div className="absolute inset-0 z-0">
+                                    <div className="absolute inset-0 z-0">
                                          <ResponsiveContainer width="100%" height="100%">
                                              <BarChart data={combinedChartData} layout="vertical" margin={{ top: 5, right: 20, left: -25, bottom: 5 }}>
                                                  <XAxis type="number" hide domain={[0, 'dataMax']} />
@@ -1763,8 +1830,6 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                              </BarChart>
                                          </ResponsiveContainer>
                                      </div>
-                                    
-                                    {/* Foreground Profile Chart */}
                                     <div className="absolute inset-0 z-10">
                                     <ResponsiveContainer width="100%" height="100%">
                                         <AreaChart 
@@ -1809,7 +1874,6 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                                  <Area key={`area-${series.datasetId}`} yAxisId={index === 0 ? 'left' : 'right'} type="monotone" dataKey={series.datasetId} name={series.name} stroke={series.color} fill={`url(#gradient-${series.datasetId})`} strokeWidth={2} connectNulls />
                                             ))}
                                             
-                                            {/* Reference Lines for Jenks Breaks */}
                                             {profileData.map((series, index) => (
                                                 series.stats.jenksBreaks.map((breakValue, i) => (
                                                     <ReferenceLine 
@@ -2309,49 +2373,23 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                 </AccordionTrigger>
                 <AccordionContent className="p-3 pt-2 space-y-3 border-t border-white/10 bg-transparent rounded-b-md">
                     <div className="space-y-1">
-                        <Label className="text-xs font-semibold">Análisis de Cúmulos (Clustering)</Label>
-                        <div className="space-y-2 p-2 border border-white/10 rounded-md">
-                            <div>
-                                <Label htmlFor="cluster-input-layer" className="text-xs">Capa de Puntos de Entrada</Label>
-                                <Select value={clusterInputLayerId} onValueChange={setClusterInputLayerId}>
-                                    <SelectTrigger id="cluster-input-layer" className="h-8 text-xs bg-black/20"><SelectValue placeholder="Seleccionar capa de puntos..." /></SelectTrigger>
-                                    <SelectContent className="bg-gray-700 text-white border-gray-600">
-                                        {pointLayers.map(l => <SelectItem key={l.id} value={l.id} className="text-xs">{l.name}</SelectItem>)}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                            <div>
-                                <Label htmlFor="cluster-distance" className="text-xs">Distancia Máx. del Cúmulo (km)</Label>
-                                <Input id="cluster-distance" type="number" value={clusterDistance} onChange={(e) => setClusterDistance(Number(e.target.value))} min="1" className="h-8 text-xs bg-black/20"/>
-                            </div>
-                            <div>
-                                <Label htmlFor="cluster-output-name" className="text-xs">Nombre de la Capa de Salida</Label>
-                                <Input id="cluster-output-name" value={clusterOutputName} onChange={(e) => setClusterOutputName(e.target.value)} placeholder="Ej: Cumulos_CapaX" className="h-8 text-xs bg-black/20"/>
-                            </div>
-                            <Button onClick={handleRunClustering} size="sm" className="w-full h-8 text-xs" disabled={!clusterInputLayerId}>
-                                <GitBranch className="mr-2 h-3.5 w-3.5" />
-                                Ejecutar Clustering
-                            </Button>
-                        </div>
-                    </div>
-                    <div className="space-y-1">
                         <Label className="text-xs font-semibold">Cálculo de Vectores de Desplazamiento</Label>
                         <div className="space-y-2 p-2 border border-white/10 rounded-md">
                             <div>
                                 <Label htmlFor="traj-layer1" className="text-xs">Capa de Origen (Tiempo 1)</Label>
                                 <Select value={trajectoryLayer1Id} onValueChange={setTrajectoryLayer1Id}>
-                                    <SelectTrigger id="traj-layer1" className="h-8 text-xs bg-black/20"><SelectValue placeholder="Seleccionar capa inicial..." /></SelectTrigger>
+                                    <SelectTrigger id="traj-layer1" className="h-8 text-xs bg-black/20"><SelectValue placeholder="Seleccionar capa de centroides..." /></SelectTrigger>
                                     <SelectContent className="bg-gray-700 text-white border-gray-600">
-                                        {pointLayers.map(l => <SelectItem key={l.id} value={l.id} className="text-xs">{l.name}</SelectItem>)}
+                                        {pointLayers.filter(l => l.name.toLowerCase().startsWith('centroides')).map(l => <SelectItem key={l.id} value={l.id} className="text-xs">{l.name}</SelectItem>)}
                                     </SelectContent>
                                 </Select>
                             </div>
                             <div>
                                 <Label htmlFor="traj-layer2" className="text-xs">Capa de Destino (Tiempo 2)</Label>
                                 <Select value={trajectoryLayer2Id} onValueChange={setTrajectoryLayer2Id}>
-                                    <SelectTrigger id="traj-layer2" className="h-8 text-xs bg-black/20"><SelectValue placeholder="Seleccionar capa final..." /></SelectTrigger>
+                                    <SelectTrigger id="traj-layer2" className="h-8 text-xs bg-black/20"><SelectValue placeholder="Seleccionar capa de centroides..." /></SelectTrigger>
                                     <SelectContent className="bg-gray-700 text-white border-gray-600">
-                                        {pointLayers.map(l => <SelectItem key={l.id} value={l.id} className="text-xs">{l.name}</SelectItem>)}
+                                        {pointLayers.filter(l => l.name.toLowerCase().startsWith('centroides')).map(l => <SelectItem key={l.id} value={l.id} className="text-xs">{l.name}</SelectItem>)}
                                     </SelectContent>
                                 </Select>
                             </div>
@@ -2367,6 +2405,26 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                 <Wind className="mr-2 h-3.5 w-3.5" />
                                 Calcular Trayectorias
                             </Button>
+                        </div>
+                    </div>
+                     <Separator className="bg-white/10" />
+                     <div className="space-y-1">
+                        <Label className="text-xs font-semibold">Análisis de Coherencia de Vectores</Label>
+                        <div className="space-y-2 p-2 border border-white/10 rounded-md">
+                           <div>
+                                <Label htmlFor="coherence-layer" className="text-xs">Capa de Trayectorias</Label>
+                                <Select value={coherenceLayerId} onValueChange={setCoherenceLayerId}>
+                                    <SelectTrigger id="coherence-layer" className="h-8 text-xs bg-black/20"><SelectValue placeholder="Seleccionar capa de trayectoria..." /></SelectTrigger>
+                                    <SelectContent className="bg-gray-700 text-white border-gray-600">
+                                        {trajectoryLayers.map(l => <SelectItem key={l.id} value={l.id} className="text-xs">{l.name}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <Button onClick={handleAnalyzeCoherence} size="sm" className="w-full h-8 text-xs" disabled={!coherenceLayerId}>
+                                <Activity className="mr-2 h-3.5 w-3.5" />
+                                Analizar Coherencia
+                            </Button>
+                             <p className="text-xs text-gray-400">Colorea los vectores según su coherencia con el patrón de movimiento general (Azul: Coherente, Amarillo: Moderado, Rojo: Atípico).</p>
                         </div>
                     </div>
                 </AccordionContent>
@@ -2425,4 +2483,5 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
 
