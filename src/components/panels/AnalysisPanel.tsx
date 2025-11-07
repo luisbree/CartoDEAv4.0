@@ -36,7 +36,7 @@ import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 import { Style, Text as TextStyle, Fill, Stroke, Circle as CircleStyle } from 'ol/style';
 import type { Map } from 'ol';
 import Draw, { createBox } from 'ol/interaction/Draw';
-import { ResponsiveContainer, XAxis, YAxis, Tooltip, AreaChart, Area, CartesianGrid, ReferenceLine, Legend, ScatterChart, Scatter, Line, BarChart, Bar } from 'recharts';
+import { ResponsiveContainer, XAxis, YAxis, Tooltip, AreaChart, Area, CartesianGrid, ReferenceLine, Legend, ScatterChart, Scatter, Line, BarChart, Bar, Cell } from 'recharts';
 import { cn } from '@/lib/utils';
 import { transform } from 'ol/proj';
 import { Slider } from '../ui/slider';
@@ -88,7 +88,7 @@ interface ProfileDataSeries {
     unit: string;
     points: ProfilePoint[];
     stats: ProfileStats;
-    histogram: { value: number; count: number, key: string }[];
+    histogram: { value: number; count: number; key: string; }[];
 }
 
 interface ProfileStats {
@@ -517,7 +517,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                     const binMin = stats.min + i * binSize;
                     const binMax = binMin + binSize;
                     const count = validValues.filter(v => v >= binMin && v < binMax).length;
-                    histogram.push({ value: (binMin + binMax) / 2, count, key: `hist-${i}` });
+                    histogram.push({ value: (binMin + binMax) / 2, count, key: `hist-${nanoid()}` });
                 }
             }
             
@@ -1877,7 +1877,11 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                                      <YAxis key={`y-hist-${series.datasetId}`} type="number" dataKey={series.datasetId} hide yAxisId={index === 0 ? 'left' : 'right'} domain={[index === 0 ? yAxisDomainLeft.min : yAxisDomainRight.min, index === 0 ? yAxisDomainLeft.max : yAxisDomainRight.max]} />
                                                  ))}
                                                  {profileData.map((series, index) => (
-                                                      <Bar key={`bar-${series.datasetId}`} dataKey="count" data={series.histogram} name={series.name} yAxisId={index === 0 ? 'left' : 'right'} fill={series.color} fillOpacity={0.1} isAnimationActive={false} />
+                                                     <Bar key={`bar-${series.datasetId}`} dataKey="count" data={series.histogram} name={series.name} yAxisId={index === 0 ? 'left' : 'right'} isAnimationActive={false}>
+                                                        {series.histogram.map((entry) => (
+                                                          <Cell key={entry.key} fill={series.color} fillOpacity={0.1} />
+                                                        ))}
+                                                     </Bar>
                                                  ))}
                                              </BarChart>
                                          </ResponsiveContainer>
@@ -2544,6 +2548,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
 
 
 
