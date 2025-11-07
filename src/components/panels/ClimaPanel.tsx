@@ -7,7 +7,7 @@ import DraggablePanel from './DraggablePanel';
 import { CloudRain, RadioTower, Satellite, Loader2, Zap } from 'lucide-react';
 import { Button } from '../ui/button';
 import { useToast } from '@/hooks/use-toast';
-import type { MapLayer, LayerGroup } from '@/lib/types';
+import type { MapLayer, LayerGroup, VectorMapLayer } from '@/lib/types';
 import TileLayer from 'ol/layer/Tile';
 import VectorLayer from 'ol/layer/Vector';
 import { getGoesLayers, getGoesStormCores } from '@/ai/flows/gee-flow';
@@ -210,9 +210,10 @@ const handleDetectStormCores = async () => {
 
     const selectedLayer = goesLayers.find(l => l.id === selectedGoesLayerId);
     const imageId = selectedLayer?.geeParams?.imageId;
+    const layerGeeParams = selectedLayer?.geeParams; // Capture full GEE params including metadata
 
-    if (!imageId) {
-        toast({ description: "La capa GOES seleccionada no tiene un ID de imagen válido.", variant: "destructive" });
+    if (!imageId || !layerGeeParams) {
+        toast({ description: "La capa GOES seleccionada no tiene un ID de imagen o metadatos válidos.", variant: "destructive" });
         return;
     }
 
@@ -276,7 +277,7 @@ const handleDetectStormCores = async () => {
             id: polygonLayerId, name: polygonLayerName, olLayer: polygonOlLayer, visible: true, opacity: 0.7, type: 'analysis'
         }, true);
 
-        // 5. Create Centroid Layer
+        // 5. Create Centroid Layer and attach GEE params
         const centroidFeatures = olFormat.readFeatures(centroidsGeoJSON);
         centroidFeatures.forEach(f => f.setId(nanoid()));
         const centroidSource = new VectorSource({ features: centroidFeatures });
@@ -284,12 +285,26 @@ const handleDetectStormCores = async () => {
         const centroidLayerName = `Centroides de ${polygonLayerName}`;
         const centroidOlLayer = new VectorLayer({
             source: centroidSource,
-            properties: { id: centroidLayerId, name: centroidLayerName, type: 'analysis' },
+            properties: {
+                id: centroidLayerId,
+                name: centroidLayerName,
+                type: 'analysis',
+                // Attach the original GEE metadata here
+                geeParams: layerGeeParams,
+            },
             style: centroidStyle,
         });
         onAddLayer({
-            id: centroidLayerId, name: centroidLayerName, olLayer: centroidOlLayer, visible: true, opacity: 1, type: 'analysis'
+            id: centroidLayerId,
+            name: centroidLayerName,
+            olLayer: centroidOlLayer,
+            visible: true,
+            opacity: 1,
+            type: 'analysis',
+            // Also add geeParams to the MapLayer object for easy access
+            geeParams: layerGeeParams,
         }, true);
+
 
         toast({ description: "Se añadieron los núcleos de tormenta y sus centroides." });
 

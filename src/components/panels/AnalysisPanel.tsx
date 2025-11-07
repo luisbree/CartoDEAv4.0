@@ -68,7 +68,7 @@ const SectionHeader: React.FC<{ icon: React.ElementType; title: string; }> = ({ 
 );
 
 const analysisLayerStyle = new Style({
-    stroke: new Stroke({ color: 'rgba(233, 196, 106, 1)', width: 2.5, lineDash: [8, 4] }),
+    stroke: new Stroke({ color: 'rgba(233, 196, 106, 1)', width: 2.5 }),
     fill: new Fill({ color: 'rgba(233, 196, 106, 0.2)' }),
 });
 
@@ -1448,9 +1448,9 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         return;
     }
 
-    // Attempt to get timestamps from GEE metadata
-    const time1 = layer1.geeParams?.metadata?.timestamp;
-    const time2 = layer2.geeParams?.metadata?.timestamp;
+    // This logic relies on the layer properties set in ClimaPanel
+    const time1 = layer1.olLayer.get('geeParams')?.metadata?.timestamp;
+    const time2 = layer2.olLayer.get('geeParams')?.metadata?.timestamp;
 
     if (!time1 || !time2) {
         toast({
@@ -1666,13 +1666,13 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                 <div className="h-[250px] w-full mt-2 relative" ref={chartContainerRef}>
                                     {/* Background Histograms */}
                                     <ResponsiveContainer width="100%" height="100%" className="absolute inset-0 z-0">
-                                      <BarChart layout="vertical" margin={{ top: 5, right: 20, left: -25, bottom: 5 }}>
+                                      <BarChart data={combinedChartData} layout="vertical" margin={{ top: 5, right: 20, left: -25, bottom: 5 }}>
                                           <XAxis type="number" hide domain={[0, 'dataMax']} />
                                           {profileData.map((series, index) => (
                                               <YAxis key={`y-hist-${series.datasetId}`} type="number" dataKey="value" hide yAxisId={index === 0 ? 'left' : 'right'} domain={[index === 0 ? yAxisDomainLeft.min : yAxisDomainRight.min, index === 0 ? yAxisDomainLeft.max : yAxisDomainRight.max]} />
                                           ))}
                                           {profileData.map((series, index) => (
-                                               <Bar key={`bar-${series.datasetId}`} data={series.histogram} dataKey="count" name={series.name} yAxisId={index === 0 ? 'left' : 'right'} fill={series.color} fillOpacity={0.1} isAnimationActive={false} barSize={10} />
+                                               <Bar key={`bar-${series.datasetId}`} data={series.histogram} dataKey="count" name={series.name} yAxisId={index === 0 ? 'left' : 'right'} fill={series.color} fillOpacity={0.1} isAnimationActive={false} />
                                           ))}
                                       </BarChart>
                                     </ResponsiveContainer>
@@ -2290,6 +2290,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 export default AnalysisPanel;
 
     
+
 
 
 
