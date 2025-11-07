@@ -22,7 +22,7 @@ import { nanoid } from 'nanoid';
 import GeoJSON from 'ol/format/GeoJSON';
 import VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
-import { intersect, featureCollection, difference, cleanCoords, length as turfLength, along as turfAlong, clustersDbscan, nearestPoint as turfNearestPoint, distance as turfDistance, bearing as turfBearing, destination, bezierSpline, centroid, clusterEach } from '@turf/turf';
+import { intersect, featureCollection, difference, cleanCoords, length as turfLength, along as turfAlong, clustersDbscan, nearestPoint as turfNearestPoint, bearing as turfBearing, destination, bezierSpline, centroid, distance as turfDistance, clusterEach } from '@turf/turf';
 import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as TurfMultiPolygon, FeatureCollection as TurfFeatureCollection, Geometry as TurfGeometry, Point as TurfPoint, LineString as TurfLineString } from 'geojson';
 import { multiPolygon, lineString as turfLineString, point as turfPoint, polygon as turfPolygon, convex } from '@turf/helpers';
 import Feature from 'ol/Feature';
@@ -1516,6 +1516,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         return;
     }
 
+    // Correctly get timestamp from geeParams.metadata
     const time1 = layer1.geeParams?.metadata?.timestamp;
     const time2 = layer2.geeParams?.metadata?.timestamp;
 
@@ -1535,8 +1536,9 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         toast({ description: "El intervalo de tiempo entre las capas es cero o inválido.", variant: 'destructive' });
         return;
     }
-
+    
     const format = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
+    const formatForMap = new GeoJSON({ dataProjection: 'EPSG:4326', featureProjection: 'EPSG:3857' });
     const features1GeoJSON = format.writeFeaturesObject(source1.getFeatures());
     const features2GeoJSON = format.writeFeaturesObject(source2.getFeatures());
 
@@ -1579,7 +1581,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         });
         
         const arrow = new Style({
-            geometry: new Point(feature.getGeometry()!.getLastCoordinate()),
+            geometry: new Point((feature.getGeometry() as OlLineString).getLastCoordinate()),
             image: new CircleStyle({
                 fill: new Fill({ color: color }),
                 radius: 3
@@ -1587,7 +1589,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         });
 
         const label = new Style({
-            geometry: new Point(feature.getGeometry()!.getFlatMidpoint()),
+            geometry: new Point((feature.getGeometry() as OlLineString).getFlatMidpoint()),
             text: new TextStyle({
                 text: `${speed.toFixed(1)} km/h`,
                 font: '10px sans-serif',
@@ -1619,14 +1621,27 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   };
   
   const handleRunFeatureTracking = async () => {
-    const layer1 = pointLayers.find(l => l.id === trackingLayer1Id);
-    const layer2 = pointLayers.find(l => l.id === trackingLayer2Id);
+    const layer1 = pointLayers.find(l => l.id === trackingLayer1Id) as VectorMapLayer | undefined;
+    const layer2 = pointLayers.find(l => l.id === trackingLayer2Id) as VectorMapLayer | undefined;
 
     if (!layer1 || !layer2 || trackingRadius <= 0 || !trackingField) {
-        toast({ description: "Seleccione dos capas de puntos, un campo de atributo y un radio de búsqueda válido.", variant: 'destructive' });
+        toast({ description: "Seleccione dos capas de puntos, un campo de atributo y un radio de búsqueda válido.", variant: "destructive" });
         return;
     }
     
+    // Correctly get timestamp from geeParams.metadata
+    const time1 = layer1.olLayer.get('geeParams')?.metadata?.timestamp;
+    const time2 = layer2.olLayer.get('geeParams')?.metadata?.timestamp;
+
+    if (!time1 || !time2) {
+        toast({
+            title: "Faltan Metadatos de Tiempo",
+            description: "No se pudo encontrar la información de tiempo en las capas de centroides. Asegúrese de que fueron generadas por la herramienta 'Detectar Núcleos de Tormenta'.",
+            variant: "destructive",
+        });
+        return;
+    }
+
     setTrackingIsLoading(true);
     toast({ description: "Iniciando seguimiento de entidades..." });
 
@@ -1635,7 +1650,9 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         sourceFeatures: layer1.olLayer.getSource()!.getFeatures(),
         targetFeatures: layer2.olLayer.getSource()!.getFeatures(),
         attributeField: trackingField,
-        maxDistanceKm: trackingRadius
+        maxDistanceKm: trackingRadius,
+        time1,
+        time2
       });
       
       if (trackingResultFeatures.length === 0) {
@@ -1690,25 +1707,30 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     const directions = features.map(f => f.get('sentido_grados')).filter(d => typeof d === 'number') as number[];
     const magnitudes = features.map(f => f.get(coherenceMagnitudeField)).filter(s => typeof s === 'number') as number[];
     
-    if (directions.length === 0 || magnitudes.length === 0) {
-        toast({ description: 'Las entidades no tienen los atributos de dirección o magnitud requeridos.', variant: 'destructive' });
+    if (directions.length === 0 || magnitudes.length === 0 || directions.length !== magnitudes.length) {
+        toast({ description: 'Las entidades no tienen los atributos de dirección o magnitud requeridos o hay un desajuste.', variant: 'destructive' });
         return;
     }
     
     const avgMagnitude = magnitudes.reduce((a, b) => a + b, 0) / magnitudes.length;
-    const avgX = directions.reduce((sum, d) => sum + Math.cos(d * Math.PI / 180), 0);
-    const avgY = directions.reduce((sum, d) => sum + Math.sin(d * Math.PI / 180), 0);
+    const avgX = directions.reduce((sum, d) => sum + Math.cos(d * Math.PI / 180), 0) / directions.length;
+    const avgY = directions.reduce((sum, d) => sum + Math.sin(d * Math.PI / 180), 0) / directions.length;
     const avgAngleRad = Math.atan2(avgY, avgX);
     const avgDirection = (avgAngleRad * 180 / Math.PI + 360) % 360;
 
-    const stdDevDirection = Math.sqrt(directions.reduce((sum, d) => sum + Math.pow((d - avgDirection + 360) % 360, 2), 0) / directions.length);
+    const stdDevDirection = Math.sqrt(directions.reduce((sum, d) => {
+        let diff = Math.abs(d - avgDirection);
+        if (diff > 180) diff = 360 - diff; // Handle circular difference
+        return sum + Math.pow(diff, 2);
+    }, 0) / directions.length);
     const stdDevMagnitude = Math.sqrt(magnitudes.reduce((sum, s) => sum + Math.pow(s - avgMagnitude, 2), 0) / magnitudes.length);
     
     features.forEach(f => {
         const direction = f.get('sentido_grados');
         const magnitude = f.get(coherenceMagnitudeField);
         
-        const dirDiff = Math.abs(direction - avgDirection);
+        let dirDiff = Math.abs(direction - avgDirection);
+        if (dirDiff > 180) dirDiff = 360 - dirDiff;
         const magDiff = Math.abs(magnitude - avgMagnitude);
         
         let coherence = 'Coherente';
@@ -2522,6 +2544,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
 
 
 

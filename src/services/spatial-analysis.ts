@@ -679,96 +679,112 @@ export async function performFeatureTracking({
   sourceFeatures,
   targetFeatures,
   attributeField,
-  maxDistanceKm
+  maxDistanceKm,
+  time1,
+  time2,
 }: {
   sourceFeatures: Feature<Geometry>[];
   targetFeatures: Feature<Geometry>[];
   attributeField: string;
   maxDistanceKm: number;
+  time1: string; // ISO string
+  time2: string; // ISO string
 }): Promise<Feature<OlLineString>[]> {
-  if (sourceFeatures.length === 0 || targetFeatures.length === 0) {
-    throw new Error("Las capas de origen y destino deben contener entidades.");
-  }
-  
-  const format = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
-  const formatForMap = new GeoJSON({ dataProjection: 'EPSG:4326', featureProjection: 'EPSG:3857' });
-
-  const sourceGeoJSON = format.writeFeaturesObject(sourceFeatures) as TurfFeatureCollection<TurfPoint>;
-  const targetGeoJSON = format.writeFeaturesObject(targetFeatures) as TurfFeatureCollection<TurfPoint>;
-  
-  const attributeValues = [...sourceGeoJSON.features, ...targetGeoJSON.features]
-    .map(f => f.properties?.[attributeField])
-    .filter(v => typeof v === 'number' && isFinite(v)) as number[];
-
-  if (attributeValues.length === 0) {
-      throw new Error(`El campo '${attributeField}' no contiene valores numéricos válidos en ninguna de las capas.`);
-  }
-
-  const maxAttr = Math.max(...attributeValues);
-  const minAttr = Math.min(...attributeValues);
-  const attrRange = maxAttr - minAttr;
-  
-  const allPotentialMatches: { sourceIndex: number; targetIndex: number; cost: number; distance: number; attrDiff: number }[] = [];
-
-  // 1. Calculate cost for all potential pairs within the search radius
-  sourceGeoJSON.features.forEach((p1, index1) => {
-    const p1Attr = p1.properties?.[attributeField];
-    if (typeof p1Attr !== 'number') return;
-    
-    targetGeoJSON.features.forEach((p2, index2) => {
-      const distance = turfDistance(p1, p2, { units: 'kilometers' });
-      
-      if (distance <= maxDistanceKm) {
-        const p2Attr = p2.properties?.[attributeField];
-        if (typeof p2Attr !== 'number') return;
-        
-        const distNorm = distance / maxDistanceKm;
-        const attrDiff = Math.abs(p1Attr - p2Attr);
-        const attrDiffNorm = attrRange > 0 ? attrDiff / attrRange : 0;
-        
-        // Simple cost function (can be weighted later)
-        const cost = (0.5 * distNorm) + (0.5 * attrDiffNorm);
-
-        allPotentialMatches.push({ sourceIndex: index1, targetIndex: index2, cost, distance, attrDiff });
-      }
-    });
-  });
-
-  // 2. Greedy assignment: find the best match iteratively
-  allPotentialMatches.sort((a, b) => a.cost - b.cost);
-  
-  const assignedSource = new Set<number>();
-  const assignedTarget = new Set<number>();
-  const finalMatches: { p1: TurfFeature<TurfPoint>, p2: TurfFeature<TurfPoint>, cost: number, distance: number, attrDiff: number }[] = [];
-  
-  for (const match of allPotentialMatches) {
-    if (!assignedSource.has(match.sourceIndex) && !assignedTarget.has(match.targetIndex)) {
-      finalMatches.push({
-          p1: sourceGeoJSON.features[match.sourceIndex],
-          p2: targetGeoJSON.features[match.targetIndex],
-          cost: match.cost,
-          distance: match.distance,
-          attrDiff: match.attrDiff
-      });
-      assignedSource.add(match.sourceIndex);
-      assignedTarget.add(match.targetIndex);
+    if (sourceFeatures.length === 0 || targetFeatures.length === 0) {
+        throw new Error("Las capas de origen y destino deben contener entidades.");
     }
-  }
+  
+    const timeDiffMs = Math.abs(new Date(time2).getTime() - new Date(time1).getTime());
+    const timeDiffHours = timeDiffMs / (1000 * 60 * 60);
 
-  // 3. Create result features
-  const trajectoryFeatures: Feature<OlLineString>[] = [];
-  for (const match of finalMatches) {
-    const line = turfLineString([match.p1.geometry.coordinates, match.p2.geometry.coordinates]);
-    const olFeature = formatForMap.readFeature(line) as Feature<OlLineString>;
+    if (timeDiffHours <= 0) {
+        throw new Error("El intervalo de tiempo entre las capas es cero o inválido.");
+    }
+  
+    const format = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
+    const formatForMap = new GeoJSON({ dataProjection: 'EPSG:4326', featureProjection: 'EPSG:3857' });
+
+    const sourceGeoJSON = format.writeFeaturesObject(sourceFeatures) as TurfFeatureCollection<TurfPoint>;
+    const targetGeoJSON = format.writeFeaturesObject(targetFeatures) as TurfFeatureCollection<TurfPoint>;
+  
+    const attributeValues = [...sourceGeoJSON.features, ...targetGeoJSON.features]
+        .map(f => f.properties?.[attributeField])
+        .filter(v => typeof v === 'number' && isFinite(v)) as number[];
+
+    if (attributeValues.length === 0) {
+        throw new Error(`El campo '${attributeField}' no contiene valores numéricos válidos en ninguna de las capas.`);
+    }
+
+    const maxAttr = Math.max(...attributeValues);
+    const minAttr = Math.min(...attributeValues);
+    const attrRange = maxAttr - minAttr;
+  
+    const allPotentialMatches: { sourceIndex: number; targetIndex: number; cost: number; distance: number; attrDiff: number }[] = [];
+
+    // 1. Calculate cost for all potential pairs within the search radius
+    sourceGeoJSON.features.forEach((p1, index1) => {
+        const p1Attr = p1.properties?.[attributeField];
+        if (typeof p1Attr !== 'number') return;
     
-    olFeature.setProperties({
-        costo_similitud: parseFloat(match.cost.toFixed(4)),
-        distancia_km: parseFloat(match.distance.toFixed(2)),
-        variacion_attr: parseFloat(match.attrDiff.toFixed(2)),
+        targetGeoJSON.features.forEach((p2, index2) => {
+            const distance = turfDistance(p1, p2, { units: 'kilometers' });
+      
+            if (distance <= maxDistanceKm) {
+                const p2Attr = p2.properties?.[attributeField];
+                if (typeof p2Attr !== 'number') return;
+        
+                const distNorm = distance / maxDistanceKm;
+                const attrDiff = Math.abs(p1Attr - p2Attr);
+                const attrDiffNorm = attrRange > 0 ? attrDiff / attrRange : 0;
+        
+                // Simple cost function (can be weighted later)
+                const cost = (0.5 * distNorm) + (0.5 * attrDiffNorm);
+
+                allPotentialMatches.push({ sourceIndex: index1, targetIndex: index2, cost, distance, attrDiff });
+            }
+        });
     });
-    olFeature.setId(nanoid());
-    trajectoryFeatures.push(olFeature);
-  }
+
+    // 2. Greedy assignment: find the best match iteratively
+    allPotentialMatches.sort((a, b) => a.cost - b.cost);
+  
+    const assignedSource = new Set<number>();
+    const assignedTarget = new Set<number>();
+    const finalMatches: { p1: TurfFeature<TurfPoint>, p2: TurfFeature<TurfPoint>, cost: number, distance: number, attrDiff: number }[] = [];
+  
+    for (const match of allPotentialMatches) {
+        if (!assignedSource.has(match.sourceIndex) && !assignedTarget.has(match.targetIndex)) {
+            finalMatches.push({
+                p1: sourceGeoJSON.features[match.sourceIndex],
+                p2: targetGeoJSON.features[match.targetIndex],
+                cost: match.cost,
+                distance: match.distance,
+                attrDiff: match.attrDiff
+            });
+            assignedSource.add(match.sourceIndex);
+            assignedTarget.add(match.targetIndex);
+        }
+    }
+
+    // 3. Create result features
+    const trajectoryFeatures: Feature<OlLineString>[] = [];
+    for (const match of finalMatches) {
+        const line = turfLineString([match.p1.geometry.coordinates, match.p2.geometry.coordinates]);
+        const olFeature = formatForMap.readFeature(line) as Feature<OlLineString>;
+    
+        const bearingVal = bearing(match.p1, match.p2);
+        const speed = match.distance / timeDiffHours;
+
+        olFeature.setProperties({
+            costo_similitud: parseFloat(match.cost.toFixed(4)),
+            distancia_km: parseFloat(match.distance.toFixed(2)),
+            variacion_attr: parseFloat(match.attrDiff.toFixed(2)),
+            velocidad_kmh: parseFloat(speed.toFixed(2)),
+            sentido_grados: parseFloat(bearingVal.toFixed(2)),
+        });
+        olFeature.setId(nanoid());
+        trajectoryFeatures.push(olFeature);
+    }
 
   return trajectoryFeatures;
 }
