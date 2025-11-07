@@ -1,8 +1,9 @@
 
+
 "use client";
 
 import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as TurfMultiPolygon, FeatureCollection as TurfFeatureCollection, Geometry as TurfGeometry, Point as TurfPoint, LineString as TurfLineString } from 'geojson';
-import { area as turfArea, intersect, featureCollection, buffer as turfBuffer, union, convex, concave, nearestPoint, along, length as turfLength, bearing, destination, bezierSpline, centroid, distance as turfDistance } from '@turf/turf';
+import { area as turfArea, intersect, featureCollection, buffer as turfBuffer, union, convex, concave, nearestPoint as turfNearestPoint, along, length as turfLength, bearing, destination, bezierSpline, centroid, distance as turfDistance } from '@turf/turf';
 import { multiPolygon, lineString as turfLineString, polygon as turfPolygon } from '@turf/helpers';
 import type Feature from 'ol/Feature';
 import GeoJSON from 'ol/format/GeoJSON';
@@ -367,7 +368,7 @@ export async function calculateOptimalConcavity({ features }: HullParams): Promi
             const otherPoints = featureCollection(pointsToProcess.filter((_, index) => i !== index));
             
             if (otherPoints.features.length > 0) {
-                const nearest = nearestPoint(currentPoint, otherPoints);
+                const nearest = turfNearestPoint(currentPoint, otherPoints);
                 distances.push(nearest.properties.distanceToPoint);
             }
         }

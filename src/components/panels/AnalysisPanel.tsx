@@ -1,3 +1,5 @@
+
+
 'use client';
 
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
@@ -13,14 +15,14 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { DraftingCompass, Scissors, Layers, CircleDotDashed, MinusSquare, BoxSelect, Droplet, Sparkles, Loader2, Combine, Minus, Plus, TrendingUp, Waypoints as CrosshairIcon, Merge, LineChart, PenLine, Eraser, Brush, ZoomIn, Download, FileImage, FileText, CheckCircle, GitCommit, GitBranch, Wind, Layers as LayersIcon, LocateFixed } from 'lucide-react';
+import { DraftingCompass, Scissors, Layers, CircleDotDashed, MinusSquare, BoxSelect, Droplet, Sparkles, Loader2, Combine, Minus, Plus, TrendingUp, Waypoints as CrosshairIcon, Merge, LineChart, PenLine, Eraser, Brush, ZoomIn, Download, FileImage, FileText, CheckCircle, GitCommit, GitBranch, Wind, Layers as LayersIcon, LocateFixed, Eye } from 'lucide-react';
 import type { MapLayer, VectorMapLayer, ProfilePoint } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { nanoid } from 'nanoid';
 import GeoJSON from 'ol/format/GeoJSON';
 import VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
-import { intersect, featureCollection, difference, cleanCoords, length as turfLength, along as turfAlong, clustersDbscan, nearestPoint as turfNearestPoint, distance as turfDistance, bearing as turfBearing, destination, bezierSpline, centroid } from '@turf/turf';
+import { intersect, featureCollection, difference, cleanCoords, length as turfLength, along as turfAlong, clustersDbscan, nearestPoint as turfNearestPoint, distance as turfDistance, bearing as turfBearing, destination, bezierSpline, centroid, clusterEach } from '@turf/turf';
 import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as TurfMultiPolygon, FeatureCollection as TurfFeatureCollection, Geometry as TurfGeometry, Point as TurfPoint, LineString as TurfLineString } from 'geojson';
 import { multiPolygon, lineString as turfLineString, point as turfPoint, polygon as turfPolygon, convex } from '@turf/helpers';
 import Feature from 'ol/Feature';
@@ -42,7 +44,6 @@ import Overlay from 'ol/Overlay';
 import * as htmlToImage from 'html-to-image';
 import jsPDF from 'jspdf';
 import { Separator } from '../ui/separator';
-import { clusterEach } from '@turf/clusters';
 
 
 interface AnalysisPanelProps {
@@ -66,8 +67,8 @@ const SectionHeader: React.FC<{ icon: React.ElementType; title: string; }> = ({ 
 );
 
 const analysisLayerStyle = new Style({
-    stroke: new Stroke({ color: 'rgba(233, 196, 106, 1)', width: 2.5 }),
-    fill: new Fill({ color: 'rgba(233, 196, 106, 0.2)' }),
+    stroke: new Stroke({ color: 'rgba(255, 107, 107, 1)', width: 2.5 }),
+    fill: new Fill({ color: 'rgba(255, 107, 107, 0.2)' }),
 });
 
 const profilePointsStyle = new Style({
@@ -1481,7 +1482,6 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         return;
     }
 
-    // This logic relies on the layer properties set in ClimaPanel
     const time1 = layer1.olLayer.get('geeParams')?.metadata?.timestamp;
     const time2 = layer2.olLayer.get('geeParams')?.metadata?.timestamp;
 
@@ -1749,21 +1749,24 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                         <div className="pt-2 border-t border-white/10 flex flex-col gap-3">
                              <div id="profile-chart-to-export" className="bg-background p-2 rounded-md">
                                 <div className="h-[250px] w-full mt-2 relative" ref={chartContainerRef}>
-                                    {/* Background Histograms */}
-                                    <ResponsiveContainer width="100%" height="100%" className="absolute inset-0 z-0">
-                                      <BarChart data={profileData[0].histogram} layout="vertical" margin={{ top: 5, right: 20, left: -25, bottom: 5 }}>
-                                          <XAxis type="number" hide domain={[0, 'dataMax']} />
-                                          {profileData.map((series, index) => (
-                                              <YAxis key={`y-hist-${series.datasetId}`} type="number" dataKey="value" hide yAxisId={index === 0 ? 'left' : 'right'} domain={[index === 0 ? yAxisDomainLeft.min : yAxisDomainLeft.max, index === 0 ? yAxisDomainRight.min : yAxisDomainRight.max]} />
-                                          ))}
-                                          {profileData.map((series, index) => (
-                                               <Bar key={`bar-${series.datasetId}`} data={series.histogram} dataKey="count" name={series.name} yAxisId={index === 0 ? 'left' : 'right'} fill={series.color} fillOpacity={0.1} isAnimationActive={false} />
-                                          ))}
-                                      </BarChart>
-                                    </ResponsiveContainer>
+                                     {/* Background Histograms */}
+                                     <div className="absolute inset-0 z-0">
+                                         <ResponsiveContainer width="100%" height="100%">
+                                             <BarChart data={combinedChartData} layout="vertical" margin={{ top: 5, right: 20, left: -25, bottom: 5 }}>
+                                                 <XAxis type="number" hide domain={[0, 'dataMax']} />
+                                                 {profileData.map((series, index) => (
+                                                     <YAxis key={`y-hist-${series.datasetId}`} type="number" dataKey={series.datasetId} hide yAxisId={index === 0 ? 'left' : 'right'} domain={[index === 0 ? yAxisDomainLeft.min : yAxisDomainRight.min, index === 0 ? yAxisDomainLeft.max : yAxisDomainRight.max]} />
+                                                 ))}
+                                                 {profileData.map((series, index) => (
+                                                      <Bar key={`bar-${series.datasetId}`} dataKey="count" data={series.histogram} name={series.name} yAxisId={index === 0 ? 'left' : 'right'} fill={series.color} fillOpacity={0.1} isAnimationActive={false} />
+                                                 ))}
+                                             </BarChart>
+                                         </ResponsiveContainer>
+                                     </div>
                                     
                                     {/* Foreground Profile Chart */}
-                                    <ResponsiveContainer width="100%" height="100%" className="absolute inset-0 z-10">
+                                    <div className="absolute inset-0 z-10">
+                                    <ResponsiveContainer width="100%" height="100%">
                                         <AreaChart 
                                           data={combinedChartData} 
                                           margin={{ top: 5, right: 20, left: -25, bottom: 5 }}
@@ -1820,6 +1823,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                             ))}
                                         </AreaChart>
                                     </ResponsiveContainer>
+                                    </div>
                                 </div>
                             </div>
                             
@@ -2421,3 +2425,4 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
