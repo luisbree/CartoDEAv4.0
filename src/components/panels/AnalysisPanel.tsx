@@ -22,7 +22,7 @@ import { nanoid } from 'nanoid';
 import GeoJSON from 'ol/format/GeoJSON';
 import VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
-import { intersect, featureCollection, difference, cleanCoords, length as turfLength, along as turfAlong, clustersDbscan, nearestPoint as turfNearestPoint, bearing as turfBearing, destination, bezierSpline, centroid, distance as turfDistance, clusterEach } from '@turf/turf';
+import { intersect, featureCollection, difference, cleanCoords, length as turfLength, along as turfAlong, clustersDbscan, nearestPoint as turfNearestPoint, bearing as turfBearing, destination, bezierSpline, centroid, distance as turfDistance } from '@turf/turf';
 import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as TurfMultiPolygon, FeatureCollection as TurfFeatureCollection, Geometry as TurfGeometry, Point as TurfPoint, LineString as TurfLineString } from 'geojson';
 import { multiPolygon, lineString as turfLineString, point as turfPoint, polygon as turfPolygon, convex } from '@turf/helpers';
 import Feature from 'ol/Feature';
@@ -88,7 +88,7 @@ interface ProfileDataSeries {
     unit: string;
     points: ProfilePoint[];
     stats: ProfileStats;
-    histogram: { value: number; count: number }[];
+    histogram: { value: number; count: number, key: string }[];
 }
 
 interface ProfileStats {
@@ -510,14 +510,14 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 
             // --- HISTOGRAM CALCULATION ---
             const HISTOGRAM_BINS = 30;
-            const histogram: { value: number; count: number }[] = [];
+            const histogram: { value: number; count: number, key: string }[] = [];
             if (validValues.length > 1) {
                 const binSize = (stats.max - stats.min) / HISTOGRAM_BINS;
                 for (let i = 0; i < HISTOGRAM_BINS; i++) {
                     const binMin = stats.min + i * binSize;
                     const binMax = binMin + binSize;
                     const count = validValues.filter(v => v >= binMin && v < binMax).length;
-                    histogram.push({ value: (binMin + binMax) / 2, count });
+                    histogram.push({ value: (binMin + binMax) / 2, count, key: `hist-${i}` });
                 }
             }
             
@@ -2544,6 +2544,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
 
 
 
