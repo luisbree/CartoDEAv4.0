@@ -597,11 +597,9 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                 value: (binMin + binMax) / 2, // Use bin center for positioning
                 count,
                 key: `hist-${series.datasetId}-${i}`,
-                name: series.name,
-                color: series.color,
             });
         }
-        return histogram;
+        return { ...series, histogram };
     });
   }, [profileData, yAxisDomainLeft, yAxisDomainRight]);
   
@@ -1854,15 +1852,17 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                 <div className="h-[250px] w-full mt-2 relative" ref={chartContainerRef}>
                                     <div className="absolute inset-0 z-0">
                                          <ResponsiveContainer width="100%" height="100%">
-                                             <BarChart data={combinedHistogramData} layout="vertical" margin={{ top: 5, right: 20, left: -25, bottom: 5 }} barCategoryGap={0}>
-                                                 <XAxis type="number" hide domain={[0, 'dataMax']} />
-                                                 <YAxis type="number" dataKey="value" hide domain={[yAxisDomainLeft.min, yAxisDomainLeft.max]} reversed={profileData[0]?.unit === '°C'} />
-                                                  <Bar dataKey="count" isAnimationActive={false}>
-                                                      {combinedHistogramData.map((entry) => (
-                                                         <Cell key={entry.key} fill={entry.color} fillOpacity={0.1} />
-                                                     ))}
-                                                 </Bar>
-                                             </BarChart>
+                                            <BarChart data={combinedHistogramData.flatMap(s => s.histogram)} layout="vertical" margin={{ top: 5, right: 20, left: -25, bottom: 5 }} barCategoryGap={0}>
+                                                <XAxis type="number" hide domain={[0, 'dataMax']} />
+                                                <YAxis type="number" dataKey="value" hide domain={[yAxisDomainLeft.min, yAxisDomainLeft.max]} reversed={profileData[0]?.unit === '°C'} />
+                                                <Bar dataKey="count" isAnimationActive={false}>
+                                                    {combinedHistogramData.flatMap(series =>
+                                                        series.histogram.map((entry) => (
+                                                          <Cell key={entry.key} fill={series.color} fillOpacity={0.1} />
+                                                        ))
+                                                    )}
+                                                </Bar>
+                                            </BarChart>
                                          </ResponsiveContainer>
                                      </div>
                                     <div className="absolute inset-0 z-10">
@@ -2527,6 +2527,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
 
 
 
