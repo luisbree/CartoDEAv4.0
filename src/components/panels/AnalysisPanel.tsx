@@ -569,13 +569,9 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 
   const combinedHistogramData = useMemo(() => {
     if (!profileData) return [];
-    
-    // Determine the overall domain across all visible series
-    const leftDomain = yAxisDomainLeft;
-    const rightDomain = profileData.length > 1 ? yAxisDomainRight : {min: 'auto', max: 'auto'};
-    
-    return profileData.flatMap((series, index) => {
-        const domain = index === 0 ? leftDomain : rightDomain;
+
+    return profileData.flatMap((series) => {
+        const domain = yAxisDomainLeft; // Always use the primary axis domain for histogram calculation
         const min = domain.min === 'auto' ? series.stats.min : domain.min;
         const max = domain.max === 'auto' ? series.stats.max : domain.max;
 
@@ -594,14 +590,14 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
             const binMax = binMin + binSize;
             const count = allValues.filter(v => v >= binMin && v < binMax).length;
             histogram.push({
-                value: (binMin + binMax) / 2, // Use bin center for positioning
+                value: (binMin + binMax) / 2,
                 count,
                 key: `hist-${series.datasetId}-${i}`,
             });
         }
         return { ...series, histogram };
     });
-  }, [profileData, yAxisDomainLeft, yAxisDomainRight]);
+  }, [profileData, yAxisDomainLeft]);
   
   const handleCalculateCorrelation = () => {
     if (!profileData || !corrAxisX || !corrAxisY || corrAxisX === corrAxisY) {
@@ -1851,10 +1847,16 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                              <div id="profile-chart-to-export" className="bg-background p-2 rounded-md">
                                 <div className="h-[250px] w-full mt-2 relative" ref={chartContainerRef}>
                                     <div className="absolute inset-0 z-0">
-                                         <ResponsiveContainer width="100%" height="100%">
-                                            <BarChart data={combinedHistogramData.flatMap(s => s.histogram)} layout="vertical" margin={{ top: 5, right: 20, left: -25, bottom: 5 }} barCategoryGap={0}>
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <BarChart data={combinedHistogramData.flatMap(s => s.histogram)} layout="vertical" margin={{ top: 5, right: 20, left: -25, bottom: 5 }}>
                                                 <XAxis type="number" hide domain={[0, 'dataMax']} />
-                                                <YAxis type="number" dataKey="value" hide domain={[yAxisDomainLeft.min, yAxisDomainLeft.max]} reversed={profileData[0]?.unit === '°C'} />
+                                                <YAxis
+                                                    type="number"
+                                                    dataKey="value"
+                                                    hide
+                                                    domain={[yAxisDomainLeft.min, yAxisDomainLeft.max]}
+                                                    reversed={profileData[0]?.unit === '°C'}
+                                                />
                                                 <Bar dataKey="count" isAnimationActive={false}>
                                                     {combinedHistogramData.flatMap(series =>
                                                         series.histogram.map((entry) => (
@@ -1863,7 +1865,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                                     )}
                                                 </Bar>
                                             </BarChart>
-                                         </ResponsiveContainer>
+                                        </ResponsiveContainer>
                                      </div>
                                     <div className="absolute inset-0 z-10">
                                     <ResponsiveContainer width="100%" height="100%">
@@ -2527,12 +2529,3 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
-
-
-
-
-
-
-
-
-
