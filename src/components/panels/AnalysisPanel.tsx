@@ -23,7 +23,7 @@ import GeoJSON from 'ol/format/GeoJSON';
 import VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
 import { intersect, featureCollection, difference, cleanCoords, length as turfLength, along as turfAlong, clustersDbscan, nearestPoint as turfNearestPoint, distance as turfDistance, bearing as turfBearing, destination, bezierSpline, centroid } from '@turf/turf';
-import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as TurfMultiPolygon, FeatureCollection as TurfFeatureCollection, Geometry as TurfGeometry, LineString as TurfLineString, Point as TurfPoint } from 'geojson';
+import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as TurfMultiPolygon, FeatureCollection as TurfFeatureCollection, Geometry as TurfGeometry, Point as TurfPoint, LineString as TurfLineString } from 'geojson';
 import { multiPolygon, lineString as turfLineString, point as turfPoint, polygon as turfPolygon, convex } from '@turf/helpers';
 import Feature from 'ol/Feature';
 import { type Geometry, type LineString as OlLineString, Point } from 'ol/geom';
@@ -44,6 +44,7 @@ import Overlay from 'ol/Overlay';
 import * as htmlToImage from 'html-to-image';
 import jsPDF from 'jspdf';
 import { Separator } from '../ui/separator';
+import { clusterEach } from '@turf/clusters';
 
 
 interface AnalysisPanelProps {
@@ -1432,51 +1433,72 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   };
   
   const handleRunTrajectory = () => {
-    const layer1 = pointLayers.find(l => l.id === trajectoryLayer1Id);
-    const layer2 = pointLayers.find(l => l.id === trajectoryLayer2Id);
-  
+    const layer1 = allLayers.find(l => l.id === trajectoryLayer1Id) as VectorMapLayer | undefined;
+    const layer2 = allLayers.find(l => l.id === trajectoryLayer2Id) as VectorMapLayer | undefined;
+
     if (!layer1 || !layer2 || trajectorySearchRadius <= 0) {
-      toast({ description: "Seleccione dos capas de puntos y un radio de búsqueda válido.", variant: 'destructive' });
-      return;
+        toast({ description: "Seleccione dos capas de puntos y un radio de búsqueda válido.", variant: 'destructive' });
+        return;
     }
-  
+
     const source1 = layer1.olLayer.getSource();
     const source2 = layer2.olLayer.getSource();
     if (!source1 || !source2 || source1.getFeatures().length === 0 || source2.getFeatures().length === 0) {
-      toast({ description: 'Una o ambas capas no tienen entidades.', variant: 'destructive' });
-      return;
+        toast({ description: 'Una o ambas capas no tienen entidades.', variant: 'destructive' });
+        return;
     }
-  
+
+    // Attempt to get timestamps from GEE metadata
+    const time1 = layer1.geeParams?.metadata?.timestamp;
+    const time2 = layer2.geeParams?.metadata?.timestamp;
+
+    if (!time1 || !time2) {
+        toast({
+            title: "Faltan Metadatos",
+            description: "No se encontró la información de tiempo en una o ambas capas. Asegúrese de que provengan de la herramienta de detección de núcleos.",
+            variant: "destructive"
+        });
+        return;
+    }
+
+    const timeDiffMs = Math.abs(new Date(time2).getTime() - new Date(time1).getTime());
+    const timeDiffHours = timeDiffMs / (1000 * 60 * 60);
+
+    if (timeDiffHours <= 0) {
+        toast({ description: "El intervalo de tiempo entre las capas es cero o inválido.", variant: 'destructive' });
+        return;
+    }
+
     const format = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
     const features1GeoJSON = format.writeFeaturesObject(source1.getFeatures());
     const features2GeoJSON = format.writeFeaturesObject(source2.getFeatures());
-  
+
     const vectorFeatures: Feature<OlLineString>[] = [];
     for (const point1 of features1GeoJSON.features) {
-      const nearest = turfNearestPoint(point1, features2GeoJSON);
-      const distance = turfDistance(point1, nearest, { units: 'kilometers' });
-  
-      if (distance <= trajectorySearchRadius) {
-        const line = turfLineString([point1.geometry.coordinates, nearest.geometry.coordinates]);
-        const bearingVal = turfBearing(point1, nearest);
-        const speed = distance * 60; // Assuming 1 hour between layers, simplistic. km/h.
-  
-        const olFeature = new GeoJSON({ featureProjection: 'EPSG:3857' }).readFeature(line) as Feature<OlLineString>;
-        olFeature.setProperties({
-          velocidad_kmh: parseFloat(speed.toFixed(2)),
-          sentido_grados: parseFloat(bearingVal.toFixed(2)),
-          distancia_km: parseFloat(distance.toFixed(2))
-        });
-        olFeature.setId(nanoid());
-        vectorFeatures.push(olFeature);
-      }
+        const nearest = turfNearestPoint(point1, features2GeoJSON);
+        const distance = turfDistance(point1, nearest, { units: 'kilometers' });
+
+        if (distance <= trajectorySearchRadius) {
+            const line = turfLineString([point1.geometry.coordinates, nearest.geometry.coordinates]);
+            const bearingVal = turfBearing(point1, nearest);
+            const speed = distance / timeDiffHours; // Correct speed calculation
+
+            const olFeature = new GeoJSON({ featureProjection: 'EPSG:3857' }).readFeature(line) as Feature<OlLineString>;
+            olFeature.setProperties({
+                velocidad_kmh: parseFloat(speed.toFixed(2)),
+                sentido_grados: parseFloat(bearingVal.toFixed(2)),
+                distancia_km: parseFloat(distance.toFixed(2))
+            });
+            olFeature.setId(nanoid());
+            vectorFeatures.push(olFeature);
+        }
     }
-  
+
     if (vectorFeatures.length === 0) {
-      toast({ description: "No se encontraron trayectorias entre las capas con los parámetros dados." });
-      return;
+        toast({ description: "No se encontraron trayectorias entre las capas con los parámetros dados." });
+        return;
     }
-  
+
     const outputName = trajectoryOutputName.trim() || `Trayectoria ${layer1.name} a ${layer2.name}`;
     const newLayerId = `trajectory-result-${nanoid()}`;
     const newSource = new VectorSource({ features: vectorFeatures });
@@ -1650,7 +1672,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                               <YAxis key={`y-hist-${series.datasetId}`} type="number" dataKey="value" hide yAxisId={index === 0 ? 'left' : 'right'} domain={[index === 0 ? yAxisDomainLeft.min : yAxisDomainRight.min, index === 0 ? yAxisDomainLeft.max : yAxisDomainRight.max]} />
                                           ))}
                                           {profileData.map((series, index) => (
-                                              <Bar key={`bar-${series.datasetId}`} data={series.histogram} dataKey="count" name={series.name} yAxisId={index === 0 ? 'left' : 'right'} fill={series.color} fillOpacity={0.1} isAnimationActive={false} barSize={10} />
+                                               <Bar key={`bar-${series.datasetId}`} data={series.histogram} dataKey="count" name={series.name} yAxisId={index === 0 ? 'left' : 'right'} fill={series.color} fillOpacity={0.1} isAnimationActive={false} barSize={10} />
                                           ))}
                                       </BarChart>
                                     </ResponsiveContainer>
@@ -2268,6 +2290,8 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 export default AnalysisPanel;
 
     
+
+
 
 
 
