@@ -15,7 +15,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { DraftingCompass, Scissors, Layers, CircleDotDashed, MinusSquare, BoxSelect, Droplet, Sparkles, Loader2, Combine, Minus, Plus, TrendingUp, Waypoints as CrosshairIcon, Merge, LineChart, PenLine, Eraser, Brush, ZoomIn, Download, FileImage, FileText, CheckCircle, GitCommit, GitBranch, Wind, Layers as LayersIcon, LocateFixed, Eye, Activity } from 'lucide-react';
+import { DraftingCompass, Scissors, Layers, CircleDotDashed, MinusSquare, BoxSelect, Droplet, Sparkles, Loader2, Combine, Minus, Plus, TrendingUp, Waypoints as CrosshairIcon, Merge, LineChart, PenLine, Eraser, Brush, ZoomIn, Download, FileImage, FileText, CheckCircle, GitCommit, GitBranch, Wind, Layers as LayersIcon, LocateFixed, Eye, Activity, Sigma } from 'lucide-react';
 import type { MapLayer, VectorMapLayer, ProfilePoint } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { nanoid } from 'nanoid';
@@ -202,6 +202,8 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   const [trajectorySearchRadius, setTrajectorySearchRadius] = useState(100);
   const [trajectoryOutputName, setTrajectoryOutputName] = useState('');
   const [coherenceLayerId, setCoherenceLayerId] = useState('');
+  const [coherenceMagnitudeField, setCoherenceMagnitudeField] = useState('velocidad_kmh');
+
 
   // State for Feature Tracking
   const [trackingIsLoading, setTrackingIsLoading] = useState(false);
@@ -802,6 +804,25 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     const trajectoryLayers = useMemo(() => {
         return vectorLayers.filter(l => l.name.toLowerCase().startsWith('trayectoria') || l.name.toLowerCase().startsWith('seguimiento'));
     }, [vectorLayers]);
+    
+    const coherenceNumericFields = useMemo(() => {
+        const layer = trajectoryLayers.find(l => l.id === coherenceLayerId);
+        if (!layer) return [];
+        
+        const source = layer.olLayer.getSource();
+        if (!source) return [];
+        const features = source.getFeatures();
+        if (features.length === 0) return [];
+    
+        const keys = new Set<string>();
+        const firstFeatureProps = features[0].getProperties();
+        for (const key in firstFeatureProps) {
+            if (typeof firstFeatureProps[key] === 'number') {
+                keys.add(key);
+            }
+        }
+        return Array.from(keys).sort();
+    }, [trajectoryLayers, coherenceLayerId]);
 
   const trackingNumericFields = useMemo(() => {
     const layer1 = pointLayers.find(l => l.id === trackingLayer1Id);
@@ -829,6 +850,14 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         setTrackingField('');
     }
   }, [trackingNumericFields, trackingField]);
+  
+  useEffect(() => {
+    if (coherenceNumericFields.length > 0 && !coherenceNumericFields.includes(coherenceMagnitudeField)) {
+        setCoherenceMagnitudeField(coherenceNumericFields.find(f => f.includes('velocidad')) || coherenceNumericFields[0]);
+    } else if (coherenceNumericFields.length === 0) {
+        setCoherenceMagnitudeField('');
+    }
+}, [coherenceNumericFields, coherenceMagnitudeField]);
 
 
   const handleRunClip = () => {
@@ -1519,9 +1548,9 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         if (distance <= trajectorySearchRadius) {
             const line = turfLineString([point1.geometry.coordinates, nearest.geometry.coordinates]);
             const bearingVal = turfBearing(point1, nearest);
-            const speed = distance / timeDiffHours; // Correct speed calculation
+            const speed = distance / timeDiffHours;
 
-            const olFeature = new GeoJSON({ featureProjection: 'EPSG:3857' }).readFeature(line) as Feature<OlLineString>;
+            const olFeature = formatForMap.readFeature(line) as Feature<OlLineString>;
             olFeature.setProperties({
                 velocidad_kmh: parseFloat(speed.toFixed(2)),
                 sentido_grados: parseFloat(bearingVal.toFixed(2)),
@@ -1541,10 +1570,8 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     const newLayerId = `trajectory-result-${nanoid()}`;
     const newSource = new VectorSource({ features: vectorFeatures });
     
-    // Style function to show arrows
     const vectorStyle = (feature: Feature) => {
         const speed = feature.get('velocidad_kmh') as number || 0;
-        const bearing = feature.get('sentido_grados') as number || 0;
         const color = speed > 100 ? '#e63946' : speed > 50 ? '#f4a261' : '#2a9d8f';
 
         const line = new Style({
@@ -1654,37 +1681,40 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         toast({ description: 'La capa de trayectorias no tiene entidades.', variant: 'destructive' });
         return;
     }
+    if (!coherenceMagnitudeField || !coherenceNumericFields.includes(coherenceMagnitudeField)) {
+        toast({ description: "Por favor, seleccione un campo de magnitud válido.", variant: "destructive" });
+        return;
+    }
 
     const features = source.getFeatures();
     const directions = features.map(f => f.get('sentido_grados')).filter(d => typeof d === 'number') as number[];
-    const speeds = features.map(f => f.get('velocidad_kmh')).filter(s => typeof s === 'number') as number[];
+    const magnitudes = features.map(f => f.get(coherenceMagnitudeField)).filter(s => typeof s === 'number') as number[];
     
-    if (directions.length === 0 || speeds.length === 0) {
-        toast({ description: 'Las entidades no tienen los atributos "sentido_grados" o "velocidad_kmh".', variant: 'destructive' });
+    if (directions.length === 0 || magnitudes.length === 0) {
+        toast({ description: 'Las entidades no tienen los atributos de dirección o magnitud requeridos.', variant: 'destructive' });
         return;
     }
     
-    const avgSpeed = speeds.reduce((a, b) => a + b, 0) / speeds.length;
-    // Average angle calculation is complex, we use a vector approach
+    const avgMagnitude = magnitudes.reduce((a, b) => a + b, 0) / magnitudes.length;
     const avgX = directions.reduce((sum, d) => sum + Math.cos(d * Math.PI / 180), 0);
     const avgY = directions.reduce((sum, d) => sum + Math.sin(d * Math.PI / 180), 0);
     const avgAngleRad = Math.atan2(avgY, avgX);
     const avgDirection = (avgAngleRad * 180 / Math.PI + 360) % 360;
 
     const stdDevDirection = Math.sqrt(directions.reduce((sum, d) => sum + Math.pow((d - avgDirection + 360) % 360, 2), 0) / directions.length);
-    const stdDevSpeed = Math.sqrt(speeds.reduce((sum, s) => sum + Math.pow(s - avgSpeed, 2), 0) / speeds.length);
+    const stdDevMagnitude = Math.sqrt(magnitudes.reduce((sum, s) => sum + Math.pow(s - avgMagnitude, 2), 0) / magnitudes.length);
     
     features.forEach(f => {
         const direction = f.get('sentido_grados');
-        const speed = f.get('velocidad_kmh');
+        const magnitude = f.get(coherenceMagnitudeField);
         
         const dirDiff = Math.abs(direction - avgDirection);
-        const speedDiff = Math.abs(speed - avgSpeed);
+        const magDiff = Math.abs(magnitude - avgMagnitude);
         
         let coherence = 'Coherente';
-        if (dirDiff > stdDevDirection * 1.5 || speedDiff > stdDevSpeed * 1.5) {
+        if (dirDiff > stdDevDirection * 1.5 || magDiff > stdDevMagnitude * 1.5) {
             coherence = 'Atípico';
-        } else if (dirDiff > stdDevDirection * 0.75 || speedDiff > stdDevSpeed * 0.75) {
+        } else if (dirDiff > stdDevDirection * 0.75 || magDiff > stdDevMagnitude * 0.75) {
             coherence = 'Moderado';
         }
         f.set('coherencia', coherence);
@@ -2409,7 +2439,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                     </div>
                      <Separator className="bg-white/10" />
                      <div className="space-y-1">
-                        <Label className="text-xs font-semibold">Análisis de Coherencia de Vectores</Label>
+                        <Label className="text-xs font-semibold">Análisis de Coherencia de Movimiento</Label>
                         <div className="space-y-2 p-2 border border-white/10 rounded-md">
                            <div>
                                 <Label htmlFor="coherence-layer" className="text-xs">Capa de Trayectorias</Label>
@@ -2420,11 +2450,20 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                     </SelectContent>
                                 </Select>
                             </div>
-                            <Button onClick={handleAnalyzeCoherence} size="sm" className="w-full h-8 text-xs" disabled={!coherenceLayerId}>
+                            <div>
+                                <Label htmlFor="coherence-field" className="text-xs">Campo de Magnitud (Intensidad)</Label>
+                                <Select value={coherenceMagnitudeField} onValueChange={setCoherenceMagnitudeField} disabled={!coherenceLayerId}>
+                                    <SelectTrigger id="coherence-field" className="h-8 text-xs bg-black/20"><SelectValue placeholder="Seleccionar campo..." /></SelectTrigger>
+                                    <SelectContent className="bg-gray-700 text-white border-gray-600">
+                                        {coherenceNumericFields.map(f => <SelectItem key={f} value={f} className="text-xs">{f}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <Button onClick={handleAnalyzeCoherence} size="sm" className="w-full h-8 text-xs" disabled={!coherenceLayerId || !coherenceMagnitudeField}>
                                 <Activity className="mr-2 h-3.5 w-3.5" />
                                 Analizar Coherencia
                             </Button>
-                             <p className="text-xs text-gray-400">Colorea los vectores según su coherencia con el patrón de movimiento general (Azul: Coherente, Amarillo: Moderado, Rojo: Atípico).</p>
+                             <p className="text-xs text-gray-400">Colorea los vectores según su coherencia con el patrón de movimiento general.</p>
                         </div>
                     </div>
                 </AccordionContent>
@@ -2483,5 +2522,6 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
 
 
