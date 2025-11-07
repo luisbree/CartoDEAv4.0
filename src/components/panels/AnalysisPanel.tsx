@@ -1,5 +1,3 @@
-
-
 'use client';
 
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
@@ -15,7 +13,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { DraftingCompass, Scissors, Layers, CircleDotDashed, MinusSquare, BoxSelect, Droplet, Sparkles, Loader2, Combine, Minus, Plus, TrendingUp, Waypoints as CrosshairIcon, Merge, LineChart, PenLine, Eraser, Brush, ZoomIn, Download, FileImage, FileText, CheckCircle, GitCommit, GitBranch, Wind, Layers as LayersIcon } from 'lucide-react';
+import { DraftingCompass, Scissors, Layers, CircleDotDashed, MinusSquare, BoxSelect, Droplet, Sparkles, Loader2, Combine, Minus, Plus, TrendingUp, Waypoints as CrosshairIcon, Merge, LineChart, PenLine, Eraser, Brush, ZoomIn, Download, FileImage, FileText, CheckCircle, GitCommit, GitBranch, Wind, Layers as LayersIcon, LocateFixed } from 'lucide-react';
 import type { MapLayer, VectorMapLayer, ProfilePoint } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { nanoid } from 'nanoid';
@@ -28,7 +26,7 @@ import { multiPolygon, lineString as turfLineString, point as turfPoint, polygon
 import Feature from 'ol/Feature';
 import { type Geometry, type LineString as OlLineString, Point } from 'ol/geom';
 import { getLength as olGetLength } from 'ol/sphere';
-import { performBufferAnalysis, performConvexHull, performConcaveHull, calculateOptimalConcavity, projectPopulationGeometric, generateCrossSections, dissolveFeatures, performBezierSmoothing, DATASET_DEFINITIONS, jenks } from '@/services/spatial-analysis';
+import { performBufferAnalysis, performConvexHull, performConcaveHull, calculateOptimalConcavity, projectPopulationGeometric, generateCrossSections, dissolveFeatures, performBezierSmoothing, DATASET_DEFINITIONS, jenks, performFeatureTracking } from '@/services/spatial-analysis';
 import { getValuesForPoints } from '@/ai/flows/gee-flow';
 import { ScrollArea } from '../ui/scroll-area';
 import { Checkbox } from '../ui/checkbox';
@@ -202,6 +200,14 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   const [trajectoryLayer2Id, setTrajectoryLayer2Id] = useState('');
   const [trajectorySearchRadius, setTrajectorySearchRadius] = useState(100);
   const [trajectoryOutputName, setTrajectoryOutputName] = useState('');
+  
+  // State for Feature Tracking
+  const [trackingIsLoading, setTrackingIsLoading] = useState(false);
+  const [trackingLayer1Id, setTrackingLayer1Id] = useState('');
+  const [trackingLayer2Id, setTrackingLayer2Id] = useState('');
+  const [trackingField, setTrackingField] = useState('');
+  const [trackingRadius, setTrackingRadius] = useState(100);
+  const [trackingOutputName, setTrackingOutputName] = useState('');
   
   // State for clicked profile points
   const [profilePoints, setProfilePoints] = useState<Feature<Point>[]>([]);
@@ -790,6 +796,33 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         l.type === 'gee' && l.geeParams?.bandCombination === 'GOES_CLOUDTOP'
       );
   }, [allLayers]);
+  
+  const trackingNumericFields = useMemo(() => {
+    const layer1 = pointLayers.find(l => l.id === trackingLayer1Id);
+    if (!layer1) return [];
+    
+    const source = layer1.olLayer.getSource();
+    if (!source) return [];
+    const features = source.getFeatures();
+    if (features.length === 0) return [];
+
+    const keys = new Set<string>();
+    const firstFeatureProps = features[0].getProperties();
+    for (const key in firstFeatureProps) {
+        if (typeof firstFeatureProps[key] === 'number') {
+            keys.add(key);
+        }
+    }
+    return Array.from(keys).sort();
+  }, [pointLayers, trackingLayer1Id]);
+
+  useEffect(() => {
+    if (trackingNumericFields.length > 0 && !trackingNumericFields.includes(trackingField)) {
+        setTrackingField(trackingNumericFields[0]);
+    } else if (trackingNumericFields.length === 0) {
+        setTrackingField('');
+    }
+  }, [trackingNumericFields, trackingField]);
 
 
   const handleRunClip = () => {
@@ -1552,6 +1585,58 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   
     toast({ description: `Se generaron ${vectorFeatures.length} vectores de trayectoria.` });
   };
+  
+  const handleRunFeatureTracking = async () => {
+    const layer1 = pointLayers.find(l => l.id === trackingLayer1Id);
+    const layer2 = pointLayers.find(l => l.id === trackingLayer2Id);
+
+    if (!layer1 || !layer2 || trackingRadius <= 0 || !trackingField) {
+        toast({ description: "Seleccione dos capas de puntos, un campo de atributo y un radio de búsqueda válido.", variant: 'destructive' });
+        return;
+    }
+    
+    setTrackingIsLoading(true);
+    toast({ description: "Iniciando seguimiento de entidades..." });
+
+    try {
+      const trackingResultFeatures = await performFeatureTracking({
+        sourceFeatures: layer1.olLayer.getSource()!.getFeatures(),
+        targetFeatures: layer2.olLayer.getSource()!.getFeatures(),
+        attributeField: trackingField,
+        maxDistanceKm: trackingRadius
+      });
+      
+      if (trackingResultFeatures.length === 0) {
+          toast({ description: "No se encontraron puntos homólogos con los parámetros dados." });
+          return;
+      }
+      
+      const outputName = trackingOutputName.trim() || `Seguimiento de ${layer1.name}`;
+      const newLayerId = `tracking-result-${nanoid()}`;
+      const newSource = new VectorSource({ features: trackingResultFeatures });
+      const newOlLayer = new VectorLayer({
+          source: newSource,
+          properties: { id: newLayerId, name: outputName, type: 'analysis' },
+      });
+      
+      onAddLayer({
+        id: newLayerId,
+        name: outputName,
+        olLayer: newOlLayer,
+        visible: true,
+        opacity: 1,
+        type: 'analysis',
+      }, true);
+  
+      toast({ description: `Se generaron ${trackingResultFeatures.length} vectores de seguimiento.` });
+
+    } catch (error: any) {
+        console.error("Feature tracking failed:", error);
+        toast({ title: "Error de Seguimiento", description: error.message, variant: "destructive" });
+    } finally {
+        setTrackingIsLoading(false);
+    }
+  };
 
 
   const trendlineData = useMemo(() => {
@@ -1666,10 +1751,10 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                 <div className="h-[250px] w-full mt-2 relative" ref={chartContainerRef}>
                                     {/* Background Histograms */}
                                     <ResponsiveContainer width="100%" height="100%" className="absolute inset-0 z-0">
-                                      <BarChart data={combinedChartData} layout="vertical" margin={{ top: 5, right: 20, left: -25, bottom: 5 }}>
+                                      <BarChart data={profileData[0].histogram} layout="vertical" margin={{ top: 5, right: 20, left: -25, bottom: 5 }}>
                                           <XAxis type="number" hide domain={[0, 'dataMax']} />
                                           {profileData.map((series, index) => (
-                                              <YAxis key={`y-hist-${series.datasetId}`} type="number" dataKey="value" hide yAxisId={index === 0 ? 'left' : 'right'} domain={[index === 0 ? yAxisDomainLeft.min : yAxisDomainRight.min, index === 0 ? yAxisDomainLeft.max : yAxisDomainRight.max]} />
+                                              <YAxis key={`y-hist-${series.datasetId}`} type="number" dataKey="value" hide yAxisId={index === 0 ? 'left' : 'right'} domain={[index === 0 ? yAxisDomainLeft.min : yAxisDomainLeft.max, index === 0 ? yAxisDomainRight.min : yAxisDomainRight.max]} />
                                           ))}
                                           {profileData.map((series, index) => (
                                                <Bar key={`bar-${series.datasetId}`} data={series.histogram} dataKey="count" name={series.name} yAxisId={index === 0 ? 'left' : 'right'} fill={series.color} fillOpacity={0.1} isAnimationActive={false} />
@@ -2282,19 +2367,57 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                     </div>
                 </AccordionContent>
             </AccordionItem>
+            <AccordionItem value="tracking-analysis" className="border-b-0 bg-white/5 rounded-md">
+                <AccordionTrigger className="p-3 hover:no-underline hover:bg-white/10 rounded-t-md data-[state=open]:rounded-b-none">
+                    <SectionHeader icon={LocateFixed} title="Seguimiento de Entidades" />
+                </AccordionTrigger>
+                <AccordionContent className="p-3 pt-2 space-y-3 border-t border-white/10 bg-transparent rounded-b-md">
+                    <div className="space-y-2 p-2 border border-white/10 rounded-md">
+                        <div>
+                            <Label htmlFor="track-layer1" className="text-xs">Capa de Origen (Tiempo 1)</Label>
+                            <Select value={trackingLayer1Id} onValueChange={setTrackingLayer1Id}>
+                                <SelectTrigger id="track-layer1" className="h-8 text-xs bg-black/20"><SelectValue placeholder="Seleccionar capa de puntos..." /></SelectTrigger>
+                                <SelectContent className="bg-gray-700 text-white border-gray-600">
+                                    {pointLayers.map(l => <SelectItem key={l.id} value={l.id} className="text-xs">{l.name}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div>
+                            <Label htmlFor="track-layer2" className="text-xs">Capa de Destino (Tiempo 2)</Label>
+                            <Select value={trackingLayer2Id} onValueChange={setTrackingLayer2Id}>
+                                <SelectTrigger id="track-layer2" className="h-8 text-xs bg-black/20"><SelectValue placeholder="Seleccionar capa de puntos..." /></SelectTrigger>
+                                <SelectContent className="bg-gray-700 text-white border-gray-600">
+                                    {pointLayers.map(l => <SelectItem key={l.id} value={l.id} className="text-xs">{l.name}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                         <div>
+                            <Label htmlFor="track-field" className="text-xs">Campo Numérico de Similitud</Label>
+                            <Select value={trackingField} onValueChange={setTrackingField} disabled={trackingNumericFields.length === 0}>
+                                <SelectTrigger id="track-field" className="h-8 text-xs bg-black/20"><SelectValue placeholder="Seleccionar campo numérico..." /></SelectTrigger>
+                                <SelectContent className="bg-gray-700 text-white border-gray-600">
+                                    {trackingNumericFields.map(f => <SelectItem key={f} value={f} className="text-xs">{f}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div>
+                            <Label htmlFor="track-radius" className="text-xs">Radio Máx. de Búsqueda (km)</Label>
+                            <Input id="track-radius" type="number" value={trackingRadius} onChange={(e) => setTrackingRadius(Number(e.target.value))} min="1" className="h-8 text-xs bg-black/20"/>
+                        </div>
+                        <div>
+                           <Label htmlFor="track-output-name" className="text-xs">Nombre de la Capa de Salida</Label>
+                           <Input id="track-output-name" value={trackingOutputName} onChange={(e) => setTrackingOutputName(e.target.value)} placeholder="Ej: Seguimiento_Nucleos" className="h-8 text-xs bg-black/20"/>
+                       </div>
+                        <Button onClick={handleRunFeatureTracking} size="sm" className="w-full h-8 text-xs" disabled={trackingIsLoading || !trackingLayer1Id || !trackingLayer2Id || !trackingField}>
+                             {trackingIsLoading ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <LocateFixed className="mr-2 h-3.5 w-3.5" />}
+                             Ejecutar Seguimiento
+                        </Button>
+                    </div>
+                </AccordionContent>
+            </AccordionItem>
         </Accordion>
     </DraggablePanel>
   );
 };
 
 export default AnalysisPanel;
-
-    
-
-
-
-
-
-
-
-

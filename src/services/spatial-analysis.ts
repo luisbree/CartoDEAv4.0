@@ -1,5 +1,3 @@
-
-
 "use client";
 
 import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as TurfMultiPolygon, FeatureCollection as TurfFeatureCollection, Geometry as TurfGeometry, Point as TurfPoint, LineString as TurfLineString } from 'geojson';
@@ -8,6 +6,7 @@ import { multiPolygon, lineString as turfLineString, polygon as turfPolygon } fr
 import type Feature from 'ol/Feature';
 import GeoJSON from 'ol/format/GeoJSON';
 import type { Geometry, LineString as OlLineString } from 'ol/geom';
+import { nanoid } from 'nanoid';
 
 
 // --- Jenks Natural Breaks Algorithm (Moved Here) ---
@@ -668,4 +667,106 @@ export async function performBezierSmoothing({
         throw new Error(`Turf.js bezierSpline failed: ${error.message}`);
     }
 }
+
+/**
+ * Tracks features from a source layer to a target layer based on spatial proximity
+ * and attribute similarity.
+ * @returns A promise resolving to an array of line features representing the tracks.
+ */
+export async function performFeatureTracking({
+  sourceFeatures,
+  targetFeatures,
+  attributeField,
+  maxDistanceKm
+}: {
+  sourceFeatures: Feature<Geometry>[];
+  targetFeatures: Feature<Geometry>[];
+  attributeField: string;
+  maxDistanceKm: number;
+}): Promise<Feature<OlLineString>[]> {
+  if (sourceFeatures.length === 0 || targetFeatures.length === 0) {
+    throw new Error("Las capas de origen y destino deben contener entidades.");
+  }
+  
+  const format = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
+  const formatForMap = new GeoJSON({ dataProjection: 'EPSG:4326', featureProjection: 'EPSG:3857' });
+
+  const sourceGeoJSON = format.writeFeaturesObject(sourceFeatures) as TurfFeatureCollection<TurfPoint>;
+  const targetGeoJSON = format.writeFeaturesObject(targetFeatures) as TurfFeatureCollection<TurfPoint>;
+  
+  const attributeValues = [...sourceGeoJSON.features, ...targetGeoJSON.features]
+    .map(f => f.properties?.[attributeField])
+    .filter(v => typeof v === 'number' && isFinite(v)) as number[];
+
+  if (attributeValues.length === 0) {
+      throw new Error(`El campo '${attributeField}' no contiene valores numéricos válidos en ninguna de las capas.`);
+  }
+
+  const maxAttr = Math.max(...attributeValues);
+  const minAttr = Math.min(...attributeValues);
+  const attrRange = maxAttr - minAttr;
+  
+  const allPotentialMatches: { sourceIndex: number; targetIndex: number; cost: number; distance: number; attrDiff: number }[] = [];
+
+  // 1. Calculate cost for all potential pairs within the search radius
+  sourceGeoJSON.features.forEach((p1, index1) => {
+    const p1Attr = p1.properties?.[attributeField];
+    if (typeof p1Attr !== 'number') return;
     
+    targetGeoJSON.features.forEach((p2, index2) => {
+      const distance = turfDistance(p1, p2, { units: 'kilometers' });
+      
+      if (distance <= maxDistanceKm) {
+        const p2Attr = p2.properties?.[attributeField];
+        if (typeof p2Attr !== 'number') return;
+        
+        const distNorm = distance / maxDistanceKm;
+        const attrDiff = Math.abs(p1Attr - p2Attr);
+        const attrDiffNorm = attrRange > 0 ? attrDiff / attrRange : 0;
+        
+        // Simple cost function (can be weighted later)
+        const cost = (0.5 * distNorm) + (0.5 * attrDiffNorm);
+
+        allPotentialMatches.push({ sourceIndex: index1, targetIndex: index2, cost, distance, attrDiff });
+      }
+    });
+  });
+
+  // 2. Greedy assignment: find the best match iteratively
+  allPotentialMatches.sort((a, b) => a.cost - b.cost);
+  
+  const assignedSource = new Set<number>();
+  const assignedTarget = new Set<number>();
+  const finalMatches: { p1: TurfFeature<TurfPoint>, p2: TurfFeature<TurfPoint>, cost: number, distance: number, attrDiff: number }[] = [];
+  
+  for (const match of allPotentialMatches) {
+    if (!assignedSource.has(match.sourceIndex) && !assignedTarget.has(match.targetIndex)) {
+      finalMatches.push({
+          p1: sourceGeoJSON.features[match.sourceIndex],
+          p2: targetGeoJSON.features[match.targetIndex],
+          cost: match.cost,
+          distance: match.distance,
+          attrDiff: match.attrDiff
+      });
+      assignedSource.add(match.sourceIndex);
+      assignedTarget.add(match.targetIndex);
+    }
+  }
+
+  // 3. Create result features
+  const trajectoryFeatures: Feature<OlLineString>[] = [];
+  for (const match of finalMatches) {
+    const line = turfLineString([match.p1.geometry.coordinates, match.p2.geometry.coordinates]);
+    const olFeature = formatForMap.readFeature(line) as Feature<OlLineString>;
+    
+    olFeature.setProperties({
+        costo_similitud: parseFloat(match.cost.toFixed(4)),
+        distancia_km: parseFloat(match.distance.toFixed(2)),
+        variacion_attr: parseFloat(match.attrDiff.toFixed(2)),
+    });
+    olFeature.setId(nanoid());
+    trajectoryFeatures.push(olFeature);
+  }
+
+  return trajectoryFeatures;
+}
