@@ -67,8 +67,8 @@ const SectionHeader: React.FC<{ icon: React.ElementType; title: string; }> = ({ 
 );
 
 const analysisLayerStyle = new Style({
-    stroke: new Stroke({ color: 'rgba(255, 120, 0, 1)', width: 2.5 }),
-    fill: new Fill({ color: 'rgba(255, 120, 0, 0.2)' }),
+    stroke: new Stroke({ color: 'rgba(0, 255, 255, 1)', width: 2.5, lineDash: [8, 8] }),
+    fill: new Fill({ color: 'rgba(0, 255, 255, 0.2)' }),
 });
 
 const profilePointsStyle = new Style({
@@ -102,6 +102,7 @@ interface HistogramEntry {
     value: number;
     count: number;
     key: string;
+    color: string;
 }
 
 interface CorrelationResult {
@@ -568,36 +569,46 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   }, [profileData]);
 
   const combinedHistogramData = useMemo(() => {
-    if (!profileData) return [];
-
-    return profileData.flatMap((series) => {
-        const domain = yAxisDomainLeft; // Always use the primary axis domain for histogram calculation
-        const min = domain.min === 'auto' ? series.stats.min : domain.min;
-        const max = domain.max === 'auto' ? series.stats.max : domain.max;
-
-        const allValues = series.points.map(p => 
-            series.unit === '°C' ? p.value - 273.15 : p.value
-        ).filter(v => v >= min && v <= max);
-
-        if (allValues.length === 0) return [];
-
-        const HISTOGRAM_BINS = 30;
-        const binSize = (max - min) / HISTOGRAM_BINS;
-        const histogram: HistogramEntry[] = [];
-
-        for (let i = 0; i < HISTOGRAM_BINS; i++) {
-            const binMin = min + i * binSize;
-            const binMax = binMin + binSize;
-            const count = allValues.filter(v => v >= binMin && v < binMax).length;
-            histogram.push({
-                value: (binMin + binMax) / 2,
-                count,
-                key: `hist-${series.datasetId}-${i}`,
-            });
-        }
-        return { ...series, histogram };
-    });
-  }, [profileData, yAxisDomainLeft]);
+      if (!profileData) return [];
+  
+      return profileData.flatMap((series) => {
+          const isLeftAxis = series.datasetId === profileData[0].datasetId;
+          const domain = isLeftAxis ? yAxisDomainLeft : yAxisDomainRight;
+          
+          let min = domain.min === 'auto' ? series.stats.min : domain.min;
+          let max = domain.max === 'auto' ? series.stats.max : domain.max;
+  
+          // Ensure min and max are valid numbers
+          if (typeof min !== 'number' || typeof max !== 'number' || min >= max) {
+              min = series.stats.min;
+              max = series.stats.max;
+              if (min >= max) return [];
+          }
+          
+          const allValues = series.points.map(p => 
+              series.unit === '°C' ? p.value - 273.15 : p.value
+          ).filter(v => v >= min && v <= max);
+  
+          if (allValues.length === 0) return [];
+  
+          const HISTOGRAM_BINS = 30;
+          const binSize = (max - min) / HISTOGRAM_BINS;
+          const histogram: HistogramEntry[] = [];
+  
+          for (let i = 0; i < HISTOGRAM_BINS; i++) {
+              const binMin = min + i * binSize;
+              const binMax = binMin + binSize;
+              const count = allValues.filter(v => v >= binMin && v < binMax).length;
+              histogram.push({
+                  value: (binMin + binMax) / 2,
+                  count,
+                  key: `hist-${series.datasetId}-${i}`,
+                  color: series.color,
+              });
+          }
+          return histogram;
+      });
+  }, [profileData, yAxisDomainLeft, yAxisDomainRight]);
   
   const handleCalculateCorrelation = () => {
     if (!profileData || !corrAxisX || !corrAxisY || corrAxisX === corrAxisY) {
@@ -1848,21 +1859,13 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                 <div className="h-[250px] w-full mt-2 relative" ref={chartContainerRef}>
                                     <div className="absolute inset-0 z-0">
                                         <ResponsiveContainer width="100%" height="100%">
-                                            <BarChart data={combinedHistogramData.flatMap(s => s.histogram)} layout="vertical" margin={{ top: 5, right: 20, left: -25, bottom: 5 }}>
+                                             <BarChart data={combinedHistogramData} layout="vertical" margin={{ top: 5, right: 20, left: -25, bottom: 5 }}>
                                                 <XAxis type="number" hide domain={[0, 'dataMax']} />
-                                                <YAxis
-                                                    type="number"
-                                                    dataKey="value"
-                                                    hide
-                                                    domain={[yAxisDomainLeft.min, yAxisDomainLeft.max]}
-                                                    reversed={profileData[0]?.unit === '°C'}
-                                                />
-                                                <Bar dataKey="count" isAnimationActive={false}>
-                                                    {combinedHistogramData.flatMap(series =>
-                                                        series.histogram.map((entry) => (
-                                                          <Cell key={entry.key} fill={series.color} fillOpacity={0.1} />
-                                                        ))
-                                                    )}
+                                                <YAxis type="number" dataKey="value" hide domain={[yAxisDomainLeft.min, yAxisDomainLeft.max]} yAxisId="left" reversed={profileData[0]?.unit === '°C'} />
+                                                <Bar dataKey="count" yAxisId="left" isAnimationActive={false}>
+                                                  {combinedHistogramData.map((entry) => (
+                                                      <Cell key={entry.key} fill={entry.color} fillOpacity={0.1} />
+                                                  ))}
                                                 </Bar>
                                             </BarChart>
                                         </ResponsiveContainer>
@@ -2529,3 +2532,4 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
