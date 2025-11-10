@@ -580,60 +580,58 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   }, [profileData]);
 
   const combinedHistogramData = useMemo(() => {
-    if (!profileData) return [];
+    if (!profileData || combinedChartData.length === 0) return [];
 
-    const allSeriesHistogramData = profileData.flatMap((series) => {
+    return profileData.flatMap((series) => {
+        const isGoes = series.unit === '°C';
         const isLeftAxis = series.datasetId === profileData[0].datasetId;
         const domain = isLeftAxis ? yAxisDomainLeft : yAxisDomainRight;
-
+        
         let min = domain.min === 'auto' ? series.stats.min : domain.min;
         let max = domain.max === 'auto' ? series.stats.max : domain.max;
         
-        // Swap for inverted axis
-        const isGoes = series.unit === '°C';
-        if (isGoes) {
-            [min, max] = [max, min];
-        }
-
-        if (typeof min !== 'number' || typeof max !== 'number' || min >= max) {
+        if (typeof min !== 'number' || typeof max !== 'number' || min === max) {
             min = series.stats.min;
             max = series.stats.max;
-            if (min >= max) return [];
         }
 
+        if (isGoes) {
+            [min, max] = [max, min]; // Invert for hanging bars
+        }
+        
+        if (min === max) return [];
+
         const allValues = series.points.map(p =>
-            series.unit === '°C' ? p.value - 273.15 : p.value
-        ).filter(v => v >= min && v <= max);
+            isGoes ? p.value - 273.15 : p.value
+        ).filter(v => v >= Math.min(min, max) && v <= Math.max(min, max));
 
         if (allValues.length === 0) return [];
 
         const HISTOGRAM_BINS = 30;
         const binSize = (max - min) / HISTOGRAM_BINS;
-        const histogram: { value: number; count: number; color: string; }[] = [];
+        const histogram: { value: number; count: number; }[] = [];
         let maxCount = 0;
 
         for (let i = 0; i < HISTOGRAM_BINS; i++) {
             const binMin = min + i * binSize;
             const binMax = binMin + binSize;
-            const count = allValues.filter(v => v >= binMin && v < binMax).length;
+            const count = allValues.filter(v => v >= Math.min(binMin, binMax) && v < Math.max(binMin, binMax)).length;
             if (count > maxCount) maxCount = count;
             histogram.push({
                 value: (binMin + binMax) / 2,
                 count,
-                color: series.color,
             });
         }
         
-        // Normalize histogram counts to be a percentage of the chart width
+        const totalDistance = combinedChartData[combinedChartData.length - 1]?.distance || 1;
+
         return histogram.map(bin => ({
-            ...bin,
-            // Adjust count to be proportional to chart domain, e.g. 30% of width
-            count: (bin.count / maxCount) * ((combinedChartData[combinedChartData.length-1]?.distance || 1) * 0.3) 
+            key: `${series.datasetId}-${bin.value}`,
+            [series.datasetId]: bin.value,
+            [`${series.datasetId}_hist`]: (bin.count / (maxCount || 1)) * (totalDistance * 0.3),
+            color: series.color,
         }));
     });
-    
-    return allSeriesHistogramData;
-
   }, [profileData, yAxisDomainLeft, yAxisDomainRight, combinedChartData]);
   
   const handleCalculateCorrelation = () => {
@@ -1904,8 +1902,8 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                                orientation="left" 
                                                stroke={profileData[0]?.color} 
                                                fontSize={10} 
-                                               reversed={profileData[0]?.unit === '°C'}
-                                               domain={profileData[0]?.unit === '°C' ? [yAxisDomainLeft.max, yAxisDomainLeft.min] : [yAxisDomainLeft.min, yAxisDomainLeft.max]}
+                                               reversed={isAnyGoesProfile}
+                                               domain={isAnyGoesProfile ? [yAxisDomainLeft.max, yAxisDomainLeft.min] : [yAxisDomainLeft.min, yAxisDomainLeft.max]}
                                            />
                                            {profileData.length > 1 && (
                                                <YAxis 
@@ -1919,10 +1917,9 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                            )}
                                            <Tooltip
                                                contentStyle={{
-                                                   backgroundColor: 'rgba(30, 40, 50, 0.9)',
-                                                   border: '1px solid hsl(var(--border))',
-                                                   fontSize: '12px',
-                                                   color: 'hsl(var(--foreground))'
+                                                    backgroundColor: 'rgba(30, 41, 59, 0.9)',
+                                                    border: '1px solid hsl(var(--border))',
+                                                    fontSize: '12px',
                                                }}
                                                labelFormatter={(label) => `Distancia: ${(label / 1000).toFixed(2)} km`}
                                                formatter={(value: number, name: string) => [`${value.toFixed(2)} ${profileData.find(d => d.datasetId === name)?.unit || ''}`, profileData.find(d => d.datasetId === name)?.name]}
@@ -1951,11 +1948,18 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                                    strokeWidth={1.5}
                                                />
                                            ))}
-                                           <Bar dataKey={profileData[0]?.datasetId} yAxisId="left" barSize={4} background={false} shape={(props) => <InvertedBar {...props} />}>
-                                               {combinedHistogramData.filter(d => d.key === profileData[0]?.datasetId).map((entry, index) => (
-                                                   <Cell key={`cell-${index}`} fill={entry.color} fillOpacity={0.3} />
-                                               ))}
-                                           </Bar>
+                                            {profileData.map((series, index) => (
+                                                <Bar 
+                                                    key={`${series.datasetId}_hist`} 
+                                                    dataKey={`${series.datasetId}_hist`} 
+                                                    yAxisId={index === 0 ? "left" : "right"}
+                                                    barSize={4} 
+                                                    fill={series.color} 
+                                                    fillOpacity={0.3}
+                                                    shape={series.unit === '°C' ? <InvertedBar /> : undefined}
+                                                    data={combinedHistogramData}
+                                                />
+                                            ))}
                                        </AreaChart>
                                    </ResponsiveContainer>
                                </div>
