@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
@@ -1875,9 +1874,8 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                     </div>
                     {profileData ? (
                         <div className="pt-2 border-t border-white/10 flex flex-col gap-3">
-                            {/* Chart Area */}
                             <div id="profile-chart-to-export" className="bg-background p-2 rounded">
-                                <div className="h-64 w-full">
+                                <div ref={chartContainerRef} className="h-64 w-full">
                                     <ResponsiveContainer>
                                         <AreaChart 
                                             data={combinedChartData} 
@@ -1896,7 +1894,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                             <YAxis 
                                                 yAxisId="left" 
                                                 orientation="left" 
-                                                stroke={profileData[0].color} 
+                                                stroke={profileData[0]?.color} 
                                                 fontSize={10} 
                                                 domain={[yAxisDomainLeft.min, yAxisDomainLeft.max]}
                                             />
@@ -1904,14 +1902,14 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                                 <YAxis 
                                                     yAxisId="right" 
                                                     orientation="right" 
-                                                    stroke={profileData[1].color} 
+                                                    stroke={profileData[1]?.color} 
                                                     fontSize={10} 
                                                     domain={[yAxisDomainRight.min, yAxisDomainRight.max]}
                                                 />
                                             )}
                                             <Tooltip
                                                 contentStyle={{
-                                                    backgroundColor: 'rgba(30, 41, 59, 0.9)',
+                                                    backgroundColor: 'rgba(50, 50, 50, 0.8)',
                                                     border: '1px solid hsl(var(--border))',
                                                     fontSize: '12px',
                                                     color: 'hsl(var(--foreground))'
@@ -1920,12 +1918,12 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                                 formatter={(value: number, name: string) => [`${value.toFixed(2)} ${profileData.find(d => d.datasetId === name)?.unit || ''}`, profileData.find(d => d.datasetId === name)?.name]}
                                             />
                                             <Legend wrapperStyle={{fontSize: "10px", paddingTop: '20px'}}/>
-                                            {profileData[0].stats.jenksBreaks.map((br, i) => (
+                                            {profileData[0]?.stats.jenksBreaks.map((br, i) => (
                                                 <ReferenceLine key={`jenks-left-${i}`} y={br} yAxisId="left" stroke="hsl(var(--muted-foreground))" strokeDasharray="2 2" strokeOpacity={0.7}>
                                                     <Label value={br.toFixed(1)} position="insideLeft" fontSize={9} fill="hsl(var(--muted-foreground))" />
                                                 </ReferenceLine>
                                             ))}
-                                            {profileData.length > 1 && profileData[1].stats.jenksBreaks.map((br, i) => (
+                                            {profileData.length > 1 && profileData[1]?.stats.jenksBreaks.map((br, i) => (
                                                 <ReferenceLine key={`jenks-right-${i}`} y={br} yAxisId="right" stroke="hsl(var(--muted-foreground))" strokeDasharray="2 2" strokeOpacity={0.7}>
                                                      <Label value={br.toFixed(1)} position="insideRight" fontSize={9} fill="hsl(var(--muted-foreground))" />
                                                 </ReferenceLine>
@@ -1943,7 +1941,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                                     strokeWidth={1.5}
                                                 />
                                             ))}
-                                            <Bar data={combinedHistogramData} barSize={4} yAxisId="left" shape={profileData[0].unit === '°C' ? InvertedBar : undefined}>
+                                            <Bar data={combinedHistogramData} barSize={4} yAxisId="left" shape={(props) => InvertedBar({ ...props, background: profileData.find(s => s.datasetId === props.dataKey)?.unit !== '°C' })}>
                                                 {combinedHistogramData.map((entry, index) => (
                                                     <Cell key={`cell-${index}`} fill={entry.color} fillOpacity={0.3} />
                                                 ))}
@@ -1953,7 +1951,6 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                 </div>
                             </div>
                             
-                            {/* Statistics Table */}
                             <div className="space-y-1">
                                 {profileData.map(series => (
                                     <details key={series.datasetId}>
@@ -1961,7 +1958,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                         <Table>
                                             <TableBody>
                                                 <TableRow><TableCell className="text-xs p-1">Media</TableCell><TableCell className="text-xs p-1 text-right font-mono">{series.stats.mean.toFixed(2)}</TableCell></TableRow>
-                                                <TableRow><TableCell className="text-xs p-1">Mediana</TableCell><TableCell className="text-xs p-1 text-right font-mono">{jenks(series.points.map(p => series.unit === '°C' ? p.value - 273.15 : p.value), 2)[0].toFixed(2)}</TableCell></TableRow>
+                                                <TableRow><TableCell className="text-xs p-1">Mediana</TableCell><TableCell className="text-xs p-1 text-right font-mono">{jenks(series.points.map(p => series.unit === '°C' ? p.value - 273.15 : p.value), 2)[0]?.toFixed(2) || 'N/A'}</TableCell></TableRow>
                                                 <TableRow><TableCell className="text-xs p-1">Mín</TableCell><TableCell className="text-xs p-1 text-right font-mono">{series.stats.min.toFixed(2)}</TableCell></TableRow>
                                                 <TableRow><TableCell className="text-xs p-1">Máx</TableCell><TableCell className="text-xs p-1 text-right font-mono">{series.stats.max.toFixed(2)}</TableCell></TableRow>
                                                 <TableRow><TableCell className="text-xs p-1">Desv. Est.</TableCell><TableCell className="text-xs p-1 text-right font-mono">{series.stats.stdDev.toFixed(2)}</TableCell></TableRow>
@@ -1971,8 +1968,53 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                     </details>
                                 ))}
                             </div>
+
+                            {profileData && profileData.length > 1 && (
+                                <div className="space-y-2 pt-2 border-t border-white/10">
+                                  <h4 className="text-xs font-semibold">Análisis de Correlación</h4>
+                                  <div className="flex items-end gap-2">
+                                      <div className="flex-1 space-y-1">
+                                          <Label htmlFor="corr-x" className="text-xs">Eje X</Label>
+                                          <Select value={corrAxisX} onValueChange={setCorrAxisX}>
+                                              <SelectTrigger id="corr-x" className="h-7 text-xs bg-black/20"><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
+                                              <SelectContent className="bg-gray-700 text-white border-gray-600">
+                                                  {profileData.map(d => <SelectItem key={d.datasetId} value={d.datasetId} className="text-xs">{d.name}</SelectItem>)}
+                                              </SelectContent>
+                                          </Select>
+                                      </div>
+                                      <div className="flex-1 space-y-1">
+                                          <Label htmlFor="corr-y" className="text-xs">Eje Y</Label>
+                                          <Select value={corrAxisY} onValueChange={setCorrAxisY}>
+                                              <SelectTrigger id="corr-y" className="h-7 text-xs bg-black/20"><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
+                                              <SelectContent className="bg-gray-700 text-white border-gray-600">
+                                                  {profileData.map(d => <SelectItem key={d.datasetId} value={d.datasetId} className="text-xs">{d.name}</SelectItem>)}
+                                              </SelectContent>
+                                          </Select>
+                                      </div>
+                                      <Button onClick={handleCalculateCorrelation} size="sm" className="h-7 text-xs" disabled={!corrAxisX || !corrAxisY || corrAxisX === corrAxisY}>
+                                          Calcular
+                                      </Button>
+                                  </div>
+                                  {correlationResult && (
+                                    <div className="pt-2">
+                                      <p className="text-center text-sm font-mono mb-1">r = {correlationResult.coefficient.toFixed(4)}</p>
+                                      <div className="h-48 w-full">
+                                        <ResponsiveContainer>
+                                          <ScatterChart margin={{ top: 5, right: 20, bottom: 20, left: -20 }}>
+                                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                                            <XAxis type="number" dataKey="x" name={profileData.find(d=>d.datasetId === correlationResult.xDatasetId)?.name} domain={['dataMin', 'dataMax']} fontSize={10} tickFormatter={(v) => v.toFixed(0)} />
+                                            <YAxis type="number" dataKey="y" name={profileData.find(d=>d.datasetId === correlationResult.yDatasetId)?.name} domain={['dataMin', 'dataMax']} fontSize={10} tickFormatter={(v) => v.toFixed(0)} />
+                                            <Tooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={{backgroundColor: 'rgba(50, 50, 50, 0.8)', border: '1px solid hsl(var(--border))', fontSize: '12px'}}/>
+                                            <Scatter data={correlationResult.scatterData} fill="#8884d8" fillOpacity={0.6} shape="circle" />
+                                            <Line data={trendlineData} dataKey="y" stroke="#ff7300" dot={false} strokeWidth={2} name="Tendencia" />
+                                          </ScatterChart>
+                                        </ResponsiveContainer>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                            )}
                             
-                            {/* Action Buttons */}
                             <div className="flex justify-end items-center gap-2">
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
@@ -1995,7 +2037,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                         </div>
                     ) : (
                         <div className="pt-2 text-center text-xs text-gray-400">
-                           {/* Intentionally empty to avoid showing the placeholder */}
+                           {isGeneratingProfile ? 'Generando perfil...' : ''}
                         </div>
                     )}
                 </AccordionContent>
@@ -2501,11 +2543,4 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
-
-
-
-
-
-
-
 
