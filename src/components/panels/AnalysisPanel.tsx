@@ -1879,7 +1879,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                         </Button>
                     </div>
                     {profileData ? (
-                        <div className="pt-2 border-t border-white/10 flex flex-col gap-3">
+                         <div className="pt-2 border-t border-white/10 flex flex-col gap-3">
                            <div id="profile-chart-to-export" className="bg-background p-2 rounded">
                                <div ref={chartContainerRef} className="h-64 w-full">
                                     <ResponsiveContainer>
@@ -1902,8 +1902,8 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                                orientation="left" 
                                                stroke={profileData[0]?.color} 
                                                fontSize={10} 
-                                               reversed={isAnyGoesProfile}
-                                               domain={isAnyGoesProfile ? [yAxisDomainLeft.max, yAxisDomainLeft.min] : [yAxisDomainLeft.min, yAxisDomainLeft.max]}
+                                               reversed={profileData[0]?.unit === '°C'}
+                                               domain={profileData[0]?.unit === '°C' ? [yAxisDomainLeft.max, yAxisDomainLeft.min] : [yAxisDomainLeft.min, yAxisDomainLeft.max]}
                                            />
                                            {profileData.length > 1 && (
                                                <YAxis 
@@ -1964,6 +1964,31 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                    </ResponsiveContainer>
                                </div>
                            </div>
+                           <div className="space-y-1">
+                                <Label className="text-xs font-semibold">Dominio del Eje Y</Label>
+                                <div className="grid grid-cols-2 gap-2">
+                                  <div className="space-y-1">
+                                    <Label htmlFor="y-left-min" className="text-xs" style={{color: profileData[0]?.color}}>Min Izquierdo</Label>
+                                    <Input id="y-left-min" type="text" value={yAxisDomainLeft.min} onChange={(e) => handleYAxisDomainChange('left', 'min', e.target.value)} className="h-7 text-xs bg-black/20" placeholder="auto"/>
+                                  </div>
+                                  <div className="space-y-1">
+                                    <Label htmlFor="y-left-max" className="text-xs" style={{color: profileData[0]?.color}}>Max Izquierdo</Label>
+                                    <Input id="y-left-max" type="text" value={yAxisDomainLeft.max} onChange={(e) => handleYAxisDomainChange('left', 'max', e.target.value)} className="h-7 text-xs bg-black/20" placeholder="auto"/>
+                                  </div>
+                                  {profileData.length > 1 && (
+                                    <>
+                                      <div className="space-y-1">
+                                        <Label htmlFor="y-right-min" className="text-xs" style={{color: profileData[1]?.color}}>Min Derecho</Label>
+                                        <Input id="y-right-min" type="text" value={yAxisDomainRight.min} onChange={(e) => handleYAxisDomainChange('right', 'min', e.target.value)} className="h-7 text-xs bg-black/20" placeholder="auto"/>
+                                      </div>
+                                      <div className="space-y-1">
+                                        <Label htmlFor="y-right-max" className="text-xs" style={{color: profileData[1]?.color}}>Max Derecho</Label>
+                                        <Input id="y-right-max" type="text" value={yAxisDomainRight.max} onChange={(e) => handleYAxisDomainChange('right', 'max', e.target.value)} className="h-7 text-xs bg-black/20" placeholder="auto"/>
+                                      </div>
+                                    </>
+                                  )}
+                                </div>
+                            </div>
                            <div className="space-y-1">
                                {profileData.map(series => (
                                    <details key={series.datasetId}>
@@ -2554,3 +2579,5 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
+    
