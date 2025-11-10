@@ -680,6 +680,20 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     setDomain(prev => ({ ...prev, [key]: numValue }));
   };
 
+  const handleYAxisDomainStep = (axis: 'left' | 'right', key: 'min' | 'max', direction: 'inc' | 'dec') => {
+      const setDomain = axis === 'left' ? setYAxisDomainLeft : setYAxisDomainRight;
+      const currentDomain = axis === 'left' ? yAxisDomainLeft : yAxisDomainRight;
+      const currentValue = currentDomain[key];
+
+      if (currentValue === 'auto') return; // Cannot step from 'auto'
+      
+      const step = Math.max(1, Math.round(Math.abs(currentValue) * 0.05));
+      const newValue = direction === 'inc' ? currentValue + step : currentValue - step;
+
+      setDomain(prev => ({ ...prev, [key]: newValue }));
+  };
+
+
   const handleDownloadProfile = (format: 'csv' | 'jpg' | 'pdf') => {
     if (!profileData) {
         toast({ description: "No hay datos de perfil para descargar.", variant: "destructive" });
@@ -1881,73 +1895,73 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                     {profileData ? (
                          <div className="pt-2 border-t border-white/10 flex flex-col gap-3">
                            <div id="profile-chart-to-export" className="bg-background p-2 rounded">
-                               <div ref={chartContainerRef} className="h-64 w-full">
+                                <div ref={chartContainerRef} className="h-64 w-full">
                                     <ResponsiveContainer>
-                                       <AreaChart 
-                                           data={combinedChartData} 
-                                           margin={{ top: 5, right: 10, left: -20, bottom: 20 }}
-                                           onMouseMove={handleChartMouseMove}
-                                           onMouseLeave={handleChartMouseLeave}
-                                           onClick={handleChartClick}
-                                       >
-                                           <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                                           <XAxis 
-                                               dataKey="distance" 
-                                               tickFormatter={(val) => `${(val / 1000).toFixed(1)}km`} 
-                                               stroke="hsl(var(--foreground))" 
-                                               fontSize={10} 
-                                           />
-                                           <YAxis 
-                                               yAxisId="left" 
-                                               orientation="left" 
-                                               stroke={profileData[0]?.color} 
-                                               fontSize={10} 
-                                               reversed={profileData[0]?.unit === '°C'}
-                                               domain={profileData[0]?.unit === '°C' ? [yAxisDomainLeft.max, yAxisDomainLeft.min] : [yAxisDomainLeft.min, yAxisDomainLeft.max]}
-                                           />
-                                           {profileData.length > 1 && (
-                                               <YAxis 
-                                                   yAxisId="right" 
-                                                   orientation="right" 
-                                                   stroke={profileData[1]?.color} 
-                                                   fontSize={10} 
-                                                   reversed={profileData[1]?.unit === '°C'}
-                                                   domain={profileData[1]?.unit === '°C' ? [yAxisDomainRight.max, yAxisDomainRight.min] : [yAxisDomainRight.min, yAxisDomainRight.max]}
-                                               />
-                                           )}
-                                           <Tooltip
-                                               contentStyle={{
+                                        <AreaChart 
+                                            data={combinedChartData} 
+                                            margin={{ top: 5, right: 10, left: -20, bottom: 20 }}
+                                            onMouseMove={handleChartMouseMove}
+                                            onMouseLeave={handleChartMouseLeave}
+                                            onClick={handleChartClick}
+                                        >
+                                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                                            <XAxis 
+                                                dataKey="distance" 
+                                                tickFormatter={(val) => `${(val / 1000).toFixed(1)}km`} 
+                                                stroke="hsl(var(--foreground))" 
+                                                fontSize={10} 
+                                            />
+                                            <YAxis 
+                                                yAxisId="left" 
+                                                orientation="left" 
+                                                stroke={profileData[0]?.color} 
+                                                fontSize={10} 
+                                                reversed={profileData[0]?.unit === '°C'}
+                                                domain={profileData[0]?.unit === '°C' ? [yAxisDomainLeft.max, yAxisDomainLeft.min] : [yAxisDomainLeft.min, yAxisDomainLeft.max]}
+                                            />
+                                            {profileData.length > 1 && (
+                                                <YAxis 
+                                                    yAxisId="right" 
+                                                    orientation="right" 
+                                                    stroke={profileData[1]?.color} 
+                                                    fontSize={10} 
+                                                    reversed={profileData[1]?.unit === '°C'}
+                                                    domain={profileData[1]?.unit === '°C' ? [yAxisDomainRight.max, yAxisDomainRight.min] : [yAxisDomainRight.min, yAxisDomainRight.max]}
+                                                />
+                                            )}
+                                            <Tooltip
+                                                contentStyle={{
                                                     backgroundColor: 'rgba(30, 41, 59, 0.9)',
                                                     border: '1px solid hsl(var(--border))',
                                                     fontSize: '12px',
-                                               }}
-                                               labelFormatter={(label) => `Distancia: ${(label / 1000).toFixed(2)} km`}
-                                               formatter={(value: number, name: string) => [`${value.toFixed(2)} ${profileData.find(d => d.datasetId === name)?.unit || ''}`, profileData.find(d => d.datasetId === name)?.name]}
-                                           />
-                                           <Legend wrapperStyle={{fontSize: "10px", paddingTop: '20px'}}/>
-                                           {profileData[0]?.stats.jenksBreaks.map((br, i) => (
-                                               <ReferenceLine key={`jenks-left-${i}`} y={br} yAxisId="left" stroke="hsl(var(--muted-foreground))" strokeDasharray="2 2" strokeOpacity={0.7}>
-                                                   <Label value={br.toFixed(1)} position="insideLeft" fontSize={9} fill="hsl(var(--muted-foreground))" />
-                                               </ReferenceLine>
-                                           ))}
-                                           {profileData.length > 1 && profileData[1]?.stats.jenksBreaks.map((br, i) => (
-                                               <ReferenceLine key={`jenks-right-${i}`} y={br} yAxisId="right" stroke="hsl(var(--muted-foreground))" strokeDasharray="2 2" strokeOpacity={0.7}>
+                                                }}
+                                                labelFormatter={(label) => `Distancia: ${(label / 1000).toFixed(2)} km`}
+                                                formatter={(value: number, name: string) => [`${value.toFixed(2)} ${profileData.find(d => d.datasetId === name)?.unit || ''}`, profileData.find(d => d.datasetId === name)?.name]}
+                                            />
+                                            <Legend wrapperStyle={{fontSize: "10px", paddingTop: '20px'}}/>
+                                            {profileData[0]?.stats.jenksBreaks.map((br, i) => (
+                                                <ReferenceLine key={`jenks-left-${i}`} y={br} yAxisId="left" stroke="hsl(var(--muted-foreground))" strokeDasharray="2 2" strokeOpacity={0.7}>
+                                                    <Label value={br.toFixed(1)} position="insideLeft" fontSize={9} fill="hsl(var(--muted-foreground))" />
+                                                </ReferenceLine>
+                                            ))}
+                                            {profileData.length > 1 && profileData[1]?.stats.jenksBreaks.map((br, i) => (
+                                                <ReferenceLine key={`jenks-right-${i}`} y={br} yAxisId="right" stroke="hsl(var(--muted-foreground))" strokeDasharray="2 2" strokeOpacity={0.7}>
                                                     <Label value={br.toFixed(1)} position="insideRight" fontSize={9} fill="hsl(var(--muted-foreground))" />
-                                               </ReferenceLine>
-                                           ))}
-                                           {profileData.map((series, index) => (
-                                               <Area 
-                                                   key={series.datasetId}
-                                                   yAxisId={index === 0 ? "left" : "right"}
-                                                   type="monotone" 
-                                                   dataKey={series.datasetId}
-                                                   name={series.name}
-                                                   stroke={series.color}
-                                                   fill={series.color}
-                                                   fillOpacity={0.2}
-                                                   strokeWidth={1.5}
-                                               />
-                                           ))}
+                                                </ReferenceLine>
+                                            ))}
+                                            {profileData.map((series, index) => (
+                                                <Area 
+                                                    key={series.datasetId}
+                                                    yAxisId={index === 0 ? "left" : "right"}
+                                                    type="monotone" 
+                                                    dataKey={series.datasetId}
+                                                    name={series.name}
+                                                    stroke={series.color}
+                                                    fill={series.color}
+                                                    fillOpacity={0.2}
+                                                    strokeWidth={1.5}
+                                                />
+                                            ))}
                                             {profileData.map((series, index) => (
                                                 <Bar 
                                                     key={`${series.datasetId}_hist`} 
@@ -1960,33 +1974,50 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                                     data={combinedHistogramData}
                                                 />
                                             ))}
-                                       </AreaChart>
-                                   </ResponsiveContainer>
-                               </div>
-                           </div>
-                           <div className="space-y-1">
+                                        </AreaChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            </div>
+                            <div className="space-y-2">
                                 <Label className="text-xs font-semibold">Dominio del Eje Y</Label>
-                                <div className="grid grid-cols-2 gap-2">
-                                  <div className="space-y-1">
-                                    <Label htmlFor="y-left-min" className="text-xs" style={{color: profileData[0]?.color}}>Min Izquierdo</Label>
-                                    <Input id="y-left-min" type="text" value={yAxisDomainLeft.min} onChange={(e) => handleYAxisDomainChange('left', 'min', e.target.value)} className="h-7 text-xs bg-black/20" placeholder="auto"/>
-                                  </div>
-                                  <div className="space-y-1">
-                                    <Label htmlFor="y-left-max" className="text-xs" style={{color: profileData[0]?.color}}>Max Izquierdo</Label>
-                                    <Input id="y-left-max" type="text" value={yAxisDomainLeft.max} onChange={(e) => handleYAxisDomainChange('left', 'max', e.target.value)} className="h-7 text-xs bg-black/20" placeholder="auto"/>
-                                  </div>
-                                  {profileData.length > 1 && (
-                                    <>
-                                      <div className="space-y-1">
-                                        <Label htmlFor="y-right-min" className="text-xs" style={{color: profileData[1]?.color}}>Min Derecho</Label>
-                                        <Input id="y-right-min" type="text" value={yAxisDomainRight.min} onChange={(e) => handleYAxisDomainChange('right', 'min', e.target.value)} className="h-7 text-xs bg-black/20" placeholder="auto"/>
-                                      </div>
-                                      <div className="space-y-1">
-                                        <Label htmlFor="y-right-max" className="text-xs" style={{color: profileData[1]?.color}}>Max Derecho</Label>
-                                        <Input id="y-right-max" type="text" value={yAxisDomainRight.max} onChange={(e) => handleYAxisDomainChange('right', 'max', e.target.value)} className="h-7 text-xs bg-black/20" placeholder="auto"/>
-                                      </div>
-                                    </>
-                                  )}
+                                <div className="space-y-2 p-2 border border-white/10 rounded-md">
+                                    <div className="flex items-end gap-2 justify-between">
+                                        <Label htmlFor="y-left-min" className="text-xs flex-1" style={{color: profileData[0]?.color}}>Min Izquierdo</Label>
+                                        <div className="flex items-center gap-1">
+                                            <Button onClick={() => handleYAxisDomainStep('left', 'min', 'dec')} variant="outline" size="icon" className="h-6 w-6"><Minus className="h-3 w-3"/></Button>
+                                            <Input id="y-left-min" type="text" value={yAxisDomainLeft.min} onChange={(e) => handleYAxisDomainChange('left', 'min', e.target.value)} className="h-7 w-20 text-xs bg-black/20 text-center" placeholder="auto"/>
+                                            <Button onClick={() => handleYAxisDomainStep('left', 'min', 'inc')} variant="outline" size="icon" className="h-6 w-6"><Plus className="h-3 w-3"/></Button>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-end gap-2 justify-between">
+                                        <Label htmlFor="y-left-max" className="text-xs flex-1" style={{color: profileData[0]?.color}}>Max Izquierdo</Label>
+                                         <div className="flex items-center gap-1">
+                                            <Button onClick={() => handleYAxisDomainStep('left', 'max', 'dec')} variant="outline" size="icon" className="h-6 w-6"><Minus className="h-3 w-3"/></Button>
+                                            <Input id="y-left-max" type="text" value={yAxisDomainLeft.max} onChange={(e) => handleYAxisDomainChange('left', 'max', e.target.value)} className="h-7 w-20 text-xs bg-black/20 text-center" placeholder="auto"/>
+                                            <Button onClick={() => handleYAxisDomainStep('left', 'max', 'inc')} variant="outline" size="icon" className="h-6 w-6"><Plus className="h-3 w-3"/></Button>
+                                        </div>
+                                    </div>
+                                    {profileData.length > 1 && (
+                                        <>
+                                            <Separator className="bg-white/10 my-1"/>
+                                             <div className="flex items-end gap-2 justify-between">
+                                                <Label htmlFor="y-right-min" className="text-xs flex-1" style={{color: profileData[1]?.color}}>Min Derecho</Label>
+                                                <div className="flex items-center gap-1">
+                                                    <Button onClick={() => handleYAxisDomainStep('right', 'min', 'dec')} variant="outline" size="icon" className="h-6 w-6"><Minus className="h-3 w-3"/></Button>
+                                                    <Input id="y-right-min" type="text" value={yAxisDomainRight.min} onChange={(e) => handleYAxisDomainChange('right', 'min', e.target.value)} className="h-7 w-20 text-xs bg-black/20 text-center" placeholder="auto"/>
+                                                    <Button onClick={() => handleYAxisDomainStep('right', 'min', 'inc')} variant="outline" size="icon" className="h-6 w-6"><Plus className="h-3 w-3"/></Button>
+                                                </div>
+                                            </div>
+                                             <div className="flex items-end gap-2 justify-between">
+                                                <Label htmlFor="y-right-max" className="text-xs flex-1" style={{color: profileData[1]?.color}}>Max Derecho</Label>
+                                                <div className="flex items-center gap-1">
+                                                    <Button onClick={() => handleYAxisDomainStep('right', 'max', 'dec')} variant="outline" size="icon" className="h-6 w-6"><Minus className="h-3 w-3"/></Button>
+                                                    <Input id="y-right-max" type="text" value={yAxisDomainRight.max} onChange={(e) => handleYAxisDomainChange('right', 'max', e.target.value)} className="h-7 w-20 text-xs bg-black/20 text-center" placeholder="auto"/>
+                                                    <Button onClick={() => handleYAxisDomainStep('right', 'max', 'inc')} variant="outline" size="icon" className="h-6 w-6"><Plus className="h-3 w-3"/></Button>
+                                                </div>
+                                            </div>
+                                        </>
+                                    )}
                                 </div>
                             </div>
                            <div className="space-y-1">
@@ -2579,5 +2610,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
+    
 
     
