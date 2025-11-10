@@ -626,22 +626,6 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         }));
     });
     
-    // The chart expects a single array where each item has all values for that 'x'
-    // We need to merge our histogram data. A simplified approach is to interleave,
-    // but recharts' <Bar> can handle separate `dataKey`s from a single `data` array.
-    // For now, we will render multiple <Bar> components, one for each series.
-    // So, we just need to provide the data in a format that <Bar> can use.
-    // Let's create a combined data structure that can be used by both Area and Bar.
-    // The combinedChartData already has distance as X. We can add histogram values to it.
-    // This is complex. A simpler way is to render the BarChart separately but with a shared domain.
-    // But the prompt wants them integrated.
-
-    const finalChartData = [...combinedChartData];
-    allSeriesHistogramData.forEach(histBin => {
-        // This is tricky. We can't easily merge binned histogram data with point-by-point profile data.
-        // Instead, the Bar component will have its own data. We just need to prepare the series data.
-    });
-
     return allSeriesHistogramData;
 
   }, [profileData, yAxisDomainLeft, yAxisDomainRight, combinedChartData]);
@@ -1890,80 +1874,105 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                         </Button>
                     </div>
                     {profileData ? (
-                        <div ref={chartContainerRef} id="profile-chart-to-export" className="pt-2 border-t border-white/10 flex flex-col gap-3 bg-background p-2 rounded">
-                            <div className="h-64 w-full">
-                                <ResponsiveContainer>
-                                    <AreaChart 
-                                        data={combinedChartData} 
-                                        margin={{ top: 5, right: 10, left: -20, bottom: 20 }}
-                                        onMouseMove={handleChartMouseMove}
-                                        onMouseLeave={handleChartMouseLeave}
-                                        onClick={handleChartClick}
-                                    >
-                                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                                        <XAxis 
-                                            dataKey="distance" 
-                                            tickFormatter={(val) => `${(val / 1000).toFixed(1)}km`} 
-                                            stroke="hsl(var(--foreground))" 
-                                            fontSize={10} 
-                                        />
-                                        <YAxis 
-                                            yAxisId="left" 
-                                            orientation="left" 
-                                            stroke={profileData[0].color} 
-                                            fontSize={10} 
-                                            domain={[yAxisDomainLeft.min, yAxisDomainLeft.max]}
-                                        />
-                                        {profileData.length > 1 && (
-                                            <YAxis 
-                                                yAxisId="right" 
-                                                orientation="right" 
-                                                stroke={profileData[1].color} 
+                        <div className="pt-2 border-t border-white/10 flex flex-col gap-3">
+                            {/* Chart Area */}
+                            <div id="profile-chart-to-export" className="bg-background p-2 rounded">
+                                <div className="h-64 w-full">
+                                    <ResponsiveContainer>
+                                        <AreaChart 
+                                            data={combinedChartData} 
+                                            margin={{ top: 5, right: 10, left: -20, bottom: 20 }}
+                                            onMouseMove={handleChartMouseMove}
+                                            onMouseLeave={handleChartMouseLeave}
+                                            onClick={handleChartClick}
+                                        >
+                                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                                            <XAxis 
+                                                dataKey="distance" 
+                                                tickFormatter={(val) => `${(val / 1000).toFixed(1)}km`} 
+                                                stroke="hsl(var(--foreground))" 
                                                 fontSize={10} 
-                                                domain={[yAxisDomainRight.min, yAxisDomainRight.max]}
                                             />
-                                        )}
-                                        <Tooltip 
-                                            contentStyle={{
-                                                backgroundColor: 'rgba(50, 50, 50, 0.8)',
-                                                border: '1px solid hsl(var(--border))',
-                                                fontSize: '12px'
-                                            }} 
-                                            labelFormatter={(label) => `Distancia: ${(label / 1000).toFixed(2)} km`}
-                                            formatter={(value: number, name: string) => [`${value.toFixed(2)} ${profileData.find(d => d.datasetId === name)?.unit || ''}`, profileData.find(d => d.datasetId === name)?.name]}
-                                        />
-                                        <Legend wrapperStyle={{fontSize: "10px", paddingTop: '20px'}}/>
-                                        {profileData[0].stats.jenksBreaks.map((br, i) => (
-                                            <ReferenceLine key={`jenks-left-${i}`} y={br} yAxisId="left" stroke="hsl(var(--muted-foreground))" strokeDasharray="2 2" strokeOpacity={0.7}>
-                                                <Label value={br.toFixed(1)} position="insideLeft" fontSize={9} fill="hsl(var(--muted-foreground))" />
-                                            </ReferenceLine>
-                                        ))}
-                                         {profileData.length > 1 && profileData[1].stats.jenksBreaks.map((br, i) => (
-                                            <ReferenceLine key={`jenks-right-${i}`} y={br} yAxisId="right" stroke="hsl(var(--muted-foreground))" strokeDasharray="2 2" strokeOpacity={0.7}>
-                                                 <Label value={br.toFixed(1)} position="insideRight" fontSize={9} fill="hsl(var(--muted-foreground))" />
-                                            </ReferenceLine>
-                                        ))}
-                                        {profileData.map((series, index) => (
-                                            <Area 
-                                                key={series.datasetId}
-                                                yAxisId={index === 0 ? "left" : "right"}
-                                                type="monotone" 
-                                                dataKey={series.datasetId}
-                                                name={series.name}
-                                                stroke={series.color}
-                                                fill={series.color}
-                                                fillOpacity={0.2}
-                                                strokeWidth={1.5}
+                                            <YAxis 
+                                                yAxisId="left" 
+                                                orientation="left" 
+                                                stroke={profileData[0].color} 
+                                                fontSize={10} 
+                                                domain={[yAxisDomainLeft.min, yAxisDomainLeft.max]}
                                             />
-                                        ))}
-                                        <Bar data={combinedHistogramData} barSize={4} yAxisId="left" shape={profileData[0].unit === '°C' ? InvertedBar : undefined}>
-                                            {combinedHistogramData.map((entry, index) => (
-                                                <Cell key={`cell-${index}`} fill={entry.color} fillOpacity={0.3} />
+                                            {profileData.length > 1 && (
+                                                <YAxis 
+                                                    yAxisId="right" 
+                                                    orientation="right" 
+                                                    stroke={profileData[1].color} 
+                                                    fontSize={10} 
+                                                    domain={[yAxisDomainRight.min, yAxisDomainRight.max]}
+                                                />
+                                            )}
+                                            <Tooltip
+                                                contentStyle={{
+                                                    backgroundColor: 'rgba(30, 41, 59, 0.9)',
+                                                    border: '1px solid hsl(var(--border))',
+                                                    fontSize: '12px',
+                                                    color: 'hsl(var(--foreground))'
+                                                }}
+                                                labelFormatter={(label) => `Distancia: ${(label / 1000).toFixed(2)} km`}
+                                                formatter={(value: number, name: string) => [`${value.toFixed(2)} ${profileData.find(d => d.datasetId === name)?.unit || ''}`, profileData.find(d => d.datasetId === name)?.name]}
+                                            />
+                                            <Legend wrapperStyle={{fontSize: "10px", paddingTop: '20px'}}/>
+                                            {profileData[0].stats.jenksBreaks.map((br, i) => (
+                                                <ReferenceLine key={`jenks-left-${i}`} y={br} yAxisId="left" stroke="hsl(var(--muted-foreground))" strokeDasharray="2 2" strokeOpacity={0.7}>
+                                                    <Label value={br.toFixed(1)} position="insideLeft" fontSize={9} fill="hsl(var(--muted-foreground))" />
+                                                </ReferenceLine>
                                             ))}
-                                        </Bar>
-                                    </AreaChart>
-                                </ResponsiveContainer>
+                                            {profileData.length > 1 && profileData[1].stats.jenksBreaks.map((br, i) => (
+                                                <ReferenceLine key={`jenks-right-${i}`} y={br} yAxisId="right" stroke="hsl(var(--muted-foreground))" strokeDasharray="2 2" strokeOpacity={0.7}>
+                                                     <Label value={br.toFixed(1)} position="insideRight" fontSize={9} fill="hsl(var(--muted-foreground))" />
+                                                </ReferenceLine>
+                                            ))}
+                                            {profileData.map((series, index) => (
+                                                <Area 
+                                                    key={series.datasetId}
+                                                    yAxisId={index === 0 ? "left" : "right"}
+                                                    type="monotone" 
+                                                    dataKey={series.datasetId}
+                                                    name={series.name}
+                                                    stroke={series.color}
+                                                    fill={series.color}
+                                                    fillOpacity={0.2}
+                                                    strokeWidth={1.5}
+                                                />
+                                            ))}
+                                            <Bar data={combinedHistogramData} barSize={4} yAxisId="left" shape={profileData[0].unit === '°C' ? InvertedBar : undefined}>
+                                                {combinedHistogramData.map((entry, index) => (
+                                                    <Cell key={`cell-${index}`} fill={entry.color} fillOpacity={0.3} />
+                                                ))}
+                                            </Bar>
+                                        </AreaChart>
+                                    </ResponsiveContainer>
+                                </div>
                             </div>
+                            
+                            {/* Statistics Table */}
+                            <div className="space-y-1">
+                                {profileData.map(series => (
+                                    <details key={series.datasetId}>
+                                        <summary className="text-xs font-semibold cursor-pointer py-1" style={{ color: series.color }}>Estadísticas: {series.name}</summary>
+                                        <Table>
+                                            <TableBody>
+                                                <TableRow><TableCell className="text-xs p-1">Media</TableCell><TableCell className="text-xs p-1 text-right font-mono">{series.stats.mean.toFixed(2)}</TableCell></TableRow>
+                                                <TableRow><TableCell className="text-xs p-1">Mediana</TableCell><TableCell className="text-xs p-1 text-right font-mono">{jenks(series.points.map(p => series.unit === '°C' ? p.value - 273.15 : p.value), 2)[0].toFixed(2)}</TableCell></TableRow>
+                                                <TableRow><TableCell className="text-xs p-1">Mín</TableCell><TableCell className="text-xs p-1 text-right font-mono">{series.stats.min.toFixed(2)}</TableCell></TableRow>
+                                                <TableRow><TableCell className="text-xs p-1">Máx</TableCell><TableCell className="text-xs p-1 text-right font-mono">{series.stats.max.toFixed(2)}</TableCell></TableRow>
+                                                <TableRow><TableCell className="text-xs p-1">Desv. Est.</TableCell><TableCell className="text-xs p-1 text-right font-mono">{series.stats.stdDev.toFixed(2)}</TableCell></TableRow>
+                                                <TableRow><TableCell className="text-xs p-1">Cortes Jenks</TableCell><TableCell className="text-xs p-1 text-right font-mono">{series.stats.jenksBreaks.map(b => b.toFixed(1)).join(', ')}</TableCell></TableRow>
+                                            </TableBody>
+                                        </Table>
+                                    </details>
+                                ))}
+                            </div>
+                            
+                            {/* Action Buttons */}
                             <div className="flex justify-end items-center gap-2">
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
@@ -1986,7 +1995,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                         </div>
                     ) : (
                         <div className="pt-2 text-center text-xs text-gray-400">
-                            El gráfico del perfil aparecerá aquí
+                           {/* Intentionally empty to avoid showing the placeholder */}
                         </div>
                     )}
                 </AccordionContent>
@@ -2492,6 +2501,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
 
 
 
