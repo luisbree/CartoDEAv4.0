@@ -119,6 +119,17 @@ interface CombinedChartDataPoint {
     [key: string]: number | number[]; // Will hold values for each datasetId, e.g., NASADEM_ELEVATION: 45.3
 }
 
+// Custom component for inverted histogram bar
+const InvertedBar = (props: any) => {
+    const { fill, x, y, width, height, background } = props;
+    if (background) {
+        // This is a dummy component for the background, so it doesn't draw anything visible
+        return null;
+    }
+    // Draw the bar "hanging" from the top (y=0 in this case)
+    return <rect x={x} y={0} width={width} height={height} fill={fill} />;
+};
+
 
 const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   panelRef,
@@ -694,7 +705,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         toast({ description: "Descarga de perfil CSV iniciada." });
 
     } else if (format === 'jpg') {
-        htmlToImage.toJpeg(chartElement, { quality: 0.95, backgroundColor: '#ffffff' })
+        htmlToImage.toJpeg(chartElement, { quality: 0.95, backgroundColor: 'hsl(var(--background))' })
             .then(function (dataUrl) {
                 const link = document.createElement('a');
                 link.download = 'perfil_topografico.jpg';
@@ -706,7 +717,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                 toast({ description: "Error al generar JPG.", variant: "destructive" });
             });
     } else if (format === 'pdf') {
-        htmlToImage.toCanvas(chartElement, { backgroundColor: '#ffffff' })
+        htmlToImage.toCanvas(chartElement, { backgroundColor: 'hsl(var(--background))' })
             .then(function (canvas) {
                 const imgData = canvas.toDataURL('image/png');
                 const pdf = new jsPDF({
@@ -1855,22 +1866,8 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                     </div>
                     {profileData && (
                         <div className="pt-2 border-t border-white/10 flex flex-col gap-3">
-                             <div id="profile-chart-to-export" className="bg-background p-2 rounded-md">
+                             <div id="profile-chart-to-export" className="bg-gray-800 p-2 rounded-md">
                                 <div className="h-[250px] w-full mt-2 relative" ref={chartContainerRef}>
-                                    <div className="absolute inset-0 z-0">
-                                        <ResponsiveContainer width="100%" height="100%">
-                                             <BarChart data={combinedHistogramData} layout="vertical" margin={{ top: 5, right: 20, left: -25, bottom: 5 }}>
-                                                <XAxis type="number" hide domain={[0, 'dataMax']} />
-                                                <YAxis type="number" dataKey="value" hide domain={[yAxisDomainLeft.min, yAxisDomainLeft.max]} yAxisId="left" reversed={profileData[0]?.unit === '°C'} />
-                                                <Bar dataKey="count" yAxisId="left" isAnimationActive={false}>
-                                                  {combinedHistogramData.map((entry) => (
-                                                      <Cell key={entry.key} fill={entry.color} fillOpacity={0.1} />
-                                                  ))}
-                                                </Bar>
-                                            </BarChart>
-                                        </ResponsiveContainer>
-                                     </div>
-                                    <div className="absolute inset-0 z-10">
                                     <ResponsiveContainer width="100%" height="100%">
                                         <AreaChart 
                                           data={combinedChartData} 
@@ -1890,15 +1887,14 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                             <CartesianGrid strokeDasharray="3 3" stroke="rgba(200, 200, 200, 0.2)" />
                                             <XAxis dataKey="distance" type="number" stroke="hsl(var(--muted-foreground))" fontSize={10} tickFormatter={(val) => `${(val / 1000).toFixed(1)} km`} domain={['dataMin', 'dataMax']} />
                                             
-                                            <YAxis yAxisId="left" stroke={profileData[0]?.color || '#8884d8'} fontSize={10} domain={[yAxisDomainLeft.min, yAxisDomainLeft.max]} tickFormatter={(val) => `${val.toFixed(0)}${profileData[0]?.unit || ''}`} reversed={profileData[0]?.unit === '°C'} />
-                                            {profileData.length > 1 && (
-                                                <YAxis yAxisId="right" orientation="right" stroke={profileData[1]?.color || '#82ca9d'} fontSize={10} domain={[yAxisDomainRight.min, yAxisDomainRight.max]} tickFormatter={(val) => `${val.toFixed(0)}${profileData[1]?.unit || ''}`} reversed={profileData[1]?.unit === '°C'} />
-                                            )}
+                                            {profileData.map((series, index) => (
+                                                <YAxis key={`yaxis-${series.datasetId}`} yAxisId={index === 0 ? 'left' : 'right'} orientation={index === 0 ? 'left' : 'right'} stroke={series.color} fontSize={10} domain={[index === 0 ? yAxisDomainLeft.min : yAxisDomainRight.min, index === 0 ? yAxisDomainLeft.max : yAxisDomainRight.max]} tickFormatter={(val) => `${val.toFixed(0)}${series.unit}`} reversed={series.unit === '°C'} />
+                                            ))}
                                             
                                             <Tooltip
-                                                contentStyle={{ backgroundColor: 'rgba(200, 200, 200, 0.8)', border: '1px solid #ccc', color: '#333' }}
+                                                contentStyle={{ backgroundColor: 'rgba(50, 50, 50, 0.95)', border: '1px solid #555', color: '#fff', borderRadius: '0.5rem' }}
                                                 itemStyle={{ fontSize: '12px' }}
-                                                labelStyle={{ color: '#666', fontSize: '11px' }}
+                                                labelStyle={{ color: '#ccc', fontSize: '11px' }}
                                                 cursor={{ stroke: 'hsl(var(--primary))', strokeWidth: 1 }}
                                                 labelFormatter={(label) => `Distancia: ${Number(label).toFixed(2)} m`}
                                                 formatter={(value, name) => {
@@ -1910,10 +1906,24 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                             />
                                             <Legend wrapperStyle={{fontSize: "10px"}} />
 
+                                            <Bar dataKey="count" fill="#8884d8" yAxisId="left" fillOpacity={0} background={false} />
+
                                             {profileData.map((series, index) => (
                                                  <Area key={`area-${series.datasetId}`} yAxisId={index === 0 ? 'left' : 'right'} type="monotone" dataKey={series.datasetId} name={series.name} stroke={series.color} fill={`url(#gradient-${series.datasetId})`} strokeWidth={2} connectNulls />
                                             ))}
                                             
+                                            {/* Render histogram bars */}
+                                            {combinedHistogramData.map((entry) => {
+                                                const series = profileData.find(s => s.datasetId === entry.key.split('-')[1]);
+                                                const yAxisId = series?.datasetId === profileData[0]?.datasetId ? 'left' : 'right';
+                                                const isReversed = series?.unit === '°C';
+                                                if (isReversed) {
+                                                    return <Bar key={entry.key} dataKey="count" yAxisId={yAxisId} fill={entry.color} fillOpacity={0.1} shape={<InvertedBar />} data={[entry]} />;
+                                                }
+                                                return <Bar key={entry.key} dataKey="count" yAxisId={yAxisId} fill={entry.color} fillOpacity={0.1} data={[entry]} />;
+                                            })}
+
+                                            {/* Render Jenks breaks reference lines */}
                                             {profileData.map((series, index) => (
                                                 series.stats.jenksBreaks.map((breakValue, i) => (
                                                     <ReferenceLine 
@@ -2532,5 +2542,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
+
 
 
