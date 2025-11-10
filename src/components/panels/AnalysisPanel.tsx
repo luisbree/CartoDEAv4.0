@@ -1896,9 +1896,9 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                             )}
                                             
                                             <Tooltip
-                                                contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', color: 'hsl(var(--foreground))' }}
+                                                contentStyle={{ backgroundColor: 'rgba(200, 200, 200, 0.8)', border: '1px solid #ccc', color: '#333' }}
                                                 itemStyle={{ fontSize: '12px' }}
-                                                labelStyle={{ color: 'hsl(var(--muted-foreground))', fontSize: '11px' }}
+                                                labelStyle={{ color: '#666', fontSize: '11px' }}
                                                 cursor={{ stroke: 'hsl(var(--primary))', strokeWidth: 1 }}
                                                 labelFormatter={(label) => `Distancia: ${Number(label).toFixed(2)} m`}
                                                 formatter={(value, name) => {
@@ -2532,4 +2532,5 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
 
