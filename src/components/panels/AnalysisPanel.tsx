@@ -25,7 +25,7 @@ import VectorLayer from 'ol/layer/Vector';
 import { intersect, featureCollection, difference, cleanCoords, length as turfLength, along as turfAlong, clustersDbscan, nearestPoint as turfNearestPoint, bearing as turfBearing, destination, bezierSpline, centroid, distance as turfDistance } from '@turf/turf';
 import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as TurfMultiPolygon, FeatureCollection as TurfFeatureCollection, Geometry as TurfGeometry, Point as TurfPoint, LineString as TurfLineString } from 'geojson';
 import { multiPolygon, lineString as turfLineString, point as turfPoint, polygon as turfPolygon, convex } from '@turf/helpers';
-import type Feature from 'ol/Feature';
+import Feature from 'ol/Feature';
 import { type Geometry, type LineString as OlLineString, Point } from 'ol/geom';
 import { getLength as olGetLength } from 'ol/sphere';
 import { performBufferAnalysis, performConvexHull, performConcaveHull, calculateOptimalConcavity, projectPopulationGeometric, generateCrossSections, dissolveFeatures, performBezierSmoothing, DATASET_DEFINITIONS, jenks, performFeatureTracking } from '@/services/spatial-analysis';
@@ -36,7 +36,7 @@ import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 import { Style, Text as TextStyle, Fill, Stroke, Circle as CircleStyle } from 'ol/style';
 import type { Map } from 'ol';
 import Draw, { createBox } from 'ol/interaction/Draw';
-import { ResponsiveContainer, XAxis, YAxis, Tooltip, AreaChart, Area, CartesianGrid, ReferenceLine, Legend, ScatterChart, Scatter, Line, BarChart, Bar, Cell } from 'recharts';
+import { ResponsiveContainer, XAxis, YAxis, Tooltip, AreaChart, Area, CartesianGrid, ReferenceLine, Legend, ScatterChart, Scatter, Line, Bar, Cell } from 'recharts';
 import { cn } from '@/lib/utils';
 import { transform } from 'ol/proj';
 import { Slider } from '../ui/slider';
@@ -1881,101 +1881,102 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                         </Button>
                     </div>
                     {profileData ? (
-                         <div className="pt-2 border-t border-white/10 flex flex-col gap-3">
-                            <div id="profile-chart-to-export" className="bg-background p-2 rounded">
-                                <div ref={chartContainerRef} className="h-64 w-full">
-                                     <ResponsiveContainer>
-                                        <AreaChart 
-                                            data={combinedChartData} 
-                                            margin={{ top: 5, right: 10, left: -20, bottom: 20 }}
-                                            onMouseMove={handleChartMouseMove}
-                                            onMouseLeave={handleChartMouseLeave}
-                                            onClick={handleChartClick}
-                                        >
-                                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                                            <XAxis 
-                                                dataKey="distance" 
-                                                tickFormatter={(val) => `${(val / 1000).toFixed(1)}km`} 
-                                                stroke="hsl(var(--foreground))" 
-                                                fontSize={10} 
-                                            />
-                                            <YAxis 
-                                                yAxisId="left" 
-                                                orientation="left" 
-                                                stroke={profileData[0]?.color} 
-                                                fontSize={10} 
-                                                reversed={isAnyGoesProfile}
-                                                domain={isAnyGoesProfile ? [yAxisDomainLeft.max, yAxisDomainLeft.min] : [yAxisDomainLeft.min, yAxisDomainLeft.max]}
-                                            />
-                                            {profileData.length > 1 && (
-                                                <YAxis 
-                                                    yAxisId="right" 
-                                                    orientation="right" 
-                                                    stroke={profileData[1]?.color} 
-                                                    fontSize={10} 
-                                                    domain={[yAxisDomainRight.min, yAxisDomainRight.max]}
-                                                />
-                                            )}
-                                            <Tooltip
-                                                contentStyle={{
-                                                    backgroundColor: 'rgba(50, 50, 50, 0.8)',
-                                                    border: '1px solid hsl(var(--border))',
-                                                    fontSize: '12px',
-                                                    color: 'hsl(var(--foreground))'
-                                                }}
-                                                labelFormatter={(label) => `Distancia: ${(label / 1000).toFixed(2)} km`}
-                                                formatter={(value: number, name: string) => [`${value.toFixed(2)} ${profileData.find(d => d.datasetId === name)?.unit || ''}`, profileData.find(d => d.datasetId === name)?.name]}
-                                            />
-                                            <Legend wrapperStyle={{fontSize: "10px", paddingTop: '20px'}}/>
-                                            {profileData[0]?.stats.jenksBreaks.map((br, i) => (
-                                                <ReferenceLine key={`jenks-left-${i}`} y={br} yAxisId="left" stroke="hsl(var(--muted-foreground))" strokeDasharray="2 2" strokeOpacity={0.7}>
-                                                    <Label value={br.toFixed(1)} position="insideLeft" fontSize={9} fill="hsl(var(--muted-foreground))" />
-                                                </ReferenceLine>
-                                            ))}
-                                            {profileData.length > 1 && profileData[1]?.stats.jenksBreaks.map((br, i) => (
-                                                <ReferenceLine key={`jenks-right-${i}`} y={br} yAxisId="right" stroke="hsl(var(--muted-foreground))" strokeDasharray="2 2" strokeOpacity={0.7}>
-                                                     <Label value={br.toFixed(1)} position="insideRight" fontSize={9} fill="hsl(var(--muted-foreground))" />
-                                                </ReferenceLine>
-                                            ))}
-                                            {profileData.map((series, index) => (
-                                                <Area 
-                                                    key={series.datasetId}
-                                                    yAxisId={index === 0 ? "left" : "right"}
-                                                    type="monotone" 
-                                                    dataKey={series.datasetId}
-                                                    name={series.name}
-                                                    stroke={series.color}
-                                                    fill={series.color}
-                                                    fillOpacity={0.2}
-                                                    strokeWidth={1.5}
-                                                />
-                                            ))}
-                                            <Bar dataKey={profileData[0].datasetId} yAxisId="left" barSize={4} background={false} shape={(props) => <InvertedBar {...props} />}>
-                                                {combinedHistogramData.filter(d=>d.key === profileData[0].datasetId).map((entry, index) => (
-                                                    <Cell key={`cell-${index}`} fill={entry.color} fillOpacity={0.3} />
-                                                ))}
-                                            </Bar>
-                                        </AreaChart>
-                                    </ResponsiveContainer>
-                                </div>
-                            </div>
-                            <div className="space-y-1">
-                                {profileData.map(series => (
-                                    <details key={series.datasetId}>
-                                        <summary className="text-xs font-semibold cursor-pointer py-1" style={{ color: series.color }}>Estadísticas: {series.name}</summary>
-                                        <Table>
-                                            <TableBody>
-                                                <TableRow><TableCell className="text-xs p-1">Media</TableCell><TableCell className="text-xs p-1 text-right font-mono">{series.stats.mean.toFixed(2)}</TableCell></TableRow>
-                                                <TableRow><TableCell className="text-xs p-1">Mediana</TableCell><TableCell className="text-xs p-1 text-right font-mono">{jenks(series.points.map(p => series.unit === '°C' ? p.value - 273.15 : p.value), 2)[0]?.toFixed(2) || 'N/A'}</TableCell></TableRow>
-                                                <TableRow><TableCell className="text-xs p-1">Mín</TableCell><TableCell className="text-xs p-1 text-right font-mono">{series.stats.min.toFixed(2)}</TableCell></TableRow>
-                                                <TableRow><TableCell className="text-xs p-1">Máx</TableCell><TableCell className="text-xs p-1 text-right font-mono">{series.stats.max.toFixed(2)}</TableCell></TableRow>
-                                                <TableRow><TableCell className="text-xs p-1">Desv. Est.</TableCell><TableCell className="text-xs p-1 text-right font-mono">{series.stats.stdDev.toFixed(2)}</TableCell></TableRow>
-                                                <TableRow><TableCell className="text-xs p-1">Cortes Jenks</TableCell><TableCell className="text-xs p-1 text-right font-mono">{series.stats.jenksBreaks.map(b => b.toFixed(1)).join(', ')}</TableCell></TableRow>
-                                            </TableBody>
-                                        </Table>
-                                    </details>
-                                ))}
-                            </div>
+                        <div className="pt-2 border-t border-white/10 flex flex-col gap-3">
+                           <div id="profile-chart-to-export" className="bg-background p-2 rounded">
+                               <div ref={chartContainerRef} className="h-64 w-full">
+                                    <ResponsiveContainer>
+                                       <AreaChart 
+                                           data={combinedChartData} 
+                                           margin={{ top: 5, right: 10, left: -20, bottom: 20 }}
+                                           onMouseMove={handleChartMouseMove}
+                                           onMouseLeave={handleChartMouseLeave}
+                                           onClick={handleChartClick}
+                                       >
+                                           <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                                           <XAxis 
+                                               dataKey="distance" 
+                                               tickFormatter={(val) => `${(val / 1000).toFixed(1)}km`} 
+                                               stroke="hsl(var(--foreground))" 
+                                               fontSize={10} 
+                                           />
+                                           <YAxis 
+                                               yAxisId="left" 
+                                               orientation="left" 
+                                               stroke={profileData[0]?.color} 
+                                               fontSize={10} 
+                                               reversed={profileData[0]?.unit === '°C'}
+                                               domain={profileData[0]?.unit === '°C' ? [yAxisDomainLeft.max, yAxisDomainLeft.min] : [yAxisDomainLeft.min, yAxisDomainLeft.max]}
+                                           />
+                                           {profileData.length > 1 && (
+                                               <YAxis 
+                                                   yAxisId="right" 
+                                                   orientation="right" 
+                                                   stroke={profileData[1]?.color} 
+                                                   fontSize={10} 
+                                                   reversed={profileData[1]?.unit === '°C'}
+                                                   domain={profileData[1]?.unit === '°C' ? [yAxisDomainRight.max, yAxisDomainRight.min] : [yAxisDomainRight.min, yAxisDomainRight.max]}
+                                               />
+                                           )}
+                                           <Tooltip
+                                               contentStyle={{
+                                                   backgroundColor: 'rgba(30, 40, 50, 0.9)',
+                                                   border: '1px solid hsl(var(--border))',
+                                                   fontSize: '12px',
+                                                   color: 'hsl(var(--foreground))'
+                                               }}
+                                               labelFormatter={(label) => `Distancia: ${(label / 1000).toFixed(2)} km`}
+                                               formatter={(value: number, name: string) => [`${value.toFixed(2)} ${profileData.find(d => d.datasetId === name)?.unit || ''}`, profileData.find(d => d.datasetId === name)?.name]}
+                                           />
+                                           <Legend wrapperStyle={{fontSize: "10px", paddingTop: '20px'}}/>
+                                           {profileData[0]?.stats.jenksBreaks.map((br, i) => (
+                                               <ReferenceLine key={`jenks-left-${i}`} y={br} yAxisId="left" stroke="hsl(var(--muted-foreground))" strokeDasharray="2 2" strokeOpacity={0.7}>
+                                                   <Label value={br.toFixed(1)} position="insideLeft" fontSize={9} fill="hsl(var(--muted-foreground))" />
+                                               </ReferenceLine>
+                                           ))}
+                                           {profileData.length > 1 && profileData[1]?.stats.jenksBreaks.map((br, i) => (
+                                               <ReferenceLine key={`jenks-right-${i}`} y={br} yAxisId="right" stroke="hsl(var(--muted-foreground))" strokeDasharray="2 2" strokeOpacity={0.7}>
+                                                    <Label value={br.toFixed(1)} position="insideRight" fontSize={9} fill="hsl(var(--muted-foreground))" />
+                                               </ReferenceLine>
+                                           ))}
+                                           {profileData.map((series, index) => (
+                                               <Area 
+                                                   key={series.datasetId}
+                                                   yAxisId={index === 0 ? "left" : "right"}
+                                                   type="monotone" 
+                                                   dataKey={series.datasetId}
+                                                   name={series.name}
+                                                   stroke={series.color}
+                                                   fill={series.color}
+                                                   fillOpacity={0.2}
+                                                   strokeWidth={1.5}
+                                               />
+                                           ))}
+                                           <Bar dataKey={profileData[0]?.datasetId} yAxisId="left" barSize={4} background={false} shape={(props) => <InvertedBar {...props} />}>
+                                               {combinedHistogramData.filter(d => d.key === profileData[0]?.datasetId).map((entry, index) => (
+                                                   <Cell key={`cell-${index}`} fill={entry.color} fillOpacity={0.3} />
+                                               ))}
+                                           </Bar>
+                                       </AreaChart>
+                                   </ResponsiveContainer>
+                               </div>
+                           </div>
+                           <div className="space-y-1">
+                               {profileData.map(series => (
+                                   <details key={series.datasetId}>
+                                       <summary className="text-xs font-semibold cursor-pointer py-1" style={{ color: series.color }}>Estadísticas: {series.name}</summary>
+                                       <Table>
+                                           <TableBody>
+                                               <TableRow><TableCell className="text-xs p-1">Media</TableCell><TableCell className="text-xs p-1 text-right font-mono">{series.stats.mean.toFixed(2)}</TableCell></TableRow>
+                                               <TableRow><TableCell className="text-xs p-1">Mediana</TableCell><TableCell className="text-xs p-1 text-right font-mono">{jenks(series.points.map(p => series.unit === '°C' ? p.value - 273.15 : p.value), 2)[0]?.toFixed(2) || 'N/A'}</TableCell></TableRow>
+                                               <TableRow><TableCell className="text-xs p-1">Mín</TableCell><TableCell className="text-xs p-1 text-right font-mono">{series.stats.min.toFixed(2)}</TableCell></TableRow>
+                                               <TableRow><TableCell className="text-xs p-1">Máx</TableCell><TableCell className="text-xs p-1 text-right font-mono">{series.stats.max.toFixed(2)}</TableCell></TableRow>
+                                               <TableRow><TableCell className="text-xs p-1">Desv. Est.</TableCell><TableCell className="text-xs p-1 text-right font-mono">{series.stats.stdDev.toFixed(2)}</TableCell></TableRow>
+                                               <TableRow><TableCell className="text-xs p-1">Cortes Jenks</TableCell><TableCell className="text-xs p-1 text-right font-mono">{series.stats.jenksBreaks.map(b => b.toFixed(1)).join(', ')}</TableCell></TableRow>
+                                           </TableBody>
+                                       </Table>
+                                   </details>
+                               ))}
+                           </div>
                             {profileData && profileData.length > 1 && (
                                 <div className="space-y-2 pt-2 border-t border-white/10">
                                   <h4 className="text-xs font-semibold">Análisis de Correlación</h4>
@@ -2021,31 +2022,31 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                   )}
                                 </div>
                             )}
-                            <div className="flex justify-end items-center gap-2">
-                                <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                        <Button variant="outline" size="sm" className="h-7 text-xs bg-gray-600/70 hover:bg-gray-500/70 border-gray-500 text-white">
-                                            <Download className="mr-2 h-3.5 w-3.5"/> Exportar
-                                        </Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent>
-                                        <DropdownMenuItem onSelect={() => handleDownloadProfile('csv')} className="text-xs"><FileText className="mr-2 h-3.5 w-3.5"/>CSV</DropdownMenuItem>
-                                        <DropdownMenuItem onSelect={() => handleDownloadProfile('jpg')} className="text-xs"><FileImage className="mr-2 h-3.5 w-3.5"/>JPG</DropdownMenuItem>
-                                        <DropdownMenuItem onSelect={() => handleDownloadProfile('pdf')} className="text-xs"><FileImage className="mr-2 h-3.5 w-3.5"/>PDF</DropdownMenuItem>
-                                    </DropdownMenuContent>
-                                </DropdownMenu>
-                                {profilePoints.length > 0 && (
-                                     <Button onClick={onConvertProfilePointsToLayer} variant="outline" size="sm" className="h-7 text-xs bg-primary/30 text-white border-primary/50">
-                                         <LayersIcon className="mr-2 h-3.5 w-3.5"/>Crear Capa de Puntos ({profilePoints.length})
-                                     </Button>
-                                )}
-                            </div>
-                        </div>
+                           <div className="flex justify-end items-center gap-2">
+                               <DropdownMenu>
+                                   <DropdownMenuTrigger asChild>
+                                       <Button variant="outline" size="sm" className="h-7 text-xs bg-gray-600/70 hover:bg-gray-500/70 border-gray-500 text-white">
+                                           <Download className="mr-2 h-3.5 w-3.5"/> Exportar
+                                       </Button>
+                                   </DropdownMenuTrigger>
+                                   <DropdownMenuContent>
+                                       <DropdownMenuItem onSelect={() => handleDownloadProfile('csv')} className="text-xs"><FileText className="mr-2 h-3.5 w-3.5"/>CSV</DropdownMenuItem>
+                                       <DropdownMenuItem onSelect={() => handleDownloadProfile('jpg')} className="text-xs"><FileImage className="mr-2 h-3.5 w-3.5"/>JPG</DropdownMenuItem>
+                                       <DropdownMenuItem onSelect={() => handleDownloadProfile('pdf')} className="text-xs"><FileImage className="mr-2 h-3.5 w-3.5"/>PDF</DropdownMenuItem>
+                                   </DropdownMenuContent>
+                               </DropdownMenu>
+                               {profilePoints.length > 0 && (
+                                    <Button onClick={onConvertProfilePointsToLayer} variant="outline" size="sm" className="h-7 text-xs bg-primary/30 text-white border-primary/50">
+                                        <LayersIcon className="mr-2 h-3.5 w-3.5"/>Crear Capa de Puntos ({profilePoints.length})
+                                    </Button>
+                               )}
+                           </div>
+                       </div>
                     ) : (
-                        <div className="pt-2 text-center text-xs text-gray-400">
-                           {isGeneratingProfile ? 'Generando perfil...' : ''}
-                        </div>
-                    )}
+                       <div className="pt-2 text-center text-xs text-gray-400">
+                          {isGeneratingProfile ? 'Generando perfil...' : ''}
+                       </div>
+                   )}
                 </AccordionContent>
             </AccordionItem>
             <AccordionItem value="overlay-tools" className="border-b-0 bg-white/5 rounded-md">
@@ -2549,5 +2550,3 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
-
-
