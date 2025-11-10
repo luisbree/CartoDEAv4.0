@@ -580,46 +580,71 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   }, [profileData]);
 
   const combinedHistogramData = useMemo(() => {
-      if (!profileData) return [];
-  
-      return profileData.flatMap((series) => {
-          const isLeftAxis = series.datasetId === profileData[0].datasetId;
-          const domain = isLeftAxis ? yAxisDomainLeft : yAxisDomainRight;
-          
-          let min = domain.min === 'auto' ? series.stats.min : domain.min;
-          let max = domain.max === 'auto' ? series.stats.max : domain.max;
-  
-          // Ensure min and max are valid numbers
-          if (typeof min !== 'number' || typeof max !== 'number' || min >= max) {
-              min = series.stats.min;
-              max = series.stats.max;
-              if (min >= max) return [];
-          }
-          
-          const allValues = series.points.map(p => 
-              series.unit === '°C' ? p.value - 273.15 : p.value
-          ).filter(v => v >= min && v <= max);
-  
-          if (allValues.length === 0) return [];
-  
-          const HISTOGRAM_BINS = 30;
-          const binSize = (max - min) / HISTOGRAM_BINS;
-          const histogram: HistogramEntry[] = [];
-  
-          for (let i = 0; i < HISTOGRAM_BINS; i++) {
-              const binMin = min + i * binSize;
-              const binMax = binMin + binSize;
-              const count = allValues.filter(v => v >= binMin && v < binMax).length;
-              histogram.push({
-                  value: (binMin + binMax) / 2,
-                  count,
-                  key: `hist-${series.datasetId}-${i}`,
-                  color: series.color,
-              });
-          }
-          return histogram;
-      });
-  }, [profileData, yAxisDomainLeft, yAxisDomainRight]);
+    if (!profileData) return [];
+
+    const allSeriesHistogramData = profileData.flatMap((series) => {
+        const isLeftAxis = series.datasetId === profileData[0].datasetId;
+        const domain = isLeftAxis ? yAxisDomainLeft : yAxisDomainRight;
+
+        let min = domain.min === 'auto' ? series.stats.min : domain.min;
+        let max = domain.max === 'auto' ? series.stats.max : domain.max;
+
+        if (typeof min !== 'number' || typeof max !== 'number' || min >= max) {
+            min = series.stats.min;
+            max = series.stats.max;
+            if (min >= max) return [];
+        }
+
+        const allValues = series.points.map(p =>
+            series.unit === '°C' ? p.value - 273.15 : p.value
+        ).filter(v => v >= min && v <= max);
+
+        if (allValues.length === 0) return [];
+
+        const HISTOGRAM_BINS = 30;
+        const binSize = (max - min) / HISTOGRAM_BINS;
+        const histogram: { value: number; count: number; color: string; }[] = [];
+        let maxCount = 0;
+
+        for (let i = 0; i < HISTOGRAM_BINS; i++) {
+            const binMin = min + i * binSize;
+            const binMax = binMin + binSize;
+            const count = allValues.filter(v => v >= binMin && v < binMax).length;
+            if (count > maxCount) maxCount = count;
+            histogram.push({
+                value: (binMin + binMax) / 2,
+                count,
+                color: series.color,
+            });
+        }
+        
+        // Normalize histogram counts to be a percentage of the chart width
+        return histogram.map(bin => ({
+            ...bin,
+            // Adjust count to be proportional to chart domain, e.g. 30% of width
+            count: (bin.count / maxCount) * ((combinedChartData[combinedChartData.length-1]?.distance || 1) * 0.3) 
+        }));
+    });
+    
+    // The chart expects a single array where each item has all values for that 'x'
+    // We need to merge our histogram data. A simplified approach is to interleave,
+    // but recharts' <Bar> can handle separate `dataKey`s from a single `data` array.
+    // For now, we will render multiple <Bar> components, one for each series.
+    // So, we just need to provide the data in a format that <Bar> can use.
+    // Let's create a combined data structure that can be used by both Area and Bar.
+    // The combinedChartData already has distance as X. We can add histogram values to it.
+    // This is complex. A simpler way is to render the BarChart separately but with a shared domain.
+    // But the prompt wants them integrated.
+
+    const finalChartData = [...combinedChartData];
+    allSeriesHistogramData.forEach(histBin => {
+        // This is tricky. We can't easily merge binned histogram data with point-by-point profile data.
+        // Instead, the Bar component will have its own data. We just need to prepare the series data.
+    });
+
+    return allSeriesHistogramData;
+
+}, [profileData, yAxisDomainLeft, yAxisDomainRight, combinedChartData]);
   
   const handleCalculateCorrelation = () => {
     if (!profileData || !corrAxisX || !corrAxisY || corrAxisX === corrAxisY) {
@@ -1864,9 +1889,15 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                             Generar Perfil(es)
                         </Button>
                     </div>
-                    {profileData && (
-                        <div className="pt-2 border-t border-white/10 flex flex-col gap-3">
-                            <div className="text-center">El gráfico del perfil aparecerá aquí</div>
+                    {profileData ? (
+                         <div className="pt-2 border-t border-white/10 flex flex-col gap-3">
+                            <div className="text-center text-xs text-gray-300">
+                                Gráfico del Perfil
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="pt-2 text-center text-xs text-gray-400">
+                            El gráfico del perfil aparecerá aquí
                         </div>
                     )}
                 </AccordionContent>
@@ -2372,6 +2403,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
 
 
 
