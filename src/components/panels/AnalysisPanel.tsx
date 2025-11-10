@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
@@ -587,6 +588,12 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 
         let min = domain.min === 'auto' ? series.stats.min : domain.min;
         let max = domain.max === 'auto' ? series.stats.max : domain.max;
+        
+        // Swap for inverted axis
+        const isGoes = series.unit === '°C';
+        if (isGoes) {
+            [min, max] = [max, min];
+        }
 
         if (typeof min !== 'number' || typeof max !== 'number' || min >= max) {
             min = series.stats.min;
@@ -1777,6 +1784,8 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
       { x: maxX, y: slope * maxX + intercept },
     ];
   }, [correlationResult]);
+  
+  const isAnyGoesProfile = profileData?.some(d => d.unit === '°C') ?? false;
 
 
   return (
@@ -1793,7 +1802,6 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
       style={style}
       zIndex={style?.zIndex as number | undefined}
       initialSize={{ width: 380, height: "auto" }}
-      minSize={{ width: 350, height: 300 }}
     >
        <Accordion
           type="single"
@@ -1873,10 +1881,10 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                         </Button>
                     </div>
                     {profileData ? (
-                        <div className="pt-2 border-t border-white/10 flex flex-col gap-3">
+                         <div className="pt-2 border-t border-white/10 flex flex-col gap-3">
                             <div id="profile-chart-to-export" className="bg-background p-2 rounded">
                                 <div ref={chartContainerRef} className="h-64 w-full">
-                                    <ResponsiveContainer>
+                                     <ResponsiveContainer>
                                         <AreaChart 
                                             data={combinedChartData} 
                                             margin={{ top: 5, right: 10, left: -20, bottom: 20 }}
@@ -1896,7 +1904,8 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                                 orientation="left" 
                                                 stroke={profileData[0]?.color} 
                                                 fontSize={10} 
-                                                domain={[yAxisDomainLeft.min, yAxisDomainLeft.max]}
+                                                reversed={isAnyGoesProfile}
+                                                domain={isAnyGoesProfile ? [yAxisDomainLeft.max, yAxisDomainLeft.min] : [yAxisDomainLeft.min, yAxisDomainLeft.max]}
                                             />
                                             {profileData.length > 1 && (
                                                 <YAxis 
@@ -1941,8 +1950,8 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                                     strokeWidth={1.5}
                                                 />
                                             ))}
-                                            <Bar data={combinedHistogramData} barSize={4} yAxisId="left" shape={(props) => InvertedBar({ ...props, background: profileData.find(s => s.datasetId === props.dataKey)?.unit !== '°C' })}>
-                                                {combinedHistogramData.map((entry, index) => (
+                                            <Bar dataKey={profileData[0].datasetId} yAxisId="left" barSize={4} background={false} shape={(props) => <InvertedBar {...props} />}>
+                                                {combinedHistogramData.filter(d=>d.key === profileData[0].datasetId).map((entry, index) => (
                                                     <Cell key={`cell-${index}`} fill={entry.color} fillOpacity={0.3} />
                                                 ))}
                                             </Bar>
@@ -1950,7 +1959,6 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                     </ResponsiveContainer>
                                 </div>
                             </div>
-                            
                             <div className="space-y-1">
                                 {profileData.map(series => (
                                     <details key={series.datasetId}>
@@ -1968,7 +1976,6 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                     </details>
                                 ))}
                             </div>
-
                             {profileData && profileData.length > 1 && (
                                 <div className="space-y-2 pt-2 border-t border-white/10">
                                   <h4 className="text-xs font-semibold">Análisis de Correlación</h4>
@@ -2014,7 +2021,6 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                   )}
                                 </div>
                             )}
-                            
                             <div className="flex justify-end items-center gap-2">
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
@@ -2543,4 +2549,5 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
 
