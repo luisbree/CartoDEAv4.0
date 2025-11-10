@@ -32,7 +32,7 @@ import { performBufferAnalysis, performConvexHull, performConcaveHull, calculate
 import { getValuesForPoints } from '@/ai/flows/gee-flow';
 import { ScrollArea } from '../ui/scroll-area';
 import { Checkbox } from '../ui/checkbox';
-import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableRow, TableHead, TableHeader } from "@/components/ui/table";
 import { Style, Text as TextStyle, Fill, Stroke, Circle as CircleStyle } from 'ol/style';
 import type { Map } from 'ol';
 import Draw, { createBox } from 'ol/interaction/Draw';
@@ -681,11 +681,11 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     setDomain(prev => ({ ...prev, [key]: numValue }));
   };
 
-  const useSteppedChange = (setter: React.Dispatch<React.SetStateAction<any>>, stepValue: number) => {
+  const useSteppedChange = (setter: () => void) => {
     const start = () => {
         if (intervalRef.current) clearInterval(intervalRef.current);
-        setter(stepValue); // Initial change
-        intervalRef.current = setInterval(() => setter(stepValue), 100);
+        setter(); // Initial change
+        intervalRef.current = setInterval(() => setter(), 100);
     };
     const stop = () => {
         if (intervalRef.current) clearInterval(intervalRef.current);
@@ -700,33 +700,35 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 
       if (currentValue === 'auto') return; // Cannot step from 'auto'
       
-      const step = Math.max(1, Math.round(Math.abs(currentValue) * 0.05));
-      const change = direction === 'inc' ? step : -step;
+      const change = direction === 'inc' ? 1 : -1;
 
       return () => setDomain(prev => ({ ...prev, [key]: (prev[key] === 'auto' ? 0 : prev[key]) + change }));
   };
 
   const YAxisControl = ({ axis, domain, setDomain, color }: { axis: 'left' | 'right', domain: typeof yAxisDomainLeft, setDomain: typeof setYAxisDomainLeft, color?: string }) => {
-    const minIncHandlers = useSteppedChange(handleYAxisDomainStep(axis, 'min', 'inc'), 1);
-    const minDecHandlers = useSteppedChange(handleYAxisDomainStep(axis, 'min', 'dec'), 1);
-    const maxIncHandlers = useSteppedChange(handleYAxisDomainStep(axis, 'max', 'inc'), 1);
-    const maxDecHandlers = useSteppedChange(handleYAxisDomainStep(axis, 'max', 'dec'), 1);
+    const minIncHandlers = useSteppedChange(handleYAxisDomainStep(axis, 'min', 'inc'));
+    const minDecHandlers = useSteppedChange(handleYAxisDomainStep(axis, 'min', 'dec'));
+    const maxIncHandlers = useSteppedChange(handleYAxisDomainStep(axis, 'max', 'inc'));
+    const maxDecHandlers = useSteppedChange(handleYAxisDomainStep(axis, 'max', 'dec'));
     
     return (
-        <div className="flex items-center justify-between gap-2">
-            <Label htmlFor={`y-${axis}-min`} className="text-xs flex-1" style={{ color: color }}>Min {axis === 'left' ? 'Izquierdo' : 'Derecho'}</Label>
-            <div className="flex items-center gap-1">
-                <Button {...minDecHandlers} variant="outline" size="icon" className="h-6 w-6"><Minus className="h-3 w-3"/></Button>
-                <Input id={`y-${axis}-min`} type="text" value={domain.min} onChange={(e) => handleYAxisDomainChange(axis, 'min', e.target.value)} className="h-7 w-20 text-xs bg-black/20 text-center" placeholder="auto"/>
-                <Button {...minIncHandlers} variant="outline" size="icon" className="h-6 w-6"><Plus className="h-3 w-3"/></Button>
-            </div>
-            <Label htmlFor={`y-${axis}-max`} className="text-xs flex-1 text-center" style={{ color: color }}>Max</Label>
-            <div className="flex items-center gap-1">
-                <Button {...maxDecHandlers} variant="outline" size="icon" className="h-6 w-6"><Minus className="h-3 w-3"/></Button>
-                <Input id={`y-${axis}-max`} type="text" value={domain.max} onChange={(e) => handleYAxisDomainChange(axis, 'max', e.target.value)} className="h-7 w-20 text-xs bg-black/20 text-center" placeholder="auto"/>
-                <Button {...maxIncHandlers} variant="outline" size="icon" className="h-6 w-6"><Plus className="h-3 w-3"/></Button>
-            </div>
-        </div>
+        <TableRow className="border-none hover:bg-transparent">
+            <TableCell className="p-1 text-xs font-semibold" style={{ color: color }}>Eje {axis === 'left' ? 'Izquierdo' : 'Derecho'}</TableCell>
+            <TableCell className="p-1">
+                <div className="flex items-center gap-1">
+                    <Button {...minDecHandlers} variant="outline" size="icon" className="h-6 w-6"><Minus className="h-3 w-3"/></Button>
+                    <Input type="text" value={domain.min} onChange={(e) => handleYAxisDomainChange(axis, 'min', e.target.value)} className="h-7 w-16 text-xs bg-black/20 text-center" placeholder="auto"/>
+                    <Button {...minIncHandlers} variant="outline" size="icon" className="h-6 w-6"><Plus className="h-3 w-3"/></Button>
+                </div>
+            </TableCell>
+            <TableCell className="p-1">
+                 <div className="flex items-center gap-1">
+                    <Button {...maxDecHandlers} variant="outline" size="icon" className="h-6 w-6"><Minus className="h-3 w-3"/></Button>
+                    <Input type="text" value={domain.max} onChange={(e) => handleYAxisDomainChange(axis, 'max', e.target.value)} className="h-7 w-16 text-xs bg-black/20 text-center" placeholder="auto"/>
+                    <Button {...maxIncHandlers} variant="outline" size="icon" className="h-6 w-6"><Plus className="h-3 w-3"/></Button>
+                </div>
+            </TableCell>
+        </TableRow>
     );
   };
 
@@ -1559,7 +1561,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 
     } catch (error: any) {
         console.error("Bezier smoothing failed:", error);
-        toast({ title: "Error de Suavizado", description: error.message, variant: "destructive" });
+        throw new Error(`Turf.js bezierSpline failed: ${error.message}`);
     }
   };
 
@@ -2017,10 +2019,21 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                             </div>
                            <div className="space-y-2 p-2 border border-white/10 rounded-md">
                                 <Label className="text-xs font-semibold">Dominio del Eje Y</Label>
-                                <YAxisControl axis="left" domain={yAxisDomainLeft} setDomain={setYAxisDomainLeft} color={profileData[0]?.color} />
-                                {profileData.length > 1 && (
-                                    <YAxisControl axis="right" domain={yAxisDomainRight} setDomain={setYAxisDomainRight} color={profileData[1]?.color} />
-                                )}
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow className="border-b-white/10">
+                                            <TableHead className="p-1 h-auto text-xs">Eje</TableHead>
+                                            <TableHead className="p-1 h-auto text-xs">Mínimo</TableHead>
+                                            <TableHead className="p-1 h-auto text-xs">Máximo</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        <YAxisControl axis="left" domain={yAxisDomainLeft} setDomain={setYAxisDomainLeft} color={profileData[0]?.color} />
+                                        {profileData.length > 1 && (
+                                            <YAxisControl axis="right" domain={yAxisDomainRight} setDomain={setYAxisDomainRight} color={profileData[1]?.color} />
+                                        )}
+                                    </TableBody>
+                                </Table>
                             </div>
                            <div className="space-y-1">
                                {profileData.map(series => (
@@ -2612,3 +2625,4 @@ export default AnalysisPanel;
     
 
     
+
