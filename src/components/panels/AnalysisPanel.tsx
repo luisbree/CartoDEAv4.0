@@ -25,7 +25,7 @@ import VectorLayer from 'ol/layer/Vector';
 import { intersect, featureCollection, difference, cleanCoords, length as turfLength, along as turfAlong, clustersDbscan, nearestPoint as turfNearestPoint, bearing as turfBearing, destination, bezierSpline, centroid, distance as turfDistance } from '@turf/turf';
 import type { Feature as TurfFeature, Polygon as TurfPolygon, MultiPolygon as TurfMultiPolygon, FeatureCollection as TurfFeatureCollection, Geometry as TurfGeometry, Point as TurfPoint, LineString as TurfLineString } from 'geojson';
 import { multiPolygon, lineString as turfLineString, point as turfPoint, polygon as turfPolygon, convex } from '@turf/helpers';
-import Feature from 'ol/Feature';
+import type Feature from 'ol/Feature';
 import { type Geometry, type LineString as OlLineString, Point } from 'ol/geom';
 import { getLength as olGetLength } from 'ol/sphere';
 import { performBufferAnalysis, performConvexHull, performConcaveHull, calculateOptimalConcavity, projectPopulationGeometric, generateCrossSections, dissolveFeatures, performBezierSmoothing, DATASET_DEFINITIONS, jenks, performFeatureTracking } from '@/services/spatial-analysis';
@@ -1866,178 +1866,8 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                     </div>
                     {profileData && (
                         <div className="pt-2 border-t border-white/10 flex flex-col gap-3">
-                             <div id="profile-chart-to-export" className="bg-gray-800 p-2 rounded-md">
-                                <div className="h-[250px] w-full mt-2 relative" ref={chartContainerRef}>
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <AreaChart 
-                                          data={combinedChartData} 
-                                          margin={{ top: 5, right: 20, left: -25, bottom: 5 }}
-                                          onMouseMove={handleChartMouseMove}
-                                          onMouseLeave={handleChartMouseLeave}
-                                          onClick={handleChartClick}
-                                        >
-                                            <defs>
-                                                {profileData.map((series) => (
-                                                    <linearGradient key={`grad-${series.datasetId}`} id={`gradient-${series.datasetId}`} x1="0" y1="0" x2="0" y2="1">
-                                                        <stop offset="5%" stopColor={series.color} stopOpacity={0.3}/>
-                                                        <stop offset="95%" stopColor={series.color} stopOpacity={0.05}/>
-                                                    </linearGradient>
-                                                ))}
-                                            </defs>
-                                            <CartesianGrid strokeDasharray="3 3" stroke="rgba(200, 200, 200, 0.2)" />
-                                            <XAxis dataKey="distance" type="number" stroke="hsl(var(--muted-foreground))" fontSize={10} tickFormatter={(val) => `${(val / 1000).toFixed(1)} km`} domain={['dataMin', 'dataMax']} />
-                                            
-                                            {profileData.map((series, index) => (
-                                                <YAxis key={`yaxis-${series.datasetId}`} yAxisId={index === 0 ? 'left' : 'right'} orientation={index === 0 ? 'left' : 'right'} stroke={series.color} fontSize={10} domain={[index === 0 ? yAxisDomainLeft.min : yAxisDomainRight.min, index === 0 ? yAxisDomainLeft.max : yAxisDomainRight.max]} tickFormatter={(val) => `${val.toFixed(0)}${series.unit}`} reversed={series.unit === '°C'} />
-                                            ))}
-                                            
-                                            <Tooltip
-                                                contentStyle={{ backgroundColor: 'rgba(50, 50, 50, 0.95)', border: '1px solid #555', color: '#fff', borderRadius: '0.5rem' }}
-                                                itemStyle={{ fontSize: '12px' }}
-                                                labelStyle={{ color: '#ccc', fontSize: '11px' }}
-                                                cursor={{ stroke: 'hsl(var(--primary))', strokeWidth: 1 }}
-                                                labelFormatter={(label) => `Distancia: ${Number(label).toFixed(2)} m`}
-                                                formatter={(value, name) => {
-                                                    if (!profileData || typeof value !== 'number') return [value, name];
-                                                    const series = profileData.find(d => d.datasetId === name);
-                                                    if (!series) return [value, name];
-                                                    return [`${value.toFixed(2)} ${series.unit}`, series.name];
-                                                }}
-                                            />
-                                            <Legend wrapperStyle={{fontSize: "10px"}} />
-
-                                            <Bar dataKey="count" fill="#8884d8" yAxisId="left" fillOpacity={0} background={false} />
-
-                                            {profileData.map((series, index) => (
-                                                 <Area key={`area-${series.datasetId}`} yAxisId={index === 0 ? 'left' : 'right'} type="monotone" dataKey={series.datasetId} name={series.name} stroke={series.color} fill={`url(#gradient-${series.datasetId})`} strokeWidth={2} connectNulls />
-                                            ))}
-                                            
-                                            {/* Render histogram bars */}
-                                            {combinedHistogramData.map((entry) => {
-                                                const series = profileData.find(s => s.datasetId === entry.key.split('-')[1]);
-                                                const yAxisId = series?.datasetId === profileData[0]?.datasetId ? 'left' : 'right';
-                                                const isReversed = series?.unit === '°C';
-                                                if (isReversed) {
-                                                    return <Bar key={entry.key} dataKey="count" yAxisId={yAxisId} fill={entry.color} fillOpacity={0.1} shape={<InvertedBar />} data={[entry]} />;
-                                                }
-                                                return <Bar key={entry.key} dataKey="count" yAxisId={yAxisId} fill={entry.color} fillOpacity={0.1} data={[entry]} />;
-                                            })}
-
-                                            {/* Render Jenks breaks reference lines */}
-                                            {profileData.map((series, index) => (
-                                                series.stats.jenksBreaks.map((breakValue, i) => (
-                                                    <ReferenceLine 
-                                                        key={`jenks-${series.datasetId}-${i}`} 
-                                                        yAxisId={index === 0 ? 'left' : 'right'} 
-                                                        y={breakValue} 
-                                                        stroke="rgba(150, 150, 150, 0.6)" 
-                                                        strokeDasharray="3 3" 
-                                                    />
-                                                ))
-                                            ))}
-                                        </AreaChart>
-                                    </ResponsiveContainer>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                           <div className="flex items-end gap-2 w-full">
-                                <div className="space-y-1 flex-1">
-                                    <Label htmlFor="y-min-left" className="text-xs">Y Mín ({profileData[0]?.unit})</Label>
-                                    <Input id="y-min-left" type="number" placeholder="auto" value={yAxisDomainLeft.min} onChange={(e) => handleYAxisDomainChange('left', 'min', e.target.value)} className="h-7 text-xs bg-black/20" />
-                                </div>
-                                <div className="space-y-1 flex-1">
-                                    <Label htmlFor="y-max-left" className="text-xs">Y Máx ({profileData[0]?.unit})</Label>
-                                    <Input id="y-max-left" type="number" placeholder="auto" value={yAxisDomainLeft.max} onChange={(e) => handleYAxisDomainChange('left', 'max', e.target.value)} className="h-7 text-xs bg-black/20" />
-                                </div>
-                                {profileData.length > 1 && (
-                                    <>
-                                        <div className="space-y-1 flex-1">
-                                            <Label htmlFor="y-min-right" className="text-xs">Y Mín ({profileData[1]?.unit})</Label>
-                                            <Input id="y-min-right" type="number" placeholder="auto" value={yAxisDomainRight.min} onChange={(e) => handleYAxisDomainChange('right', 'min', e.target.value)} className="h-7 text-xs bg-black/20" />
-                                        </div>
-                                        <div className="space-y-1 flex-1">
-                                            <Label htmlFor="y-max-right" className="text-xs">Y Máx ({profileData[1]?.unit})</Label>
-                                            <Input id="y-max-right" type="number" placeholder="auto" value={yAxisDomainRight.max} onChange={(e) => handleYAxisDomainChange('right', 'max', e.target.value)} className="h-7 text-xs bg-black/20" />
-                                        </div>
-                                    </>
-                                )}
-                            </div>
-                            <div className="flex items-center gap-2">
-                               <Button onClick={onConvertProfilePointsToLayer} disabled={profilePoints.length === 0} size="sm" className="h-8 text-xs flex-grow"><LayersIcon className="mr-2 h-3.5 w-3.5" />Crear Capa desde Puntos</Button>
-                               <DropdownMenu>
-                                 <DropdownMenuTrigger asChild><Button size="sm" variant="outline" className="h-8 text-xs flex-grow" disabled={!profileData}><Download className="mr-2 h-3.5 w-3.5" />Exportar Perfil</Button></DropdownMenuTrigger>
-                                 <DropdownMenuContent className="bg-gray-700 text-white border-gray-600">
-                                   <DropdownMenuItem onSelect={() => handleDownloadProfile('csv')}><FileText className="mr-2 h-4 w-4"/>CSV</DropdownMenuItem>
-                                   <DropdownMenuItem onSelect={() => handleDownloadProfile('jpg')}><FileImage className="mr-2 h-4 w-4"/>JPG</DropdownMenuItem>
-                                   <DropdownMenuItem onSelect={() => handleDownloadProfile('pdf')}><FileImage className="mr-2 h-4 w-4"/>PDF</DropdownMenuItem>
-                                 </DropdownMenuContent>
-                               </DropdownMenu>
-                            </div>
-                            <ScrollArea className="max-h-48">
-                              <div className="grid grid-cols-2 gap-4">
-                                {profileData.map(series => (
-                                    <div key={series.datasetId}>
-                                      <h4 className="text-xs text-white p-1.5 font-bold border-b border-white/10" style={{color: series.color}}>{series.name}</h4>
-                                      <Table>
-                                          <TableBody>
-                                            <TableRow><TableCell className="text-xs text-gray-300 p-1.5">Mín / Máx</TableCell><TableCell className="text-xs text-white p-1.5 text-right font-mono">{series.stats.min.toFixed(2)} / {series.stats.max.toFixed(2)}</TableCell></TableRow>
-                                            <TableRow><TableCell className="text-xs text-gray-300 p-1.5">Promedio</TableCell><TableCell className="text-xs text-white p-1.5 text-right font-mono">{series.stats.mean.toFixed(2)}</TableCell></TableRow>
-                                            <TableRow><TableCell className="text-xs text-gray-300 p-1.5">Desv. Est.</TableCell><TableCell className="text-xs text-white p-1.5 text-right font-mono">{series.stats.stdDev.toFixed(2)}</TableCell></TableRow>
-                                            <TableRow>
-                                                <TableCell className="text-xs text-gray-300 p-1.5">Cortes Jenks</TableCell>
-                                                <TableCell className="text-xs text-white p-1.5 text-right font-mono whitespace-normal">{series.stats.jenksBreaks.map(b => b.toFixed(2)).join(' | ')}</TableCell>
-                                            </TableRow>
-                                          </TableBody>
-                                      </Table>
-                                    </div>
-                                ))}
-                              </div>
-                            </ScrollArea>
+                            <div className="text-center">El gráfico del perfil aparecerá aquí</div>
                         </div>
-                    )}
-                    {profileData && profileData.length >= 2 && (
-                         <div className="space-y-3 pt-3 border-t border-white/10">
-                            <Label className="text-xs font-semibold">Análisis de Correlación</Label>
-                             <div className="grid grid-cols-2 gap-2">
-                                <Select value={corrAxisX} onValueChange={(v) => setCorrAxisX(v as string)}>
-                                    <SelectTrigger className="h-8 text-xs bg-black/20"><SelectValue placeholder="Eje X..." /></SelectTrigger>
-                                    <SelectContent className="bg-gray-700 text-white border-gray-600">
-                                        {profileData.map(d => <SelectItem key={d.datasetId} value={d.datasetId} className="text-xs">{d.name}</SelectItem>)}
-                                    </SelectContent>
-                                </Select>
-                                <Select value={corrAxisY} onValueChange={(v) => setCorrAxisY(v as string)}>
-                                    <SelectTrigger className="h-8 text-xs bg-black/20"><SelectValue placeholder="Eje Y..." /></SelectTrigger>
-                                    <SelectContent className="bg-gray-700 text-white border-gray-600">
-                                        {profileData.map(d => <SelectItem key={d.datasetId} value={d.datasetId} className="text-xs">{d.name}</SelectItem>)}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                            <Button onClick={handleCalculateCorrelation} size="sm" className="w-full h-8 text-xs" disabled={!corrAxisX || !corrAxisY || corrAxisX === corrAxisY}>
-                                <CheckCircle className="mr-2 h-3.5 w-3.5" />
-                                Calcular Correlación
-                            </Button>
-                            {correlationResult && (
-                                <div className="space-y-2">
-                                    <div className="text-center text-sm p-2 bg-black/20 rounded-md">
-                                        <span>Coeficiente de Correlación (r): </span>
-                                        <span className="font-bold font-mono">{correlationResult.coefficient.toFixed(4)}</span>
-                                    </div>
-                                    <div className="h-48 w-full mt-2">
-                                        <ResponsiveContainer>
-                                            <ScatterChart margin={{ top: 5, right: 20, left: -25, bottom: 5 }}>
-                                                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted-foreground), 0.3)" />
-                                                <XAxis type="number" dataKey="x" name={profileData.find(d => d.datasetId === correlationResult.xDatasetId)?.name} stroke="hsl(var(--muted-foreground))" fontSize={10} domain={['dataMin', 'dataMax']} tickFormatter={(v) => v.toFixed(1)} />
-                                                <YAxis type="number" dataKey="y" name={profileData.find(d => d.datasetId === correlationResult.yDatasetId)?.name} stroke="hsl(var(--muted-foreground))" fontSize={10} domain={['dataMin', 'dataMax']} tickFormatter={(v) => v.toFixed(1)} />
-                                                <Tooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', fontSize: '11px' }} />
-                                                <Scatter data={correlationResult.scatterData} fill="#8884d8" shape="circle" fillOpacity={0.5} />
-                                                <Line dataKey="y" data={trendlineData} stroke="#e63946" dot={false} strokeWidth={2} name="Línea de Tendencia" />
-                                            </ScatterChart>
-                                        </ResponsiveContainer>
-                                    </div>
-                                </div>
-                            )}
-                         </div>
                     )}
                 </AccordionContent>
             </AccordionItem>
@@ -2542,6 +2372,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
 
 
 
