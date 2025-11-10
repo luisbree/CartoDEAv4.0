@@ -67,8 +67,8 @@ const SectionHeader: React.FC<{ icon: React.ElementType; title: string; }> = ({ 
 );
 
 const analysisLayerStyle = new Style({
-    stroke: new Stroke({ color: 'rgba(0, 255, 255, 1)', width: 2.5, lineDash: [8, 8] }),
-    fill: new Fill({ color: 'rgba(0, 255, 255, 0.2)' }),
+    stroke: new Stroke({ color: '#f4a261', width: 2.5 }), // Orange, solid line
+    fill: new Fill({ color: 'rgba(244, 162, 97, 0.2)' }),
 });
 
 const profilePointsStyle = new Style({
@@ -242,6 +242,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   const liveTooltipElementRef = useRef<HTMLDivElement | null>(null);
   const chartContainerRef = useRef<HTMLDivElement | null>(null);
   const profileHoverMarkerRef = useRef<Overlay | null>(null);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const { toast } = useToast();
   
@@ -680,6 +681,18 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     setDomain(prev => ({ ...prev, [key]: numValue }));
   };
 
+  const useSteppedChange = (setter: React.Dispatch<React.SetStateAction<any>>, stepValue: number) => {
+    const start = () => {
+        if (intervalRef.current) clearInterval(intervalRef.current);
+        setter(stepValue); // Initial change
+        intervalRef.current = setInterval(() => setter(stepValue), 100);
+    };
+    const stop = () => {
+        if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+    return { onMouseDown: start, onMouseUp: stop, onMouseLeave: stop };
+  };
+
   const handleYAxisDomainStep = (axis: 'left' | 'right', key: 'min' | 'max', direction: 'inc' | 'dec') => {
       const setDomain = axis === 'left' ? setYAxisDomainLeft : setYAxisDomainRight;
       const currentDomain = axis === 'left' ? yAxisDomainLeft : yAxisDomainRight;
@@ -688,9 +701,33 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
       if (currentValue === 'auto') return; // Cannot step from 'auto'
       
       const step = Math.max(1, Math.round(Math.abs(currentValue) * 0.05));
-      const newValue = direction === 'inc' ? currentValue + step : currentValue - step;
+      const change = direction === 'inc' ? step : -step;
 
-      setDomain(prev => ({ ...prev, [key]: newValue }));
+      return () => setDomain(prev => ({ ...prev, [key]: (prev[key] === 'auto' ? 0 : prev[key]) + change }));
+  };
+
+  const YAxisControl = ({ axis, domain, setDomain, color }: { axis: 'left' | 'right', domain: typeof yAxisDomainLeft, setDomain: typeof setYAxisDomainLeft, color?: string }) => {
+    const minIncHandlers = useSteppedChange(handleYAxisDomainStep(axis, 'min', 'inc'), 1);
+    const minDecHandlers = useSteppedChange(handleYAxisDomainStep(axis, 'min', 'dec'), 1);
+    const maxIncHandlers = useSteppedChange(handleYAxisDomainStep(axis, 'max', 'inc'), 1);
+    const maxDecHandlers = useSteppedChange(handleYAxisDomainStep(axis, 'max', 'dec'), 1);
+    
+    return (
+        <div className="flex items-center justify-between gap-2">
+            <Label htmlFor={`y-${axis}-min`} className="text-xs flex-1" style={{ color: color }}>Min {axis === 'left' ? 'Izquierdo' : 'Derecho'}</Label>
+            <div className="flex items-center gap-1">
+                <Button {...minDecHandlers} variant="outline" size="icon" className="h-6 w-6"><Minus className="h-3 w-3"/></Button>
+                <Input id={`y-${axis}-min`} type="text" value={domain.min} onChange={(e) => handleYAxisDomainChange(axis, 'min', e.target.value)} className="h-7 w-20 text-xs bg-black/20 text-center" placeholder="auto"/>
+                <Button {...minIncHandlers} variant="outline" size="icon" className="h-6 w-6"><Plus className="h-3 w-3"/></Button>
+            </div>
+            <Label htmlFor={`y-${axis}-max`} className="text-xs flex-1 text-center" style={{ color: color }}>Max</Label>
+            <div className="flex items-center gap-1">
+                <Button {...maxDecHandlers} variant="outline" size="icon" className="h-6 w-6"><Minus className="h-3 w-3"/></Button>
+                <Input id={`y-${axis}-max`} type="text" value={domain.max} onChange={(e) => handleYAxisDomainChange(axis, 'max', e.target.value)} className="h-7 w-20 text-xs bg-black/20 text-center" placeholder="auto"/>
+                <Button {...maxIncHandlers} variant="outline" size="icon" className="h-6 w-6"><Plus className="h-3 w-3"/></Button>
+            </div>
+        </div>
+    );
   };
 
 
@@ -1892,8 +1929,8 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                             Generar Perfil(es)
                         </Button>
                     </div>
-                    {profileData ? (
-                         <div className="pt-2 border-t border-white/10 flex flex-col gap-3">
+                    {profileData && (
+                        <div className="pt-2 border-t border-white/10 flex flex-col gap-3">
                            <div id="profile-chart-to-export" className="bg-background p-2 rounded">
                                 <div ref={chartContainerRef} className="h-64 w-full">
                                     <ResponsiveContainer>
@@ -1978,47 +2015,12 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                     </ResponsiveContainer>
                                 </div>
                             </div>
-                            <div className="space-y-2">
+                           <div className="space-y-2 p-2 border border-white/10 rounded-md">
                                 <Label className="text-xs font-semibold">Dominio del Eje Y</Label>
-                                <div className="space-y-2 p-2 border border-white/10 rounded-md">
-                                    <div className="flex items-end gap-2 justify-between">
-                                        <Label htmlFor="y-left-min" className="text-xs flex-1" style={{color: profileData[0]?.color}}>Min Izquierdo</Label>
-                                        <div className="flex items-center gap-1">
-                                            <Button onClick={() => handleYAxisDomainStep('left', 'min', 'dec')} variant="outline" size="icon" className="h-6 w-6"><Minus className="h-3 w-3"/></Button>
-                                            <Input id="y-left-min" type="text" value={yAxisDomainLeft.min} onChange={(e) => handleYAxisDomainChange('left', 'min', e.target.value)} className="h-7 w-20 text-xs bg-black/20 text-center" placeholder="auto"/>
-                                            <Button onClick={() => handleYAxisDomainStep('left', 'min', 'inc')} variant="outline" size="icon" className="h-6 w-6"><Plus className="h-3 w-3"/></Button>
-                                        </div>
-                                    </div>
-                                    <div className="flex items-end gap-2 justify-between">
-                                        <Label htmlFor="y-left-max" className="text-xs flex-1" style={{color: profileData[0]?.color}}>Max Izquierdo</Label>
-                                         <div className="flex items-center gap-1">
-                                            <Button onClick={() => handleYAxisDomainStep('left', 'max', 'dec')} variant="outline" size="icon" className="h-6 w-6"><Minus className="h-3 w-3"/></Button>
-                                            <Input id="y-left-max" type="text" value={yAxisDomainLeft.max} onChange={(e) => handleYAxisDomainChange('left', 'max', e.target.value)} className="h-7 w-20 text-xs bg-black/20 text-center" placeholder="auto"/>
-                                            <Button onClick={() => handleYAxisDomainStep('left', 'max', 'inc')} variant="outline" size="icon" className="h-6 w-6"><Plus className="h-3 w-3"/></Button>
-                                        </div>
-                                    </div>
-                                    {profileData.length > 1 && (
-                                        <>
-                                            <Separator className="bg-white/10 my-1"/>
-                                             <div className="flex items-end gap-2 justify-between">
-                                                <Label htmlFor="y-right-min" className="text-xs flex-1" style={{color: profileData[1]?.color}}>Min Derecho</Label>
-                                                <div className="flex items-center gap-1">
-                                                    <Button onClick={() => handleYAxisDomainStep('right', 'min', 'dec')} variant="outline" size="icon" className="h-6 w-6"><Minus className="h-3 w-3"/></Button>
-                                                    <Input id="y-right-min" type="text" value={yAxisDomainRight.min} onChange={(e) => handleYAxisDomainChange('right', 'min', e.target.value)} className="h-7 w-20 text-xs bg-black/20 text-center" placeholder="auto"/>
-                                                    <Button onClick={() => handleYAxisDomainStep('right', 'min', 'inc')} variant="outline" size="icon" className="h-6 w-6"><Plus className="h-3 w-3"/></Button>
-                                                </div>
-                                            </div>
-                                             <div className="flex items-end gap-2 justify-between">
-                                                <Label htmlFor="y-right-max" className="text-xs flex-1" style={{color: profileData[1]?.color}}>Max Derecho</Label>
-                                                <div className="flex items-center gap-1">
-                                                    <Button onClick={() => handleYAxisDomainStep('right', 'max', 'dec')} variant="outline" size="icon" className="h-6 w-6"><Minus className="h-3 w-3"/></Button>
-                                                    <Input id="y-right-max" type="text" value={yAxisDomainRight.max} onChange={(e) => handleYAxisDomainChange('right', 'max', e.target.value)} className="h-7 w-20 text-xs bg-black/20 text-center" placeholder="auto"/>
-                                                    <Button onClick={() => handleYAxisDomainStep('right', 'max', 'inc')} variant="outline" size="icon" className="h-6 w-6"><Plus className="h-3 w-3"/></Button>
-                                                </div>
-                                            </div>
-                                        </>
-                                    )}
-                                </div>
+                                <YAxisControl axis="left" domain={yAxisDomainLeft} setDomain={setYAxisDomainLeft} color={profileData[0]?.color} />
+                                {profileData.length > 1 && (
+                                    <YAxisControl axis="right" domain={yAxisDomainRight} setDomain={setYAxisDomainRight} color={profileData[1]?.color} />
+                                )}
                             </div>
                            <div className="space-y-1">
                                {profileData.map(series => (
@@ -2102,11 +2104,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                )}
                            </div>
                        </div>
-                    ) : (
-                       <div className="pt-2 text-center text-xs text-gray-400">
-                          {isGeneratingProfile ? 'Generando perfil...' : ''}
-                       </div>
-                   )}
+                    )}
                 </AccordionContent>
             </AccordionItem>
             <AccordionItem value="overlay-tools" className="border-b-0 bg-white/5 rounded-md">
