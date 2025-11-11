@@ -695,14 +695,13 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 
   const handleYAxisDomainStep = (axis: 'left' | 'right', key: 'min' | 'max', direction: 'inc' | 'dec') => {
       const setDomain = axis === 'left' ? setYAxisDomainLeft : setYAxisDomainRight;
-      const currentDomain = axis === 'left' ? yAxisDomainLeft : yAxisDomainRight;
-      const currentValue = currentDomain[key];
-
-      if (currentValue === 'auto') return; // Cannot step from 'auto'
       
-      const change = direction === 'inc' ? 1 : -1;
-
-      return () => setDomain(prev => ({ ...prev, [key]: (prev[key] === 'auto' ? 0 : prev[key]) + change }));
+      return () => setDomain(prev => {
+          const currentValue = prev[key];
+          if (currentValue === 'auto') return prev; // Cannot step from 'auto'
+          const change = direction === 'inc' ? 1 : -1;
+          return { ...prev, [key]: currentValue + change };
+      });
   };
 
   const YAxisControl = ({ axis, domain, setDomain, color }: { axis: 'left' | 'right', domain: typeof yAxisDomainLeft, setDomain: typeof setYAxisDomainLeft, color?: string }) => {
@@ -1970,8 +1969,9 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                             )}
                                             <Tooltip
                                                 contentStyle={{
-                                                    backgroundColor: 'rgba(30, 41, 59, 0.9)',
+                                                    backgroundColor: 'hsl(var(--popover))',
                                                     border: '1px solid hsl(var(--border))',
+                                                    color: 'hsl(var(--popover-foreground))',
                                                     fontSize: '12px',
                                                 }}
                                                 labelFormatter={(label) => `Distancia: ${(label / 1000).toFixed(2)} km`}
@@ -2023,8 +2023,8 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                     <TableHeader>
                                         <TableRow className="border-b-white/10">
                                             <TableHead className="p-1 h-auto text-xs">Eje</TableHead>
-                                            <TableHead className="p-1 h-auto text-xs">Mínimo</TableHead>
-                                            <TableHead className="p-1 h-auto text-xs">Máximo</TableHead>
+                                            <TableHead className="p-1 h-auto text-xs text-center">Mínimo</TableHead>
+                                            <TableHead className="p-1 h-auto text-xs text-center">Máximo</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
@@ -2087,7 +2087,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                                             <XAxis type="number" dataKey="x" name={profileData.find(d=>d.datasetId === correlationResult.xDatasetId)?.name} domain={['dataMin', 'dataMax']} fontSize={10} tickFormatter={(v) => v.toFixed(0)} />
                                             <YAxis type="number" dataKey="y" name={profileData.find(d=>d.datasetId === correlationResult.yDatasetId)?.name} domain={['dataMin', 'dataMax']} fontSize={10} tickFormatter={(v) => v.toFixed(0)} />
-                                            <Tooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={{backgroundColor: 'rgba(50, 50, 50, 0.8)', border: '1px solid hsl(var(--border))', fontSize: '12px'}}/>
+                                            <Tooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={{backgroundColor: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', color: 'hsl(var(--popover-foreground))', fontSize: '12px'}}/>
                                             <Scatter data={correlationResult.scatterData} fill="#8884d8" fillOpacity={0.6} shape="circle" />
                                             <Line data={trendlineData} dataKey="y" stroke="#ff7300" dot={false} strokeWidth={2} name="Tendencia" />
                                           </ScatterChart>
@@ -2625,4 +2625,5 @@ export default AnalysisPanel;
     
 
     
+
 
