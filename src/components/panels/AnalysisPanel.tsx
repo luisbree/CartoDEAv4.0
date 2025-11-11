@@ -67,7 +67,7 @@ const SectionHeader: React.FC<{ icon: React.ElementType; title: string; }> = ({ 
 );
 
 const analysisLayerStyle = new Style({
-    stroke: new Stroke({ color: '#f4a261', width: 2.5 }), // Orange, solid line
+    stroke: new Stroke({ color: '#f4a261', width: 2.5 }),
     fill: new Fill({ color: 'rgba(244, 162, 97, 0.2)' }),
 });
 
@@ -91,12 +91,14 @@ interface ProfileDataSeries {
 }
 
 interface ProfileStats {
-    min: number;
-    max: number;
-    mean: number;
-    stdDev: number;
-    jenksBreaks: number[];
+  min: number;
+  max: number;
+  mean: number;
+  median: number;
+  stdDev: number;
+  jenksBreaks: number[];
 }
+
 
 interface HistogramEntry {
     value: number;
@@ -515,7 +517,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                 : points.map(p => p.value);
             
             const validValues = valuesForStats.filter(e => e !== 0); 
-            let stats: ProfileStats = { min: 0, max: 0, mean: 0, stdDev: 0, jenksBreaks: [] };
+            let stats: ProfileStats = { min: 0, max: 0, mean: 0, median: 0, stdDev: 0, jenksBreaks: [] };
             if (validValues.length > 0) {
                 const sum = validValues.reduce((a, b) => a + b, 0);
                 stats.mean = sum / validValues.length;
@@ -524,6 +526,9 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                 const variance = validValues.reduce((sq, n) => sq + Math.pow(n - stats.mean, 2), 0) / validValues.length;
                 stats.stdDev = Math.sqrt(variance);
                 stats.jenksBreaks = jenks(validValues, jenksClasses);
+                validValues.sort((a,b) => a-b);
+                const mid = Math.floor(validValues.length / 2);
+                stats.median = validValues.length % 2 !== 0 ? validValues[mid] : (validValues[mid - 1] + validValues[mid]) / 2;
             }
             
             allProfileData.push({ datasetId, name, color, unit, points, stats });
@@ -1837,6 +1842,13 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   
   const isAnyGoesProfile = profileData?.some(d => d.unit === '°C') ?? false;
 
+  const tooltipStyle = {
+      backgroundColor: 'rgba(240, 240, 240, 0.9)',
+      border: '1px solid #ccc',
+      color: '#000000',
+      fontSize: '12px',
+  };
+
 
   return (
     <DraggablePanel
@@ -1968,12 +1980,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                                 />
                                             )}
                                             <Tooltip
-                                                contentStyle={{
-                                                    backgroundColor: 'hsl(var(--popover))',
-                                                    border: '1px solid hsl(var(--border))',
-                                                    color: 'hsl(var(--popover-foreground))',
-                                                    fontSize: '12px',
-                                                }}
+                                                contentStyle={tooltipStyle}
                                                 labelFormatter={(label) => `Distancia: ${(label / 1000).toFixed(2)} km`}
                                                 formatter={(value: number, name: string) => [`${value.toFixed(2)} ${profileData.find(d => d.datasetId === name)?.unit || ''}`, profileData.find(d => d.datasetId === name)?.name]}
                                             />
@@ -2042,7 +2049,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                        <Table>
                                            <TableBody>
                                                <TableRow><TableCell className="text-xs p-1">Media</TableCell><TableCell className="text-xs p-1 text-right font-mono">{series.stats.mean.toFixed(2)}</TableCell></TableRow>
-                                               <TableRow><TableCell className="text-xs p-1">Mediana</TableCell><TableCell className="text-xs p-1 text-right font-mono">{jenks(series.points.map(p => series.unit === '°C' ? p.value - 273.15 : p.value), 2)[0]?.toFixed(2) || 'N/A'}</TableCell></TableRow>
+                                               <TableRow><TableCell className="text-xs p-1">Mediana</TableCell><TableCell className="text-xs p-1 text-right font-mono">{series.stats.median.toFixed(2)}</TableCell></TableRow>
                                                <TableRow><TableCell className="text-xs p-1">Mín</TableCell><TableCell className="text-xs p-1 text-right font-mono">{series.stats.min.toFixed(2)}</TableCell></TableRow>
                                                <TableRow><TableCell className="text-xs p-1">Máx</TableCell><TableCell className="text-xs p-1 text-right font-mono">{series.stats.max.toFixed(2)}</TableCell></TableRow>
                                                <TableRow><TableCell className="text-xs p-1">Desv. Est.</TableCell><TableCell className="text-xs p-1 text-right font-mono">{series.stats.stdDev.toFixed(2)}</TableCell></TableRow>
@@ -2087,7 +2094,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                                             <XAxis type="number" dataKey="x" name={profileData.find(d=>d.datasetId === correlationResult.xDatasetId)?.name} domain={['dataMin', 'dataMax']} fontSize={10} tickFormatter={(v) => v.toFixed(0)} />
                                             <YAxis type="number" dataKey="y" name={profileData.find(d=>d.datasetId === correlationResult.yDatasetId)?.name} domain={['dataMin', 'dataMax']} fontSize={10} tickFormatter={(v) => v.toFixed(0)} />
-                                            <Tooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={{backgroundColor: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', color: 'hsl(var(--popover-foreground))', fontSize: '12px'}}/>
+                                            <Tooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={tooltipStyle}/>
                                             <Scatter data={correlationResult.scatterData} fill="#8884d8" fillOpacity={0.6} shape="circle" />
                                             <Line data={trendlineData} dataKey="y" stroke="#ff7300" dot={false} strokeWidth={2} name="Tendencia" />
                                           </ScatterChart>
@@ -2627,3 +2634,6 @@ export default AnalysisPanel;
     
 
 
+
+
+    
