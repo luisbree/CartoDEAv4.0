@@ -159,10 +159,10 @@ export const GoesStormCoresInputSchema = z.object({
 });
 export type GoesStormCoresInput = z.infer<typeof GoesStormCoresInputSchema>;
 
-// New type for getValuesForPoints function params
+// Updated type for getValuesForPoints function params
 export type ValuesForPointsParams = {
     points: ElevationPoint[];
-    datasetId: string;
-    bandName: string;
-    isGoesLayer?: boolean;
+    datasetId: string; // Can be a GEE collection ID or a specific image ID
+    bandName: string; // The specific band to sample
+    isGoesLayer?: boolean; // Flag for special GOES temperature conversion
 };

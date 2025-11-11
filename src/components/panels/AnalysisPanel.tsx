@@ -477,29 +477,31 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         
         for (const datasetId of selectedProfileDatasets) {
             const staticDef = DATASET_DEFINITIONS[datasetId as DatasetId];
-            let name, color, unit, band, isGoesLayer = false;
-            let finalDatasetId: string;
+            let name, color, unit, band, isGoesLayer = false, imageId;
 
             if (staticDef) {
-                // It's a predefined dataset
-                finalDatasetId = staticDef.id;
+                // It's a predefined GEE dataset
+                imageId = staticDef.id;
                 name = staticDef.name;
                 color = staticDef.color;
                 unit = staticDef.unit;
                 band = staticDef.band;
             } else {
-                // It's a dynamic GOES layer
-                const goesLayer = goesProfileLayers.find(l => l.id === datasetId);
-                if (!goesLayer || !goesLayer.geeParams?.imageId) continue;
-                finalDatasetId = goesLayer.geeParams.imageId;
-                name = goesLayer.name;
-                color = '#ff6b6b'; // Assign a distinct color for GOES profiles
-                unit = '°C';
-                band = 'CMI_C13';
-                isGoesLayer = true;
+                // It's a dynamic raster layer from the map
+                const rasterLayer = allRasterLayersForProfile.find(l => l.id === datasetId);
+                if (!rasterLayer || !rasterLayer.geeParams?.imageId) {
+                    console.warn(`Capa ráster con ID ${datasetId} no encontrada o sin imageId, omitiendo.`);
+                    continue;
+                }
+                imageId = rasterLayer.geeParams.imageId;
+                name = rasterLayer.name;
+                color = '#ff6b6b'; // Default color for custom raster layers
+                unit = rasterLayer.geeParams?.bandCombination === 'GOES_CLOUDTOP' ? '°C' : 'valor';
+                band = rasterLayer.geeParams?.bandCombination === 'GOES_CLOUDTOP' ? 'CMI_C13' : 'first'; // Fallback band name
+                isGoesLayer = rasterLayer.geeParams?.bandCombination === 'GOES_CLOUDTOP';
             }
             
-            const values = await getValuesForPoints({ points: pointsToQuery, datasetId: finalDatasetId, bandName: band, isGoesLayer });
+            const values = await getValuesForPoints({ points: pointsToQuery, datasetId: imageId, bandName: band, isGoesLayer });
             
             if (!values || values.length !== pointsToQuery.length) {
                 throw new Error(`No se obtuvieron datos válidos para ${name}.`);
@@ -910,18 +912,19 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
       });
   }, [vectorLayers]);
 
-  const goesProfileLayers = useMemo(() => {
-    return allLayers.flatMap(item => 'layers' in item ? item.layers : [item])
-      .filter((l): l is MapLayer => 
-        l.type === 'gee' && l.geeParams?.bandCombination === 'GOES_CLOUDTOP'
-      );
+  const allRasterLayersForProfile = useMemo(() => {
+      return allLayers.flatMap(item => 'layers' in item ? item.layers : [item])
+        .filter((l): l is MapLayer => 
+            (l.type === 'gee' || l.type === 'geotiff') && !!l.geeParams?.imageId
+        );
   }, [allLayers]);
-  
-    const trajectoryLayers = useMemo(() => {
-        return vectorLayers.filter(l => l.name.toLowerCase().startsWith('trayectoria') || l.name.toLowerCase().startsWith('seguimiento'));
-    }, [vectorLayers]);
+
     
-    const coherenceNumericFields = useMemo(() => {
+  const trajectoryLayers = useMemo(() => {
+        return vectorLayers.filter(l => l.name.toLowerCase().startsWith('trayectoria') || l.name.toLowerCase().startsWith('seguimiento'));
+  }, [vectorLayers]);
+    
+  const coherenceNumericFields = useMemo(() => {
         const layer = trajectoryLayers.find(l => l.id === coherenceLayerId);
         if (!layer) return [];
         
@@ -938,7 +941,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
             }
         }
         return Array.from(keys).sort();
-    }, [trajectoryLayers, coherenceLayerId]);
+  }, [trajectoryLayers, coherenceLayerId]);
 
   const trackingNumericFields = useMemo(() => {
     const layer1 = pointLayers.find(l => l.id === trackingLayer1Id);
@@ -1843,7 +1846,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   const isAnyGoesProfile = profileData?.some(d => d.unit === '°C') ?? false;
 
   const tooltipStyle = {
-      backgroundColor: 'rgba(240, 240, 240, 0.9)',
+      backgroundColor: 'rgba(240, 240, 240, 0.75)',
       border: '1px solid #ccc',
       color: '#000000',
       fontSize: '12px',
@@ -1917,8 +1920,8 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                     <Label htmlFor={`profile-ds-${id}`} className="text-xs font-normal">{def.name}</Label>
                                 </div>
                             ))}
-                            {goesProfileLayers.length > 0 && <Separator className="bg-white/10 my-2" />}
-                            {goesProfileLayers.map(layer => (
+                            {allRasterLayersForProfile.length > 0 && <Separator className="bg-white/10 my-2" />}
+                            {allRasterLayersForProfile.map(layer => (
                                 <div key={layer.id} className="flex items-center space-x-2">
                                     <Checkbox
                                         id={`profile-ds-${layer.id}`}

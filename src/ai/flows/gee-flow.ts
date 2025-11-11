@@ -77,13 +77,14 @@ export async function getValuesForPoints({
 
     if (isGoesLayer && datasetId) {
         const goesImage = ee.Image(datasetId);
-        const offset = ee.Number(goesImage.get(bandName + '_offset'));
-        const scale = ee.Number(goesImage.get(bandName + '_scale'));
-        // The result of this expression is an image with one band named 'temp'
+        // The band name is CMI_C13 for GOES, but we need to find the specific offset/scale properties
+        // which use the full band name like 'CMI_C13_offset'.
+        const offset = ee.Number(goesImage.get('CMI_C13_offset'));
+        const scale = ee.Number(goesImage.get('CMI_C13_scale'));
         image = goesImage.expression(
             'temp = CMI_C13 * scale + offset',
-            { 'CMI_C13': goesImage.select(bandName), 'scale': scale, 'offset': offset }
-        ).rename('first'); // Rename to 'first' to match the reducer output
+            { 'CMI_C13': goesImage.select('CMI_C13'), 'scale': scale, 'offset': offset }
+        ).rename('first');
     } else if (datasetId) {
         // Special handling for mosaic collections vs single images
         if (datasetId === 'JAXA/ALOS/AW3D30/V3_2' || datasetId === 'COPERNICUS/S2_SR_HARMONIZED') {
