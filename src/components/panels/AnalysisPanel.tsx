@@ -138,6 +138,13 @@ interface CoherenceStats {
     stdDevMagnitude: number;
 }
 
+const tooltipStyle = {
+    backgroundColor: 'rgba(240, 240, 240, 0.75)',
+    border: '1px solid #ccc',
+    color: '#000000',
+    fontSize: '12px',
+};
+
 
 const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   panelRef,
@@ -1816,7 +1823,10 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     
     for (const clusterId in clusterGroups) {
         const featureIdsInCluster = clusterGroups[clusterId];
-        const featuresInCluster = featureIdsInCluster.map(id => source.getFeatureById(id!)).filter(f => f) as Feature<Geometry>[];
+        const featuresInCluster = featureIdsInCluster
+            .filter(id => id !== undefined && id !== null) // Filter out any undefined IDs
+            .map(id => source.getFeatureById(id!))
+            .filter(f => f) as Feature<Geometry>[];
         totalAnalyzed += featuresInCluster.length;
 
         const directions = featuresInCluster.map(f => f.get('sentido_grados')).filter(d => typeof d === 'number') as number[];
@@ -1891,12 +1901,6 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   
   const isAnyGoesProfile = profileData?.some(d => d.unit === '°C') ?? false;
 
-  const tooltipStyle = {
-      backgroundColor: 'rgba(240, 240, 240, 0.75)',
-      border: '1px solid #ccc',
-      color: '#000000',
-      fontSize: '12px',
-  };
 
 
   return (
@@ -2086,12 +2090,12 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                        <summary className="text-xs font-semibold cursor-pointer py-1" style={{ color: series.color }}>Estadísticas: {series.name}</summary>
                                        <Table>
                                            <TableBody>
-                                               <TableRow><TableCell className="text-xs p-1">Media</TableCell><TableCell className="text-xs p-1 text-right font-mono">{series.stats.mean.toFixed(2)}</TableCell></TableRow>
-                                               <TableRow><TableCell className="text-xs p-1">Mediana</TableCell><TableCell className="text-xs p-1 text-right font-mono">{series.stats.median.toFixed(2)}</TableCell></TableRow>
-                                               <TableRow><TableCell className="text-xs p-1">Mín</TableCell><TableCell className="text-xs p-1 text-right font-mono">{series.stats.min.toFixed(2)}</TableCell></TableRow>
-                                               <TableRow><TableCell className="text-xs p-1">Máx</TableCell><TableCell className="text-xs p-1 text-right font-mono">{series.stats.max.toFixed(2)}</TableCell></TableRow>
-                                               <TableRow><TableCell className="text-xs p-1">Desv. Est.</TableCell><TableCell className="text-xs p-1 text-right font-mono">{series.stats.stdDev.toFixed(2)}</TableCell></TableRow>
-                                               <TableRow><TableCell className="text-xs p-1">Cortes Jenks</TableCell><TableCell className="text-xs p-1 text-right font-mono">{series.stats.jenksBreaks.map(b => b.toFixed(1)).join(', ')}</TableCell></TableRow>
+                                               <TableRow><TableCell className="text-xs text-gray-300 p-1">Media</TableCell><TableCell className="text-xs text-white p-1 text-right font-mono">{series.stats.mean.toFixed(2)}</TableCell></TableRow>
+                                               <TableRow><TableCell className="text-xs text-gray-300 p-1">Mediana</TableCell><TableCell className="text-xs text-white p-1 text-right font-mono">{series.stats.median.toFixed(2)}</TableCell></TableRow>
+                                               <TableRow><TableCell className="text-xs text-gray-300 p-1">Mín</TableCell><TableCell className="text-xs text-white p-1 text-right font-mono">{series.stats.min.toFixed(2)}</TableCell></TableRow>
+                                               <TableRow><TableCell className="text-xs text-gray-300 p-1">Máx</TableCell><TableCell className="text-xs text-white p-1 text-right font-mono">{series.stats.max.toFixed(2)}</TableCell></TableRow>
+                                               <TableRow><TableCell className="text-xs text-gray-300 p-1">Desv. Est.</TableCell><TableCell className="text-xs text-white p-1 text-right font-mono">{series.stats.stdDev.toFixed(2)}</TableCell></TableRow>
+                                               <TableRow><TableCell className="text-xs text-gray-300 p-1">Cortes Jenks</TableCell><TableCell className="text-xs text-white p-1 text-right font-mono">{series.stats.jenksBreaks.map(b => b.toFixed(1)).join(', ')}</TableCell></TableRow>
                                            </TableBody>
                                        </Table>
                                    </details>
