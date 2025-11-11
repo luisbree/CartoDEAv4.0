@@ -132,6 +132,13 @@ const InvertedBar = (props: any) => {
     return <rect x={x} y={0} width={width} height={height} fill={fill} />;
 };
 
+interface CoherenceStats {
+    avgDirection: number;
+    stdDevDirection: number;
+    avgMagnitude: number;
+    stdDevMagnitude: number;
+}
+
 
 const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   panelRef,
@@ -222,6 +229,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   const [trajectoryOutputName, setTrajectoryOutputName] = useState('');
   const [coherenceLayerId, setCoherenceLayerId] = useState('');
   const [coherenceMagnitudeField, setCoherenceMagnitudeField] = useState('velocidad_kmh');
+  const [coherenceStats, setCoherenceStats] = useState<CoherenceStats | null>(null);
 
 
   // State for Feature Tracking
@@ -718,23 +726,19 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     const maxDecHandlers = useSteppedChange(handleYAxisDomainStep(axis, 'max', 'dec'));
     
     return (
-        <TableRow className="border-none hover:bg-transparent">
-            <TableCell className="p-1 text-xs font-semibold" style={{ color: color }}>Eje {axis === 'left' ? 'Izquierdo' : 'Derecho'}</TableCell>
-            <TableCell className="p-1">
-                <div className="flex items-center gap-1">
-                    <Button {...minDecHandlers} variant="outline" size="icon" className="h-6 w-6"><Minus className="h-3 w-3"/></Button>
-                    <Input type="text" value={domain.min} onChange={(e) => handleYAxisDomainChange(axis, 'min', e.target.value)} className="h-7 w-16 text-xs bg-black/20 text-center" placeholder="auto"/>
-                    <Button {...minIncHandlers} variant="outline" size="icon" className="h-6 w-6"><Plus className="h-3 w-3"/></Button>
-                </div>
-            </TableCell>
-            <TableCell className="p-1">
-                 <div className="flex items-center gap-1">
-                    <Button {...maxDecHandlers} variant="outline" size="icon" className="h-6 w-6"><Minus className="h-3 w-3"/></Button>
-                    <Input type="text" value={domain.max} onChange={(e) => handleYAxisDomainChange(axis, 'max', e.target.value)} className="h-7 w-16 text-xs bg-black/20 text-center" placeholder="auto"/>
-                    <Button {...maxIncHandlers} variant="outline" size="icon" className="h-6 w-6"><Plus className="h-3 w-3"/></Button>
-                </div>
-            </TableCell>
-        </TableRow>
+        <div className="flex items-center gap-2">
+             <span className="text-xs font-semibold" style={{ color: color }}>Eje {axis === 'left' ? 'Izq.' : 'Der.'}:</span>
+             <div className="flex items-center gap-1">
+                 <Button {...minDecHandlers} variant="outline" size="icon" className="h-6 w-6"><Minus className="h-3 w-3"/></Button>
+                 <Input type="text" value={domain.min} onChange={(e) => handleYAxisDomainChange(axis, 'min', e.target.value)} className="h-7 w-16 text-xs bg-black/20 text-center" placeholder="auto"/>
+                 <Button {...minIncHandlers} variant="outline" size="icon" className="h-6 w-6"><Plus className="h-3 w-3"/></Button>
+             </div>
+             <div className="flex items-center gap-1">
+                 <Button {...maxDecHandlers} variant="outline" size="icon" className="h-6 w-6"><Minus className="h-3 w-3"/></Button>
+                 <Input type="text" value={domain.max} onChange={(e) => handleYAxisDomainChange(axis, 'max', e.target.value)} className="h-7 w-16 text-xs bg-black/20 text-center" placeholder="auto"/>
+                 <Button {...maxIncHandlers} variant="outline" size="icon" className="h-6 w-6"><Plus className="h-3 w-3"/></Button>
+             </div>
+        </div>
     );
   };
 
@@ -1781,6 +1785,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     
     if (directions.length === 0 || magnitudes.length === 0 || directions.length !== magnitudes.length) {
         toast({ description: 'Las entidades no tienen los atributos de dirección o magnitud requeridos o hay un desajuste.', variant: 'destructive' });
+        setCoherenceStats(null);
         return;
     }
     
@@ -1797,6 +1802,9 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     }, 0) / directions.length);
     const stdDevMagnitude = Math.sqrt(magnitudes.reduce((sum, s) => sum + Math.pow(s - avgMagnitude, 2), 0) / magnitudes.length);
     
+    // Store stats to display in UI
+    setCoherenceStats({ avgDirection, stdDevDirection, avgMagnitude, stdDevMagnitude });
+
     features.forEach(f => {
         const direction = f.get('sentido_grados');
         const magnitude = f.get(coherenceMagnitudeField);
@@ -2029,21 +2037,12 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                             </div>
                            <div className="space-y-2 p-2 border border-white/10 rounded-md">
                                 <Label className="text-xs font-semibold">Dominio del Eje Y</Label>
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow className="border-b-white/10">
-                                            <TableHead className="p-1 h-auto text-xs">Eje</TableHead>
-                                            <TableHead className="p-1 h-auto text-xs text-center">Mínimo</TableHead>
-                                            <TableHead className="p-1 h-auto text-xs text-center">Máximo</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        <YAxisControl axis="left" domain={yAxisDomainLeft} setDomain={setYAxisDomainLeft} color={profileData[0]?.color} />
-                                        {profileData.length > 1 && (
-                                            <YAxisControl axis="right" domain={yAxisDomainRight} setDomain={setYAxisDomainRight} color={profileData[1]?.color} />
-                                        )}
-                                    </TableBody>
-                                </Table>
+                                <div className="space-y-2">
+                                    <YAxisControl axis="left" domain={yAxisDomainLeft} setDomain={setYAxisDomainLeft} color={profileData[0]?.color} />
+                                    {profileData.length > 1 && (
+                                        <YAxisControl axis="right" domain={yAxisDomainRight} setDomain={setYAxisDomainRight} color={profileData[1]?.color} />
+                                    )}
+                                </div>
                             </div>
                            <div className="space-y-1">
                                {profileData.map(series => (
@@ -2552,7 +2551,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                         <div className="space-y-2 p-2 border border-white/10 rounded-md">
                            <div>
                                 <Label htmlFor="coherence-layer" className="text-xs">Capa de Trayectorias</Label>
-                                <Select value={coherenceLayerId} onValueChange={setCoherenceLayerId}>
+                                <Select value={coherenceLayerId} onValueChange={(id) => { setCoherenceLayerId(id); setCoherenceStats(null); }}>
                                     <SelectTrigger id="coherence-layer" className="h-8 text-xs bg-black/20"><SelectValue placeholder="Seleccionar capa de trayectoria..." /></SelectTrigger>
                                     <SelectContent className="bg-gray-700 text-white border-gray-600">
                                         {trajectoryLayers.map(l => <SelectItem key={l.id} value={l.id} className="text-xs">{l.name}</SelectItem>)}
@@ -2573,6 +2572,22 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                 Analizar Coherencia
                             </Button>
                              <p className="text-xs text-gray-400">Colorea los vectores según su coherencia con el patrón de movimiento general.</p>
+                             {coherenceStats && (
+                                <div className="pt-2 border-t border-white/10">
+                                    <Table>
+                                        <TableBody>
+                                            <TableRow>
+                                                <TableCell className="text-xs text-gray-300 p-1.5">Dirección Promedio</TableCell>
+                                                <TableCell className="text-xs text-white p-1.5 text-right font-mono">{coherenceStats.avgDirection.toFixed(1)}° (±{coherenceStats.stdDevDirection.toFixed(1)}°)</TableCell>
+                                            </TableRow>
+                                            <TableRow>
+                                                <TableCell className="text-xs text-gray-300 p-1.5">Magnitud Promedio</TableCell>
+                                                <TableCell className="text-xs text-white p-1.5 text-right font-mono">{coherenceStats.avgMagnitude.toFixed(2)} (±{coherenceStats.stdDevMagnitude.toFixed(2)})</TableCell>
+                                            </TableRow>
+                                        </TableBody>
+                                    </Table>
+                                </div>
+                             )}
                         </div>
                     </div>
                 </AccordionContent>
@@ -2640,3 +2655,4 @@ export default AnalysisPanel;
 
 
     
+
