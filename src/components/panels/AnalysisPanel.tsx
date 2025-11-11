@@ -16,7 +16,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { DraftingCompass, Scissors, Layers, CircleDotDashed, MinusSquare, BoxSelect, Droplet, Sparkles, Loader2, Combine, Minus, Plus, TrendingUp, Waypoints as CrosshairIcon, Merge, LineChart, PenLine, Eraser, Brush, ZoomIn, Download, FileImage, FileText, CheckCircle, GitCommit, GitBranch, Wind, Layers as LayersIcon, LocateFixed, Eye, Activity, Sigma } from 'lucide-react';
-import type { MapLayer, VectorMapLayer, ProfilePoint } from '@/lib/types';
+import type { MapLayer, VectorMapLayer, ProfilePoint, PlainFeatureData } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { nanoid } from 'nanoid';
 import GeoJSON from 'ol/format/GeoJSON';
@@ -57,6 +57,7 @@ interface AnalysisPanelProps {
   onAddLayer: (layer: MapLayer, bringToTop?: boolean) => void;
   style?: React.CSSProperties;
   mapRef: React.RefObject<Map | null>;
+  onShowTableRequest: (plainData: PlainFeatureData[], layerName: string, layerId: string) => void;
 }
 
 const SectionHeader: React.FC<{ icon: React.ElementType; title: string; }> = ({ icon: Icon, title }) => (
@@ -67,7 +68,7 @@ const SectionHeader: React.FC<{ icon: React.ElementType; title: string; }> = ({ 
 );
 
 const analysisLayerStyle = new Style({
-    stroke: new Stroke({ color: '#f4a261', width: 2.5 }),
+    stroke: new Stroke({ color: 'rgba(255, 107, 107, 1)', width: 2.5, lineDash: [8, 8] }),
     fill: new Fill({ color: 'rgba(244, 162, 97, 0.2)' }),
 });
 
@@ -157,7 +158,8 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   selectedFeatures,
   onAddLayer,
   style,
-  mapRef
+  mapRef,
+  onShowTableRequest,
 }) => {
   const [activeAccordionItem, setActiveAccordionItem] = useState<string | undefined>(undefined);
   
@@ -1887,6 +1889,11 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     });
     
     source.changed(); // Force redraw
+    onShowTableRequest(
+        source.getFeatures().map(f => ({ id: f.getId() as string, attributes: f.getProperties() })),
+        layer.name,
+        layer.id
+    );
     toast({ description: `Análisis completado para ${totalAnalyzed} vectores en ${Object.keys(clusterGroups).length} cluster(s).` });
   };
 
@@ -1960,35 +1967,37 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                      <div className="space-y-2 p-2 border border-white/10 rounded-md">
                          <div className="space-y-2">
                             <Label className="text-xs">Datasets a Perfilar</Label>
-                            {Object.entries(DATASET_DEFINITIONS).map(([id, def]) => (
-                                <div key={id} className="flex items-center space-x-2">
-                                    <Checkbox
-                                        id={`profile-ds-${id}`}
-                                        checked={selectedProfileDatasets.includes(id as DatasetId)}
-                                        onCheckedChange={(checked) => {
-                                            setSelectedProfileDatasets(prev => 
-                                                checked ? [...prev, id as DatasetId] : prev.filter(item => item !== id)
-                                            );
-                                        }}
-                                    />
-                                    <Label htmlFor={`profile-ds-${id}`} className="text-xs font-normal">{def.name}</Label>
-                                </div>
-                            ))}
-                            {allRasterLayersForProfile.length > 0 && <Separator className="bg-white/10 my-2" />}
-                            {allRasterLayersForProfile.map(layer => (
-                                <div key={layer.id} className="flex items-center space-x-2">
-                                    <Checkbox
-                                        id={`profile-ds-${layer.id}`}
-                                        checked={selectedProfileDatasets.includes(layer.id)}
-                                        onCheckedChange={(checked) => {
-                                            setSelectedProfileDatasets(prev => 
-                                                checked ? [...prev, layer.id] : prev.filter(item => item !== layer.id)
-                                            );
-                                        }}
-                                    />
-                                    <Label htmlFor={`profile-ds-${layer.id}`} className="text-xs font-normal text-amber-300">{layer.name}</Label>
-                                </div>
-                            ))}
+                            <ScrollArea className="h-28">
+                                {Object.entries(DATASET_DEFINITIONS).map(([id, def]) => (
+                                    <div key={id} className="flex items-center space-x-2">
+                                        <Checkbox
+                                            id={`profile-ds-${id}`}
+                                            checked={selectedProfileDatasets.includes(id as DatasetId)}
+                                            onCheckedChange={(checked) => {
+                                                setSelectedProfileDatasets(prev => 
+                                                    checked ? [...prev, id as DatasetId] : prev.filter(item => item !== id)
+                                                );
+                                            }}
+                                        />
+                                        <Label htmlFor={`profile-ds-${id}`} className="text-xs font-normal">{def.name}</Label>
+                                    </div>
+                                ))}
+                                {allRasterLayersForProfile.length > 0 && <Separator className="bg-white/10 my-2" />}
+                                {allRasterLayersForProfile.map(layer => (
+                                    <div key={layer.id} className="flex items-center space-x-2">
+                                        <Checkbox
+                                            id={`profile-ds-${layer.id}`}
+                                            checked={selectedProfileDatasets.includes(layer.id)}
+                                            onCheckedChange={(checked) => {
+                                                setSelectedProfileDatasets(prev => 
+                                                    checked ? [...prev, layer.id] : prev.filter(item => item !== layer.id)
+                                                );
+                                            }}
+                                        />
+                                        <Label htmlFor={`profile-ds-${layer.id}`} className="text-xs font-normal text-amber-300">{layer.name}</Label>
+                                    </div>
+                                ))}
+                            </ScrollArea>
                         </div>
                         <div className="flex items-center gap-2 pt-2 border-t border-white/10 mt-2">
                            <Label htmlFor="jenks-classes" className="text-xs whitespace-nowrap">Clases Jenks</Label>
@@ -2084,7 +2093,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                            <div className="space-y-2 p-2 border border-white/10 rounded-md">
                                 <Label className="text-xs font-semibold">Dominio del Eje Y</Label>
                                 <Table>
-                                    <TableHeader><TableRow className="hover:bg-transparent"><TableHead className="p-1 h-auto text-center text-xs">Eje Izquierdo</TableHead><TableHead className="p-1 h-auto text-center text-xs">Eje Derecho</TableHead></TableRow></TableHeader>
+                                    <TableHeader><TableRow className="hover:bg-transparent"><TableHead className="p-1 h-auto text-center text-xs">Eje Izquierdo ({profileData[0].unit})</TableHead><TableHead className="p-1 h-auto text-center text-xs">Eje Derecho ({profileData[1]?.unit || '...'})</TableHead></TableRow></TableHeader>
                                     <TableBody><TableRow className="hover:bg-transparent"><YAxisControl axis="left" domain={yAxisDomainLeft} setDomain={setYAxisDomainLeft} color={profileData[0]?.color} /><YAxisControl axis="right" domain={yAxisDomainRight} setDomain={setYAxisDomainRight} color={profileData[1]?.color} /></TableRow></TableBody>
                                 </Table>
                             </div>
@@ -2699,4 +2708,5 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
 
