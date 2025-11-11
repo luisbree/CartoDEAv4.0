@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
@@ -230,6 +229,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   const [coherenceLayerId, setCoherenceLayerId] = useState('');
   const [coherenceMagnitudeField, setCoherenceMagnitudeField] = useState('velocidad_kmh');
   const [coherenceStats, setCoherenceStats] = useState<CoherenceStats | null>(null);
+  const [useClustering, setUseClustering] = useState(false);
 
 
   // State for Feature Tracking
@@ -726,19 +726,18 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     const maxDecHandlers = useSteppedChange(handleYAxisDomainStep(axis, 'max', 'dec'));
     
     return (
-        <div className="flex items-center gap-2">
-             <span className="text-xs font-semibold" style={{ color: color }}>Eje {axis === 'left' ? 'Izq.' : 'Der.'}:</span>
-             <div className="flex items-center gap-1">
-                 <Button {...minDecHandlers} variant="outline" size="icon" className="h-6 w-6"><Minus className="h-3 w-3"/></Button>
-                 <Input type="text" value={domain.min} onChange={(e) => handleYAxisDomainChange(axis, 'min', e.target.value)} className="h-7 w-16 text-xs bg-black/20 text-center" placeholder="auto"/>
-                 <Button {...minIncHandlers} variant="outline" size="icon" className="h-6 w-6"><Plus className="h-3 w-3"/></Button>
-             </div>
-             <div className="flex items-center gap-1">
-                 <Button {...maxDecHandlers} variant="outline" size="icon" className="h-6 w-6"><Minus className="h-3 w-3"/></Button>
-                 <Input type="text" value={domain.max} onChange={(e) => handleYAxisDomainChange(axis, 'max', e.target.value)} className="h-7 w-16 text-xs bg-black/20 text-center" placeholder="auto"/>
-                 <Button {...maxIncHandlers} variant="outline" size="icon" className="h-6 w-6"><Plus className="h-3 w-3"/></Button>
-             </div>
-        </div>
+        <td className="p-1">
+          <div className="flex items-center gap-1 justify-center">
+              <Button {...minDecHandlers} variant="ghost" size="icon" className="h-6 w-6"><Minus className="h-3 w-3"/></Button>
+              <Input type="text" value={domain.min} onChange={(e) => handleYAxisDomainChange(axis, 'min', e.target.value)} className="h-7 w-16 text-xs bg-black/20 text-center" placeholder="auto"/>
+              <Button {...minIncHandlers} variant="ghost" size="icon" className="h-6 w-6"><Plus className="h-3 w-3"/></Button>
+          </div>
+           <div className="flex items-center gap-1 justify-center mt-1">
+              <Button {...maxDecHandlers} variant="ghost" size="icon" className="h-6 w-6"><Minus className="h-3 w-3"/></Button>
+              <Input type="text" value={domain.max} onChange={(e) => handleYAxisDomainChange(axis, 'max', e.target.value)} className="h-7 w-16 text-xs bg-black/20 text-center" placeholder="auto"/>
+              <Button {...maxIncHandlers} variant="ghost" size="icon" className="h-6 w-6"><Plus className="h-3 w-3"/></Button>
+          </div>
+        </td>
     );
   };
 
@@ -1778,49 +1777,88 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         toast({ description: "Por favor, seleccione un campo de magnitud válido.", variant: "destructive" });
         return;
     }
-
-    const features = source.getFeatures();
-    const directions = features.map(f => f.get('sentido_grados')).filter(d => typeof d === 'number') as number[];
-    const magnitudes = features.map(f => f.get(coherenceMagnitudeField)).filter(s => typeof s === 'number') as number[];
     
-    if (directions.length === 0 || magnitudes.length === 0 || directions.length !== magnitudes.length) {
-        toast({ description: 'Las entidades no tienen los atributos de dirección o magnitud requeridos o hay un desajuste.', variant: 'destructive' });
-        setCoherenceStats(null);
-        return;
+    const allFeatures = source.getFeatures();
+    
+    // Convert features to GeoJSON for turf
+    const format = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
+    const geojsonFeatures = format.writeFeaturesObject(allFeatures);
+    
+    // Add original OL feature ID to properties for easy mapping back
+    geojsonFeatures.features.forEach((f, i) => {
+      f.properties!._ol_id = allFeatures[i].getId();
+    });
+
+    let clusters;
+    if (useClustering) {
+        const centroids = featureCollection(geojsonFeatures.features.map(f => centroid(f)));
+        // Estimate a reasonable distance for DBSCAN, e.g., the average length of the vectors.
+        const avgLength = allFeatures.reduce((sum, f) => sum + olGetLength(f.getGeometry() as OlLineString, {projection: 'EPSG:3857'}), 0) / allFeatures.length / 1000; // in km
+        const dbscanDistance = avgLength * 2; // A starting point, can be tuned
+        clusters = clustersDbscan(centroids, dbscanDistance, { minPoints: 2 });
+    } else {
+        // Create a single cluster with all features
+        geojsonFeatures.features.forEach(f => f.properties!.cluster = 0);
+        clusters = geojsonFeatures;
     }
     
-    const avgMagnitude = magnitudes.reduce((a, b) => a + b, 0) / magnitudes.length;
-    const avgX = directions.reduce((sum, d) => sum + Math.cos(d * Math.PI / 180), 0) / directions.length;
-    const avgY = directions.reduce((sum, d) => sum + Math.sin(d * Math.PI / 180), 0) / directions.length;
-    const avgAngleRad = Math.atan2(avgY, avgX);
-    const avgDirection = (avgAngleRad * 180 / Math.PI + 360) % 360;
-
-    const stdDevDirection = Math.sqrt(directions.reduce((sum, d) => {
-        let diff = Math.abs(d - avgDirection);
-        if (diff > 180) diff = 360 - diff; // Handle circular difference
-        return sum + Math.pow(diff, 2);
-    }, 0) / directions.length);
-    const stdDevMagnitude = Math.sqrt(magnitudes.reduce((sum, s) => sum + Math.pow(s - avgMagnitude, 2), 0) / magnitudes.length);
-    
-    // Store stats to display in UI
-    setCoherenceStats({ avgDirection, stdDevDirection, avgMagnitude, stdDevMagnitude });
-
-    features.forEach(f => {
-        const direction = f.get('sentido_grados');
-        const magnitude = f.get(coherenceMagnitudeField);
-        
-        let dirDiff = Math.abs(direction - avgDirection);
-        if (dirDiff > 180) dirDiff = 360 - dirDiff;
-        const magDiff = Math.abs(magnitude - avgMagnitude);
-        
-        let coherence = 'Coherente';
-        if (dirDiff > stdDevDirection * 1.5 || magDiff > stdDevMagnitude * 1.5) {
-            coherence = 'Atípico';
-        } else if (dirDiff > stdDevDirection * 0.75 || magDiff > stdDevMagnitude * 0.75) {
-            coherence = 'Moderado';
+    const clusterGroups = clusters.features.reduce((acc, feature) => {
+        const clusterId = feature.properties!.cluster;
+        if (clusterId === undefined) return acc; // Unclustered points (noise)
+        if (!acc[clusterId]) {
+            acc[clusterId] = [];
         }
-        f.set('coherencia', coherence);
-    });
+        acc[clusterId].push(feature.properties!._ol_id);
+        return acc;
+    }, {} as Record<string, (string | number)[]>);
+    
+    let totalAnalyzed = 0;
+    
+    for (const clusterId in clusterGroups) {
+        const featureIdsInCluster = clusterGroups[clusterId];
+        const featuresInCluster = featureIdsInCluster.map(id => source.getFeatureById(id!)).filter(f => f) as Feature<Geometry>[];
+        totalAnalyzed += featuresInCluster.length;
+
+        const directions = featuresInCluster.map(f => f.get('sentido_grados')).filter(d => typeof d === 'number') as number[];
+        const magnitudes = featuresInCluster.map(f => f.get(coherenceMagnitudeField)).filter(s => typeof s === 'number') as number[];
+
+        if (directions.length === 0 || magnitudes.length === 0 || directions.length !== magnitudes.length) continue;
+
+        const avgMagnitude = magnitudes.reduce((a, b) => a + b, 0) / magnitudes.length;
+        const avgX = directions.reduce((sum, d) => sum + Math.cos(d * Math.PI / 180), 0) / directions.length;
+        const avgY = directions.reduce((sum, d) => sum + Math.sin(d * Math.PI / 180), 0) / directions.length;
+        const avgAngleRad = Math.atan2(avgY, avgX);
+        const avgDirection = (avgAngleRad * 180 / Math.PI + 360) % 360;
+
+        const stdDevDirection = Math.sqrt(directions.reduce((sum, d) => {
+            let diff = Math.abs(d - avgDirection);
+            if (diff > 180) diff = 360 - diff;
+            return sum + Math.pow(diff, 2);
+        }, 0) / directions.length);
+        const stdDevMagnitude = Math.sqrt(magnitudes.reduce((sum, s) => sum + Math.pow(s - avgMagnitude, 2), 0) / magnitudes.length);
+
+        if (clusterId === '0' && !useClustering) {
+            setCoherenceStats({ avgDirection, stdDevDirection, avgMagnitude, stdDevMagnitude });
+        }
+
+        featuresInCluster.forEach(f => {
+            const direction = f.get('sentido_grados');
+            const magnitude = f.get(coherenceMagnitudeField);
+            
+            let dirDiff = Math.abs(direction - avgDirection);
+            if (dirDiff > 180) dirDiff = 360 - dirDiff;
+            const magDiff = Math.abs(magnitude - avgMagnitude);
+            
+            let coherence = 'Coherente';
+            if (dirDiff > stdDevDirection * 1.5 || magDiff > stdDevMagnitude * 1.5) {
+                coherence = 'Atípico';
+            } else if (dirDiff > stdDevDirection * 0.75 || magDiff > stdDevMagnitude * 0.75) {
+                coherence = 'Moderado';
+            }
+            f.set('coherencia', coherence);
+            if (useClustering) f.set('cluster_id', clusterId);
+        });
+    }
 
     layer.olLayer.setStyle((feature) => {
         const coherence = feature.get('coherencia');
@@ -1835,7 +1873,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     });
     
     source.changed(); // Force redraw
-    toast({ description: "Análisis de coherencia completado. Las trayectorias se han coloreado." });
+    toast({ description: `Análisis completado para ${totalAnalyzed} vectores en ${Object.keys(clusterGroups).length} cluster(s).` });
   };
 
 
@@ -2037,12 +2075,10 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                             </div>
                            <div className="space-y-2 p-2 border border-white/10 rounded-md">
                                 <Label className="text-xs font-semibold">Dominio del Eje Y</Label>
-                                <div className="space-y-2">
-                                    <YAxisControl axis="left" domain={yAxisDomainLeft} setDomain={setYAxisDomainLeft} color={profileData[0]?.color} />
-                                    {profileData.length > 1 && (
-                                        <YAxisControl axis="right" domain={yAxisDomainRight} setDomain={setYAxisDomainRight} color={profileData[1]?.color} />
-                                    )}
-                                </div>
+                                <Table>
+                                    <TableHeader><TableRow className="hover:bg-transparent"><TableHead className="p-1 h-auto text-center text-xs">Eje Izquierdo</TableHead><TableHead className="p-1 h-auto text-center text-xs">Eje Derecho</TableHead></TableRow></TableHeader>
+                                    <TableBody><TableRow className="hover:bg-transparent"><YAxisControl axis="left" domain={yAxisDomainLeft} setDomain={setYAxisDomainLeft} color={profileData[0]?.color} /><YAxisControl axis="right" domain={yAxisDomainRight} setDomain={setYAxisDomainRight} color={profileData[1]?.color} /></TableRow></TableBody>
+                                </Table>
                             </div>
                            <div className="space-y-1">
                                {profileData.map(series => (
@@ -2567,13 +2603,22 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                     </SelectContent>
                                 </Select>
                             </div>
+                            <div className="flex items-center space-x-2 pt-1">
+                                <Checkbox
+                                    id="use-clustering"
+                                    checked={useClustering}
+                                    onCheckedChange={(checked) => setUseClustering(!!checked)}
+                                />
+                                <Label htmlFor="use-clustering" className="text-xs font-normal">Analizar por clusters espaciales</Label>
+                            </div>
                             <Button onClick={handleAnalyzeCoherence} size="sm" className="w-full h-8 text-xs" disabled={!coherenceLayerId || !coherenceMagnitudeField}>
                                 <Activity className="mr-2 h-3.5 w-3.5" />
                                 Analizar Coherencia
                             </Button>
-                             <p className="text-xs text-gray-400">Colorea los vectores según su coherencia con el patrón de movimiento general.</p>
+                             <p className="text-xs text-gray-400">Colorea los vectores según su coherencia con el patrón de movimiento general (o por cluster).</p>
                              {coherenceStats && (
                                 <div className="pt-2 border-t border-white/10">
+                                    <p className="text-xs font-semibold text-center mb-1">Estadísticas Globales</p>
                                     <Table>
                                         <TableBody>
                                             <TableRow>
@@ -2646,13 +2691,3 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
-
-    
-
-    
-
-
-
-
-    
-
