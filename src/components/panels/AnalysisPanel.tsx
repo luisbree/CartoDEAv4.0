@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
@@ -1827,6 +1828,9 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
             .filter(id => id !== undefined && id !== null) // Filter out any undefined IDs
             .map(id => source.getFeatureById(id!))
             .filter(f => f) as Feature<Geometry>[];
+
+        if (featuresInCluster.length === 0) continue;
+
         totalAnalyzed += featuresInCluster.length;
 
         const directions = featuresInCluster.map(f => f.get('sentido_grados')).filter(d => typeof d === 'number') as number[];
@@ -2695,3 +2699,4 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
