@@ -1753,44 +1753,49 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     const clusterGroups = clusters.features.reduce((acc, feature) => {
         let clusterId = feature.properties!.cluster;
         
-        // Handle noise points (undefined cluster)
         if (clusterId === undefined) {
-            clusterId = `noise-${noiseIndex++}`;
-            // Directly handle noise points here
-             const olFeature = (useClustering ? feature.properties!._originalFeature.properties._ol_id : feature.properties!._ol_id);
-             if (olFeature) {
-                 olFeature.set('coherencia', 'Coherente');
-                 olFeature.set('cluster_id', clusterId);
+             const olFeatureId = (useClustering ? feature.properties!._originalFeature.properties._ol_id : feature.properties!._ol_id);
+             if (olFeatureId) {
+                const olFeature = source.getFeatureById(olFeatureId) as Feature<Geometry> | null;
+                if (olFeature) {
+                    clusterId = `noise-${noiseIndex++}`;
+                    feature.properties!.cluster = clusterId;
+                    olFeature.set('coherencia', 'Coherente');
+                    olFeature.set('cluster_id', clusterId);
+                }
              }
-            return acc;
         }
+        
+        if (clusterId === undefined) return acc;
 
         if (!acc[clusterId]) {
             acc[clusterId] = [];
         }
         const originalFeature = useClustering ? feature.properties!._originalFeature : feature;
-        originalFeature.properties!._ol_id = allFeatures.find(f => {
+        const olFeature = allFeatures.find(f => {
             const props = f.getProperties();
             return props.distancia_km === originalFeature.properties!.distancia_km && props.sentido_grados === originalFeature.properties!.sentido_grados
-        })
-        acc[clusterId].push(originalFeature);
+        });
+        if (olFeature) {
+           acc[clusterId].push(olFeature.getId());
+        }
         return acc;
-    }, {} as Record<string, TurfFeature<TurfGeometry>[]>);
+    }, {} as Record<string, (string | number)[]>);
     
     let totalAnalyzed = 0;
     
     for (const clusterId in clusterGroups) {
-        const featuresInClusterTurf = clusterGroups[clusterId];
-        const olFeaturesInCluster = featuresInClusterTurf.map(tf => tf.properties!._ol_id).filter(f => f) as Feature<Geometry>[];
-        totalAnalyzed += olFeaturesInCluster.length;
+        const featureIdsInCluster = clusterGroups[clusterId];
+        const featuresInCluster = featureIdsInCluster.map(id => source.getFeatureById(id!)).filter(f => f) as Feature<Geometry>[];
+        totalAnalyzed += featuresInCluster.length;
 
-        const directions = olFeaturesInCluster.map(f => f.get('sentido_grados')).filter(d => typeof d === 'number') as number[];
-        const magnitudes = olFeaturesInCluster.map(f => f.get(coherenceMagnitudeField)).filter(s => typeof s === 'number') as number[];
+        const directions = featuresInCluster.map(f => f.get('sentido_grados')).filter(d => typeof d === 'number') as number[];
+        const magnitudes = featuresInCluster.map(f => f.get(coherenceMagnitudeField)).filter(s => typeof s === 'number') as number[];
 
         if (directions.length === 0 || magnitudes.length === 0 || directions.length !== magnitudes.length) continue;
         if (directions.length === 1) {
-            olFeaturesInCluster[0].set('coherencia', 'Coherente');
-            olFeaturesInCluster[0].set('cluster_id', clusterId);
+            featuresInCluster[0].set('coherencia', 'Coherente');
+            featuresInCluster[0].set('cluster_id', clusterId);
             continue;
         }
 
@@ -1811,7 +1816,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
             setCoherenceStats({ avgDirection, stdDevDirection, avgMagnitude, stdDevMagnitude });
         }
         
-        olFeaturesInCluster.forEach(olFeature => {
+        featuresInCluster.forEach(olFeature => {
             const direction = olFeature.get('sentido_grados');
             const magnitude = olFeature.get(coherenceMagnitudeField);
             
@@ -2729,6 +2734,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
 
 
 
