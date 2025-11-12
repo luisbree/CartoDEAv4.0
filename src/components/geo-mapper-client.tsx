@@ -1540,7 +1540,6 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
             onRenameGroup={layerManagerHook.renameGroup}
             onToggleGroupPlayback={layerManagerHook.toggleGroupPlayback}
             onSetGroupPlaySpeed={layerManagerHook.setGroupPlaySpeed}
-            onToggleGroupVisibility={layerManagerHook.toggleGroupVisibility}
             isDrawingSourceEmptyOrNotPolygon={
               layerManagerHook.isDrawingSourceEmptyOrNotPolygon
             }
@@ -1689,6 +1688,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
                 zIndex: panels.analysis.zIndex,
               }}
               mapRef={mapRef}
+              onShowTableRequest={featureInspectionHook.processAndDisplayFeatures}
             />
           )}
 
