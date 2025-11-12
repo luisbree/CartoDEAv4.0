@@ -68,7 +68,7 @@ const SectionHeader: React.FC<{ icon: React.ElementType; title: string; }> = ({ 
 );
 
 const analysisLayerStyle = new Style({
-    stroke: new Stroke({ color: 'rgba(255, 107, 107, 1)', width: 2.5, lineDash: [8, 8] }),
+    stroke: new Stroke({ color: 'rgba(255, 107, 107, 1)', width: 2.5, }),
     fill: new Fill({ color: 'rgba(244, 162, 97, 0.2)' }),
 });
 
@@ -1794,49 +1794,42 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     const format = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
     const geojsonFeatures = format.writeFeaturesObject(allFeatures);
     
-    // Add original OL feature ID to properties for easy mapping back
-    geojsonFeatures.features.forEach((f, i) => {
-      f.properties!._ol_id = allFeatures[i].getId();
-    });
-
     let clusters;
     if (useClustering) {
-        const centroids = featureCollection(geojsonFeatures.features.map(f => centroid(f)));
-        // Estimate a reasonable distance for DBSCAN, e.g., the average length of the vectors.
-        const avgLength = allFeatures.reduce((sum, f) => sum + olGetLength(f.getGeometry() as OlLineString, {projection: 'EPSG:3857'}), 0) / allFeatures.length / 1000; // in km
-        const dbscanDistance = avgLength * 2; // A starting point, can be tuned
+        const centroids = featureCollection(geojsonFeatures.features.map(f => {
+            const center = centroid(f);
+            center.properties = { ...f.properties, _originalFeature: f };
+            return center;
+        }));
+        
+        const avgLength = allFeatures.reduce((sum, f) => sum + olGetLength(f.getGeometry() as OlLineString, {projection: 'EPSG:3857'}), 0) / allFeatures.length / 1000;
+        const dbscanDistance = avgLength * 2 || 10;
         clusters = clustersDbscan(centroids, dbscanDistance, { minPoints: 2 });
     } else {
-        // Create a single cluster with all features
         geojsonFeatures.features.forEach(f => f.properties!.cluster = 0);
         clusters = geojsonFeatures;
     }
     
     const clusterGroups = clusters.features.reduce((acc, feature) => {
         const clusterId = feature.properties!.cluster;
-        if (clusterId === undefined) return acc; // Unclustered points (noise)
+        if (clusterId === undefined) return acc;
         if (!acc[clusterId]) {
             acc[clusterId] = [];
         }
-        acc[clusterId].push(feature.properties!._ol_id);
+        // If clustering was used, get the original line feature. Otherwise, use the feature itself.
+        const originalFeature = useClustering ? feature.properties!._originalFeature : feature;
+        acc[clusterId].push(originalFeature);
         return acc;
-    }, {} as Record<string, (string | number)[]>);
+    }, {} as Record<string, TurfFeature<TurfGeometry>[]>);
     
     let totalAnalyzed = 0;
     
     for (const clusterId in clusterGroups) {
-        const featureIdsInCluster = clusterGroups[clusterId];
-        const featuresInCluster = featureIdsInCluster
-            .filter(id => id !== undefined && id !== null) // Filter out any undefined IDs
-            .map(id => source.getFeatureById(id!))
-            .filter(f => f) as Feature<Geometry>[];
-
-        if (featuresInCluster.length === 0) continue;
-
+        const featuresInCluster = clusterGroups[clusterId];
         totalAnalyzed += featuresInCluster.length;
 
-        const directions = featuresInCluster.map(f => f.get('sentido_grados')).filter(d => typeof d === 'number') as number[];
-        const magnitudes = featuresInCluster.map(f => f.get(coherenceMagnitudeField)).filter(s => typeof s === 'number') as number[];
+        const directions = featuresInCluster.map(f => f.properties!.sentido_grados).filter(d => typeof d === 'number') as number[];
+        const magnitudes = featuresInCluster.map(f => f.properties![coherenceMagnitudeField]).filter(s => typeof s === 'number') as number[];
 
         if (directions.length === 0 || magnitudes.length === 0 || directions.length !== magnitudes.length) continue;
 
@@ -1856,10 +1849,13 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         if (clusterId === '0' && !useClustering) {
             setCoherenceStats({ avgDirection, stdDevDirection, avgMagnitude, stdDevMagnitude });
         }
+        
+        featuresInCluster.forEach(turfFeature => {
+            const olFeature = allFeatures.find(f => f.get('distancia_km') === turfFeature.properties!.distancia_km && f.get('sentido_grados') === turfFeature.properties!.sentido_grados);
+            if (!olFeature) return;
 
-        featuresInCluster.forEach(f => {
-            const direction = f.get('sentido_grados');
-            const magnitude = f.get(coherenceMagnitudeField);
+            const direction = olFeature.get('sentido_grados');
+            const magnitude = olFeature.get(coherenceMagnitudeField);
             
             let dirDiff = Math.abs(direction - avgDirection);
             if (dirDiff > 180) dirDiff = 360 - dirDiff;
@@ -1871,8 +1867,8 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
             } else if (dirDiff > stdDevDirection * 0.75 || magDiff > stdDevMagnitude * 0.75) {
                 coherence = 'Moderado';
             }
-            f.set('coherencia', coherence);
-            if (useClustering) f.set('cluster_id', clusterId);
+            olFeature.set('coherencia', coherence);
+            if (useClustering) olFeature.set('cluster_id', clusterId);
         });
     }
 
@@ -2708,5 +2704,6 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
 
 
