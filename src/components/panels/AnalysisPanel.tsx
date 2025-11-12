@@ -1863,7 +1863,8 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         if (useClustering) {
             const centroids = featureCollection(geojsonFeatures.features.map(f => {
                 const center = centroid(f);
-                center.properties = { ...f.properties, _originalFeature: f };
+                center.properties = { ...f.properties, _originalFeatureId: f.id || nanoid() }; // Store original ID
+                (f as any).properties._ol_id = (f as any).id;
                 return center;
             }));
 
@@ -1871,49 +1872,34 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
             const dbscanDistance = avgLength * 2 || 10;
             clusters = clustersDbscan(centroids, dbscanDistance, { minPoints: 2 });
         } else {
-            geojsonFeatures.features.forEach(f => f.properties!.cluster = 0);
+            geojsonFeatures.features.forEach(f => {
+                (f as any).properties._ol_id = (f as any).id;
+                f.properties!.cluster = 0
+            });
             clusters = geojsonFeatures;
         }
 
         let noiseIndex = 0;
         const clusterGroups = clusters.features.reduce((acc, feature) => {
             let clusterId = feature.properties!.cluster;
+            const originalFeatureId = useClustering ? feature.properties!._originalFeatureId : (feature as any).properties._ol_id;
 
-            // Handle noise points (undefined cluster ID from DBSCAN)
             if (clusterId === undefined) {
-                const originalFeature = useClustering ? feature.properties!._originalFeature : feature;
-                const olFeature = allFeatures.find(f => {
-                    const props = f.getProperties();
-                    return props.distancia_km === originalFeature.properties!.distancia_km && props.sentido_grados === originalFeature.properties!.sentido_grados
-                });
-                 if (olFeature) {
-                    clusterId = `noise-${noiseIndex++}`;
-                    feature.properties!.cluster = clusterId;
-                    olFeature.set('coherencia', 'Coherente');
-                    olFeature.set('cluster_id', clusterId);
-                 }
+                clusterId = `noise-${noiseIndex++}`;
             }
-
-            if (clusterId === undefined) return acc;
 
             if (!acc[clusterId]) {
                 acc[clusterId] = [];
             }
-            const originalFeature = useClustering ? feature.properties!._originalFeature : feature;
-            const olFeature = allFeatures.find(f => {
-                const props = f.getProperties();
-                return props.distancia_km === originalFeature.properties!.distancia_km && props.sentido_grados === originalFeature.properties!.sentido_grados
-            });
-            if (olFeature) {
-                acc[clusterId].push(olFeature);
-            }
+            acc[clusterId].push(originalFeatureId);
             return acc;
-        }, {} as Record<string, Feature<Geometry>[]>);
+        }, {} as Record<string, string[]>);
 
         let totalAnalyzed = 0;
 
         for (const clusterId in clusterGroups) {
-            const featuresInCluster = clusterGroups[clusterId];
+            const featureIdsInCluster = clusterGroups[clusterId];
+            const featuresInCluster = featureIdsInCluster.map(id => source.getFeatureById(id!)).filter(f => f) as Feature<Geometry>[];
             totalAnalyzed += featuresInCluster.length;
 
             const directions = featuresInCluster.map(f => f.get('sentido_grados')).filter(d => typeof d === 'number') as number[];
@@ -1952,16 +1938,16 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                 const magDiff = Math.abs(magnitude - avgMagnitude);
 
                 let coherence = 'Coherente';
-                if (dirDiff > stdDevDirection * 1.5 || magDiff > stdDevMagnitude * 1.5) {
+                if (dirDiff > stdDevDirection * 2 || magDiff > stdDevMagnitude * 2) {
                     coherence = 'Atípico';
-                } else if (dirDiff > stdDevDirection * 0.75 || magDiff > stdDevMagnitude * 0.75) {
+                } else if (dirDiff > stdDevDirection * 1 || magDiff > stdDevMagnitude * 1) {
                     coherence = 'Moderado';
                 }
                 olFeature.set('coherencia', coherence);
                 olFeature.set('cluster_id', clusterId);
             });
         }
-
+    
         layer.olLayer.setStyle((feature) => {
             const coherence = feature.get('coherencia');
             let color = '#3b82f6'; // Azul para Coherente
@@ -1974,6 +1960,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
             });
         });
 
+    
         source.changed(); // Force redraw
         onShowTableRequest(
             source.getFeatures().map(f => ({ id: f.getId() as string, attributes: f.getProperties() })),
