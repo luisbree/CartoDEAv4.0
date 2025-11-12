@@ -737,15 +737,23 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     
     return (
         <td className="p-1">
-          <div className="flex items-center gap-1 justify-center">
-              <Button {...minDecHandlers} variant="ghost" size="icon" className="h-6 w-6"><Minus className="h-3 w-3"/></Button>
-              <Input type="text" value={domain.min} onChange={(e) => handleYAxisDomainChange(axis, 'min', e.target.value)} className="h-7 w-16 text-xs bg-black/20 text-center" placeholder="auto"/>
-              <Button {...minIncHandlers} variant="ghost" size="icon" className="h-6 w-6"><Plus className="h-3 w-3"/></Button>
-          </div>
-           <div className="flex items-center gap-1 justify-center mt-1">
-              <Button {...maxDecHandlers} variant="ghost" size="icon" className="h-6 w-6"><Minus className="h-3 w-3"/></Button>
-              <Input type="text" value={domain.max} onChange={(e) => handleYAxisDomainChange(axis, 'max', e.target.value)} className="h-7 w-16 text-xs bg-black/20 text-center" placeholder="auto"/>
-              <Button {...maxIncHandlers} variant="ghost" size="icon" className="h-6 w-6"><Plus className="h-3 w-3"/></Button>
+          <div className="grid grid-cols-2 gap-1">
+             <div className="flex flex-col items-center">
+                <Label className="text-xs">Min</Label>
+                <div className="flex items-center gap-1">
+                   <Button {...minDecHandlers} variant="ghost" size="icon" className="h-6 w-6"><Minus className="h-3 w-3"/></Button>
+                   <Input type="text" value={domain.min} onChange={(e) => handleYAxisDomainChange(axis, 'min', e.target.value)} className="h-7 w-12 text-xs bg-black/20 text-center" placeholder="auto"/>
+                   <Button {...minIncHandlers} variant="ghost" size="icon" className="h-6 w-6"><Plus className="h-3 w-3"/></Button>
+                </div>
+            </div>
+             <div className="flex flex-col items-center">
+                <Label className="text-xs">Max</Label>
+                <div className="flex items-center gap-1">
+                  <Button {...maxDecHandlers} variant="ghost" size="icon" className="h-6 w-6"><Minus className="h-3 w-3"/></Button>
+                  <Input type="text" value={domain.max} onChange={(e) => handleYAxisDomainChange(axis, 'max', e.target.value)} className="h-7 w-12 text-xs bg-black/20 text-center" placeholder="auto"/>
+                  <Button {...maxIncHandlers} variant="ghost" size="icon" className="h-6 w-6"><Plus className="h-3 w-3"/></Button>
+                </div>
+            </div>
           </div>
         </td>
     );
@@ -1705,6 +1713,145 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     toast({ description: `Se generaron ${vectorFeatures.length} vectores de trayectoria.` });
   };
   
+  const handleAnalyzeCoherence = () => {
+    const layer = trajectoryLayers.find(l => l.id === coherenceLayerId) as VectorMapLayer | undefined;
+    if (!layer) {
+        toast({ description: "Por favor, seleccione una capa de trayectorias para analizar.", variant: "destructive" });
+        return;
+    }
+    const source = layer.olLayer.getSource();
+    if (!source || source.getFeatures().length === 0) {
+        toast({ description: 'La capa de trayectorias no tiene entidades.', variant: 'destructive' });
+        return;
+    }
+    if (!coherenceMagnitudeField || !coherenceNumericFields.includes(coherenceMagnitudeField)) {
+        toast({ description: "Por favor, seleccione un campo de magnitud válido.", variant: "destructive" });
+        return;
+    }
+    
+    const allFeatures = source.getFeatures();
+    const format = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
+    const geojsonFeatures = format.writeFeaturesObject(allFeatures);
+    
+    let clusters;
+    if (useClustering) {
+        const centroids = featureCollection(geojsonFeatures.features.map(f => {
+            const center = centroid(f);
+            center.properties = { ...f.properties, _originalFeature: f };
+            return center;
+        }));
+        
+        const avgLength = allFeatures.reduce((sum, f) => sum + olGetLength(f.getGeometry() as OlLineString, {projection: 'EPSG:3857'}), 0) / allFeatures.length / 1000;
+        const dbscanDistance = avgLength * 2 || 10;
+        clusters = clustersDbscan(centroids, dbscanDistance, { minPoints: 2 });
+    } else {
+        geojsonFeatures.features.forEach(f => f.properties!.cluster = 0);
+        clusters = geojsonFeatures;
+    }
+    
+    let noiseIndex = 0;
+    const clusterGroups = clusters.features.reduce((acc, feature) => {
+        let clusterId = feature.properties!.cluster;
+        
+        // Handle noise points (undefined cluster)
+        if (clusterId === undefined) {
+            clusterId = `noise-${noiseIndex++}`;
+            // Directly handle noise points here
+             const olFeature = (useClustering ? feature.properties!._originalFeature.properties._ol_id : feature.properties!._ol_id);
+             if (olFeature) {
+                 olFeature.set('coherencia', 'Coherente');
+                 olFeature.set('cluster_id', clusterId);
+             }
+            return acc;
+        }
+
+        if (!acc[clusterId]) {
+            acc[clusterId] = [];
+        }
+        const originalFeature = useClustering ? feature.properties!._originalFeature : feature;
+        originalFeature.properties!._ol_id = allFeatures.find(f => {
+            const props = f.getProperties();
+            return props.distancia_km === originalFeature.properties!.distancia_km && props.sentido_grados === originalFeature.properties!.sentido_grados
+        })
+        acc[clusterId].push(originalFeature);
+        return acc;
+    }, {} as Record<string, TurfFeature<TurfGeometry>[]>);
+    
+    let totalAnalyzed = 0;
+    
+    for (const clusterId in clusterGroups) {
+        const featuresInClusterTurf = clusterGroups[clusterId];
+        const olFeaturesInCluster = featuresInClusterTurf.map(tf => tf.properties!._ol_id).filter(f => f) as Feature<Geometry>[];
+        totalAnalyzed += olFeaturesInCluster.length;
+
+        const directions = olFeaturesInCluster.map(f => f.get('sentido_grados')).filter(d => typeof d === 'number') as number[];
+        const magnitudes = olFeaturesInCluster.map(f => f.get(coherenceMagnitudeField)).filter(s => typeof s === 'number') as number[];
+
+        if (directions.length === 0 || magnitudes.length === 0 || directions.length !== magnitudes.length) continue;
+        if (directions.length === 1) {
+            olFeaturesInCluster[0].set('coherencia', 'Coherente');
+            olFeaturesInCluster[0].set('cluster_id', clusterId);
+            continue;
+        }
+
+        const avgMagnitude = magnitudes.reduce((a, b) => a + b, 0) / magnitudes.length;
+        const avgX = directions.reduce((sum, d) => sum + Math.cos(d * Math.PI / 180), 0) / directions.length;
+        const avgY = directions.reduce((sum, d) => sum + Math.sin(d * Math.PI / 180), 0) / directions.length;
+        const avgAngleRad = Math.atan2(avgY, avgX);
+        const avgDirection = (avgAngleRad * 180 / Math.PI + 360) % 360;
+
+        const stdDevDirection = Math.sqrt(directions.reduce((sum, d) => {
+            let diff = Math.abs(d - avgDirection);
+            if (diff > 180) diff = 360 - diff;
+            return sum + Math.pow(diff, 2);
+        }, 0) / directions.length);
+        const stdDevMagnitude = Math.sqrt(magnitudes.reduce((sum, s) => sum + Math.pow(s - avgMagnitude, 2), 0) / magnitudes.length);
+
+        if (clusterId === '0' && !useClustering) {
+            setCoherenceStats({ avgDirection, stdDevDirection, avgMagnitude, stdDevMagnitude });
+        }
+        
+        olFeaturesInCluster.forEach(olFeature => {
+            const direction = olFeature.get('sentido_grados');
+            const magnitude = olFeature.get(coherenceMagnitudeField);
+            
+            let dirDiff = Math.abs(direction - avgDirection);
+            if (dirDiff > 180) dirDiff = 360 - dirDiff;
+            const magDiff = Math.abs(magnitude - avgMagnitude);
+            
+            let coherence = 'Coherente';
+            if (dirDiff > stdDevDirection * 1.5 || magDiff > stdDevMagnitude * 1.5) {
+                coherence = 'Atípico';
+            } else if (dirDiff > stdDevDirection * 0.75 || magDiff > stdDevMagnitude * 0.75) {
+                coherence = 'Moderado';
+            }
+            olFeature.set('coherencia', coherence);
+            if (useClustering) olFeature.set('cluster_id', clusterId);
+        });
+    }
+
+    layer.olLayer.setStyle((feature) => {
+        const coherence = feature.get('coherencia');
+        let color = '#3b82f6'; // Azul para Coherente
+        if (coherence === 'Moderado') color = '#facc15'; // Amarillo para Moderado
+        if (coherence === 'Atípico') color = '#ef4444'; // Rojo para Atípico
+        
+        return new Style({
+            stroke: new Stroke({ color, width: 2.5 }),
+            image: new CircleStyle({ radius: 4, fill: new Fill({ color }) })
+        });
+    });
+    
+    source.changed(); // Force redraw
+    onShowTableRequest(
+        source.getFeatures().map(f => ({ id: f.getId() as string, attributes: f.getProperties() })),
+        layer.name,
+        layer.id
+    );
+    toast({ description: `Análisis completado para ${totalAnalyzed} vectores en ${Object.keys(clusterGroups).length} cluster(s).` });
+  };
+
+
   const handleRunFeatureTracking = async () => {
     const layer1 = pointLayers.find(l => l.id === trackingLayer1Id) as VectorMapLayer | undefined;
     const layer2 = pointLayers.find(l => l.id === trackingLayer2Id) as VectorMapLayer | undefined;
@@ -1771,128 +1918,6 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         setTrackingIsLoading(false);
     }
   };
-
-  const handleAnalyzeCoherence = () => {
-    const layer = trajectoryLayers.find(l => l.id === coherenceLayerId) as VectorMapLayer | undefined;
-    if (!layer) {
-        toast({ description: "Por favor, seleccione una capa de trayectorias para analizar.", variant: "destructive" });
-        return;
-    }
-    const source = layer.olLayer.getSource();
-    if (!source || source.getFeatures().length === 0) {
-        toast({ description: 'La capa de trayectorias no tiene entidades.', variant: 'destructive' });
-        return;
-    }
-    if (!coherenceMagnitudeField || !coherenceNumericFields.includes(coherenceMagnitudeField)) {
-        toast({ description: "Por favor, seleccione un campo de magnitud válido.", variant: "destructive" });
-        return;
-    }
-    
-    const allFeatures = source.getFeatures();
-    
-    // Convert features to GeoJSON for turf
-    const format = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
-    const geojsonFeatures = format.writeFeaturesObject(allFeatures);
-    
-    let clusters;
-    if (useClustering) {
-        const centroids = featureCollection(geojsonFeatures.features.map(f => {
-            const center = centroid(f);
-            center.properties = { ...f.properties, _originalFeature: f };
-            return center;
-        }));
-        
-        const avgLength = allFeatures.reduce((sum, f) => sum + olGetLength(f.getGeometry() as OlLineString, {projection: 'EPSG:3857'}), 0) / allFeatures.length / 1000;
-        const dbscanDistance = avgLength * 2 || 10;
-        clusters = clustersDbscan(centroids, dbscanDistance, { minPoints: 2 });
-    } else {
-        geojsonFeatures.features.forEach(f => f.properties!.cluster = 0);
-        clusters = geojsonFeatures;
-    }
-    
-    const clusterGroups = clusters.features.reduce((acc, feature) => {
-        const clusterId = feature.properties!.cluster;
-        if (clusterId === undefined) return acc;
-        if (!acc[clusterId]) {
-            acc[clusterId] = [];
-        }
-        // If clustering was used, get the original line feature. Otherwise, use the feature itself.
-        const originalFeature = useClustering ? feature.properties!._originalFeature : feature;
-        acc[clusterId].push(originalFeature);
-        return acc;
-    }, {} as Record<string, TurfFeature<TurfGeometry>[]>);
-    
-    let totalAnalyzed = 0;
-    
-    for (const clusterId in clusterGroups) {
-        const featuresInCluster = clusterGroups[clusterId];
-        totalAnalyzed += featuresInCluster.length;
-
-        const directions = featuresInCluster.map(f => f.properties!.sentido_grados).filter(d => typeof d === 'number') as number[];
-        const magnitudes = featuresInCluster.map(f => f.properties![coherenceMagnitudeField]).filter(s => typeof s === 'number') as number[];
-
-        if (directions.length === 0 || magnitudes.length === 0 || directions.length !== magnitudes.length) continue;
-
-        const avgMagnitude = magnitudes.reduce((a, b) => a + b, 0) / magnitudes.length;
-        const avgX = directions.reduce((sum, d) => sum + Math.cos(d * Math.PI / 180), 0) / directions.length;
-        const avgY = directions.reduce((sum, d) => sum + Math.sin(d * Math.PI / 180), 0) / directions.length;
-        const avgAngleRad = Math.atan2(avgY, avgX);
-        const avgDirection = (avgAngleRad * 180 / Math.PI + 360) % 360;
-
-        const stdDevDirection = Math.sqrt(directions.reduce((sum, d) => {
-            let diff = Math.abs(d - avgDirection);
-            if (diff > 180) diff = 360 - diff;
-            return sum + Math.pow(diff, 2);
-        }, 0) / directions.length);
-        const stdDevMagnitude = Math.sqrt(magnitudes.reduce((sum, s) => sum + Math.pow(s - avgMagnitude, 2), 0) / magnitudes.length);
-
-        if (clusterId === '0' && !useClustering) {
-            setCoherenceStats({ avgDirection, stdDevDirection, avgMagnitude, stdDevMagnitude });
-        }
-        
-        featuresInCluster.forEach(turfFeature => {
-            const olFeature = allFeatures.find(f => f.get('distancia_km') === turfFeature.properties!.distancia_km && f.get('sentido_grados') === turfFeature.properties!.sentido_grados);
-            if (!olFeature) return;
-
-            const direction = olFeature.get('sentido_grados');
-            const magnitude = olFeature.get(coherenceMagnitudeField);
-            
-            let dirDiff = Math.abs(direction - avgDirection);
-            if (dirDiff > 180) dirDiff = 360 - dirDiff;
-            const magDiff = Math.abs(magnitude - avgMagnitude);
-            
-            let coherence = 'Coherente';
-            if (dirDiff > stdDevDirection * 1.5 || magDiff > stdDevMagnitude * 1.5) {
-                coherence = 'Atípico';
-            } else if (dirDiff > stdDevDirection * 0.75 || magDiff > stdDevMagnitude * 0.75) {
-                coherence = 'Moderado';
-            }
-            olFeature.set('coherencia', coherence);
-            if (useClustering) olFeature.set('cluster_id', clusterId);
-        });
-    }
-
-    layer.olLayer.setStyle((feature) => {
-        const coherence = feature.get('coherencia');
-        let color = '#3b82f6'; // Azul para Coherente
-        if (coherence === 'Moderado') color = '#facc15'; // Amarillo para Moderado
-        if (coherence === 'Atípico') color = '#ef4444'; // Rojo para Atípico
-        
-        return new Style({
-            stroke: new Stroke({ color, width: 2.5 }),
-            image: new CircleStyle({ radius: 4, fill: new Fill({ color }) })
-        });
-    });
-    
-    source.changed(); // Force redraw
-    onShowTableRequest(
-        source.getFeatures().map(f => ({ id: f.getId() as string, attributes: f.getProperties() })),
-        layer.name,
-        layer.id
-    );
-    toast({ description: `Análisis completado para ${totalAnalyzed} vectores en ${Object.keys(clusterGroups).length} cluster(s).` });
-  };
-
 
   const trendlineData = useMemo(() => {
     if (!correlationResult) return [];
@@ -2704,6 +2729,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
 
 
 
