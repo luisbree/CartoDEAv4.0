@@ -852,7 +852,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
 
   const handleAttributeTableFeatureSelect = useCallback(
     (featureId: string, isCtrlOrMeta: boolean, isShift: boolean) => {
-      featureInspectionHook.selectFeaturesById(featureId, isCtrlOrMeta, isShift);
+      featureInspectionHook.selectFeaturesById([featureId], isCtrlOrMeta, isShift);
     },
     [featureInspectionHook]
   );
