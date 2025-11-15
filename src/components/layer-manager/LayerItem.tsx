@@ -187,7 +187,7 @@ const LayerItem: React.FC<LayerItemProps> = ({
     <TooltipProvider>
           <li 
             className={cn(
-              "flex items-center px-1.5 py-1 transition-all",
+              "relative flex items-center px-1.5 py-1 transition-all",
               "hover:bg-gray-700/30",
               isSelected && !props.isSharedView ? "bg-primary/20 ring-1 ring-primary/70 rounded-md" : "",
               isDraggable && "cursor-grab",
@@ -222,7 +222,7 @@ const LayerItem: React.FC<LayerItemProps> = ({
                 </Button>
             )}
 
-            <div className="flex-1 min-w-0">
+            <div className="flex-1 min-w-0 pr-8"> 
                 <label
                     htmlFor={`vis-${layer.id}`}
                     className={cn(
@@ -236,7 +236,7 @@ const LayerItem: React.FC<LayerItemProps> = ({
                 </label>
             </div>
             
-            <div className="flex items-center space-x-0.5 flex-shrink-0">
+            <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center space-x-0.5">
                 <GoesMetadataTooltip />
                 {!props.isSharedView && (
                     <DropdownMenu>
