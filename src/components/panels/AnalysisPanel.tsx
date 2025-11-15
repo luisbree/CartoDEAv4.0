@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React,
@@ -144,7 +145,8 @@ import {
     Text as TextStyle,
     Fill,
     Stroke,
-    Circle as CircleStyle
+    Circle as CircleStyle,
+    Icon as IconStyle
 } from 'ol/style';
 import type { Map } from 'ol';
 import Draw, { createBox } from 'ol/interaction/Draw';
@@ -1857,66 +1859,102 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 
         const allFeatures = source.getFeatures();
         const format = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
-        const geojsonFeatures = format.writeFeaturesObject(allFeatures);
-
-        let clusterGroups: Record<string, Feature<Geometry>[]> = { '0': allFeatures };
 
         if (useClustering) {
+            const geojsonFeatures = format.writeFeaturesObject(allFeatures);
             const centroids = featureCollection(geojsonFeatures.features.map(f => {
                 const center = centroid(f);
-                center.properties = { ...f.properties, _originalFeatureId: (f as any).id || nanoid() };
+                center.properties = { ...f.properties, _originalFeatureId: f.id || nanoid() };
                 return center;
             }));
 
             const avgLength = allFeatures.reduce((sum, f) => sum + olGetLength(f.getGeometry() as OlLineString, { projection: 'EPSG:3857' }), 0) / allFeatures.length / 1000;
             const dbscanDistance = avgLength * 2 || 10;
             const clusters = clustersDbscan(centroids, dbscanDistance, { minPoints: 2 });
-
-            const newClusterGroups: Record<string, Feature<Geometry>[]> = {};
+            
+            const clusterGroups: Record<string, Feature<Geometry>[]> = {};
             clusters.features.forEach(feature => {
                 const clusterId = feature.properties!.cluster;
-                const originalId = feature.properties!._originalFeatureId;
                 if (clusterId === undefined) return;
+
                 const idStr = String(clusterId);
-                const originalFeature = source.getFeatureById(originalId);
+                const originalFeature = allFeatures.find(f => f.getId() === feature.properties!._originalFeatureId);
+
                 if (originalFeature) {
-                    if (!newClusterGroups[idStr]) newClusterGroups[idStr] = [];
-                    newClusterGroups[idStr].push(originalFeature);
+                    if (!clusterGroups[idStr]) {
+                        clusterGroups[idStr] = [];
+                    }
+                    clusterGroups[idStr].push(originalFeature);
                 }
             });
-            clusterGroups = newClusterGroups;
-        }
-        
-        const allClusteredFeatures = Object.values(clusterGroups).flat();
-        const clusteredFeatureIds = new Set(allClusteredFeatures.map(f => f.getId()));
-        const noiseFeatures = allFeatures.filter(f => !clusteredFeatureIds.has(f.getId() as string | number));
-        
-        let noiseIndex = 0;
-        noiseFeatures.forEach(f => {
-            const noiseClusterId = `ruido_${noiseIndex++}`;
-            clusterGroups[noiseClusterId] = [f];
-        });
-
-
-        // --- Clean up old average vector ---
-        if (averageVectorLayerRef.current) {
-            averageVectorLayerRef.current.getSource()?.clear();
-        }
-
-        for (const clusterId in clusterGroups) {
-            const featuresInCluster = clusterGroups[clusterId];
-            if (featuresInCluster.length === 0) continue;
             
-            const directions = featuresInCluster.map(f => f.get('sentido_grados')).filter(d => typeof d === 'number') as number[];
-            const magnitudes = featuresInCluster.map(f => f.get(coherenceMagnitudeField)).filter(s => typeof s === 'number') as number[];
-    
-            if (directions.length === 0 || magnitudes.length === 0) continue;
-            if (directions.length === 1) {
-                featuresInCluster[0].set('coherencia', 'Coherente');
-                featuresInCluster[0].set('cluster_id', clusterId);
-                continue;
+            // Identify noise features (those not in any cluster)
+            const allClusteredFeatures = Object.values(clusterGroups).flat();
+            const clusteredFeatureIds = new Set(allClusteredFeatures.map(f => f.getId()));
+            const noiseFeatures = allFeatures.filter(f => !clusteredFeatureIds.has(f.getId() as string | number));
+            
+            let noiseIndex = 0;
+            noiseFeatures.forEach(f => {
+                const noiseClusterId = `ruido_${noiseIndex++}`;
+                clusterGroups[noiseClusterId] = [f];
+            });
+
+            for (const clusterId in clusterGroups) {
+                const featuresInCluster = clusterGroups[clusterId];
+                if (featuresInCluster.length === 0) continue;
+                
+                const directions = featuresInCluster.map(f => f.get('sentido_grados')).filter(d => typeof d === 'number') as number[];
+                const magnitudes = featuresInCluster.map(f => f.get(coherenceMagnitudeField)).filter(s => typeof s === 'number') as number[];
+        
+                if (directions.length === 0 || magnitudes.length === 0) continue;
+                
+                if (directions.length === 1) {
+                    featuresInCluster[0].set('coherencia', 'Coherente');
+                    featuresInCluster[0].set('cluster_id', clusterId);
+                    continue;
+                }
+                
+                const avgMagnitude = magnitudes.reduce((a, b) => a + b, 0) / magnitudes.length;
+                const avgX = directions.reduce((sum, d) => sum + Math.cos(d * Math.PI / 180), 0) / directions.length;
+                const avgY = directions.reduce((sum, d) => sum + Math.sin(d * Math.PI / 180), 0) / directions.length;
+                const avgAngleRad = Math.atan2(avgY, avgX);
+                const avgDirection = (avgAngleRad * 180 / Math.PI + 360) % 360;
+
+                const stdDevDirection = Math.sqrt(directions.reduce((sum, d) => {
+                    let dirDiff = Math.abs(d - avgDirection);
+                    if (dirDiff > 180) dirDiff = 360 - dirDiff;
+                    return sum + Math.pow(dirDiff, 2);
+                }, 0) / directions.length);
+                const stdDevMagnitude = Math.sqrt(magnitudes.reduce((sum, s) => sum + Math.pow(s - avgMagnitude, 2), 0) / magnitudes.length);
+                
+                featuresInCluster.forEach(olFeature => {
+                    const direction = olFeature.get('sentido_grados');
+                    const magnitude = olFeature.get(coherenceMagnitudeField);
+
+                    let dirDiff = Math.abs(direction - avgDirection);
+                    if (dirDiff > 180) dirDiff = 360 - dirDiff;
+                    const magDiff = Math.abs(magnitude - avgMagnitude);
+
+                    let coherence = 'Coherente';
+                    if (dirDiff > stdDevDirection * 2 || magDiff > stdDevMagnitude * 2) {
+                        coherence = 'Atípico';
+                    } else if (dirDiff > stdDevDirection * 1 || magDiff > stdDevMagnitude * 1) {
+                        coherence = 'Moderado';
+                    }
+                    olFeature.set('coherencia', coherence);
+                    olFeature.set('cluster_id', clusterId);
+                });
             }
-            
+
+        } else { // Global analysis (no clustering)
+            const directions = allFeatures.map(f => f.get('sentido_grados')).filter(d => typeof d === 'number') as number[];
+            const magnitudes = allFeatures.map(f => f.get(coherenceMagnitudeField)).filter(s => typeof s === 'number') as number[];
+
+            if (directions.length === 0 || magnitudes.length === 0) {
+                toast({ description: "No hay datos válidos de dirección o magnitud para analizar." });
+                return;
+            }
+
             const avgMagnitude = magnitudes.reduce((a, b) => a + b, 0) / magnitudes.length;
             const avgX = directions.reduce((sum, d) => sum + Math.cos(d * Math.PI / 180), 0) / directions.length;
             const avgY = directions.reduce((sum, d) => sum + Math.sin(d * Math.PI / 180), 0) / directions.length;
@@ -1929,40 +1967,17 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                 return sum + Math.pow(dirDiff, 2);
             }, 0) / directions.length);
             const stdDevMagnitude = Math.sqrt(magnitudes.reduce((sum, s) => sum + Math.pow(s - avgMagnitude, 2), 0) / magnitudes.length);
-            
-            if (clusterId === '0' && !useClustering) {
-                setCoherenceStats({ avgDirection, stdDevDirection, avgMagnitude, stdDevMagnitude });
-                 if (showAverageVector && mapRef.current) {
-                    const allFeaturesGeoJSON = format.writeFeaturesObject(allFeatures);
-                    const center = centroid(allFeaturesGeoJSON);
-                    const avgVectorEndPoint = destination(center, avgMagnitude * 0.1, avgDirection, { units: 'kilometers' });
 
-                    if (!averageVectorLayerRef.current) {
-                        const avgSource = new VectorSource();
-                        const avgLayer = new VectorLayer({
-                            source: avgSource,
-                            style: new Style({ stroke: new Stroke({ color: '#333333', width: 4, lineDash: [8, 8] }) }),
-                            properties: { id: `avg-vector-layer-${nanoid()}` }
-                        });
-                        averageVectorLayerRef.current = avgLayer;
-                        mapRef.current.addLayer(avgLayer);
-                    }
+            setCoherenceStats({ avgDirection, stdDevDirection, avgMagnitude, stdDevMagnitude });
 
-                    const olArrow = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' }).readFeature(
-                        turfLineString([center.geometry.coordinates, avgVectorEndPoint.geometry.coordinates])
-                    );
-                    averageVectorLayerRef.current.getSource()!.addFeature(olArrow);
-                }
-            }
-
-            featuresInCluster.forEach(olFeature => {
+            allFeatures.forEach(olFeature => {
                 const direction = olFeature.get('sentido_grados');
                 const magnitude = olFeature.get(coherenceMagnitudeField);
 
                 let dirDiff = Math.abs(direction - avgDirection);
                 if (dirDiff > 180) dirDiff = 360 - dirDiff;
                 const magDiff = Math.abs(magnitude - avgMagnitude);
-
+                
                 let coherence = 'Coherente';
                 if (dirDiff > stdDevDirection * 2 || magDiff > stdDevMagnitude * 2) {
                     coherence = 'Atípico';
@@ -1970,8 +1985,61 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                     coherence = 'Moderado';
                 }
                 olFeature.set('coherencia', coherence);
-                olFeature.set('cluster_id', clusterId);
             });
+
+            // Handle drawing the average vector
+            if (averageVectorLayerRef.current) {
+                averageVectorLayerRef.current.getSource()?.clear();
+            }
+            if (showAverageVector && mapRef.current) {
+                const allFeaturesGeoJSON = format.writeFeaturesObject(allFeatures);
+                const center = centroid(allFeaturesGeoJSON);
+                if (center.geometry && center.geometry.coordinates.every(isFinite)) {
+                    const avgVectorEndPoint = destination(center, avgMagnitude, avgDirection, { units: 'kilometers' });
+
+                    if (!averageVectorLayerRef.current) {
+                        const avgSource = new VectorSource();
+                        const avgLayer = new VectorLayer({
+                            source: avgSource,
+                            properties: { id: `avg-vector-layer-${nanoid()}` }
+                        });
+                        averageVectorLayerRef.current = avgLayer;
+                        mapRef.current.addLayer(avgLayer);
+                    }
+                    
+                    const olArrowFeature = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' }).readFeature(
+                        turfLineString([center.geometry.coordinates, avgVectorEndPoint.geometry.coordinates])
+                    );
+
+                    const arrowStyle = (feature: Feature<Geometry>) => {
+                        const geometry = feature.getGeometry() as OlLineString;
+                        const end = geometry.getLastCoordinate();
+                        const start = geometry.getFirstCoordinate();
+                        const dx = end[0] - start[0];
+                        const dy = end[1] - start[1];
+                        const rotation = Math.atan2(dy, dx);
+                
+                        return [
+                            new Style({
+                                stroke: new Stroke({ color: '#333333', width: 3 }),
+                            }),
+                            new Style({
+                                geometry: new Point(end),
+                                image: new IconStyle({
+                                    src: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="%23333333" viewBox="0 0 16 16"><path d="M8 0L6.59 1.41 12.17 7H0v2h12.17l-5.58 5.59L8 16l8-8z"/></svg>',
+                                    anchor: [0.5, 0.5],
+                                    rotateWithView: true,
+                                    rotation: -rotation,
+                                    scale: 1.5,
+                                }),
+                            }),
+                        ];
+                    };
+                    
+                    olArrowFeature.setStyle(arrowStyle);
+                    averageVectorLayerRef.current.getSource()!.addFeature(olArrowFeature);
+                }
+            }
         }
         
         layer.olLayer.setStyle((feature) => {
