@@ -64,7 +64,7 @@ const ClimaPanel: React.FC<ClimaPanelProps> = ({
 }) => {
     const [isLoading, setIsLoading] = useState(false);
     const [isDetecting, setIsDetecting] = useState(false);
-    const [tempThreshold, setTempThreshold] = useState(-50);
+    const [tempThreshold, setTempThreshold] = useState(-60);
     const [numberOfImages, setNumberOfImages] = useState(1);
     const [selectedGoesLayerId, setSelectedGoesLayerId] = useState<string>('');
     const { toast } = useToast();
@@ -383,8 +383,8 @@ const handleDetectStormCores = async () => {
                 <Label htmlFor="temp-threshold" className="text-xs">Umbral de Temperatura: <span className="font-bold">{tempThreshold}°C</span></Label>
                 <Slider
                     id="temp-threshold"
-                    min={-100}
-                    max={-30}
+                    min={-120}
+                    max={0}
                     step={1}
                     value={[tempThreshold]}
                     onValueChange={(value) => setTempThreshold(value[0])}
