@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import React,
@@ -368,7 +367,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     const [coherenceMagnitudeField, setCoherenceMagnitudeField] = useState('velocidad_kmh');
     const [coherenceStats, setCoherenceStats] = useState<CoherenceStats | null>(null);
     const [useClustering, setUseClustering] = useState(false);
-
+    const [showAverageVector, setShowAverageVector] = useState(true);
 
     // State for Feature Tracking
     const [trackingIsLoading, setTrackingIsLoading] = useState(false);
@@ -382,6 +381,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     const [profilePoints, setProfilePoints] = useState<Feature<Point>[]>([]);
     const profilePointsLayerRef = useRef<VectorLayer<VectorSource<Point>> | null>(null);
     const profilePointsSourceRef = useRef<VectorSource<Point> | null>(null);
+    const averageVectorLayerRef = useRef<VectorLayer<VectorSource<OlLineString>> | null>(null);
 
 
     const analysisLayerRef = useRef<VectorLayer<VectorSource<Feature<Geometry>>> | null>(null);
@@ -1859,59 +1859,64 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         const format = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
         const geojsonFeatures = format.writeFeaturesObject(allFeatures);
 
-        let clusters;
+        let clusterGroups: Record<string, Feature<Geometry>[]> = { '0': allFeatures };
+
         if (useClustering) {
             const centroids = featureCollection(geojsonFeatures.features.map(f => {
                 const center = centroid(f);
-                center.properties = { ...f.properties, _originalFeatureId: f.id || nanoid() }; // Store original ID
-                (f as any).properties._ol_id = (f as any).id;
+                center.properties = { ...f.properties, _originalFeatureId: (f as any).id || nanoid() };
                 return center;
             }));
 
             const avgLength = allFeatures.reduce((sum, f) => sum + olGetLength(f.getGeometry() as OlLineString, { projection: 'EPSG:3857' }), 0) / allFeatures.length / 1000;
             const dbscanDistance = avgLength * 2 || 10;
-            clusters = clustersDbscan(centroids, dbscanDistance, { minPoints: 2 });
-        } else {
-            geojsonFeatures.features.forEach(f => {
-                (f as any).properties._ol_id = (f as any).id;
-                f.properties!.cluster = 0
+            const clusters = clustersDbscan(centroids, dbscanDistance, { minPoints: 2 });
+
+            const newClusterGroups: Record<string, Feature<Geometry>[]> = {};
+            clusters.features.forEach(feature => {
+                const clusterId = feature.properties!.cluster;
+                const originalId = feature.properties!._originalFeatureId;
+                if (clusterId === undefined) return;
+                const idStr = String(clusterId);
+                const originalFeature = source.getFeatureById(originalId);
+                if (originalFeature) {
+                    if (!newClusterGroups[idStr]) newClusterGroups[idStr] = [];
+                    newClusterGroups[idStr].push(originalFeature);
+                }
             });
-            clusters = geojsonFeatures;
+            clusterGroups = newClusterGroups;
+        }
+        
+        const allClusteredFeatures = Object.values(clusterGroups).flat();
+        const clusteredFeatureIds = new Set(allClusteredFeatures.map(f => f.getId()));
+        const noiseFeatures = allFeatures.filter(f => !clusteredFeatureIds.has(f.getId() as string | number));
+        
+        let noiseIndex = 0;
+        noiseFeatures.forEach(f => {
+            const noiseClusterId = `ruido_${noiseIndex++}`;
+            clusterGroups[noiseClusterId] = [f];
+        });
+
+
+        // --- Clean up old average vector ---
+        if (averageVectorLayerRef.current) {
+            averageVectorLayerRef.current.getSource()?.clear();
         }
 
-        let noiseIndex = 0;
-        const clusterGroups = clusters.features.reduce((acc, feature) => {
-            let clusterId = feature.properties!.cluster;
-            const originalFeatureId = useClustering ? feature.properties!._originalFeatureId : (feature as any).properties._ol_id;
-
-            if (clusterId === undefined) {
-                clusterId = `noise-${noiseIndex++}`;
-            }
-
-            if (!acc[clusterId]) {
-                acc[clusterId] = [];
-            }
-            acc[clusterId].push(originalFeatureId);
-            return acc;
-        }, {} as Record<string, string[]>);
-
-        let totalAnalyzed = 0;
-
         for (const clusterId in clusterGroups) {
-            const featureIdsInCluster = clusterGroups[clusterId];
-            const featuresInCluster = featureIdsInCluster.map(id => source.getFeatureById(id!)).filter(f => f) as Feature<Geometry>[];
-            totalAnalyzed += featuresInCluster.length;
-
+            const featuresInCluster = clusterGroups[clusterId];
+            if (featuresInCluster.length === 0) continue;
+            
             const directions = featuresInCluster.map(f => f.get('sentido_grados')).filter(d => typeof d === 'number') as number[];
             const magnitudes = featuresInCluster.map(f => f.get(coherenceMagnitudeField)).filter(s => typeof s === 'number') as number[];
-
-            if (directions.length === 0 || magnitudes.length === 0 || directions.length !== magnitudes.length) continue;
+    
+            if (directions.length === 0 || magnitudes.length === 0) continue;
             if (directions.length === 1) {
                 featuresInCluster[0].set('coherencia', 'Coherente');
                 featuresInCluster[0].set('cluster_id', clusterId);
                 continue;
             }
-
+            
             const avgMagnitude = magnitudes.reduce((a, b) => a + b, 0) / magnitudes.length;
             const avgX = directions.reduce((sum, d) => sum + Math.cos(d * Math.PI / 180), 0) / directions.length;
             const avgY = directions.reduce((sum, d) => sum + Math.sin(d * Math.PI / 180), 0) / directions.length;
@@ -1924,9 +1929,30 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                 return sum + Math.pow(dirDiff, 2);
             }, 0) / directions.length);
             const stdDevMagnitude = Math.sqrt(magnitudes.reduce((sum, s) => sum + Math.pow(s - avgMagnitude, 2), 0) / magnitudes.length);
-
+            
             if (clusterId === '0' && !useClustering) {
                 setCoherenceStats({ avgDirection, stdDevDirection, avgMagnitude, stdDevMagnitude });
+                 if (showAverageVector && mapRef.current) {
+                    const allFeaturesGeoJSON = format.writeFeaturesObject(allFeatures);
+                    const center = centroid(allFeaturesGeoJSON);
+                    const avgVectorEndPoint = destination(center, avgMagnitude * 0.1, avgDirection, { units: 'kilometers' });
+
+                    if (!averageVectorLayerRef.current) {
+                        const avgSource = new VectorSource();
+                        const avgLayer = new VectorLayer({
+                            source: avgSource,
+                            style: new Style({ stroke: new Stroke({ color: '#333333', width: 4, lineDash: [8, 8] }) }),
+                            properties: { id: `avg-vector-layer-${nanoid()}` }
+                        });
+                        averageVectorLayerRef.current = avgLayer;
+                        mapRef.current.addLayer(avgLayer);
+                    }
+
+                    const olArrow = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' }).readFeature(
+                        turfLineString([center.geometry.coordinates, avgVectorEndPoint.geometry.coordinates])
+                    );
+                    averageVectorLayerRef.current.getSource()!.addFeature(olArrow);
+                }
             }
 
             featuresInCluster.forEach(olFeature => {
@@ -1947,12 +1973,13 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                 olFeature.set('cluster_id', clusterId);
             });
         }
-    
+        
         layer.olLayer.setStyle((feature) => {
             const coherence = feature.get('coherencia');
             let color = '#3b82f6'; // Azul para Coherente
             if (coherence === 'Moderado') color = '#facc15'; // Amarillo para Moderado
             if (coherence === 'Atípico') color = '#ef4444'; // Rojo para Atípico
+            if (coherence === 'Ruido') color = '#9ca3af'; // Gris para Ruido
 
             return new Style({
                 stroke: new Stroke({ color, width: 2.5 }),
@@ -1960,14 +1987,13 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
             });
         });
 
-    
         source.changed(); // Force redraw
         onShowTableRequest(
             source.getFeatures().map(f => ({ id: f.getId() as string, attributes: f.getProperties() })),
             layer.name,
             layer.id
         );
-        toast({ description: `Análisis completado para ${totalAnalyzed} vectores en ${Object.keys(clusterGroups).length} cluster(s).` });
+        toast({ description: `Análisis completado.` });
     };
 
 
@@ -2711,7 +2737,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                     <Select value={trajectoryLayer1Id} onValueChange={setTrajectoryLayer1Id}>
                                         <SelectTrigger id="traj-layer1" className="h-8 text-xs bg-black/20"><SelectValue placeholder="Seleccionar capa de centroides..." /></SelectTrigger>
                                         <SelectContent className="bg-gray-700 text-white border-gray-600">
-                                            {pointLayers.filter(l => l.name.toLowerCase().startsWith('centroides')).map(l => <SelectItem key={l.id} value={l.id} className="text-xs">{l.name}</SelectItem>)}
+                                            {pointLayers.map(l => l.name.toLowerCase().startsWith('centroides')).map(l => <SelectItem key={l.id} value={l.id} className="text-xs">{l.name}</SelectItem>)}
                                         </SelectContent>
                                     </Select>
                                 </div>
@@ -2720,7 +2746,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                     <Select value={trajectoryLayer2Id} onValueChange={setTrajectoryLayer2Id}>
                                         <SelectTrigger id="traj-layer2" className="h-8 text-xs bg-black/20"><SelectValue placeholder="Seleccionar capa de centroides..." /></SelectTrigger>
                                         <SelectContent className="bg-gray-700 text-white border-gray-600">
-                                            {pointLayers.filter(l => l.name.toLowerCase().startsWith('centroides')).map(l => <SelectItem key={l.id} value={l.id} className="text-xs">{l.name}</SelectItem>)}
+                                            {pointLayers.map(l => l.name.toLowerCase().startsWith('centroides')).map(l => <SelectItem key={l.id} value={l.id} className="text-xs">{l.name}</SelectItem>)}
                                         </SelectContent>
                                     </Select>
                                 </div>
@@ -2767,6 +2793,15 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                         onCheckedChange={(checked) => setUseClustering(!!checked)}
                                     />
                                     <Label htmlFor="use-clustering" className="text-xs font-normal">Analizar por clusters espaciales</Label>
+                                </div>
+                                <div className="flex items-center space-x-2 pt-1">
+                                    <Checkbox
+                                        id="show-avg-vector"
+                                        checked={showAverageVector}
+                                        onCheckedChange={(checked) => setShowAverageVector(!!checked)}
+                                        disabled={useClustering}
+                                    />
+                                    <Label htmlFor="show-avg-vector" className={cn("text-xs font-normal", useClustering && "text-gray-500")}>Dibujar vector promedio</Label>
                                 </div>
                                 <Button onClick={handleAnalyzeCoherence} size="sm" className="w-full h-8 text-xs" disabled={!coherenceLayerId || !coherenceMagnitudeField}>
                                     <Activity className="mr-2 h-3.5 w-3.5" />
@@ -2848,3 +2883,5 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
+    
