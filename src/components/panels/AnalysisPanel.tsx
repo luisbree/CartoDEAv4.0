@@ -383,7 +383,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     const [profilePoints, setProfilePoints] = useState<Feature<Point>[]>([]);
     const profilePointsLayerRef = useRef<VectorLayer<VectorSource<Point>> | null>(null);
     const profilePointsSourceRef = useRef<VectorSource<Point> | null>(null);
-    const averageVectorLayerRef = useRef<VectorLayer<VectorSource<OlLineString>> | null>(null);
+    const averageVectorLayerRef = useRef<VectorLayer<VectorSource> | null>(null);
 
 
     const analysisLayerRef = useRef<VectorLayer<VectorSource<Feature<Geometry>>> | null>(null);
@@ -1880,7 +1880,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                 if (clusterId === undefined) return;
     
                 const idStr = String(clusterId);
-                const originalFeature = allFeatures.find(f => f.getId() === feature.properties!._originalFeatureId);
+                const originalFeature = allFeatures.find(f => (f as any).id === feature.properties!._originalFeatureId);
     
                 if (originalFeature) {
                     if (!clusterGroups[idStr]) {
@@ -1995,7 +1995,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
             if (showAverageVector && mapRef.current) {
                 const allFeaturesGeoJSON = format.writeFeaturesObject(allFeatures);
                 const center = centroid(allFeaturesGeoJSON);
-    
+
                 if (center.geometry && center.geometry.coordinates.every(isFinite)) {
                     if (!averageVectorLayerRef.current) {
                         const avgSource = new VectorSource();
@@ -2007,7 +2007,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                         mapRef.current.addLayer(avgLayer);
                     }
                     const source = averageVectorLayerRef.current.getSource()!;
-    
+
                     // --- Vector Principal ---
                     const avgVectorEndPoint = destination(center, avgMagnitude, avgDirection, { units: 'kilometers' });
                     const olArrowFeature = formatForMap.readFeature(turfLineString([center.geometry.coordinates, avgVectorEndPoint.geometry.coordinates])) as Feature<OlLineString>;
@@ -2043,15 +2043,18 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                     
                     // Arco de 2 sigma (más grande)
                     const arc2sigma = lineArc(center, arcRadius, avgDirection - 2 * stdDevDirection, avgDirection + 2 * stdDevDirection, { units: 'kilometers' });
-                    const olArc2Feature = formatForMap.readFeature(turfPolygon([arc2sigma.geometry.coordinates]));
+                    const ring2 = [center.geometry.coordinates, ...arc2sigma.geometry.coordinates, center.geometry.coordinates];
+                    const olArc2Feature = formatForMap.readFeature(turfPolygon([ring2]));
                     olArc2Feature.setStyle(arcStyle('rgba(150, 150, 150, 0.2)'));
                     source.addFeature(olArc2Feature);
 
                     // Arco de 1 sigma (más pequeño, encima del otro)
                     const arc1sigma = lineArc(center, arcRadius, avgDirection - stdDevDirection, avgDirection + stdDevDirection, { units: 'kilometers' });
-                    const olArc1Feature = formatForMap.readFeature(turfPolygon([arc1sigma.geometry.coordinates]));
+                    const ring1 = [center.geometry.coordinates, ...arc1sigma.geometry.coordinates, center.geometry.coordinates];
+                    const olArc1Feature = formatForMap.readFeature(turfPolygon([ring1]));
                     olArc1Feature.setStyle(arcStyle('rgba(150, 150, 150, 0.3)'));
                     source.addFeature(olArc1Feature);
+
                 } else {
                      toast({ description: "No se pudo calcular el centroide para el vector promedio.", variant: "destructive" });
                 }
