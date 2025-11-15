@@ -307,7 +307,7 @@ const LayerItem: React.FC<LayerItemProps> = ({
                 )}
             </div>
 
-            <div className="flex-1 min-w-0 pr-8"> 
+            <div className="flex-1 pr-8"> 
                 <label
                     htmlFor={`vis-${layer.id}`}
                     className={cn(
