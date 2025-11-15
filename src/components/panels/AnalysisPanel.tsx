@@ -91,7 +91,8 @@ import {
     destination,
     bezierSpline,
     centroid,
-    distance as turfDistance
+    distance as turfDistance,
+    lineArc
 } from '@turf/turf';
 import type {
     Feature as TurfFeature,
@@ -1863,8 +1864,9 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         if (useClustering) {
             const geojsonFeatures = format.writeFeaturesObject(allFeatures);
             const centroids = featureCollection(geojsonFeatures.features.map(f => {
-                const center = centroid(f);
-                center.properties = { ...f.properties, _originalFeatureId: f.id || nanoid() };
+                const center = centroid(f as TurfFeature<TurfLineString>);
+                center.properties = { ...f.properties, _originalFeatureId: (f as any).id || nanoid() };
+                (f as any).id = center.properties._originalFeatureId;
                 return center;
             }));
 
@@ -1888,7 +1890,6 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                 }
             });
             
-            // Identify noise features (those not in any cluster)
             const allClusteredFeatures = Object.values(clusterGroups).flat();
             const clusteredFeatureIds = new Set(allClusteredFeatures.map(f => f.getId()));
             const noiseFeatures = allFeatures.filter(f => !clusteredFeatureIds.has(f.getId() as string | number));
@@ -1994,9 +1995,8 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
             if (showAverageVector && mapRef.current) {
                 const allFeaturesGeoJSON = format.writeFeaturesObject(allFeatures);
                 const center = centroid(allFeaturesGeoJSON);
-                if (center.geometry && center.geometry.coordinates.every(isFinite)) {
-                    const avgVectorEndPoint = destination(center, avgMagnitude, avgDirection, { units: 'kilometers' });
 
+                if (center.geometry && center.geometry.coordinates.every(isFinite)) {
                     if (!averageVectorLayerRef.current) {
                         const avgSource = new VectorSource();
                         const avgLayer = new VectorLayer({
@@ -2006,38 +2006,51 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                         averageVectorLayerRef.current = avgLayer;
                         mapRef.current.addLayer(avgLayer);
                     }
-                    
-                    const olArrowFeature = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' }).readFeature(
-                        turfLineString([center.geometry.coordinates, avgVectorEndPoint.geometry.coordinates])
-                    );
+                    const source = averageVectorLayerRef.current.getSource()!;
 
-                    const arrowStyle = (feature: Feature<Geometry>) => {
+                    // --- Vector Principal ---
+                    const avgVectorEndPoint = destination(center, avgMagnitude, avgDirection, { units: 'kilometers' });
+                    const olArrowFeature = formatForMap.readFeature(turfLineString([center.geometry.coordinates, avgVectorEndPoint.geometry.coordinates])) as Feature<OlLineString>;
+                    const arrowStyle = new Style({
+                        stroke: new Stroke({ color: '#333333', width: 3 }),
+                        image: new IconStyle({
+                            src: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="%23333333" viewBox="0 0 16 16"><path d="M8 0L6.59 1.41 12.17 7H0v2h12.17l-5.58 5.59L8 16l8-8z"/></svg>',
+                            anchor: [0.5, 0.5],
+                            rotateWithView: true,
+                            rotation: -Math.atan2(avgVectorEndPoint.geometry.coordinates[1] - center.geometry.coordinates[1], avgVectorEndPoint.geometry.coordinates[0] - center.geometry.coordinates[0]),
+                            scale: 1.5,
+                        }),
+                    });
+                    olArrowFeature.setStyle((feature) => {
                         const geometry = feature.getGeometry() as OlLineString;
                         const end = geometry.getLastCoordinate();
                         const start = geometry.getFirstCoordinate();
                         const dx = end[0] - start[0];
                         const dy = end[1] - start[1];
                         const rotation = Math.atan2(dy, dx);
-                
-                        return [
-                            new Style({
-                                stroke: new Stroke({ color: '#333333', width: 3 }),
-                            }),
-                            new Style({
-                                geometry: new Point(end),
-                                image: new IconStyle({
-                                    src: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="%23333333" viewBox="0 0 16 16"><path d="M8 0L6.59 1.41 12.17 7H0v2h12.17l-5.58 5.59L8 16l8-8z"/></svg>',
-                                    anchor: [0.5, 0.5],
-                                    rotateWithView: true,
-                                    rotation: -rotation,
-                                    scale: 1.5,
-                                }),
-                            }),
-                        ];
-                    };
+                        (arrowStyle.getImage() as IconStyle).setRotation(-rotation);
+                        return arrowStyle;
+                    });
+                    source.addFeature(olArrowFeature);
+
+                    // --- Arcos de Desviación Estándar ---
+                    const arcRadius = avgMagnitude * 0.25; // Radio de un 25% de la longitud del vector
+                    const arcStyle = (fillColor: string) => new Style({
+                        fill: new Fill({ color: fillColor }),
+                        stroke: new Stroke({ color: 'rgba(100, 100, 100, 0.7)', width: 1, lineDash: [2, 4] })
+                    });
                     
-                    olArrowFeature.setStyle(arrowStyle);
-                    averageVectorLayerRef.current.getSource()!.addFeature(olArrowFeature);
+                    // Arco de 2 sigma (más grande)
+                    const arc2sigma = lineArc(center, arcRadius, avgDirection - 2 * stdDevDirection, avgDirection + 2 * stdDevDirection, { units: 'kilometers' });
+                    const olArc2Feature = formatForMap.readFeature(turfPolygon([arc2sigma.geometry.coordinates]));
+                    olArc2Feature.setStyle(arcStyle('rgba(150, 150, 150, 0.2)'));
+                    source.addFeature(olArc2Feature);
+
+                    // Arco de 1 sigma (más pequeño, encima del otro)
+                    const arc1sigma = lineArc(center, arcRadius, avgDirection - stdDevDirection, avgDirection + stdDevDirection, { units: 'kilometers' });
+                    const olArc1Feature = formatForMap.readFeature(turfPolygon([arc1sigma.geometry.coordinates]));
+                    olArc1Feature.setStyle(arcStyle('rgba(150, 150, 150, 0.3)'));
+                    source.addFeature(olArc1Feature);
                 }
             }
         }
@@ -2953,3 +2966,4 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 export default AnalysisPanel;
 
     
+
