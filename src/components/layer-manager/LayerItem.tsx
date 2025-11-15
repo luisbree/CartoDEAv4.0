@@ -187,7 +187,7 @@ const LayerItem: React.FC<LayerItemProps> = ({
     <TooltipProvider>
           <li 
             className={cn(
-              "relative flex items-center px-1.5 py-1 transition-all",
+              "flex items-center justify-between px-1.5 py-1 transition-all",
               "hover:bg-gray-700/30",
               isSelected && !props.isSharedView ? "bg-primary/20 ring-1 ring-primary/70 rounded-md" : "",
               isDraggable && "cursor-grab",
@@ -203,26 +203,41 @@ const LayerItem: React.FC<LayerItemProps> = ({
             onDrop={onDrop}
             onClick={onClick}
           >
-            {isDraggable && <GripVertical className="h-4 w-4 text-gray-500 mr-1 flex-shrink-0 cursor-grab" />}
-                
-            {props.groupDisplayMode === 'single' ? (
-                <RadioGroup value={layer.visible ? layer.id : ''} onValueChange={() => props.onToggleVisibility(layer.id, layer.groupId)} className="flex items-center">
-                    <RadioGroupItem value={layer.id} id={`vis-${layer.id}`} className="h-3.5 w-3.5" />
-                </RadioGroup>
-            ) : (
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={(e) => { e.stopPropagation(); props.onToggleVisibility(layer.id); }}
-                    className="h-6 w-6 text-white hover:bg-gray-600/80 p-0 mr-1 flex-shrink-0"
-                    aria-label={`Alternar visibilidad para ${layer.name}`}
-                    title={layer.visible ? "Ocultar capa" : "Mostrar capa"}
-                >
-                    {layer.visible ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
-                </Button>
-            )}
+            <div className="flex items-center flex-1 min-w-0">
+                {isDraggable && <GripVertical className="h-4 w-4 text-gray-500 mr-1 flex-shrink-0 cursor-grab" />}
+                    
+                {props.groupDisplayMode === 'single' ? (
+                    <RadioGroup value={layer.visible ? layer.id : ''} onValueChange={() => props.onToggleVisibility(layer.id, layer.groupId)} className="flex items-center">
+                        <RadioGroupItem value={layer.id} id={`vis-${layer.id}`} className="h-3.5 w-3.5 mr-1" />
+                    </RadioGroup>
+                ) : (
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={(e) => { e.stopPropagation(); props.onToggleVisibility(layer.id); }}
+                        className="h-6 w-6 text-white hover:bg-gray-600/80 p-0 mr-1 flex-shrink-0"
+                        aria-label={`Alternar visibilidad para ${layer.name}`}
+                        title={layer.visible ? "Ocultar capa" : "Mostrar capa"}
+                    >
+                        {layer.visible ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+                    </Button>
+                )}
 
-            <div className="absolute right-1 top-1/2 -translate-y-1/2 z-10 flex items-center space-x-0.5">
+                <div className="flex-1 min-w-0">
+                    <label
+                        htmlFor={`vis-${layer.id}`}
+                        className={cn(
+                            "cursor-pointer text-xs font-medium truncate select-none block",
+                            layer.visible ? "text-white" : "text-gray-400"
+                        )}
+                        title={layer.name}
+                    >
+                        {layer.name}
+                    </label>
+                </div>
+            </div>
+
+            <div className="flex items-center space-x-0.5 flex-shrink-0">
                 <GoesMetadataTooltip />
                 {!props.isSharedView && (
                     <DropdownMenu>
@@ -305,20 +320,6 @@ const LayerItem: React.FC<LayerItemProps> = ({
                         </DropdownMenuContent>
                     </DropdownMenu>
                 )}
-            </div>
-
-            <div className="flex-1 pr-8"> 
-                <label
-                    htmlFor={`vis-${layer.id}`}
-                    className={cn(
-                        "cursor-pointer text-xs font-medium truncate select-none block",
-                        props.groupDisplayMode === 'single' ? 'ml-2' : '',
-                        layer.visible ? "text-white" : "text-gray-400"
-                    )}
-                    title={layer.name}
-                >
-                    {layer.name}
-                </label>
             </div>
           </li>
       </TooltipProvider>
