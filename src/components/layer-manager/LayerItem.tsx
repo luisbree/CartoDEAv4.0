@@ -223,17 +223,19 @@ const LayerItem: React.FC<LayerItemProps> = ({
                     </Button>
                 )}
 
-                <label
-                    htmlFor={`vis-${layer.id}`}
-                    className={cn(
-                        "flex-1 cursor-pointer text-xs font-medium truncate min-w-0 select-none",
-                        props.groupDisplayMode === 'single' ? 'ml-2' : '',
-                        layer.visible ? "text-white" : "text-gray-400"
-                    )}
-                    title={layer.name}
-                >
-                    {layer.name}
-                </label>
+                <div className="flex-1 min-w-0">
+                    <label
+                        htmlFor={`vis-${layer.id}`}
+                        className={cn(
+                            "cursor-pointer text-xs font-medium truncate select-none block",
+                            props.groupDisplayMode === 'single' ? 'ml-2' : '',
+                            layer.visible ? "text-white" : "text-gray-400"
+                        )}
+                        title={layer.name}
+                    >
+                        {layer.name}
+                    </label>
+                </div>
                 
                 <div className="flex items-center space-x-0.5 flex-shrink-0">
                     <GoesMetadataTooltip />
