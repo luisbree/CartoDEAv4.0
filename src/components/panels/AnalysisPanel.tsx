@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import React,
@@ -1857,31 +1856,32 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
             toast({ description: "Por favor, seleccione un campo de magnitud válido.", variant: "destructive" });
             return;
         }
-
-        const allFeatures = source.getFeatures();
+    
         const format = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
-
+        const formatForMap = new GeoJSON({ dataProjection: 'EPSG:4326', featureProjection: 'EPSG:3857' });
+        const allFeatures = source.getFeatures();
+    
         if (useClustering) {
             const geojsonFeatures = format.writeFeaturesObject(allFeatures);
             const centroids = featureCollection(geojsonFeatures.features.map(f => {
                 const center = centroid(f as TurfFeature<TurfLineString>);
-                center.properties = { ...f.properties, _originalFeatureId: (f as any).id || nanoid() };
+                center.properties = { ...f.properties, _originalFeatureId: nanoid() };
                 (f as any).id = center.properties._originalFeatureId;
                 return center;
             }));
-
+    
             const avgLength = allFeatures.reduce((sum, f) => sum + olGetLength(f.getGeometry() as OlLineString, { projection: 'EPSG:3857' }), 0) / allFeatures.length / 1000;
             const dbscanDistance = avgLength * 2 || 10;
             const clusters = clustersDbscan(centroids, dbscanDistance, { minPoints: 2 });
-            
+    
             const clusterGroups: Record<string, Feature<Geometry>[]> = {};
             clusters.features.forEach(feature => {
                 const clusterId = feature.properties!.cluster;
                 if (clusterId === undefined) return;
-
+    
                 const idStr = String(clusterId);
                 const originalFeature = allFeatures.find(f => f.getId() === feature.properties!._originalFeatureId);
-
+    
                 if (originalFeature) {
                     if (!clusterGroups[idStr]) {
                         clusterGroups[idStr] = [];
@@ -1889,53 +1889,53 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                     clusterGroups[idStr].push(originalFeature);
                 }
             });
-            
+    
             const allClusteredFeatures = Object.values(clusterGroups).flat();
             const clusteredFeatureIds = new Set(allClusteredFeatures.map(f => f.getId()));
             const noiseFeatures = allFeatures.filter(f => !clusteredFeatureIds.has(f.getId() as string | number));
-            
+    
             let noiseIndex = 0;
             noiseFeatures.forEach(f => {
                 const noiseClusterId = `ruido_${noiseIndex++}`;
                 clusterGroups[noiseClusterId] = [f];
             });
-
+    
             for (const clusterId in clusterGroups) {
                 const featuresInCluster = clusterGroups[clusterId];
                 if (featuresInCluster.length === 0) continue;
-                
+    
                 const directions = featuresInCluster.map(f => f.get('sentido_grados')).filter(d => typeof d === 'number') as number[];
                 const magnitudes = featuresInCluster.map(f => f.get(coherenceMagnitudeField)).filter(s => typeof s === 'number') as number[];
-        
+    
                 if (directions.length === 0 || magnitudes.length === 0) continue;
-                
+    
                 if (directions.length === 1) {
                     featuresInCluster[0].set('coherencia', 'Coherente');
                     featuresInCluster[0].set('cluster_id', clusterId);
                     continue;
                 }
-                
+    
                 const avgMagnitude = magnitudes.reduce((a, b) => a + b, 0) / magnitudes.length;
                 const avgX = directions.reduce((sum, d) => sum + Math.cos(d * Math.PI / 180), 0) / directions.length;
                 const avgY = directions.reduce((sum, d) => sum + Math.sin(d * Math.PI / 180), 0) / directions.length;
                 const avgAngleRad = Math.atan2(avgY, avgX);
                 const avgDirection = (avgAngleRad * 180 / Math.PI + 360) % 360;
-
+    
                 const stdDevDirection = Math.sqrt(directions.reduce((sum, d) => {
                     let dirDiff = Math.abs(d - avgDirection);
                     if (dirDiff > 180) dirDiff = 360 - dirDiff;
                     return sum + Math.pow(dirDiff, 2);
                 }, 0) / directions.length);
                 const stdDevMagnitude = Math.sqrt(magnitudes.reduce((sum, s) => sum + Math.pow(s - avgMagnitude, 2), 0) / magnitudes.length);
-                
+    
                 featuresInCluster.forEach(olFeature => {
                     const direction = olFeature.get('sentido_grados');
                     const magnitude = olFeature.get(coherenceMagnitudeField);
-
+    
                     let dirDiff = Math.abs(direction - avgDirection);
                     if (dirDiff > 180) dirDiff = 360 - dirDiff;
                     const magDiff = Math.abs(magnitude - avgMagnitude);
-
+    
                     let coherence = 'Coherente';
                     if (dirDiff > stdDevDirection * 2 || magDiff > stdDevMagnitude * 2) {
                         coherence = 'Atípico';
@@ -1946,39 +1946,39 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                     olFeature.set('cluster_id', clusterId);
                 });
             }
-
+    
         } else { // Global analysis (no clustering)
             const directions = allFeatures.map(f => f.get('sentido_grados')).filter(d => typeof d === 'number') as number[];
             const magnitudes = allFeatures.map(f => f.get(coherenceMagnitudeField)).filter(s => typeof s === 'number') as number[];
-
+    
             if (directions.length === 0 || magnitudes.length === 0) {
                 toast({ description: "No hay datos válidos de dirección o magnitud para analizar." });
                 return;
             }
-
+    
             const avgMagnitude = magnitudes.reduce((a, b) => a + b, 0) / magnitudes.length;
             const avgX = directions.reduce((sum, d) => sum + Math.cos(d * Math.PI / 180), 0) / directions.length;
             const avgY = directions.reduce((sum, d) => sum + Math.sin(d * Math.PI / 180), 0) / directions.length;
             const avgAngleRad = Math.atan2(avgY, avgX);
             const avgDirection = (avgAngleRad * 180 / Math.PI + 360) % 360;
-
+    
             const stdDevDirection = Math.sqrt(directions.reduce((sum, d) => {
                 let dirDiff = Math.abs(d - avgDirection);
                 if (dirDiff > 180) dirDiff = 360 - dirDiff;
                 return sum + Math.pow(dirDiff, 2);
             }, 0) / directions.length);
             const stdDevMagnitude = Math.sqrt(magnitudes.reduce((sum, s) => sum + Math.pow(s - avgMagnitude, 2), 0) / magnitudes.length);
-
+    
             setCoherenceStats({ avgDirection, stdDevDirection, avgMagnitude, stdDevMagnitude });
-
+    
             allFeatures.forEach(olFeature => {
                 const direction = olFeature.get('sentido_grados');
                 const magnitude = olFeature.get(coherenceMagnitudeField);
-
+    
                 let dirDiff = Math.abs(direction - avgDirection);
                 if (dirDiff > 180) dirDiff = 360 - dirDiff;
                 const magDiff = Math.abs(magnitude - avgMagnitude);
-                
+    
                 let coherence = 'Coherente';
                 if (dirDiff > stdDevDirection * 2 || magDiff > stdDevMagnitude * 2) {
                     coherence = 'Atípico';
@@ -1987,7 +1987,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                 }
                 olFeature.set('coherencia', coherence);
             });
-
+    
             // Handle drawing the average vector
             if (averageVectorLayerRef.current) {
                 averageVectorLayerRef.current.getSource()?.clear();
@@ -1995,7 +1995,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
             if (showAverageVector && mapRef.current) {
                 const allFeaturesGeoJSON = format.writeFeaturesObject(allFeatures);
                 const center = centroid(allFeaturesGeoJSON);
-
+    
                 if (center.geometry && center.geometry.coordinates.every(isFinite)) {
                     if (!averageVectorLayerRef.current) {
                         const avgSource = new VectorSource();
@@ -2007,32 +2007,33 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                         mapRef.current.addLayer(avgLayer);
                     }
                     const source = averageVectorLayerRef.current.getSource()!;
-
+    
                     // --- Vector Principal ---
                     const avgVectorEndPoint = destination(center, avgMagnitude, avgDirection, { units: 'kilometers' });
                     const olArrowFeature = formatForMap.readFeature(turfLineString([center.geometry.coordinates, avgVectorEndPoint.geometry.coordinates])) as Feature<OlLineString>;
                     const arrowStyle = new Style({
                         stroke: new Stroke({ color: '#333333', width: 3 }),
-                        image: new IconStyle({
-                            src: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="%23333333" viewBox="0 0 16 16"><path d="M8 0L6.59 1.41 12.17 7H0v2h12.17l-5.58 5.59L8 16l8-8z"/></svg>',
-                            anchor: [0.5, 0.5],
-                            rotateWithView: true,
-                            rotation: -Math.atan2(avgVectorEndPoint.geometry.coordinates[1] - center.geometry.coordinates[1], avgVectorEndPoint.geometry.coordinates[0] - center.geometry.coordinates[0]),
-                            scale: 1.5,
-                        }),
                     });
-                    olArrowFeature.setStyle((feature) => {
-                        const geometry = feature.getGeometry() as OlLineString;
-                        const end = geometry.getLastCoordinate();
-                        const start = geometry.getFirstCoordinate();
-                        const dx = end[0] - start[0];
-                        const dy = end[1] - start[1];
-                        const rotation = Math.atan2(dy, dx);
-                        (arrowStyle.getImage() as IconStyle).setRotation(-rotation);
-                        return arrowStyle;
-                    });
+                    olArrowFeature.setStyle(arrowStyle);
                     source.addFeature(olArrowFeature);
 
+                    // --- Punta de flecha ---
+                    const endPointGeom = new Point(olArrowFeature.getGeometry()!.getLastCoordinate());
+                    const arrowHeadFeature = new Feature(endPointGeom);
+                    const lastSegment = [olArrowFeature.getGeometry()!.getCoordinateAt(0.9), olArrowFeature.getGeometry()!.getLastCoordinate()];
+                    const rotation = -Math.atan2(lastSegment[1][1] - lastSegment[0][1], lastSegment[1][0] - lastSegment[0][0]);
+                    const arrowHeadStyle = new Style({
+                        image: new IconStyle({
+                            src: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="%23333333"><path d="M12 0L24 12H18L12 6L6 12H0L12 0Z" transform="rotate(90 12 12)"/></svg>',
+                            anchor: [0.5, 0.5],
+                            rotateWithView: true,
+                            rotation: rotation,
+                            scale: 0.8,
+                        })
+                    });
+                    arrowHeadFeature.setStyle(arrowHeadStyle);
+                    source.addFeature(arrowHeadFeature);
+    
                     // --- Arcos de Desviación Estándar ---
                     const arcRadius = avgMagnitude * 0.25; // Radio de un 25% de la longitud del vector
                     const arcStyle = (fillColor: string) => new Style({
@@ -2051,23 +2052,25 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                     const olArc1Feature = formatForMap.readFeature(turfPolygon([arc1sigma.geometry.coordinates]));
                     olArc1Feature.setStyle(arcStyle('rgba(150, 150, 150, 0.3)'));
                     source.addFeature(olArc1Feature);
+                } else {
+                     toast({ description: "No se pudo calcular el centroide para el vector promedio.", variant: "destructive" });
                 }
             }
         }
-        
+    
         layer.olLayer.setStyle((feature) => {
             const coherence = feature.get('coherencia');
             let color = '#3b82f6'; // Azul para Coherente
             if (coherence === 'Moderado') color = '#facc15'; // Amarillo para Moderado
             if (coherence === 'Atípico') color = '#ef4444'; // Rojo para Atípico
             if (coherence === 'Ruido') color = '#9ca3af'; // Gris para Ruido
-
+    
             return new Style({
                 stroke: new Stroke({ color, width: 2.5 }),
                 image: new CircleStyle({ radius: 4, fill: new Fill({ color }) })
             });
         });
-
+    
         source.changed(); // Force redraw
         onShowTableRequest(
             source.getFeatures().map(f => ({ id: f.getId() as string, attributes: f.getProperties() })),
@@ -2966,4 +2969,3 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 export default AnalysisPanel;
 
     
-
