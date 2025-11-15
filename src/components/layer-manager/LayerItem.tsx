@@ -222,21 +222,7 @@ const LayerItem: React.FC<LayerItemProps> = ({
                 </Button>
             )}
 
-            <div className="flex-1 min-w-0 pr-8"> 
-                <label
-                    htmlFor={`vis-${layer.id}`}
-                    className={cn(
-                        "cursor-pointer text-xs font-medium truncate select-none block",
-                        props.groupDisplayMode === 'single' ? 'ml-2' : '',
-                        layer.visible ? "text-white" : "text-gray-400"
-                    )}
-                    title={layer.name}
-                >
-                    {layer.name}
-                </label>
-            </div>
-            
-            <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center space-x-0.5">
+            <div className="absolute right-1 top-1/2 -translate-y-1/2 z-10 flex items-center space-x-0.5">
                 <GoesMetadataTooltip />
                 {!props.isSharedView && (
                     <DropdownMenu>
@@ -319,6 +305,20 @@ const LayerItem: React.FC<LayerItemProps> = ({
                         </DropdownMenuContent>
                     </DropdownMenu>
                 )}
+            </div>
+
+            <div className="flex-1 min-w-0 pr-8"> 
+                <label
+                    htmlFor={`vis-${layer.id}`}
+                    className={cn(
+                        "cursor-pointer text-xs font-medium truncate select-none block",
+                        props.groupDisplayMode === 'single' ? 'ml-2' : '',
+                        layer.visible ? "text-white" : "text-gray-400"
+                    )}
+                    title={layer.name}
+                >
+                    {layer.name}
+                </label>
             </div>
           </li>
       </TooltipProvider>
