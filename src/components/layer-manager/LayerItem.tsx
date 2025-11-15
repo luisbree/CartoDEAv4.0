@@ -187,7 +187,7 @@ const LayerItem: React.FC<LayerItemProps> = ({
     <TooltipProvider>
           <li 
             className={cn(
-              "flex items-center px-1.5 py-1 transition-all overflow-hidden",
+              "flex items-center px-1.5 py-1 transition-all",
               "hover:bg-gray-700/30",
               isSelected && !props.isSharedView ? "bg-primary/20 ring-1 ring-primary/70 rounded-md" : "",
               isDraggable && "cursor-grab",
