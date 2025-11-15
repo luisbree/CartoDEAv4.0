@@ -203,7 +203,7 @@ const LayerItem: React.FC<LayerItemProps> = ({
             onDrop={onDrop}
             onClick={onClick}
           >
-            <div className="flex items-center w-full">
+            <div className="flex items-center w-full min-w-0">
                 {isDraggable && <GripVertical className="h-4 w-4 text-gray-500 mr-1 flex-shrink-0 cursor-grab" />}
                     
                 {props.groupDisplayMode === 'single' ? (
