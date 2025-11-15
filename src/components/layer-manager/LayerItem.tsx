@@ -223,18 +223,16 @@ const LayerItem: React.FC<LayerItemProps> = ({
                     </Button>
                 )}
 
-                <div className="flex-1 min-w-0">
-                    <label
-                        htmlFor={`vis-${layer.id}`}
-                        className={cn(
-                            "cursor-pointer text-xs font-medium truncate select-none block",
-                            layer.visible ? "text-white" : "text-gray-400"
-                        )}
-                        title={layer.name}
-                    >
-                        {layer.name}
-                    </label>
-                </div>
+                <label
+                    htmlFor={`vis-${layer.id}`}
+                    className={cn(
+                        "cursor-pointer text-xs font-medium truncate select-none block",
+                        layer.visible ? "text-white" : "text-gray-400"
+                    )}
+                    title={layer.name}
+                >
+                    {layer.name}
+                </label>
             </div>
 
             <div className="flex items-center space-x-0.5 flex-shrink-0">
