@@ -1859,11 +1859,11 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
             toast({ description: "Por favor, seleccione un campo de magnitud válido.", variant: "destructive" });
             return;
         }
-    
+
         const format = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
         const formatForMap = new GeoJSON({ dataProjection: 'EPSG:4326', featureProjection: 'EPSG:3857' });
         const allFeatures = source.getFeatures();
-    
+
         if (useClustering) {
             const geojsonFeatures = format.writeFeaturesObject(allFeatures);
             const centroids = featureCollection(geojsonFeatures.features.map((f, i) => {
@@ -1886,18 +1886,18 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
             toast({ description: `Distancia de clustering: ${dbscanDistance.toFixed(2)} km` });
             
             const clusters = clustersDbscan(centroids, dbscanDistance, { minPoints: 2 });
-    
+
             const clusterGroups: Record<string, Feature<Geometry>[]> = {};
             const clusteredFeatureIds = new Set<string>();
 
             clusters.features.forEach(feature => {
                 const clusterId = feature.properties!.cluster;
                 if (clusterId === undefined) return; // Skip noise points for now
-    
+
                 const idStr = String(clusterId);
                 const originalFeatureId = feature.properties!._originalFeatureId;
                 const originalFeature = allFeatures.find(f => f.getId() === originalFeatureId);
-    
+
                 if (originalFeature) {
                     if (!clusterGroups[idStr]) {
                         clusterGroups[idStr] = [];
@@ -1906,38 +1906,38 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                     clusteredFeatureIds.add(originalFeatureId as string);
                 }
             });
-    
+
             // Process actual clusters
             for (const clusterId in clusterGroups) {
                 const featuresInCluster = clusterGroups[clusterId];
                 if (featuresInCluster.length < 2) continue; // Should not happen with minPoints=2, but good practice
-    
+
                 const directions = featuresInCluster.map(f => f.get('sentido_grados')).filter(d => typeof d === 'number') as number[];
                 const magnitudes = featuresInCluster.map(f => f.get(coherenceMagnitudeField)).filter(s => typeof s === 'number') as number[];
-    
+
                 if (directions.length === 0 || magnitudes.length === 0) continue;
-    
+
                 const avgMagnitude = magnitudes.reduce((a, b) => a + b, 0) / magnitudes.length;
                 const avgX = directions.reduce((sum, d) => sum + Math.cos(d * Math.PI / 180), 0) / directions.length;
                 const avgY = directions.reduce((sum, d) => sum + Math.sin(d * Math.PI / 180), 0) / directions.length;
                 const avgAngleRad = Math.atan2(avgY, avgX);
                 let avgDirection = (avgAngleRad * 180 / Math.PI + 360) % 360;
-    
+
                 const stdDevDirection = Math.sqrt(directions.reduce((sum, d) => {
                     let dirDiff = Math.abs(d - avgDirection);
                     if (dirDiff > 180) dirDiff = 360 - dirDiff;
                     return sum + Math.pow(dirDiff, 2);
                 }, 0) / directions.length);
                 const stdDevMagnitude = Math.sqrt(magnitudes.reduce((sum, s) => sum + Math.pow(s - avgMagnitude, 2), 0) / magnitudes.length);
-    
+
                 featuresInCluster.forEach(olFeature => {
                     const direction = olFeature.get('sentido_grados');
                     const magnitude = olFeature.get(coherenceMagnitudeField);
-    
+
                     let dirDiff = Math.abs(direction - avgDirection);
                     if (dirDiff > 180) dirDiff = 360 - dirDiff;
                     const magDiff = Math.abs(magnitude - avgMagnitude);
-    
+
                     let coherence = 'Coherente';
                     if (dirDiff > stdDevDirection * 2 || magDiff > stdDevMagnitude * 2) {
                         coherence = 'Atípico';
@@ -1956,7 +1956,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                     f.set('cluster_id', 'ruido');
                 }
             });
-    
+
         } else { // Global analysis (no clustering)
             const directions = allFeatures.map(f => f.get('sentido_grados')).filter(d => typeof d === 'number') as number[];
             const magnitudes = allFeatures.map(f => f.get(coherenceMagnitudeField)).filter(m => typeof m === 'number') as number[];
@@ -1999,7 +1999,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                 if (!averageVectorLayerRef.current) {
                     averageVectorLayerRef.current = new VectorLayer({
                         source: new VectorSource(),
-                        properties: { id: 'average-vector-layer' }
+                        properties: { id: 'average-vector-layer', name: 'Vector Promedio' }
                     });
                     mapRef.current?.addLayer(averageVectorLayerRef.current);
                 }
@@ -2007,45 +2007,72 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                 vectorSource?.clear();
 
                 const centerOfMass = centroid(format.writeFeaturesObject(allFeatures));
-                // Make the vector length proportional to the average speed
                 const vectorLengthKm = avgMagnitude; 
                 const endPoint = destination(centerOfMass, vectorLengthKm, avgDirection, { units: 'kilometers' });
 
-                const avgVectorFeature = formatForMap.readFeature(turfLineString([
-                    centerOfMass.geometry.coordinates,
-                    endPoint.geometry.coordinates
-                ]));
-
-                // Create a style with an arrowhead
-                const arrowStyle = new Style({
-                    stroke: new Stroke({ color: '#00aaff', width: 3 }),
-                });
-                const headStyle = new Style({
+                const avgVectorFeature = formatForMap.readFeature(turfLineString(
+                    [centerOfMass.geometry.coordinates, endPoint.geometry.coordinates],
+                    {
+                        avg_direction: avgDirection,
+                        avg_magnitude: avgMagnitude,
+                        std_dev_direction: stdDevDirection
+                    }
+                )) as Feature<OlLineString>;
+                
+                const styles = [];
+                // Main vector line
+                styles.push(new Style({
+                    stroke: new Stroke({ color: '#6c757d', width: 3 }),
+                }));
+                
+                // Arrowhead
+                styles.push(new Style({
                     geometry: new Point(endPoint.geometry.coordinates),
                     image: new IconStyle({
-                        src: "data:image/svg+xml;charset=utf-8," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><path d="M0 0l20 10L0 20z" fill="#00aaff"/></svg>'),
+                        src: "data:image/svg+xml;charset=utf-8," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="#6c757d"><path d="M0 0l20 10L0 20z"/></svg>'),
                         anchor: [0.5, 0.5],
                         rotateWithView: true,
-                        rotation: -avgAngleRad, // Stays aligned with the line
+                        rotation: -avgAngleRad,
                         scale: 0.8
                     })
-                });
+                }));
                 
-                const labelStyle = new Style({
+                // Label
+                const centroidGeom = centroid(format.writeFeatureObject(avgVectorFeature));
+                styles.push(new Style({
+                    geometry: new Point(centroidGeom.geometry.coordinates),
                     text: new TextStyle({
                         text: `Promedio: ${avgDirection.toFixed(0)}° / ${avgMagnitude.toFixed(1)} km/h`,
                         font: 'bold 12px Arial, sans-serif',
-                        fill: new Fill({ color: '#00aaff' }),
+                        fill: new Fill({ color: '#333' }),
                         stroke: new Stroke({ color: '#fff', width: 3 }),
-                        textAlign: 'center',
-                        textBaseline: 'bottom',
-                        offsetY: -10,
+                        offsetY: -15,
                     }),
-                    geometry: new Point(centroid(avgVectorFeature.getGeometry() as OlLineString).getCoordinates())
+                }));
+
+                // Standard Deviation Arcs
+                const arcRadius = vectorLengthKm * 0.33; // Make arc radius a third of the vector length
+                const arcPoints = 15; // Number of points in the arc line
+                
+                [-2, -1, 1, 2].forEach(sigmaMultiplier => {
+                    const sigmaAngle = avgDirection + (sigmaMultiplier * stdDevDirection);
+                    const startAngle = Math.min(avgDirection, sigmaAngle);
+                    const endAngle = Math.max(avgDirection, sigmaAngle);
+
+                    const arc = lineArc(centerOfMass, arcRadius, startAngle, endAngle, {steps: arcPoints, units: 'kilometers'});
+                    const arcFeature = formatForMap.readFeature(arc);
+                    const arcStyle = new Style({
+                        stroke: new Stroke({
+                            color: sigmaMultiplier === -2 || sigmaMultiplier === 2 ? 'rgba(150, 150, 150, 0.4)' : 'rgba(150, 150, 150, 0.6)',
+                            width: 2,
+                            lineDash: [4, 4]
+                        })
+                    });
+                    arcFeature.setStyle(arcStyle);
+                    vectorSource?.addFeature(arcFeature);
                 });
 
-
-                avgVectorFeature.setStyle([arrowStyle, headStyle, labelStyle]);
+                avgVectorFeature.setStyle(styles);
                 vectorSource?.addFeature(avgVectorFeature);
             } else if (averageVectorLayerRef.current) {
                 averageVectorLayerRef.current.getSource()?.clear();
