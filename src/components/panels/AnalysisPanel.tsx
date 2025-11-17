@@ -113,9 +113,11 @@ import {
 import Feature from 'ol/Feature';
 import {
     type Geometry,
-    type LineString as OlLineString,
+    LineString,
     Point,
-    Polygon as OlPolygon
+    Polygon as OlPolygon,
+    MultiPolygon as OlMultiPolygon,
+    MultiLineString as OlMultiLineString,
 } from 'ol/geom';
 import { getLength as olGetLength } from 'ol/sphere';
 import {
@@ -347,7 +349,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     const [smoothness, setSmoothness] = useState<number>(5000);
 
     // State for Topographic Profile
-    const [profileLine, setProfileLine] = useState<Feature<OlLineString> | null>(null);
+    const [profileLine, setProfileLine] = useState<Feature<LineString> | null>(null);
     const [profileData, setProfileData] = useState<ProfileDataSeries[] | null>(null);
     const [activeProfileDrawTool, setActiveProfileDrawTool] = useState<'LineString' | 'FreehandLine' | null>(null);
     const [isGeneratingProfile, setIsGeneratingProfile] = useState(false);
@@ -530,7 +532,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
             mapRef.current?.addOverlay(liveTooltipRef.current);
 
             feature.getGeometry()?.on('change', (e) => {
-                const geom = e.target as OlLineString;
+                const geom = e.target as LineString;
                 const length = olGetLength(geom, { projection: 'EPSG:3857' });
                 const output = length > 1000 ? `${(length / 1000).toFixed(2)} km` : `${length.toFixed(2)} m`;
                 liveTooltipElementRef.current!.innerHTML = output;
@@ -542,7 +544,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
             if (liveTooltipRef.current) {
                 liveTooltipRef.current.setPosition(undefined);
             }
-            const feature = event.feature as Feature<OlLineString>;
+            const feature = event.feature as Feature<LineString>;
             feature.setStyle(analysisLayerStyle);
             setProfileLine(feature);
             stopDrawing();
@@ -576,7 +578,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
             return;
         }
 
-        const feature = features[0] as Feature<OlLineString>;
+        const feature = features[0] as Feature<LineString>;
         if (feature.getGeometry()?.getType().includes('LineString')) {
             setProfileLine(feature);
             if (analysisLayerRef.current) {
@@ -1768,7 +1770,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         const features1GeoJSON = format.writeFeaturesObject(source1.getFeatures());
         const features2GeoJSON = format.writeFeaturesObject(source2.getFeatures());
 
-        const vectorFeatures: Feature<OlLineString>[] = [];
+        const vectorFeatures: Feature<LineString>[] = [];
         for (const point1 of features1GeoJSON.features) {
             const nearest = turfNearestPoint(point1, features2GeoJSON);
             const distance = turfDistance(point1, nearest, { units: 'kilometers' });
@@ -1778,7 +1780,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                 const bearingVal = turfBearing(point1, nearest);
                 const speed = distance / timeDiffHours;
 
-                const olFeature = formatForMap.readFeature(line) as Feature<OlLineString>;
+                const olFeature = formatForMap.readFeature(line) as Feature<LineString>;
                 olFeature.setProperties({
                     velocidad_kmh: parseFloat(speed.toFixed(2)),
                     sentido_grados: parseFloat(bearingVal.toFixed(2)),
@@ -1807,7 +1809,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
             });
 
             const arrow = new Style({
-                geometry: new Point((feature.getGeometry() as OlLineString).getLastCoordinate()),
+                geometry: new Point((feature.getGeometry() as LineString).getLastCoordinate()),
                 image: new CircleStyle({
                     fill: new Fill({ color: color }),
                     radius: 3
@@ -1815,7 +1817,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
             });
 
             const label = new Style({
-                geometry: new Point((feature.getGeometry() as OlLineString).getFlatMidpoint()),
+                geometry: new Point((feature.getGeometry() as LineString).getFlatMidpoint()),
                 text: new TextStyle({
                     text: `${speed.toFixed(1)} km/h`,
                     font: '10px sans-serif',
@@ -2013,13 +2015,14 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                 const endPoint = destination(centerOfMass, vectorLengthKm, avgDirection, { units: 'kilometers' });
 
                 const avgVectorFeature = formatForMap.readFeature(turfLineString(
-                    [centerOfMass.geometry.coordinates, endPoint.geometry.coordinates],
-                    {
-                        avg_direction: avgDirection,
-                        avg_magnitude: avgMagnitude,
-                        std_dev_direction: stdDevDirection
-                    }
-                )) as Feature<OlLineString>;
+                    [centerOfMass.geometry.coordinates, endPoint.geometry.coordinates]
+                )) as Feature<LineString>;
+
+                avgVectorFeature.setProperties({
+                    avg_direction: avgDirection,
+                    avg_magnitude: avgMagnitude,
+                    std_dev_direction: stdDevDirection
+                });
                 
                 const avgVectorStyle = (feature: Feature<Geometry>, resolution: number): Style[] => {
                     const styles = [
@@ -2028,7 +2031,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                         })
                     ];
                 
-                    const geometry = feature.getGeometry() as OlLineString;
+                    const geometry = feature.getGeometry() as LineString;
                     const end = geometry.getLastCoordinate();
                 
                     // Add arrowhead
@@ -2057,29 +2060,17 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                     }));
                 
                     // Add deviation arcs
-                    const arcRadius = vectorLengthKm * 0.33 * 1000; // in meters for OL
-                    const centerCoords = transform(centerOfMass.geometry.coordinates, 'EPSG:4326', 'EPSG:3857');
+                    const arcRadiusKm = vectorLengthKm * 0.33; 
                     
                     [-2, -1, 1, 2].forEach(sigmaMultiplier => {
-                        const startAngle = (avgDirection + (sigmaMultiplier * stdDevDirection) - 90) * (Math.PI / 180);
-                        const endAngle = (avgDirection - (sigmaMultiplier * stdDevDirection) - 90) * (Math.PI / 180);
+                        const startPoint = destination(centerOfMass, arcRadiusKm, avgDirection + (sigmaMultiplier * stdDevDirection), { units: 'kilometers' });
+                        const endPoint = destination(centerOfMass, arcRadiusKm, avgDirection - (sigmaMultiplier * stdDevDirection), { units: 'kilometers' });
+                        const arc = lineArc(centerOfMass, arcRadiusKm, avgDirection + (sigmaMultiplier * stdDevDirection), avgDirection - (sigmaMultiplier * stdDevDirection));
+
+                        const arcFeature = formatForMap.readFeature(arc) as Feature<LineString>;
                     
-                        const arc = new OlLineString([centerCoords]);
-                        const numPoints = 50;
-                        for (let i = 0; i <= numPoints; i++) {
-                            const angle = startAngle + (i / numPoints) * (endAngle - startAngle);
-                            arc.appendCoordinate([
-                                centerCoords[0] + arcRadius * Math.cos(angle),
-                                centerCoords[1] + arcRadius * Math.sin(angle)
-                            ]);
-                        }
-                    
-                        const arcFeature = new Feature(arc);
                         styles.push(new Style({
-                            geometry: arc,
-                             fill: new Fill({
-                                color: sigmaMultiplier === -2 || sigmaMultiplier === 2 ? 'rgba(108, 117, 125, 0.1)' : 'rgba(108, 117, 125, 0.15)',
-                            }),
+                            geometry: arcFeature.getGeometry(),
                             stroke: new Stroke({
                                 color: 'rgba(108, 117, 125, 0.4)',
                                 width: 1,
@@ -3029,5 +3020,6 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
 
 
