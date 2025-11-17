@@ -1861,6 +1861,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         }
     
         const format = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
+        const formatForMap = new GeoJSON({ dataProjection: 'EPSG:4326', featureProjection: 'EPSG:3857' });
         const allFeatures = source.getFeatures();
     
         if (useClustering) {
@@ -2016,8 +2017,8 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 
                 avgVectorFeature.setStyle(new Style({ stroke: new Stroke({ color: '#ff00ff', width: 4, lineDash: [10, 10] })}));
                 vectorSource?.addFeature(avgVectorFeature);
-            } else {
-                averageVectorLayerRef.current?.getSource()?.clear();
+            } else if (averageVectorLayerRef.current) {
+                averageVectorLayerRef.current.getSource()?.clear();
             }
         }
     
@@ -2953,4 +2954,3 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
-
