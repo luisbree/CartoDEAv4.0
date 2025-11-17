@@ -29,6 +29,8 @@ import { ToastAction } from '@/components/ui/toast';
 import { saveFileWithPicker } from '@/services/download-service';
 import { writeArrayBuffer } from 'geotiff';
 import { getGeeGeoTiffDownloadUrl } from '@/ai/flows/gee-flow';
+import { getLength } from 'ol/sphere';
+import { bearing as turfBearing } from '@turf/turf';
 
 
 interface UseLayerManagerProps {
@@ -1503,6 +1505,66 @@ const groupLayers = useCallback((layerIds: string[], groupName: string) => {
         });
     }, [setLayers, startPlayback, stopPlayback]);
 
+  const recalculateTrajectoryAttributes = useCallback((layerId: string) => {
+    const layer = layers.flatMap(l => 'layers' in l ? l.layers : [l]).find(l => l.id === layerId) as VectorMapLayer | undefined;
+    if (!layer || !layer.olLayer.getSource()) {
+      toast({ description: 'No se encontró la capa de trayectoria o su origen.', variant: 'destructive' });
+      return;
+    }
+
+    const source = layer.olLayer.getSource();
+    const features = source!.getFeatures() as Feature<LineString>[];
+    
+    // Find the original layers to get time difference
+    const olLayer = layer.olLayer;
+    const time1 = olLayer.get('time1');
+    const time2 = olLayer.get('time2');
+
+    if (!time1 || !time2) {
+      toast({ description: 'No se encontraron metadatos de tiempo en la capa para recalcular la velocidad.', variant: 'destructive' });
+      return;
+    }
+
+    const timeDiffMs = Math.abs(new Date(time2).getTime() - new Date(time1).getTime());
+    const timeDiffHours = timeDiffMs / (1000 * 60 * 60);
+    
+    if (timeDiffHours <= 0) {
+      toast({ description: 'El intervalo de tiempo entre las capas originales es cero o inválido.', variant: 'destructive' });
+      return;
+    }
+
+    let featuresUpdated = 0;
+    features.forEach(feature => {
+      const geom = feature.getGeometry();
+      if (geom && geom.getType() === 'LineString') {
+        const distanceKm = getLength(geom, { projection: 'EPSG:3857' }) / 1000;
+        const speedKmh = distanceKm / timeDiffHours;
+        
+        const coords = geom.getCoordinates();
+        const startPoint = coords[0];
+        const endPoint = coords[coords.length - 1];
+        
+        const formatForTurf = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
+        const startPoint4326 = formatForTurf.writeGeometryObject(new Point(startPoint)).coordinates;
+        const endPoint4326 = formatForTurf.writeGeometryObject(new Point(endPoint)).coordinates;
+
+        const bearing = turfBearing(startPoint4326, endPoint4326);
+        
+        feature.setProperties({
+          distancia_km: parseFloat(distanceKm.toFixed(2)),
+          velocidad_kmh: parseFloat(speedKmh.toFixed(2)),
+          sentido_grados: parseFloat(bearing.toFixed(2)),
+        });
+        featuresUpdated++;
+      }
+    });
+
+    if (featuresUpdated > 0) {
+      source.changed(); // This triggers a redraw if the style depends on the attributes
+      toast({ description: `Se recalcularon los atributos para ${featuresUpdated} entidades.` });
+    }
+  }, [layers, toast]);
+
 
   return {
     layers,
@@ -1540,6 +1602,7 @@ const groupLayers = useCallback((layerIds: string[], groupName: string) => {
     isWfsLoading,
     updateFeatureAttribute,
     addFieldToLayer,
+    recalculateTrajectoryAttributes, // Export the new function
     groupLayers,
     ungroupLayer,
     toggleGroupExpanded,
@@ -1558,3 +1621,4 @@ const groupLayers = useCallback((layerIds: string[], groupName: string) => {
 
 
     
+
