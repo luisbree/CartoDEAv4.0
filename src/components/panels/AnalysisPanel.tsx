@@ -1861,7 +1861,6 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         }
     
         const format = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
-        const formatForMap = new GeoJSON({ dataProjection: 'EPSG:4326', featureProjection: 'EPSG:3857' });
         const allFeatures = source.getFeatures();
     
         if (useClustering) {
@@ -1875,6 +1874,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
             // Calculate NN distances for epsilon
             const nnDistances = centroids.features.map((point, i, arr) => {
                 const otherPoints = featureCollection(arr.filter((_, j) => i !== j));
+                if (otherPoints.features.length === 0) return 0;
                 return turfNearestPoint(point, otherPoints).properties.distanceToPoint;
             });
             const meanDistance = nnDistances.reduce((a, b) => a + b, 0) / nnDistances.length;
@@ -1902,7 +1902,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                         clusterGroups[idStr] = [];
                     }
                     clusterGroups[idStr].push(originalFeature);
-                    clusteredFeatureIds.add(originalFeatureId);
+                    clusteredFeatureIds.add(originalFeatureId as string);
                 }
             });
     
@@ -1920,7 +1920,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                 const avgX = directions.reduce((sum, d) => sum + Math.cos(d * Math.PI / 180), 0) / directions.length;
                 const avgY = directions.reduce((sum, d) => sum + Math.sin(d * Math.PI / 180), 0) / directions.length;
                 const avgAngleRad = Math.atan2(avgY, avgX);
-                const avgDirection = (avgAngleRad * 180 / Math.PI + 360) % 360;
+                let avgDirection = (avgAngleRad * 180 / Math.PI + 360) % 360;
     
                 const stdDevDirection = Math.sqrt(directions.reduce((sum, d) => {
                     let dirDiff = Math.abs(d - avgDirection);
@@ -1957,7 +1957,68 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
             });
     
         } else { // Global analysis (no clustering)
-            // ... (existing global analysis logic)
+            const directions = allFeatures.map(f => f.get('sentido_grados')).filter(d => typeof d === 'number') as number[];
+            const magnitudes = allFeatures.map(f => f.get(coherenceMagnitudeField)).filter(m => typeof m === 'number') as number[];
+
+            if (directions.length === 0 || magnitudes.length === 0) {
+                toast({ description: 'No hay datos válidos de dirección o magnitud para analizar.', variant: 'destructive' });
+                return;
+            }
+
+            const avgMagnitude = magnitudes.reduce((a, b) => a + b, 0) / magnitudes.length;
+            const avgX = directions.reduce((sum, d) => sum + Math.cos(d * Math.PI / 180), 0) / directions.length;
+            const avgY = directions.reduce((sum, d) => sum + Math.sin(d * Math.PI / 180), 0) / directions.length;
+            const avgAngleRad = Math.atan2(avgY, avgX);
+            const avgDirection = (avgAngleRad * 180 / Math.PI + 360) % 360;
+
+            const stdDevDirection = Math.sqrt(directions.reduce((sum, d) => {
+                let dirDiff = Math.abs(d - avgDirection);
+                if (dirDiff > 180) dirDiff = 360 - dirDiff;
+                return sum + Math.pow(dirDiff, 2);
+            }, 0) / directions.length);
+            const stdDevMagnitude = Math.sqrt(magnitudes.reduce((sum, s) => sum + Math.pow(s - avgMagnitude, 2), 0) / magnitudes.length);
+            
+            setCoherenceStats({ avgDirection, stdDevDirection, avgMagnitude, stdDevMagnitude });
+
+            allFeatures.forEach(feature => {
+                const direction = feature.get('sentido_grados');
+                const magnitude = feature.get(coherenceMagnitudeField);
+                let dirDiff = Math.abs(direction - avgDirection);
+                if (dirDiff > 180) dirDiff = 360 - dirDiff;
+                const magDiff = Math.abs(magnitude - avgMagnitude);
+                
+                let coherence = 'Coherente';
+                if (dirDiff > stdDevDirection * 2 || magDiff > stdDevMagnitude * 2) coherence = 'Atípico';
+                else if (dirDiff > stdDevDirection || magDiff > stdDevMagnitude) coherence = 'Moderado';
+                
+                feature.set('coherencia', coherence);
+            });
+            
+            if (showAverageVector) {
+                if (!averageVectorLayerRef.current) {
+                    averageVectorLayerRef.current = new VectorLayer({
+                        source: new VectorSource(),
+                        properties: { id: 'average-vector-layer' }
+                    });
+                    mapRef.current?.addLayer(averageVectorLayerRef.current);
+                }
+                const vectorSource = averageVectorLayerRef.current.getSource();
+                vectorSource?.clear();
+
+                const centerOfMass = centroid(format.writeFeaturesObject(allFeatures));
+                const vectorLengthKm = 200; // Fixed length for visualization
+                const endPoint = destination(centerOfMass, vectorLengthKm, avgDirection, { units: 'kilometers' });
+
+                const avgVectorFeature = formatForMap.readFeature(turfLineString([
+                    centerOfMass.geometry.coordinates,
+                    endPoint.geometry.coordinates
+                ]));
+
+                avgVectorFeature.setStyle(new Style({ stroke: new Stroke({ color: '#ff00ff', width: 4, lineDash: [10, 10] })}));
+                vectorSource?.addFeature(avgVectorFeature);
+            } else {
+                averageVectorLayerRef.current?.getSource()?.clear();
+            }
         }
     
         layer.olLayer.setStyle((feature) => {
@@ -2892,3 +2953,4 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
