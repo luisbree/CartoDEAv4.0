@@ -28,6 +28,7 @@ import {
   Swords,
   User,
   LogOut,
+  Sigma,
 } from 'lucide-react';
 import { Style, Fill, Stroke, Circle as CircleStyle, Text as TextStyle } from 'ol/style';
 import { transform, transformExtent } from 'ol/proj';
@@ -68,7 +69,9 @@ import TileLayer from 'ol/layer/Tile';
 import type Layer from 'ol/layer/Layer';
 import type { Source as TileSource } from 'ol/source';
 import type Feature from 'ol/Feature';
-import type { Geometry } from 'ol/geom';
+import { Geometry, LineString as OlLineString } from 'ol/geom';
+import { getLength as olGetLength } from 'ol/sphere';
+import * as turf from '@turf/turf';
 
 import MapView, { BASE_LAYER_DEFINITIONS } from '@/components/map-view';
 import AttributesPanelComponent from '@/components/feature-attributes-panel';
@@ -111,6 +114,7 @@ import { cn } from '@/lib/utils';
 import { saveMapState, debugReadDocument } from '@/services/sharing-service';
 import { useAuth, useUser, useFirestore } from '@/firebase';
 import { GoogleAuthProvider, signInWithPopup, signOut, getRedirectResult, signInWithRedirect } from 'firebase/auth';
+import GeoJSON from 'ol/format/GeoJSON';
 
 import type {
   MapState,
@@ -1172,6 +1176,15 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
     }
   };
 
+  const handleRecalculateTrajectoryAttributes = (layerId: string) => {
+    layerManagerHook.recalculateTrajectoryAttributes(layerId);
+    // After recalculating, we need to refresh the data in the attributes panel
+    const layer = layerManagerHook.layers.flatMap(l => 'layers' in l ? l.layers : [l]).find(l => l.id === layerId) as VectorMapLayer | undefined;
+    if (layer) {
+      layerManagerHook.handleShowLayerTable(layer.id);
+    }
+  };
+
   return (
     <div className="flex h-screen w-screen flex-col bg-background text-foreground">
       <FirebaseErrorListener />
@@ -1595,6 +1608,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
               onAddField={layerManagerHook.addFieldToLayer}
               sortConfig={featureInspectionHook.sortConfig}
               onSortChange={featureInspectionHook.setSortConfig}
+              onRecalculateAttributes={handleRecalculateTrajectoryAttributes}
             />
           )}
 

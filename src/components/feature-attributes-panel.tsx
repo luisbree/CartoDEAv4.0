@@ -20,7 +20,7 @@ import {
   AlertDialogTrigger,
   AlertDialogPortal,
 } from "@/components/ui/alert-dialog";
-import { ChevronLeft, ChevronRight, ListChecks, Link as LinkIcon, ExternalLink, ArrowUp, ArrowDown, Plus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ListChecks, Link as LinkIcon, ExternalLink, ArrowUp, ArrowDown, Plus, Sigma } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { PlainFeatureData } from '@/lib/types';
 
@@ -44,6 +44,7 @@ interface AttributesPanelComponentProps {
   // Editing props
   onAttributeChange: (featureId: string, key: string, value: any) => void;
   onAddField: (layerId: string, fieldName: string, defaultValue: any) => void;
+  onRecalculateAttributes: (layerId: string) => void;
   
   // Sorting props
   sortConfig: { key: string; direction: 'ascending' | 'descending' } | null;
@@ -67,6 +68,7 @@ const AttributesPanelComponent: React.FC<AttributesPanelComponentProps> = ({
   onFeatureSelect,
   onAttributeChange,
   onAddField,
+  onRecalculateAttributes,
   sortConfig,
   onSortChange,
 }) => {
@@ -163,6 +165,12 @@ const AttributesPanelComponent: React.FC<AttributesPanelComponentProps> = ({
     }
   };
 
+  const handleRecalculateClick = () => {
+    if (layerId) {
+      onRecalculateAttributes(layerId);
+    }
+  };
+
   const isValidUrl = (urlString: string): boolean => {
     try {
       new URL(urlString);
@@ -209,41 +217,29 @@ const AttributesPanelComponent: React.FC<AttributesPanelComponentProps> = ({
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
   const endIndex = startIndex + ITEMS_PER_PAGE;
   const currentVisibleFeatures = sortedFeatureData.slice(startIndex, endIndex);
+  
+  const isTrajectoryLayer = layerName?.toLowerCase().includes('seguimiento') || layerName?.toLowerCase().includes('trayectoria');
 
   const panelTitle = layerName && totalFeatures > 0
     ? `Atributos: ${layerName} (${totalFeatures})` 
     : 'Atributos';
     
-  const addFieldTrigger = hasFeatures ? (
-    <AlertDialogTrigger asChild>
-      <Button variant="ghost" size="icon" className="h-6 w-6 text-white hover:bg-gray-600/80" title="Añadir Campo">
-          <Plus className="h-4 w-4" />
-          <span className="sr-only">Añadir Campo</span>
-      </Button>
-    </AlertDialogTrigger>
-  ) : null;
-
-
-  return (
-    <DraggablePanel
-      title={panelTitle}
-      icon={ListChecks}
-      panelRef={panelRef}
-      initialPosition={{ x:0, y:0}} 
-      onMouseDownHeader={onMouseDownHeader}
-      isCollapsed={isCollapsed}
-      onToggleCollapse={onToggleCollapse}
-      onClose={onClosePanel} 
-      showCloseButton={true}
-      initialSize={{ width: 450, height: 350 }} 
-      minSize={{ width: 300, height: 250 }}
-      style={style} 
-      overflowX="auto"
-      overflowY="auto"
-      zIndex={style?.zIndex as number | undefined}
-      headerActions={
+  const headerActions = (
+    <div className="flex items-center gap-1">
+      {hasFeatures && isTrajectoryLayer && (
+        <Button variant="ghost" size="icon" className="h-6 w-6 text-white hover:bg-gray-600/80" title="Recalcular Atributos" onClick={handleRecalculateClick}>
+          <Sigma className="h-4 w-4" />
+          <span className="sr-only">Recalcular Atributos</span>
+        </Button>
+      )}
+      {hasFeatures && (
         <AlertDialog open={isAddFieldDialogOpen} onOpenChange={setIsAddFieldDialogOpen}>
-          {addFieldTrigger}
+          <AlertDialogTrigger asChild>
+            <Button variant="ghost" size="icon" className="h-6 w-6 text-white hover:bg-gray-600/80" title="Añadir Campo">
+              <Plus className="h-4 w-4" />
+              <span className="sr-only">Añadir Campo</span>
+            </Button>
+          </AlertDialogTrigger>
           <AlertDialogPortal>
             <AlertDialogContent onOpenAutoFocus={(e) => e.preventDefault()}>
                 <AlertDialogHeader>
@@ -282,7 +278,29 @@ const AttributesPanelComponent: React.FC<AttributesPanelComponentProps> = ({
             </AlertDialogContent>
           </AlertDialogPortal>
         </AlertDialog>
-      }
+      )}
+    </div>
+  );
+
+
+  return (
+    <DraggablePanel
+      title={panelTitle}
+      icon={ListChecks}
+      panelRef={panelRef}
+      initialPosition={{ x:0, y:0}} 
+      onMouseDownHeader={onMouseDownHeader}
+      isCollapsed={isCollapsed}
+      onToggleCollapse={onToggleCollapse}
+      onClose={onClosePanel} 
+      showCloseButton={true}
+      initialSize={{ width: 450, height: 350 }} 
+      minSize={{ width: 300, height: 250 }}
+      style={style} 
+      overflowX="auto"
+      overflowY="auto"
+      zIndex={style?.zIndex as number | undefined}
+      headerActions={headerActions}
     >
       <div className="flex-grow flex flex-col h-full"> 
           {hasFeatures && allKeys.length > 0 ? (
