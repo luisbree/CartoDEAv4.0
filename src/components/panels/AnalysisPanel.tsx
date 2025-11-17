@@ -2034,17 +2034,18 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                         stroke: new Stroke({ color: '#6c757d', width: 3 }),
                     }));
 
-                    // Arrowhead
                     const geom = feature.getGeometry() as LineString;
                     const end = geom.getLastCoordinate();
-                    const arrowSvg = `<svg width="18" height="18" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="#6c757d" d="M12 2L2 22h20L12 2z"/></svg>`;
+
+                    // Arrowhead
                     styles.push(new Style({
                         geometry: new Point(end),
-                        image: new IconStyle({
-                            src: 'data:image/svg+xml;utf8,' + encodeURIComponent(arrowSvg),
-                            anchor: [0.5, 0.5],
-                            rotateWithView: true,
-                            rotation: (avgAngleRad - Math.PI / 2),
+                        image: new RegularShape({
+                            fill: new Fill({ color: '#6c757d' }),
+                            points: 3,
+                            radius: 8,
+                            rotation: (Math.PI / 2) - avgAngleRad,
+                            angle: 0,
                         }),
                     }));
                     
@@ -2065,21 +2066,21 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                     const centerCoords = transform(centerOfMass.geometry.coordinates, 'EPSG:4326', 'EPSG:3857');
 
                     [-2, -1, 1, 2].forEach(sigmaMultiplier => {
-                        const startAngleDegrees = avgDirection - (sigmaMultiplier * stdDevDirection);
-                        const endAngleDegrees = avgDirection + (sigmaMultiplier * stdDevDirection);
-                        const arcCoords: any[] = [];
-                        const numPoints = 50;
+                        const startAngle = (avgDirection + (sigmaMultiplier > 0 ? 0 : -sigmaMultiplier) * stdDevDirection);
+                        const endAngle = (avgDirection + (sigmaMultiplier < 0 ? 0 : sigmaMultiplier) * stdDevDirection);
 
-                        for (let i = 0; i <= numPoints; i++) {
-                            const currentAngle = startAngleDegrees + (i / numPoints) * (endAngleDegrees - startAngleDegrees);
-                            arcCoords.push([
+                        const arcPoints: number[][] = [];
+                        const numArcPoints = 50;
+
+                        for (let i = 0; i <= numArcPoints; i++) {
+                            const currentAngle = startAngle + (i / numArcPoints) * (endAngle - startAngle);
+                            arcPoints.push([
                                 centerCoords[0] + arcRadiusMeters * Math.cos((currentAngle - 90) * Math.PI / 180),
                                 centerCoords[1] + arcRadiusMeters * Math.sin((currentAngle - 90) * Math.PI / 180)
                             ]);
                         }
                         
-                        // Create a polygon for the arc sector
-                        const sectorCoords = [[...centerCoords], ...arcCoords, [...centerCoords]];
+                        const sectorCoords = [centerCoords, ...arcPoints, centerCoords];
                         const arcPolygon = new OlPolygon([sectorCoords]);
 
                         styles.push(new Style({
@@ -3031,6 +3032,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
 
 
 
