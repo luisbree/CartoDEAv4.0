@@ -2021,69 +2021,76 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                     }
                 )) as Feature<OlLineString>;
                 
-                const styles = [];
-                // Main vector line
-                styles.push(new Style({
-                    stroke: new Stroke({ color: '#6c757d', width: 3 }),
-                }));
+                const avgVectorStyle = (feature: Feature<Geometry>, resolution: number): Style[] => {
+                    const styles = [
+                        new Style({
+                            stroke: new Stroke({ color: '#6c757d', width: 3 }),
+                        })
+                    ];
                 
-                // Arrowhead
-                styles.push(new Style({
-                    geometry: new Point(endPoint.geometry.coordinates),
-                    image: new RegularShape({
-                        fill: new Fill({ color: '#6c757d' }),
-                        points: 3,
-                        radius: 8,
-                        rotation: -avgAngleRad, // Convert to radians and negate
-                        angle: Math.PI / 2, // Point the triangle 'up'
-                    }),
-                }));
+                    const geometry = feature.getGeometry() as OlLineString;
+                    const end = geometry.getLastCoordinate();
                 
-                // Label
-                const centroidGeom = centroid(format.writeFeatureObject(avgVectorFeature));
-                styles.push(new Style({
-                    geometry: new Point(centroidGeom.geometry.coordinates),
-                    text: new TextStyle({
-                        text: `${avgMagnitude.toFixed(1)} km/h`,
-                        font: 'bold 12px Arial, sans-serif',
-                        fill: new Fill({ color: '#333' }),
-                        stroke: new Stroke({ color: '#fff', width: 3 }),
-                        offsetY: -15,
-                    }),
-                }));
+                    // Add arrowhead
+                    styles.push(new Style({
+                        geometry: new Point(end),
+                        image: new RegularShape({
+                            fill: new Fill({ color: '#6c757d' }),
+                            points: 3,
+                            radius: 8,
+                            rotation: -avgAngleRad,
+                            angle: 0,
+                            displacement: [0, 0]
+                        }),
+                    }));
 
-                // Standard Deviation Arcs
-                const arcRadius = vectorLengthKm * 0.33;
+                    // Add label
+                     styles.push(new Style({
+                        geometry: new Point(geometry.getCoordinateAt(0.5)),
+                        text: new TextStyle({
+                            text: `${avgMagnitude.toFixed(1)} km/h`,
+                            font: 'bold 12px Arial, sans-serif',
+                            fill: new Fill({ color: '#333' }),
+                            stroke: new Stroke({ color: '#fff', width: 3 }),
+                            offsetY: -15,
+                        }),
+                    }));
                 
-                [-2, -1, 1, 2].forEach(sigmaMultiplier => {
-                    const startAngle = avgDirection - (sigmaMultiplier * stdDevDirection);
-                    const endAngle = avgDirection + (sigmaMultiplier * stdDevDirection);
-
-                    // Create a polygon for the pie slice
-                    const arcPoints = [centerOfMass.geometry.coordinates];
-                    for (let i = startAngle; i <= endAngle; i += 2) { // smaller step for smoother arc
-                        const arcPoint = destination(centerOfMass, arcRadius, i, { units: 'kilometers' });
-                        arcPoints.push(arcPoint.geometry.coordinates);
-                    }
-                    arcPoints.push(centerOfMass.geometry.coordinates); // Close the polygon
-
-                    if (arcPoints.length > 2) {
-                        const arcPolygonFeature = formatForMap.readFeature(turfPolygon([arcPoints]));
-                        const arcStyle = new Style({
-                            fill: new Fill({
+                    // Add deviation arcs
+                    const arcRadius = vectorLengthKm * 0.33 * 1000; // in meters for OL
+                    const centerCoords = transform(centerOfMass.geometry.coordinates, 'EPSG:4326', 'EPSG:3857');
+                    
+                    [-2, -1, 1, 2].forEach(sigmaMultiplier => {
+                        const startAngle = (avgDirection + (sigmaMultiplier * stdDevDirection) - 90) * (Math.PI / 180);
+                        const endAngle = (avgDirection - (sigmaMultiplier * stdDevDirection) - 90) * (Math.PI / 180);
+                    
+                        const arc = new OlLineString([centerCoords]);
+                        const numPoints = 50;
+                        for (let i = 0; i <= numPoints; i++) {
+                            const angle = startAngle + (i / numPoints) * (endAngle - startAngle);
+                            arc.appendCoordinate([
+                                centerCoords[0] + arcRadius * Math.cos(angle),
+                                centerCoords[1] + arcRadius * Math.sin(angle)
+                            ]);
+                        }
+                    
+                        const arcFeature = new Feature(arc);
+                        styles.push(new Style({
+                            geometry: arc,
+                             fill: new Fill({
                                 color: sigmaMultiplier === -2 || sigmaMultiplier === 2 ? 'rgba(108, 117, 125, 0.1)' : 'rgba(108, 117, 125, 0.15)',
                             }),
                             stroke: new Stroke({
                                 color: 'rgba(108, 117, 125, 0.4)',
                                 width: 1,
                             })
-                        });
-                        arcPolygonFeature.setStyle(arcStyle);
-                        vectorSource?.addFeature(arcPolygonFeature);
-                    }
-                });
+                        }));
+                    });
 
-                avgVectorFeature.setStyle(styles);
+                    return styles;
+                };
+
+                avgVectorFeature.setStyle(avgVectorStyle);
                 vectorSource?.addFeature(avgVectorFeature);
             } else if (averageVectorLayerRef.current) {
                 averageVectorLayerRef.current.getSource()?.clear();
@@ -3022,4 +3029,5 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
 
