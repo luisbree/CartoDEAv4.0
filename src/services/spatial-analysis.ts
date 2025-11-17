@@ -781,8 +781,6 @@ export async function performFeatureTracking({
             variacion_attr: parseFloat(match.attrDiff.toFixed(2)),
             velocidad_kmh: parseFloat(speed.toFixed(2)),
             sentido_grados: parseFloat(bearingVal.toFixed(2)),
-            time1, // Store the timestamps
-            time2,
         });
         olFeature.setId(nanoid());
         trajectoryFeatures.push(olFeature);

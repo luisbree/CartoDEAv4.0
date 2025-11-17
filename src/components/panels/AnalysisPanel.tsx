@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React,
@@ -2087,16 +2088,15 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     const handleRunFeatureTracking = async () => {
         const layer1 = pointLayers.find(l => l.id === trackingLayer1Id) as VectorMapLayer | undefined;
         const layer2 = pointLayers.find(l => l.id === trackingLayer2Id) as VectorMapLayer | undefined;
-
+    
         if (!layer1 || !layer2 || trackingRadius <= 0 || !trackingField) {
             toast({ description: "Seleccione dos capas de puntos, un campo de atributo y un radio de búsqueda válido.", variant: "destructive" });
             return;
         }
-
-        // Correctly get timestamp from geeParams.metadata
+    
         const time1 = layer1.olLayer.get('geeParams')?.metadata?.timestamp;
         const time2 = layer2.olLayer.get('geeParams')?.metadata?.timestamp;
-
+    
         if (!time1 || !time2) {
             toast({
                 title: "Faltan Metadatos de Tiempo",
@@ -2105,10 +2105,10 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
             });
             return;
         }
-
+    
         setTrackingIsLoading(true);
         toast({ description: "Iniciando seguimiento de entidades..." });
-
+    
         try {
             const trackingResultFeatures = await performFeatureTracking({
                 sourceFeatures: layer1.olLayer.getSource()!.getFeatures(),
@@ -2118,20 +2118,29 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                 time1,
                 time2
             });
-
+    
             if (trackingResultFeatures.length === 0) {
                 toast({ description: "No se encontraron puntos homólogos con los parámetros dados." });
+                setTrackingIsLoading(false);
                 return;
             }
-
+    
             const outputName = trackingOutputName.trim() || `Seguimiento de ${layer1.name}`;
             const newLayerId = `tracking-result-${nanoid()}`;
             const newSource = new VectorSource({ features: trackingResultFeatures });
+            
             const newOlLayer = new VectorLayer({
                 source: newSource,
-                properties: { id: newLayerId, name: outputName, type: 'analysis' },
+                properties: { 
+                    id: newLayerId, 
+                    name: outputName, 
+                    type: 'analysis',
+                    // Store timestamps for recalculation
+                    time1,
+                    time2,
+                },
             });
-
+    
             onAddLayer({
                 id: newLayerId,
                 name: outputName,
@@ -2140,9 +2149,9 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                 opacity: 1,
                 type: 'analysis',
             }, true);
-
+    
             toast({ description: `Se generaron ${trackingResultFeatures.length} vectores de seguimiento.` });
-
+    
         } catch (error: any) {
             console.error("Feature tracking failed:", error);
             toast({ title: "Error de Seguimiento", description: error.message, variant: "destructive" });
@@ -2970,5 +2979,3 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
-
-    
