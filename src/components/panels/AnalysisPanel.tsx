@@ -2007,7 +2007,8 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                 vectorSource?.clear();
 
                 const centerOfMass = centroid(format.writeFeaturesObject(allFeatures));
-                const vectorLengthKm = 200; // Fixed length for visualization
+                // Make the vector length proportional to the average speed
+                const vectorLengthKm = avgMagnitude; 
                 const endPoint = destination(centerOfMass, vectorLengthKm, avgDirection, { units: 'kilometers' });
 
                 const avgVectorFeature = formatForMap.readFeature(turfLineString([
@@ -2015,7 +2016,36 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                     endPoint.geometry.coordinates
                 ]));
 
-                avgVectorFeature.setStyle(new Style({ stroke: new Stroke({ color: '#ff00ff', width: 4, lineDash: [10, 10] })}));
+                // Create a style with an arrowhead
+                const arrowStyle = new Style({
+                    stroke: new Stroke({ color: '#00aaff', width: 3 }),
+                });
+                const headStyle = new Style({
+                    geometry: new Point(endPoint.geometry.coordinates),
+                    image: new IconStyle({
+                        src: "data:image/svg+xml;charset=utf-8," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><path d="M0 0l20 10L0 20z" fill="#00aaff"/></svg>'),
+                        anchor: [0.5, 0.5],
+                        rotateWithView: true,
+                        rotation: -avgAngleRad, // Stays aligned with the line
+                        scale: 0.8
+                    })
+                });
+                
+                const labelStyle = new Style({
+                    text: new TextStyle({
+                        text: `Promedio: ${avgDirection.toFixed(0)}° / ${avgMagnitude.toFixed(1)} km/h`,
+                        font: 'bold 12px Arial, sans-serif',
+                        fill: new Fill({ color: '#00aaff' }),
+                        stroke: new Stroke({ color: '#fff', width: 3 }),
+                        textAlign: 'center',
+                        textBaseline: 'bottom',
+                        offsetY: -10,
+                    }),
+                    geometry: new Point(centroid(avgVectorFeature.getGeometry() as OlLineString).getCoordinates())
+                });
+
+
+                avgVectorFeature.setStyle([arrowStyle, headStyle, labelStyle]);
                 vectorSource?.addFeature(avgVectorFeature);
             } else if (averageVectorLayerRef.current) {
                 averageVectorLayerRef.current.getSource()?.clear();
@@ -2054,8 +2084,8 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
             return;
         }
     
-        const time1 = layer1.olLayer.get('geeParams')?.metadata?.timestamp;
-        const time2 = layer2.olLayer.get('geeParams')?.metadata?.timestamp;
+        const time1 = layer1.geeParams?.metadata?.timestamp;
+        const time2 = layer2.geeParams?.metadata?.timestamp;
     
         if (!time1 || !time2) {
             toast({
