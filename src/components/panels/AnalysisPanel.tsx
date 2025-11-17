@@ -2003,7 +2003,8 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                 if (!averageVectorLayerRef.current) {
                     averageVectorLayerRef.current = new VectorLayer({
                         source: new VectorSource(),
-                        properties: { id: 'average-vector-layer', name: 'Vector Promedio' }
+                        properties: { id: 'average-vector-layer', name: 'Vector Promedio' },
+                        zIndex: 10001, // Ensure it's on top
                     });
                     mapRef.current?.addLayer(averageVectorLayerRef.current);
                 }
@@ -2011,13 +2012,13 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                 vectorSource?.clear();
 
                 const centerOfMass = centroid(format.writeFeaturesObject(allFeatures));
-                // The length of the vector is its speed in km/h, converted to meters for the map projection
-                const vectorLengthMeters = avgMagnitude * 1000;
-                const endPoint = destination(centerOfMass, vectorLengthMeters, avgDirection, { units: 'meters' });
+                const vectorLengthKm = avgMagnitude; // Length is the speed in km/h, representing 1 hour of travel
+                const endPoint = destination(centerOfMass, vectorLengthKm, avgDirection, { units: 'kilometers' });
 
-                const avgVectorFeature = formatForMap.readFeature(turfLineString(
-                    [centerOfMass.geometry.coordinates, endPoint.geometry.coordinates]
-                )) as Feature<LineString>;
+                const avgVectorFeature = formatForMap.readFeature(turfLineString([
+                    centerOfMass.geometry.coordinates,
+                    endPoint.geometry.coordinates
+                ])) as Feature<LineString>;
 
                 avgVectorFeature.setProperties({
                     avg_direction: avgDirection,
@@ -2025,67 +2026,66 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                     std_dev_direction: stdDevDirection
                 });
 
-                const avgVectorStyle = (feature: Feature<Geometry>, resolution: number): Style[] => {
-                    const styles = [
-                        new Style({
-                            stroke: new Stroke({ color: '#6c757d', width: 3 }),
-                        })
-                    ];
+                const avgVectorStyle = (feature: Feature<Geometry>): Style[] => {
+                    const styles: Style[] = [];
 
-                    const geometry = feature.getGeometry() as LineString;
-                    const end = geometry.getLastCoordinate();
-
-                    // Add arrowhead
+                    // Main vector line
                     styles.push(new Style({
-                        geometry: new Point(end),
-                        image: new RegularShape({
-                            fill: new Fill({ color: '#6c757d' }),
-                            points: 3,
-                            radius: 8,
-                            rotation: (Math.PI / 2) - avgAngleRad,
-                            angle: 0,
-                            displacement: [0, 0]
-                        }),
+                        stroke: new Stroke({ color: '#6c757d', width: 3 }),
                     }));
 
-                    // Add label
+                    // Arrowhead
+                    const geom = feature.getGeometry() as LineString;
+                    const end = geom.getLastCoordinate();
+                    const arrowSvg = `<svg width="18" height="18" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="#6c757d" d="M12 2L2 22h20L12 2z"/></svg>`;
                     styles.push(new Style({
-                        geometry: new Point(geometry.getCoordinateAt(0.5)),
+                        geometry: new Point(end),
+                        image: new IconStyle({
+                            src: 'data:image/svg+xml;utf8,' + encodeURIComponent(arrowSvg),
+                            anchor: [0.5, 0.5],
+                            rotateWithView: true,
+                            rotation: (avgAngleRad - Math.PI / 2),
+                        }),
+                    }));
+                    
+                    // Label
+                    styles.push(new Style({
+                        geometry: new Point(geom.getCoordinateAt(0.5)),
                         text: new TextStyle({
                             text: `${avgMagnitude.toFixed(1)} km/h`,
                             font: 'bold 12px sans-serif',
                             fill: new Fill({ color: '#333' }),
-                            stroke: new Stroke({ color: '#fff', width: 3 }),
+                            stroke: new Stroke({ color: '#fff', width: 3.5 }),
                             offsetY: -15,
                         }),
                     }));
 
-                    // Add deviation arcs
-                    const arcRadiusMeters = vectorLengthMeters * 0.33;
+                    // Deviation arcs
+                    const arcRadiusMeters = vectorLengthKm * 1000 * 0.33; 
+                    const centerCoords = transform(centerOfMass.geometry.coordinates, 'EPSG:4326', 'EPSG:3857');
 
                     [-2, -1, 1, 2].forEach(sigmaMultiplier => {
-                        const startAngle = (avgDirection - (sigmaMultiplier * stdDevDirection) - 90) * (Math.PI / 180);
-                        const endAngle = (avgDirection + (sigmaMultiplier * stdDevDirection) - 90) * (Math.PI / 180);
-                        
-                        const arcCoords = [];
+                        const startAngleDegrees = avgDirection - (sigmaMultiplier * stdDevDirection);
+                        const endAngleDegrees = avgDirection + (sigmaMultiplier * stdDevDirection);
+                        const arcCoords: any[] = [];
                         const numPoints = 50;
-                        const centerCoords = transform(centerOfMass.geometry.coordinates, 'EPSG:4326', 'EPSG:3857');
+
                         for (let i = 0; i <= numPoints; i++) {
-                            const angle = startAngle + (i / numPoints) * (endAngle - startAngle);
+                            const currentAngle = startAngleDegrees + (i / numPoints) * (endAngleDegrees - startAngleDegrees);
                             arcCoords.push([
-                                centerCoords[0] + arcRadiusMeters * Math.cos(angle),
-                                centerCoords[1] + arcRadiusMeters * Math.sin(angle)
+                                centerCoords[0] + arcRadiusMeters * Math.cos((currentAngle - 90) * Math.PI / 180),
+                                centerCoords[1] + arcRadiusMeters * Math.sin((currentAngle - 90) * Math.PI / 180)
                             ]);
                         }
                         
-                        const arc = new LineString(arcCoords);
+                        // Create a polygon for the arc sector
+                        const sectorCoords = [[...centerCoords], ...arcCoords, [...centerCoords]];
+                        const arcPolygon = new OlPolygon([sectorCoords]);
 
                         styles.push(new Style({
-                            geometry: arc,
-                            stroke: new Stroke({
-                                color: 'rgba(108, 117, 125, 0.4)',
-                                width: 1,
-                            })
+                            geometry: arcPolygon,
+                            fill: new Fill({ color: 'rgba(108, 117, 125, 0.15)' }),
+                            stroke: new Stroke({ color: 'rgba(108, 117, 125, 0.4)', width: 1 }),
                         }));
                     });
 
@@ -3031,6 +3031,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
 
 
 
