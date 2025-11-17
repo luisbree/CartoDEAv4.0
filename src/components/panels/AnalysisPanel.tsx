@@ -114,7 +114,8 @@ import Feature from 'ol/Feature';
 import {
     type Geometry,
     type LineString as OlLineString,
-    Point
+    Point,
+    Polygon as OlPolygon
 } from 'ol/geom';
 import { getLength as olGetLength } from 'ol/sphere';
 import {
@@ -147,7 +148,8 @@ import {
     Fill,
     Stroke,
     Circle as CircleStyle,
-    Icon as IconStyle
+    Icon as IconStyle,
+    RegularShape
 } from 'ol/style';
 import type { Map } from 'ol';
 import Draw, { createBox } from 'ol/interaction/Draw';
@@ -1845,6 +1847,8 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     };
 
     const handleAnalyzeCoherence = () => {
+        const format = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
+        const formatForMap = new GeoJSON({ dataProjection: 'EPSG:4326', featureProjection: 'EPSG:3857' });
         const layer = trajectoryLayers.find(l => l.id === coherenceLayerId) as VectorMapLayer | undefined;
         if (!layer) {
             toast({ description: "Por favor, seleccione una capa de trayectorias para analizar.", variant: "destructive" });
@@ -1860,8 +1864,6 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
             return;
         }
 
-        const format = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
-        const formatForMap = new GeoJSON({ dataProjection: 'EPSG:4326', featureProjection: 'EPSG:3857' });
         const allFeatures = source.getFeatures();
 
         if (useClustering) {
@@ -2028,13 +2030,13 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                 // Arrowhead
                 styles.push(new Style({
                     geometry: new Point(endPoint.geometry.coordinates),
-                    image: new IconStyle({
-                        src: "data:image/svg+xml;charset=utf-8," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="#6c757d"><path d="M0 0l20 10L0 20z"/></svg>'),
-                        anchor: [0.5, 0.5],
-                        rotateWithView: true,
-                        rotation: -avgAngleRad,
-                        scale: 0.8
-                    })
+                    image: new RegularShape({
+                        fill: new Fill({ color: '#6c757d' }),
+                        points: 3,
+                        radius: 8,
+                        rotation: -avgAngleRad, // Convert to radians and negate
+                        angle: Math.PI / 2, // Point the triangle 'up'
+                    }),
                 }));
                 
                 // Label
@@ -2042,7 +2044,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                 styles.push(new Style({
                     geometry: new Point(centroidGeom.geometry.coordinates),
                     text: new TextStyle({
-                        text: `Promedio: ${avgDirection.toFixed(0)}° / ${avgMagnitude.toFixed(1)} km/h`,
+                        text: `${avgMagnitude.toFixed(1)} km/h`,
                         font: 'bold 12px Arial, sans-serif',
                         fill: new Fill({ color: '#333' }),
                         stroke: new Stroke({ color: '#fff', width: 3 }),
@@ -2051,25 +2053,34 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                 }));
 
                 // Standard Deviation Arcs
-                const arcRadius = vectorLengthKm * 0.33; // Make arc radius a third of the vector length
-                const arcPoints = 15; // Number of points in the arc line
+                const arcRadius = vectorLengthKm * 0.33;
                 
                 [-2, -1, 1, 2].forEach(sigmaMultiplier => {
-                    const sigmaAngle = avgDirection + (sigmaMultiplier * stdDevDirection);
-                    const startAngle = Math.min(avgDirection, sigmaAngle);
-                    const endAngle = Math.max(avgDirection, sigmaAngle);
+                    const startAngle = avgDirection - (sigmaMultiplier * stdDevDirection);
+                    const endAngle = avgDirection + (sigmaMultiplier * stdDevDirection);
 
-                    const arc = lineArc(centerOfMass, arcRadius, startAngle, endAngle, {steps: arcPoints, units: 'kilometers'});
-                    const arcFeature = formatForMap.readFeature(arc);
-                    const arcStyle = new Style({
-                        stroke: new Stroke({
-                            color: sigmaMultiplier === -2 || sigmaMultiplier === 2 ? 'rgba(150, 150, 150, 0.4)' : 'rgba(150, 150, 150, 0.6)',
-                            width: 2,
-                            lineDash: [4, 4]
-                        })
-                    });
-                    arcFeature.setStyle(arcStyle);
-                    vectorSource?.addFeature(arcFeature);
+                    // Create a polygon for the pie slice
+                    const arcPoints = [centerOfMass.geometry.coordinates];
+                    for (let i = startAngle; i <= endAngle; i += 2) { // smaller step for smoother arc
+                        const arcPoint = destination(centerOfMass, arcRadius, i, { units: 'kilometers' });
+                        arcPoints.push(arcPoint.geometry.coordinates);
+                    }
+                    arcPoints.push(centerOfMass.geometry.coordinates); // Close the polygon
+
+                    if (arcPoints.length > 2) {
+                        const arcPolygonFeature = formatForMap.readFeature(turfPolygon([arcPoints]));
+                        const arcStyle = new Style({
+                            fill: new Fill({
+                                color: sigmaMultiplier === -2 || sigmaMultiplier === 2 ? 'rgba(108, 117, 125, 0.1)' : 'rgba(108, 117, 125, 0.15)',
+                            }),
+                            stroke: new Stroke({
+                                color: 'rgba(108, 117, 125, 0.4)',
+                                width: 1,
+                            })
+                        });
+                        arcPolygonFeature.setStyle(arcStyle);
+                        vectorSource?.addFeature(arcPolygonFeature);
+                    }
                 });
 
                 avgVectorFeature.setStyle(styles);
@@ -3011,3 +3022,4 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
