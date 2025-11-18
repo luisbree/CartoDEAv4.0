@@ -16,7 +16,7 @@ const WfsLoadingIndicator: React.FC<WfsLoadingIndicatorProps> = ({ isVisible }) 
     <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center pointer-events-none">
       <div className="flex flex-col items-center justify-center pointer-events-auto p-4 rounded-lg">
         <Compass className="h-16 w-16 animate-spin text-primary mb-4" />
-        <p className="text-white text-lg font-semibold">Cargando capa WFS...</p>
+        <p className="text-black text-lg font-semibold">Cargando capa WFS...</p>
       </div>
     </div>
   );
