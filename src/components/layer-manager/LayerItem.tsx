@@ -230,7 +230,7 @@ const LayerItem: React.FC<LayerItemProps> = ({
                             <Settings2 className="h-4 w-4" />
                         </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent onClick={(e) => e.stopPropagation()} side="right" align="end" className="bg-gray-700 text-white border-gray-600 w-56">
+                    <DropdownMenuContent onClick={(e) => e.stopPropagation()} side="right" align="start" className="bg-gray-700 text-white border-gray-600 w-56">
                         <DropdownMenuItem onSelect={() => props.onZoomToExtent(layer.id)} className="text-xs">
                           <ZoomIn className="mr-2 h-3.5 w-3.5" /> Ir a la extensión
                         </DropdownMenuItem>
