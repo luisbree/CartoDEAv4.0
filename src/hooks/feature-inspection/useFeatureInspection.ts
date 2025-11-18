@@ -432,8 +432,7 @@ export const useFeatureInspection = ({
         const select = new Select({
             style: highlightStyle,
             multi: true,
-            // Allow selection with single click or box drag, depending on the tool
-            condition: (e) => activeTool === 'inspect' ? singleClick(e) : primaryAction(e),
+            condition: singleClick, // Always use singleClick for the base selection
         });
         selectInteractionRef.current = select;
         map.addInteraction(select);
@@ -463,52 +462,55 @@ export const useFeatureInspection = ({
             }
         });
         
-        const dragBox = new DragBox({});
-        dragBoxInteractionRef.current = dragBox;
-        map.addInteraction(dragBox);
-    
-        dragBox.on('boxend', () => {
-            const extent = dragBox.getGeometry().getExtent();
-            const featuresInBox: Feature<Geometry>[] = [];
-            
-            map.getLayers().forEach(layer => {
-              if (layer instanceof VectorLayer && layer.getVisible() && !layer.get('isBaseLayer') && !layer.get('isDrawingLayer')) {
-                const source = layer.getSource();
-                if (source) {
-                  source.forEachFeatureIntersectingExtent(extent, (feature) => {
-                    featuresInBox.push(feature as Feature<Geometry>);
-                  });
-                }
-              }
-            });
-          
-            const currentSelectedInSelect = select.getFeatures();
-            currentSelectedInSelect.clear();
-            currentSelectedInSelect.extend(featuresInBox);
-          
-            setSelectedFeatures(featuresInBox);
-            
-             if (featuresInBox.length > 0) {
-                const firstFeature = featuresInBox[0];
-                const layer = map.getAllLayers().find(l => 
-                  l instanceof VectorLayer && l.getSource()?.getFeatureById(firstFeature.getId() || '') === firstFeature
-                );
+        // Only add DragBox if the tool is selectBox
+        if (activeTool === 'selectBox') {
+            const dragBox = new DragBox({});
+            dragBoxInteractionRef.current = dragBox;
+            map.addInteraction(dragBox);
+        
+            dragBox.on('boxend', () => {
+                const extent = dragBox.getGeometry().getExtent();
+                const featuresInBox: Feature<Geometry>[] = [];
                 
-                const layerName = layer?.get('name') || 'Selección por área';
-                const layerId = layer?.get('id') || null;
-
-                const plainData: PlainFeatureData[] = featuresInBox.map(f => ({
-                    id: f.getId() as string,
-                    attributes: f.getProperties()
-                }));
-                onNewSelectionRef.current(plainData, layerName, layerId);
-            } else {
-                setInspectedFeatureData(null);
-                setCurrentInspectedLayerName(null);
-                setCurrentInspectedLayerId(null);
-                toast({ description: 'Ninguna entidad seleccionada.' });
-            }
-        });
+                map.getLayers().forEach(layer => {
+                  if (layer instanceof VectorLayer && layer.getVisible() && !layer.get('isBaseLayer') && !layer.get('isDrawingLayer')) {
+                    const source = layer.getSource();
+                    if (source) {
+                      source.forEachFeatureIntersectingExtent(extent, (feature) => {
+                        featuresInBox.push(feature as Feature<Geometry>);
+                      });
+                    }
+                  }
+                });
+              
+                const currentSelectedInSelect = select.getFeatures();
+                currentSelectedInSelect.clear();
+                currentSelectedInSelect.extend(featuresInBox);
+              
+                setSelectedFeatures(featuresInBox);
+                
+                 if (featuresInBox.length > 0) {
+                    const firstFeature = featuresInBox[0];
+                    const layer = map.getAllLayers().find(l => 
+                      l instanceof VectorLayer && l.getSource()?.getFeatureById(firstFeature.getId() || '') === firstFeature
+                    );
+                    
+                    const layerName = layer?.get('name') || 'Selección por área';
+                    const layerId = layer?.get('id') || null;
+    
+                    const plainData: PlainFeatureData[] = featuresInBox.map(f => ({
+                        id: f.getId() as string,
+                        attributes: f.getProperties()
+                    }));
+                    onNewSelectionRef.current(plainData, layerName, layerId);
+                } else {
+                    setInspectedFeatureData(null);
+                    setCurrentInspectedLayerName(null);
+                    setCurrentInspectedLayerId(null);
+                    toast({ description: 'Ninguna entidad seleccionada.' });
+                }
+            });
+        }
     }
 
     // --- Vector Modification Logic ---

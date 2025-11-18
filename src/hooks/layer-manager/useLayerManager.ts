@@ -236,13 +236,17 @@ export const useLayerManager = ({
         operationalLayers.forEach((layer, index) => {
             const olLayer = layer.olLayer;
             const newZIndex = LAYER_START_Z_INDEX + (layer_count - 1 - index);
-            olLayer.setZIndex(newZIndex);
-
-            // Correctly handle the z-index for the WMS visual layer
-            const visualLayer = olLayer.get('visualLayer');
-            if (visualLayer) {
-                // The visual WMS layer's z-index should also follow the main layer's order.
-                visualLayer.setZIndex(newZIndex);
+            
+            // For hybrid WFS layers, the WFS part needs to be on top for interaction,
+            // while its WMS visual part stays below.
+            if (layer.type === 'wfs') {
+                olLayer.setZIndex(newZIndex + 500); // High zIndex for interactive vector layer
+                const visualLayer = olLayer.get('visualLayer');
+                if (visualLayer) {
+                    visualLayer.setZIndex(newZIndex); // Visual WMS layer follows the list order
+                }
+            } else {
+                olLayer.setZIndex(newZIndex);
             }
         });
 
