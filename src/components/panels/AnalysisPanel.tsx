@@ -1822,7 +1822,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                     text: `${speed.toFixed(1)} km/h`,
                     font: '10px sans-serif',
                     fill: new Fill({ color: '#fff' }),
-                    stroke: new Stroke({ color: '#000', width: 2 }),
+                    stroke: new Stroke({ color: '#000', width: 2.5 }),
                     offsetY: -12
                 })
             });
@@ -1966,7 +1966,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
             const magnitudes = allFeatures.map(f => f.get(coherenceMagnitudeField)).filter(m => typeof m === 'number') as number[];
 
             if (directions.length === 0 || magnitudes.length === 0) {
-                toast({ description: 'No hay datos válidos de dirección o magnitud para analizar.', variant: 'destructive' });
+                toast({ description: 'No hay datos válidos de dirección o magnitud para analizar.', variant: "destructive" });
                 return;
             }
 
@@ -1999,12 +1999,11 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                 feature.set('coherencia', coherence);
             });
             
-            if (showAverageVector) {
+             if (showAverageVector) {
                 if (!averageVectorLayerRef.current) {
                     averageVectorLayerRef.current = new VectorLayer({
                         source: new VectorSource(),
-                        properties: { id: 'average-vector-layer', name: 'Vector Promedio' },
-                        zIndex: 10001, // Ensure it's on top
+                        properties: { id: 'average-vector-layer', name: 'Vector Promedio', zIndex: 10001 },
                     });
                     mapRef.current?.addLayer(averageVectorLayerRef.current);
                 }
@@ -2020,23 +2019,21 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                     endPoint.geometry.coordinates
                 ])) as Feature<LineString>;
 
-
                 avgVectorFeature.setProperties({
                     avg_direction: avgDirection,
                     avg_magnitude: avgMagnitude,
                     std_dev_direction: stdDevDirection
                 });
-                
+
                 const avgVectorStyle = (feature: Feature<Geometry>): Style[] => {
                     const styles: Style[] = [];
+                    const geom = feature.getGeometry() as LineString;
+                    const end = geom.getLastCoordinate();
 
                     // Main vector line
                     styles.push(new Style({
                         stroke: new Stroke({ color: '#6c757d', width: 3 }),
                     }));
-
-                    const geom = feature.getGeometry() as LineString;
-                    const end = geom.getLastCoordinate();
 
                     // Arrowhead
                     styles.push(new Style({
@@ -2063,22 +2060,24 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                     }));
 
                     // Deviation arcs
-                    const arcRadiusMeters = vectorLengthKm * 1000 * 0.33; 
                     const centerCoords = transform(centerOfMass.geometry.coordinates, 'EPSG:4326', 'EPSG:3857');
 
                     [-2, -1, 1, 2].forEach(sigmaMultiplier => {
-                        const startAngle = avgDirection - (sigmaMultiplier * stdDevDirection);
-                        const endAngle = avgDirection + (sigmaMultiplier * stdDevDirection);
+                        const arcRadius = vectorLengthKm * (0.2 + Math.abs(sigmaMultiplier) * 0.05) * 1000; // Radius in meters
+                        const angleOffset = sigmaMultiplier * stdDevDirection;
 
+                        // Correct angles for OpenLayers (0 is east, positive is counter-clockwise)
+                        const startAngle = (90 - (avgDirection + angleOffset)) * (Math.PI / 180);
+                        const endAngle = (90 - (avgDirection - angleOffset)) * (Math.PI / 180);
+                        
                         const arcPoints: number[][] = [];
                         const numArcPoints = 50;
-                        const arcRadius = vectorLengthKm * (0.2 + Math.abs(sigmaMultiplier) * 0.05) * 1000;
 
                         for (let i = 0; i <= numArcPoints; i++) {
                             const currentAngle = startAngle + (i / numArcPoints) * (endAngle - startAngle);
                             arcPoints.push([
-                                centerCoords[0] + arcRadius * Math.cos((currentAngle - 90) * Math.PI / 180),
-                                centerCoords[1] + arcRadius * Math.sin((currentAngle - 90) * Math.PI / 180)
+                                centerCoords[0] + arcRadius * Math.cos(currentAngle),
+                                centerCoords[1] + arcRadius * Math.sin(currentAngle)
                             ]);
                         }
                         
@@ -3034,6 +3033,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
 
 
 
