@@ -2041,8 +2041,8 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                         image: new RegularShape({
                             fill: new Fill({ color: '#6c757d' }),
                             points: 3,
-                            radius: 8,
-                            rotation: (Math.PI / 2) - avgAngleRad,
+                            radius: 10,
+                            rotation: avgAngleRad, //(Math.PI / 2) - avgAngleRad,
                             angle: 0,
                         }),
                     }));
@@ -2063,7 +2063,8 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                     const centerCoords = transform(centerOfMass.geometry.coordinates, 'EPSG:4326', 'EPSG:3857');
 
                     [-2, -1, 1, 2].forEach(sigmaMultiplier => {
-                        const arcRadius = vectorLengthKm * (0.2 + Math.abs(sigmaMultiplier) * 0.05) * 1000; // Radius in meters
+                        const arcRadius = vectorLengthKm * 300; // Radius in meters
+                        // const arcRadius = vectorLengthKm * (0.2 + Math.abs(sigmaMultiplier) * 0.05) * 1000; // Radius in meters
                         const angleOffset = sigmaMultiplier * stdDevDirection;
 
                         // Correct angles for OpenLayers (0 is east, positive is counter-clockwise)
