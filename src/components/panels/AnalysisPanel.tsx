@@ -1849,8 +1849,8 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     };
 
     const handleAnalyzeCoherence = () => {
-        const format = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
         const formatForMap = new GeoJSON({ dataProjection: 'EPSG:4326', featureProjection: 'EPSG:3857' });
+        const format = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
         const layer = trajectoryLayers.find(l => l.id === coherenceLayerId) as VectorMapLayer | undefined;
         if (!layer) {
             toast({ description: "Por favor, seleccione una capa de trayectorias para analizar.", variant: "destructive" });
@@ -2014,18 +2014,19 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                 const centerOfMass = centroid(format.writeFeaturesObject(allFeatures));
                 const vectorLengthKm = avgMagnitude; // Length is the speed in km/h, representing 1 hour of travel
                 const endPoint = destination(centerOfMass, vectorLengthKm, avgDirection, { units: 'kilometers' });
-
+                
                 const avgVectorFeature = formatForMap.readFeature(turfLineString([
                     centerOfMass.geometry.coordinates,
                     endPoint.geometry.coordinates
                 ])) as Feature<LineString>;
+
 
                 avgVectorFeature.setProperties({
                     avg_direction: avgDirection,
                     avg_magnitude: avgMagnitude,
                     std_dev_direction: stdDevDirection
                 });
-
+                
                 const avgVectorStyle = (feature: Feature<Geometry>): Style[] => {
                     const styles: Style[] = [];
 
@@ -2066,17 +2067,18 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                     const centerCoords = transform(centerOfMass.geometry.coordinates, 'EPSG:4326', 'EPSG:3857');
 
                     [-2, -1, 1, 2].forEach(sigmaMultiplier => {
-                        const startAngle = (avgDirection + (sigmaMultiplier > 0 ? 0 : -sigmaMultiplier) * stdDevDirection);
-                        const endAngle = (avgDirection + (sigmaMultiplier < 0 ? 0 : sigmaMultiplier) * stdDevDirection);
+                        const startAngle = avgDirection - (sigmaMultiplier * stdDevDirection);
+                        const endAngle = avgDirection + (sigmaMultiplier * stdDevDirection);
 
                         const arcPoints: number[][] = [];
                         const numArcPoints = 50;
+                        const arcRadius = vectorLengthKm * (0.2 + Math.abs(sigmaMultiplier) * 0.05) * 1000;
 
                         for (let i = 0; i <= numArcPoints; i++) {
                             const currentAngle = startAngle + (i / numArcPoints) * (endAngle - startAngle);
                             arcPoints.push([
-                                centerCoords[0] + arcRadiusMeters * Math.cos((currentAngle - 90) * Math.PI / 180),
-                                centerCoords[1] + arcRadiusMeters * Math.sin((currentAngle - 90) * Math.PI / 180)
+                                centerCoords[0] + arcRadius * Math.cos((currentAngle - 90) * Math.PI / 180),
+                                centerCoords[1] + arcRadius * Math.sin((currentAngle - 90) * Math.PI / 180)
                             ]);
                         }
                         
@@ -3032,6 +3034,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
 
 
 
