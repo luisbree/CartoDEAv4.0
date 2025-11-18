@@ -220,9 +220,8 @@ export const useLayerManager = ({
 
   const setLayers = useCallback((updater: React.SetStateAction<(MapLayer | LayerGroup)[]>) => {
     setLayersInternal(prevItems => {
-        const newItems = typeof updater === 'function' ? updater(prevItems) : updater;
+        const newItems = typeof updater === 'function' ? updater(prevItems) : updater(prevItems);
 
-        // Flatten the list to get all operational layers for z-index calculation
         const operationalLayers: MapLayer[] = [];
         newItems.forEach(item => {
             if ('layers' in item) { // It's a group
@@ -232,29 +231,25 @@ export const useLayerManager = ({
             }
         });
 
-        const layer_count = operationalLayers.filter(l => l.type !== 'wms').length;
+        const layer_count = operationalLayers.length;
 
-        operationalLayers.forEach(layer => {
-            const zIndex = layer.olLayer.getZIndex();
-            let newZIndex = zIndex;
+        operationalLayers.forEach((layer, index) => {
+            const olLayer = layer.olLayer;
+            const newZIndex = LAYER_START_Z_INDEX + (layer_count - 1 - index);
+            olLayer.setZIndex(newZIndex);
 
-            if (layer.type === 'wms') {
-                newZIndex = WMS_LAYER_Z_INDEX;
-            } else {
-                const operationalIndex = operationalLayers.filter(l => l.type !== 'wms').findIndex(opLayer => opLayer.id === layer.id);
-                if (operationalIndex !== -1) {
-                    newZIndex = LAYER_START_Z_INDEX + (layer_count - 1 - operationalIndex);
-                }
-            }
-
-            if (zIndex !== newZIndex) {
-                layer.olLayer.setZIndex(newZIndex);
+            // Correctly handle the z-index for the WMS visual layer
+            const visualLayer = olLayer.get('visualLayer');
+            if (visualLayer) {
+                // The visual WMS layer's z-index should also follow the main layer's order.
+                visualLayer.setZIndex(newZIndex);
             }
         });
 
         return newItems;
     });
-  }, []);
+}, []);
+
 
   // Effect to check the state of the drawing source
   useEffect(() => {
@@ -1626,3 +1621,6 @@ const groupLayers = useCallback((layerIds: string[], groupName: string) => {
     
 
 
+
+
+    
