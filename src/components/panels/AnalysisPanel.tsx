@@ -65,7 +65,8 @@ import {
     LocateFixed,
     Eye,
     Activity,
-    Sigma
+    Sigma,
+    Move
 } from 'lucide-react';
 import type {
     MapLayer,
@@ -155,6 +156,7 @@ import {
 } from 'ol/style';
 import type { Map } from 'ol';
 import Draw, { createBox } from 'ol/interaction/Draw';
+import Modify from 'ol/interaction/Modify';
 import {
     ResponsiveContainer,
     XAxis,
@@ -202,8 +204,8 @@ const SectionHeader: React.FC<{ icon: React.ElementType; title: string; }> = ({ 
 );
 
 const analysisLayerStyle = new Style({
-    stroke: new Stroke({ color: 'rgba(255, 107, 107, 1)', width: 2.5, }),
-    fill: new Fill({ color: 'rgba(244, 162, 97, 0.2)' }),
+    stroke: new Stroke({ color: 'rgba(0, 255, 255, 1)', width: 2.5, lineDash: [8, 8] }),
+    fill: new Fill({ color: 'rgba(0, 255, 255, 0.2)' }),
 });
 
 const profilePointsStyle = new Style({
@@ -391,10 +393,12 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     const profilePointsLayerRef = useRef<VectorLayer<VectorSource<Point>> | null>(null);
     const profilePointsSourceRef = useRef<VectorSource<Point> | null>(null);
     const averageVectorLayerRef = useRef<VectorLayer<VectorSource> | null>(null);
+    const [isVectorMoveActive, setIsVectorMoveActive] = useState(false);
 
 
     const analysisLayerRef = useRef<VectorLayer<VectorSource<Feature<Geometry>>> | null>(null);
     const drawInteractionRef = useRef<Draw | null>(null);
+    const modifyInteractionRef = useRef<Modify | null>(null);
     const liveTooltipRef = useRef<Overlay | null>(null);
     const liveTooltipElementRef = useRef<HTMLDivElement | null>(null);
     const chartContainerRef = useRef<HTMLDivElement | null>(null);
@@ -2003,7 +2007,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                 if (!averageVectorLayerRef.current) {
                     averageVectorLayerRef.current = new VectorLayer({
                         source: new VectorSource(),
-                        properties: { id: 'average-vector-layer', name: 'Vector Promedio', zIndex: 10001 },
+                        properties: { id: 'average-vector-layer', name: 'Vector Promedio (Móvil)', zIndex: 10001 },
                     });
                     mapRef.current?.addLayer(averageVectorLayerRef.current);
                 }
@@ -2011,47 +2015,58 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                 vectorSource?.clear();
 
                 const centerOfMass = centroid(format.writeFeaturesObject(allFeatures));
-                const vectorLengthKm = avgMagnitude; // Length is the speed in km/h, representing 1 hour of travel
-                const endPoint = destination(centerOfMass, vectorLengthKm, avgDirection, { units: 'kilometers' });
                 
-                const avgVectorFeature = formatForMap.readFeature(turfLineString([
-                    centerOfMass.geometry.coordinates,
-                    endPoint.geometry.coordinates
-                ])) as Feature<LineString>;
-
+                const avgVectorFeature = new Feature({
+                    geometry: new Point(transform(centerOfMass.geometry.coordinates, 'EPSG:4326', 'EPSG:3857')),
+                });
                 avgVectorFeature.setProperties({
                     avg_direction: avgDirection,
                     avg_magnitude: avgMagnitude,
                     std_dev_direction: stdDevDirection
                 });
 
-                const avgVectorStyle = (feature: Feature<Geometry>): Style[] => {
+                avgVectorFeature.setStyle((feature) => {
+                    const geom = feature.getGeometry() as Point;
+                    if (!geom) return [];
+
+                    const centerCoords = geom.getCoordinates();
+                    const props = feature.getProperties();
+                    const avgDir = props.avg_direction;
+                    const avgMag = props.avg_magnitude;
+                    const stdDevDir = props.std_dev_direction;
+
+                    const center4326 = transform(centerCoords, 'EPSG:3857', 'EPSG:4326');
+                    const endPoint4326 = destination(center4326, avgMag, avgDir, { units: 'kilometers' }).geometry.coordinates;
+                    const endCoords = transform(endPoint4326, 'EPSG:4326', 'EPSG:3857');
+                    
+                    const lineGeom = new LineString([centerCoords, endCoords]);
+                    const avgAngleRad = Math.atan2(endCoords[1] - centerCoords[1], endCoords[0] - centerCoords[0]);
+
                     const styles: Style[] = [];
-                    const geom = feature.getGeometry() as LineString;
-                    const end = geom.getLastCoordinate();
 
                     // Main vector line
                     styles.push(new Style({
+                        geometry: lineGeom,
                         stroke: new Stroke({ color: '#6c757d', width: 3 }),
                     }));
 
                     // Arrowhead
                     styles.push(new Style({
-                        geometry: new Point(end),
+                        geometry: new Point(endCoords),
                         image: new RegularShape({
                             fill: new Fill({ color: '#6c757d' }),
                             points: 3,
                             radius: 10,
-                            rotation: avgAngleRad, //(Math.PI / 2) - avgAngleRad,
-                            angle: 0,
+                            rotation: -avgAngleRad,
+                            angle: Math.PI / 2,
                         }),
                     }));
-                    
+
                     // Label
                     styles.push(new Style({
-                        geometry: new Point(geom.getCoordinateAt(0.5)),
+                        geometry: new Point(lineGeom.getCoordinateAt(0.5)),
                         text: new TextStyle({
-                            text: `${avgMagnitude.toFixed(1)} km/h`,
+                            text: `${avgMag.toFixed(1)} km/h`,
                             font: 'bold 12px sans-serif',
                             fill: new Fill({ color: '#333' }),
                             stroke: new Stroke({ color: '#fff', width: 3.5 }),
@@ -2059,43 +2074,33 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                         }),
                     }));
 
-                    // Deviation arcs
-                    const centerCoords = transform(centerOfMass.geometry.coordinates, 'EPSG:4326', 'EPSG:3857');
-
+                    // Deviation sectors
                     [-2, -1, 1, 2].forEach(sigmaMultiplier => {
-                        const arcRadius = vectorLengthKm * 300; // Radius in meters
-                        // const arcRadius = vectorLengthKm * (0.2 + Math.abs(sigmaMultiplier) * 0.05) * 1000; // Radius in meters
-                        const angleOffset = sigmaMultiplier * stdDevDirection;
+                        const angleOffset = sigmaMultiplier * stdDevDir;
+                        const arcRadius = avgMag * 1000 * 0.2;
 
-                        // Correct angles for OpenLayers (0 is east, positive is counter-clockwise)
-                        const startAngle = (90 - (avgDirection + angleOffset)) * (Math.PI / 180);
-                        const endAngle = (90 - (avgDirection - angleOffset)) * (Math.PI / 180);
+                        const startAngleRad = avgAngleRad - (angleOffset * Math.PI / 180);
+                        const endAngleRad = avgAngleRad;
                         
-                        const arcPoints: number[][] = [];
-                        const numArcPoints = 50;
-
-                        for (let i = 0; i <= numArcPoints; i++) {
-                            const currentAngle = startAngle + (i / numArcPoints) * (endAngle - startAngle);
+                        const arcPoints = [];
+                        for(let i=0; i<=20; i++) {
+                            const angle = startAngleRad + (i/20) * (endAngleRad - startAngleRad);
                             arcPoints.push([
-                                centerCoords[0] + arcRadius * Math.cos(currentAngle),
-                                centerCoords[1] + arcRadius * Math.sin(currentAngle)
+                                centerCoords[0] + arcRadius * Math.cos(angle),
+                                centerCoords[1] + arcRadius * Math.sin(angle)
                             ]);
                         }
                         
-                        const sectorCoords = [centerCoords, ...arcPoints, centerCoords];
-                        const arcPolygon = new OlPolygon([sectorCoords]);
-
+                        const sectorCoords = [centerCoords, ...arcPoints.reverse(), centerCoords];
                         styles.push(new Style({
-                            geometry: arcPolygon,
-                            fill: new Fill({ color: 'rgba(108, 117, 125, 0.15)' }),
-                            stroke: new Stroke({ color: 'rgba(108, 117, 125, 0.4)', width: 1 }),
+                            geometry: new OlPolygon([sectorCoords]),
+                            fill: new Fill({ color: `rgba(108, 117, 125, ${0.2 - Math.abs(sigmaMultiplier)*0.05})` }),
                         }));
                     });
 
                     return styles;
-                };
-
-                avgVectorFeature.setStyle(avgVectorStyle);
+                });
+                
                 vectorSource?.addFeature(avgVectorFeature);
             } else if (averageVectorLayerRef.current) {
                 averageVectorLayerRef.current.getSource()?.clear();
@@ -2123,6 +2128,37 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         );
         toast({ description: `Análisis de coherencia completado.` });
     };
+
+    // Effect to handle vector movement interaction
+    useEffect(() => {
+        if (!mapRef.current) return;
+        const map = mapRef.current;
+        
+        if (modifyInteractionRef.current) {
+            map.removeInteraction(modifyInteractionRef.current);
+            modifyInteractionRef.current = null;
+        }
+
+        if (isVectorMoveActive && averageVectorLayerRef.current) {
+            const source = averageVectorLayerRef.current.getSource();
+            if (source) {
+                const modifyInteraction = new Modify({
+                    source: source,
+                    style: new Style(), // Invisible style for modify interaction itself
+                });
+                map.addInteraction(modifyInteraction);
+                modifyInteractionRef.current = modifyInteraction;
+                
+                toast({ description: "Modo de movimiento de vector activado. Arrastre el centro del vector para moverlo." });
+            }
+        }
+
+        return () => {
+            if (modifyInteractionRef.current) {
+                map.removeInteraction(modifyInteractionRef.current);
+            }
+        };
+    }, [isVectorMoveActive, mapRef, toast]);
 
 
     const handleRunFeatureTracking = async () => {
@@ -2954,6 +2990,14 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                     />
                                     <Label htmlFor="show-avg-vector" className={cn("text-xs font-normal", useClustering && "text-gray-500")}>Dibujar vector promedio</Label>
                                 </div>
+                                {averageVectorLayerRef.current && (
+                                    <div className="flex items-center space-x-2 pt-1">
+                                        <Button size="sm" onClick={() => setIsVectorMoveActive(p => !p)} variant={isVectorMoveActive ? "destructive" : "secondary"} className="h-7 text-xs">
+                                            <Move className="mr-2 h-3.5 w-3.5"/>
+                                            {isVectorMoveActive ? 'Fijar Vector' : 'Mover Vector'}
+                                        </Button>
+                                    </div>
+                                )}
                                 <Button onClick={handleAnalyzeCoherence} size="sm" className="w-full h-8 text-xs" disabled={!coherenceLayerId || !coherenceMagnitudeField}>
                                     <Activity className="mr-2 h-3.5 w-3.5" />
                                     Analizar Coherencia
@@ -3034,6 +3078,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
+
 
 
 
