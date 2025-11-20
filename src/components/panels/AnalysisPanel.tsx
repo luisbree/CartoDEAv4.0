@@ -2154,8 +2154,6 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                     });
                     map.addInteraction(modifyInteraction);
                     modifyInteractionRef.current = modifyInteraction;
-                    
-                    toast({ description: "Modo de movimiento de vector activado. Arrastre el centro del vector para moverlo." });
                 }
             }
         }
