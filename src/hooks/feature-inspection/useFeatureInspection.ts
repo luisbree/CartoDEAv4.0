@@ -26,6 +26,8 @@ import MultiPoint from 'ol/geom/MultiPoint';
 import { intersects } from 'ol/extent';
 import GeoJSON from 'ol/format/GeoJSON';
 import * as turf from '@turf/turf';
+import type { EventsKey } from 'ol/events';
+import { unByKey } from 'ol/Observable';
 
 
 interface UseFeatureInspectionProps {
@@ -272,6 +274,31 @@ export const useFeatureInspection = ({
   useEffect(() => {
     if (!isMapReady || !mapRef.current) return;
     const map = mapRef.current;
+    let eventKeys: EventsKey[] = [];
+    let currentDragBox: DragBox | null = null;
+    let currentModify: Modify | null = null;
+
+    // --- Cleanup function runs on every re-render BEFORE the new logic ---
+    const cleanup = () => {
+        // Unregister all specific event listeners
+        eventKeys.forEach(key => unByKey(key));
+        eventKeys = [];
+
+        // Remove interactions added by this hook
+        if (currentDragBox) map.removeInteraction(currentDragBox);
+        if (currentModify) map.removeInteraction(currentModify);
+        currentDragBox = null;
+        currentModify = null;
+
+        if (mapElementRef.current) mapElementRef.current.style.cursor = 'default';
+        
+        // Deactivate the shared select interaction if no selection tool is active
+        if (activeTool !== 'selectBox' && activeTool !== 'inspect' && selectInteractionRef.current) {
+            selectInteractionRef.current.setActive(false);
+        }
+    };
+    
+    cleanup(); // Clean up before setting up the new tool
 
     // --- Initialize shared layers/interactions if they don't exist ---
     if (!rasterQueryMarkersLayerRef.current) {
@@ -280,72 +307,40 @@ export const useFeatureInspection = ({
         rasterQueryMarkersLayerRef.current = markerLayer;
         map.addLayer(markerLayer);
     }
-     // Create a single Select interaction that will be shared by 'inspect' and 'selectBox'
      if (!selectInteractionRef.current) {
         const select = new Select({ style: highlightStyle, multi: true });
         selectInteractionRef.current = select;
         map.addInteraction(select);
-    }
+     }
 
-
-    // --- Cleanup previous interactions & event listeners ---
-    map.getInteractions().forEach(interaction => {
-        if (interaction instanceof DragBox || interaction instanceof Modify) {
-            map.removeInteraction(interaction);
-        }
-    });
-    dragBoxInteractionRef.current = null;
-    modifyInteractionRef.current = null;
-    deleteVertexBoxRef.current = null;
-    
-    // Detach all listeners before re-attaching them based on the new tool
-    const selectInteraction = selectInteractionRef.current;
-    if(selectInteraction) {
-        selectInteraction.getFeatures().clear();
-        selectInteraction.un('select');
-    }
-    map.un('singleclick');
-
-    if (mapElementRef.current) mapElementRef.current.style.cursor = 'default';
-
-    // --- Handle tool deactivation ---
-    if (!activeTool) {
-      clearSelection();
-      selectInteraction.setActive(false);
-      return;
-    }
-    
-    // Always keep the main select interaction active
-    selectInteraction.setActive(true);
-
-    // --- Set cursor style based on active tool ---
-    if (mapElementRef.current) {
-        const cursor = activeTool === 'queryRaster' ? 'help'
-                     : activeTool === 'modify' ? 'default'
-                     : 'crosshair';
-        mapElementRef.current.style.cursor = cursor;
-    }
 
     // --- Tool-specific logic ---
 
+    // Set cursor style based on active tool
+    if (mapElementRef.current) {
+        const cursor = activeTool === 'queryRaster' ? 'help'
+                     : activeTool === 'modify' ? 'default'
+                     : (activeTool === 'inspect' || activeTool === 'selectBox') ? 'crosshair'
+                     : 'default';
+        mapElementRef.current.style.cursor = cursor;
+    }
+
     if (activeTool === 'inspect') {
+        const selectInteraction = selectInteractionRef.current!;
+        selectInteraction.setActive(true);
+        
         const inspectDragBox = new DragBox({});
         map.addInteraction(inspectDragBox);
-        dragBoxInteractionRef.current = inspectDragBox;
+        currentDragBox = inspectDragBox;
 
-        // On single click for inspect
-        const inspectClickListener = (evt: MapBrowserEvent<any>) => {
-            const featuresAtPixel: Feature<Geometry>[] = [];
-            map.forEachFeatureAtPixel(evt.pixel, (feature) => {
-                featuresAtPixel.push(feature as Feature<Geometry>);
-                return true; // Stop after first feature
-            });
-
-            if (featuresAtPixel.length > 0) {
-                const feature = featuresAtPixel[0];
+        const inspectSelectListener = (e: SelectEvent) => {
+            const selected = e.selected;
+            if (selected.length > 0) {
+                const feature = selected[0]; // Only care about the first one for single-click inspect
                 const layer = map.getAllLayers().find(l => 
                     l instanceof VectorLayer && l.getSource()?.hasFeature(feature)
                 ) as VectorMapLayer | undefined;
+                
                 onNewSelectionRef.current(
                     [{ id: feature.getId() as string, attributes: feature.getProperties() }], 
                     layer?.get('name') || 'Inspección', 
@@ -354,50 +349,43 @@ export const useFeatureInspection = ({
             }
         };
 
-        // On box drag for inspect
-        inspectDragBox.on('boxend', () => {
+        const boxEndListener = () => {
             const extent = inspectDragBox.getGeometry().getExtent();
             const featuresInBox: Feature<Geometry>[] = [];
-            const layerInfo: { name: string; id: string | null } = { name: 'Inspección por área', id: null };
-            
+            let firstLayer: VectorMapLayer | undefined;
+
             map.forEachFeatureIntersectingExtent(extent, (feature) => {
                 featuresInBox.push(feature as Feature<Geometry>);
+                if (!firstLayer) {
+                     firstLayer = map.getAllLayers().find(l => 
+                        l instanceof VectorLayer && l.getSource()?.hasFeature(feature as Feature<Geometry>)
+                     ) as VectorMapLayer | undefined;
+                }
             });
 
             if (featuresInBox.length > 0) {
-                 const firstFeature = featuresInBox[0];
-                 const layer = map.getAllLayers().find(l => 
-                   l instanceof VectorLayer && l.getSource()?.hasFeature(firstFeature)
-                 ) as VectorMapLayer | undefined;
-                 if(layer) {
-                    layerInfo.name = layer.get('name');
-                    layerInfo.id = layer.get('id');
-                 }
                 const plainData = featuresInBox.map(f => ({ id: f.getId() as string, attributes: f.getProperties() }));
-                onNewSelectionRef.current(plainData, layerInfo.name, layerInfo.id);
+                onNewSelectionRef.current(plainData, firstLayer?.get('name') || 'Inspección por área', firstLayer?.get('id') || null);
             }
-        });
-
-        map.on('singleclick', inspectClickListener);
-        
-        // Cleanup for inspect tool
-        return () => {
-            map.un('singleclick', inspectClickListener);
-            if (dragBoxInteractionRef.current) map.removeInteraction(dragBoxInteractionRef.current);
         };
 
+        eventKeys.push(selectInteraction.on('select', inspectSelectListener as any));
+        eventKeys.push(inspectDragBox.on('boxend', boxEndListener));
+
     } else if (activeTool === 'selectBox') {
+        const selectInteraction = selectInteractionRef.current!;
+        selectInteraction.setActive(true);
+
         const selectDragBox = new DragBox({});
         map.addInteraction(selectDragBox);
-        dragBoxInteractionRef.current = selectDragBox;
+        currentDragBox = selectDragBox;
 
-        selectInteraction.on('select', (e: SelectEvent) => {
-            const currentSelectedFeatures = e.target.getFeatures().getArray();
-            setSelectedFeatures(currentSelectedFeatures);
-            // DO NOT open attribute table
-        });
+        const selectListener = (e: SelectEvent) => {
+            const selected = e.target.getFeatures().getArray();
+            setSelectedFeatures([...selected]);
+        };
         
-        selectDragBox.on('boxend', () => {
+        const boxEndListener = () => {
             const extent = selectDragBox.getGeometry().getExtent();
             const featuresInBox: Feature<Geometry>[] = [];
             
@@ -405,15 +393,15 @@ export const useFeatureInspection = ({
                 featuresInBox.push(feature as Feature<Geometry>);
             });
 
-            selectInteraction.getFeatures().clear();
+            if (!platformModifierKeyOnly(selectDragBox.getMapBrowserEvent())) {
+                 selectInteraction.getFeatures().clear();
+            }
             selectInteraction.getFeatures().extend(featuresInBox);
-            setSelectedFeatures(featuresInBox);
-        });
-
-        // Cleanup for selectBox tool
-        return () => {
-            if (dragBoxInteractionRef.current) map.removeInteraction(dragBoxInteractionRef.current);
+            setSelectedFeatures([...selectInteraction.getFeatures().getArray()]);
         };
+
+        eventKeys.push(selectInteraction.on('select', selectListener as any));
+        eventKeys.push(selectDragBox.on('boxend', boxEndListener));
 
     } else if (activeTool === 'queryRaster') {
         const handleRasterQuery = async (e: MapBrowserEvent<any>) => {
@@ -488,54 +476,26 @@ export const useFeatureInspection = ({
             }
             if (!resultsFound) toast({ description: "No se encontraron valores en las capas raster en este punto." });
         };
-        map.on('singleclick', handleRasterQuery);
-        return () => map.un('singleclick', handleRasterQuery);
+        eventKeys.push(map.on('singleclick', handleRasterQuery));
 
     } else if (activeTool === 'modify') {
-        const selectForModify = new Select({ 
-            style: (feature) => [modifyVertexStyle, highlightStyle]
-        });
-        selectInteractionRef.current = selectForModify;
-        map.addInteraction(selectForModify);
+        const selectInteraction = selectInteractionRef.current!;
+        selectInteraction.setActive(true);
+        selectInteraction.style_ = (feature) => [modifyVertexStyle, highlightStyle];
 
-        const selectedFeaturesCollection = selectForModify.getFeatures();
+        const selectedFeaturesCollection = selectInteraction.getFeatures();
         
         const modify = new Modify({ features: selectedFeaturesCollection, style: undefined });
         modifyInteractionRef.current = modify;
+        currentModify = modify;
         map.addInteraction(modify);
 
-        modify.on('modifyend', () => toast({ description: "Geometría modificada." }));
-        
-        const deleteVertexBox = new DragBox({ condition: shiftKeyOnly });
-        deleteVertexBoxRef.current = deleteVertexBox;
-        map.addInteraction(deleteVertexBox);
+        const modifyEndListener = () => toast({ description: "Geometría modificada." });
+        eventKeys.push(modify.on('modifyend', modifyEndListener));
 
-        deleteVertexBox.on('boxend', () => {
-             // ... vertex deletion logic remains the same ...
-        });
-
-        const handleModifyClick = (e: MapBrowserEvent<any>) => {
-            if (platformModifierKeyOnly(e)) { 
-                // ... feature part deletion logic remains the same ...
-                return;
-            }
-            map.forEachFeatureAtPixel(e.pixel, (feature, layer) => {
-                if (layer instanceof VectorLayer && !layer.get('isDrawingLayer')) {
-                    selectedFeaturesCollection.clear();
-                    selectedFeaturesCollection.push(feature);
-                    return true;
-                }
-                return false;
-            });
-        };
-        
-        map.on('singleclick', handleModifyClick);
-        return () => map.un('singleclick', handleModifyClick);
     }
 
-    return () => {
-        // Generic cleanup, already handled at the top of the effect
-    };
+    return cleanup;
   }, [activeTool, isMapReady, mapRef, mapElementRef, toast, clearSelection]);
 
 
