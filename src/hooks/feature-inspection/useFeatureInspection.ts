@@ -272,136 +272,144 @@ export const useFeatureInspection = ({
   
   // --- This is the main effect that manages all interactions ---
   useEffect(() => {
-    if (!isMapReady || !mapRef.current) return;
+    if (!isMapReady || !mapRef.current) {
+        return;
+    }
+
     const map = mapRef.current;
-    let eventKeys: EventsKey[] = [];
+    let clickListener: EventsKey | null = null;
     let currentDragBox: DragBox | null = null;
     let currentModify: Modify | null = null;
 
-    // --- Cleanup function runs on every re-render BEFORE the new logic ---
+    // --- Shared cleanup function ---
     const cleanup = () => {
-        // Unregister all specific event listeners
-        eventKeys.forEach(key => unByKey(key));
-        eventKeys = [];
-
-        // Remove interactions added by this hook
-        if (currentDragBox) map.removeInteraction(currentDragBox);
-        if (currentModify) map.removeInteraction(currentModify);
-        currentDragBox = null;
-        currentModify = null;
-
-        if (mapElementRef.current) mapElementRef.current.style.cursor = 'default';
-        
-        // Deactivate the shared select interaction if no selection tool is active
-        if (activeTool !== 'selectBox' && activeTool !== 'inspect' && selectInteractionRef.current) {
+        if (clickListener) {
+            unByKey(clickListener);
+            clickListener = null;
+        }
+        if (currentDragBox) {
+            map.removeInteraction(currentDragBox);
+            currentDragBox = null;
+        }
+        if (currentModify) {
+            map.removeInteraction(currentModify);
+            currentModify = null;
+        }
+        if (selectInteractionRef.current) {
             selectInteractionRef.current.setActive(false);
+            selectInteractionRef.current.getFeatures().clear();
+        }
+        if (mapElementRef.current) {
+            mapElementRef.current.style.cursor = 'default';
         }
     };
     
-    cleanup(); // Clean up before setting up the new tool
+    cleanup(); // Clean up previous tool's effects before setting up the new one
 
-    // --- Initialize shared layers/interactions if they don't exist ---
+    // --- Initialize shared interactions if they don't exist ---
     if (!rasterQueryMarkersLayerRef.current) {
         const markerSource = new VectorSource();
-        const markerLayer = new VectorLayer({ source: markerSource, style: crossStyle, properties: { id: 'raster-query-markers' } });
-        rasterQueryMarkersLayerRef.current = markerLayer;
-        map.addLayer(markerLayer);
+        rasterQueryMarkersLayerRef.current = new VectorLayer({ source: markerSource, style: crossStyle, properties: { id: 'raster-query-markers' } });
+        map.addLayer(rasterQueryMarkersLayerRef.current);
     }
-     if (!selectInteractionRef.current) {
-        const select = new Select({ style: highlightStyle, multi: true });
-        selectInteractionRef.current = select;
-        map.addInteraction(select);
-     }
+    if (!selectInteractionRef.current) {
+        selectInteractionRef.current = new Select({ style: highlightStyle, multi: true });
+        map.addInteraction(selectInteractionRef.current);
+    }
 
-
-    // --- Tool-specific logic ---
-
-    // Set cursor style based on active tool
+    // --- Tool-specific setup ---
     if (mapElementRef.current) {
-        const cursor = activeTool === 'queryRaster' ? 'help'
-                     : activeTool === 'modify' ? 'default'
-                     : (activeTool === 'inspect' || activeTool === 'selectBox') ? 'crosshair'
-                     : 'default';
-        mapElementRef.current.style.cursor = cursor;
+        mapElementRef.current.style.cursor = activeTool ? 'crosshair' : 'default';
     }
 
     if (activeTool === 'inspect') {
-        const selectInteraction = selectInteractionRef.current!;
-        selectInteraction.setActive(true);
-        
-        const inspectDragBox = new DragBox({});
-        map.addInteraction(inspectDragBox);
-        currentDragBox = inspectDragBox;
-
-        const inspectSelectListener = (e: SelectEvent) => {
-            const selected = e.selected;
-            if (selected.length > 0) {
-                const feature = selected[0]; // Only care about the first one for single-click inspect
-                const layer = map.getAllLayers().find(l => 
-                    l instanceof VectorLayer && l.getSource()?.hasFeature(feature)
-                ) as VectorMapLayer | undefined;
-                
+        const handleInspectClick = (e: MapBrowserEvent<any>) => {
+            const featuresAtPixel: Feature<Geometry>[] = [];
+            map.forEachFeatureAtPixel(e.pixel, (feature) => {
+                featuresAtPixel.push(feature as Feature<Geometry>);
+            });
+            if (featuresAtPixel.length > 0) {
+                const feature = featuresAtPixel[0];
+                const layer = map.getAllLayers().find(l => l instanceof VectorLayer && l.getSource()?.hasFeature(feature)) as VectorMapLayer | undefined;
                 onNewSelectionRef.current(
-                    [{ id: feature.getId() as string, attributes: feature.getProperties() }], 
-                    layer?.get('name') || 'Inspección', 
+                    [{ id: feature.getId() as string, attributes: feature.getProperties() }],
+                    layer?.get('name') || 'Inspección',
                     layer?.get('id') || null
                 );
             }
         };
 
-        const boxEndListener = () => {
+        const inspectDragBox = new DragBox({});
+        map.addInteraction(inspectDragBox);
+        currentDragBox = inspectDragBox;
+
+        inspectDragBox.on('boxend', () => {
             const extent = inspectDragBox.getGeometry().getExtent();
             const featuresInBox: Feature<Geometry>[] = [];
             let firstLayer: VectorMapLayer | undefined;
 
-            map.forEachFeatureIntersectingExtent(extent, (feature) => {
-                featuresInBox.push(feature as Feature<Geometry>);
-                if (!firstLayer) {
-                     firstLayer = map.getAllLayers().find(l => 
-                        l instanceof VectorLayer && l.getSource()?.hasFeature(feature as Feature<Geometry>)
-                     ) as VectorMapLayer | undefined;
+            map.getLayers().forEach(layer => {
+                if (layer instanceof VectorLayer && layer.getVisible()) {
+                    const source = layer.getSource();
+                    if (source) {
+                        source.forEachFeatureIntersectingExtent(extent, (feature) => {
+                            featuresInBox.push(feature as Feature<Geometry>);
+                            if (!firstLayer) {
+                                firstLayer = layer as VectorMapLayer;
+                            }
+                        });
+                    }
                 }
             });
 
             if (featuresInBox.length > 0) {
                 const plainData = featuresInBox.map(f => ({ id: f.getId() as string, attributes: f.getProperties() }));
-                onNewSelectionRef.current(plainData, firstLayer?.get('name') || 'Inspección por área', firstLayer?.get('id') || null);
+                onNewSelectionRef.current(plainData, firstLayer?.get('name') || 'Inspección por Área', firstLayer?.get('id') || null);
             }
-        };
-
-        eventKeys.push(selectInteraction.on('select', inspectSelectListener as any));
-        eventKeys.push(inspectDragBox.on('boxend', boxEndListener));
+        });
+        
+        clickListener = map.on('singleclick', handleInspectClick);
 
     } else if (activeTool === 'selectBox') {
         const selectInteraction = selectInteractionRef.current!;
         selectInteraction.setActive(true);
+        selectInteraction.getFeatures().clear(); // Clear previous selection
 
+        const handleSelectClick = (e: MapBrowserEvent<any>) => {
+            // Let the Select interaction handle the single click
+        };
+
+        selectInteraction.on('select', (e: SelectEvent) => {
+            setSelectedFeatures([...e.target.getFeatures().getArray()]);
+        });
+        
         const selectDragBox = new DragBox({});
         map.addInteraction(selectDragBox);
         currentDragBox = selectDragBox;
 
-        const selectListener = (e: SelectEvent) => {
-            const selected = e.target.getFeatures().getArray();
-            setSelectedFeatures([...selected]);
-        };
-        
-        const boxEndListener = () => {
+        selectDragBox.on('boxend', () => {
             const extent = selectDragBox.getGeometry().getExtent();
             const featuresInBox: Feature<Geometry>[] = [];
-            
-            map.forEachFeatureIntersectingExtent(extent, (feature) => {
-                featuresInBox.push(feature as Feature<Geometry>);
+
+            map.getLayers().forEach(layer => {
+                if (layer instanceof VectorLayer && layer.getVisible()) {
+                    const source = layer.getSource();
+                    if (source) {
+                        source.forEachFeatureIntersectingExtent(extent, (feature) => {
+                            featuresInBox.push(feature as Feature<Geometry>);
+                        });
+                    }
+                }
             });
 
             if (!platformModifierKeyOnly(selectDragBox.getMapBrowserEvent())) {
-                 selectInteraction.getFeatures().clear();
+                selectInteraction.getFeatures().clear();
             }
             selectInteraction.getFeatures().extend(featuresInBox);
             setSelectedFeatures([...selectInteraction.getFeatures().getArray()]);
-        };
+        });
 
-        eventKeys.push(selectInteraction.on('select', selectListener as any));
-        eventKeys.push(selectDragBox.on('boxend', boxEndListener));
+        clickListener = map.on('singleclick', handleSelectClick);
 
     } else if (activeTool === 'queryRaster') {
         const handleRasterQuery = async (e: MapBrowserEvent<any>) => {
@@ -476,7 +484,7 @@ export const useFeatureInspection = ({
             }
             if (!resultsFound) toast({ description: "No se encontraron valores en las capas raster en este punto." });
         };
-        eventKeys.push(map.on('singleclick', handleRasterQuery));
+        clickListener = map.on('singleclick', handleRasterQuery);
 
     } else if (activeTool === 'modify') {
         const selectInteraction = selectInteractionRef.current!;
@@ -491,12 +499,11 @@ export const useFeatureInspection = ({
         map.addInteraction(modify);
 
         const modifyEndListener = () => toast({ description: "Geometría modificada." });
-        eventKeys.push(modify.on('modifyend', modifyEndListener));
-
+        clickListener = modify.on('modifyend', modifyEndListener);
     }
-
+    
     return cleanup;
-  }, [activeTool, isMapReady, mapRef, mapElementRef, toast, clearSelection]);
+  }, [activeTool, isMapReady, mapRef, mapElementRef, toast, onNewSelectionRef]);
 
 
   return {
