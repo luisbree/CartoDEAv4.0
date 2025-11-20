@@ -1703,6 +1703,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
               }}
               mapRef={mapRef}
               onShowTableRequest={featureInspectionHook.processAndDisplayFeatures}
+              onToggleLayerVisibility={layerManagerHook.toggleLayerVisibility}
             />
           )}
 
