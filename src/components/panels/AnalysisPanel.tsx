@@ -486,11 +486,13 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
             if (mapRef.current) {
                 if (analysisLayerRef.current) mapRef.current.removeLayer(analysisLayerRef.current);
                 if (profilePointsLayerRef.current) mapRef.current.removeLayer(profilePointsLayerRef.current);
+                if (averageVectorLayerRef.current) mapRef.current.removeLayer(averageVectorLayerRef.current);
                 if (profileHoverMarkerRef.current) mapRef.current.removeOverlay(profileHoverMarkerRef.current);
             }
             analysisLayerRef.current = null;
             profilePointsLayerRef.current = null;
             profilePointsSourceRef.current = null;
+            averageVectorLayerRef.current = null;
             profileHoverMarkerRef.current = null;
             stopDrawing();
         };
@@ -2009,7 +2011,9 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                         source: new VectorSource(),
                         properties: { id: 'average-vector-layer', name: 'Vector Promedio (Móvil)', zIndex: 10001 },
                     });
-                    mapRef.current?.addLayer(averageVectorLayerRef.current);
+                    if (mapRef.current) {
+                        mapRef.current.addLayer(averageVectorLayerRef.current);
+                    }
                 }
                 const vectorSource = averageVectorLayerRef.current.getSource();
                 vectorSource?.clear();
@@ -3078,12 +3082,3 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 };
 
 export default AnalysisPanel;
-
-
-
-
-
-
-
-
-
