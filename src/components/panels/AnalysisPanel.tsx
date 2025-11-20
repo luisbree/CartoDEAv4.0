@@ -2076,7 +2076,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                      // Deviation sectors
                      [-2, -1, 1, 2].forEach(sigmaMultiplier => {
                          const angleOffset = sigmaMultiplier * stdDevDir;
-                         const arcRadius = avgMag * 1000 * 0.2;
+                         const arcRadius = avgMag * 1000 * 0.4;
 
                          const startAngleRad = avgAngleRad - (angleOffset * Math.PI / 180);
                          const endAngleRad = avgAngleRad;
