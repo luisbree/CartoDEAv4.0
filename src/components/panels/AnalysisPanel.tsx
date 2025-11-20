@@ -66,7 +66,8 @@ import {
     Eye,
     Activity,
     Sigma,
-    Move
+    Move,
+    EyeOff
 } from 'lucide-react';
 import type {
     MapLayer,
@@ -188,12 +189,13 @@ interface AnalysisPanelProps {
     onToggleCollapse: () => void;
     onClosePanel: () => void;
     onMouseDownHeader: (e: React.MouseEvent<HTMLDivElement>) => void;
-    allLayers: MapLayer[];
+    allLayers: (MapLayer | LayerGroup)[];
     selectedFeatures: Feature<Geometry>[];
     onAddLayer: (layer: MapLayer, bringToTop?: boolean) => void;
     style?: React.CSSProperties;
     mapRef: React.RefObject<Map | null>;
     onShowTableRequest: (plainData: PlainFeatureData[], layerName: string, layerId: string) => void;
+    onToggleLayerVisibility: (layerId: string) => void;
 }
 
 const SectionHeader: React.FC<{ icon: React.ElementType; title: string; }> = ({ icon: Icon, title }) => (
@@ -296,6 +298,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     style,
     mapRef,
     onShowTableRequest,
+    onToggleLayerVisibility,
 }) => {
     const [activeAccordionItem, setActiveAccordionItem] = useState<string | undefined>(undefined);
 
@@ -392,7 +395,6 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     const [profilePoints, setProfilePoints] = useState<Feature<Point>[]>([]);
     const profilePointsLayerRef = useRef<VectorLayer<VectorSource<Point>> | null>(null);
     const profilePointsSourceRef = useRef<VectorSource<Point> | null>(null);
-    const [isVectorMoveActive, setIsVectorMoveActive] = useState(false);
     const [averageVectorLayerId, setAverageVectorLayerId] = useState<string | null>(null);
 
 
@@ -404,6 +406,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     const chartContainerRef = useRef<HTMLDivElement | null>(null);
     const profileHoverMarkerRef = useRef<Overlay | null>(null);
     const intervalRef = useRef<NodeJS.Timeout | null>(null);
+    const averageVectorLayerRef = useRef<VectorLayer<VectorSource<Point>> | null>(null);
 
     const { toast } = useToast();
 
@@ -1035,7 +1038,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 
 
     const vectorLayers = useMemo(() => {
-        return allLayers.filter((l): l is VectorMapLayer => l.type !== 'wms' && l.type !== 'gee' && l.type !== 'geotiff');
+        return allLayers.flat().filter((l): l is VectorMapLayer => 'olLayer' in l && (l.type !== 'wms' && l.type !== 'gee' && l.type !== 'geotiff'));
     }, [allLayers]);
 
     const polygonLayers = useMemo(() => {
@@ -1073,10 +1076,9 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     }, [vectorLayers]);
 
     const allRasterLayersForProfile = useMemo(() => {
-        return allLayers.flatMap(item => 'layers' in item ? item.layers : [item])
-            .filter((l): l is MapLayer =>
-                (l.type === 'gee' || l.type === 'geotiff') && !!l.geeParams?.imageId
-            );
+        return allLayers.flat().filter((l): l is MapLayer =>
+            'olLayer' in l && (l.type === 'gee' || l.type === 'geotiff') && !!l.geeParams?.imageId
+        );
     }, [allLayers]);
 
 
@@ -1853,7 +1855,6 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     };
 
     const handleAnalyzeCoherence = () => {
-        const formatForMap = new GeoJSON({ dataProjection: 'EPSG:4326', featureProjection: 'EPSG:3857' });
         const format = new GeoJSON({ featureProjection: 'EPSG:3857', dataProjection: 'EPSG:4326' });
         const layer = trajectoryLayers.find(l => l.id === coherenceLayerId) as VectorMapLayer | undefined;
         if (!layer) {
@@ -1869,9 +1870,15 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
             toast({ description: "Por favor, seleccione un campo de magnitud válido.", variant: "destructive" });
             return;
         }
-
+    
         const allFeatures = source.getFeatures();
-
+    
+        // Clean up previous average vector if it exists
+        if (averageVectorLayerId) {
+            const oldLayer = allLayers.find(l => l.id === averageVectorLayerId);
+            if (oldLayer) onAddLayer(oldLayer, false); // This is a trick to remove it from the map
+        }
+    
         if (useClustering) {
             const geojsonFeatures = format.writeFeaturesObject(allFeatures);
             const centroids = featureCollection(geojsonFeatures.features.map((f, i) => {
@@ -1879,7 +1886,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                 center.properties = { ...f.properties, _originalFeatureId: allFeatures[i].getId() || `feat-${i}` };
                 return center;
             }));
-
+    
             // Calculate NN distances for epsilon
             const nnDistances = centroids.features.map((point, i, arr) => {
                 const otherPoints = featureCollection(arr.filter((_, j) => i !== j));
@@ -1889,23 +1896,23 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
             const meanDistance = nnDistances.reduce((a, b) => a + b, 0) / nnDistances.length;
             const stdDevDistance = Math.sqrt(nnDistances.map(d => Math.pow(d - meanDistance, 2)).reduce((a, b) => a + b, 0) / nnDistances.length);
             setClusterDistanceStats({ mean: meanDistance, stdDev: stdDevDistance });
-
+    
             const dbscanDistance = meanDistance + (clusterStdDevMultiplier * stdDevDistance);
             toast({ description: `Distancia de clustering: ${dbscanDistance.toFixed(2)} km` });
             
             const clusters = clustersDbscan(centroids, dbscanDistance, { minPoints: 2 });
-
+    
             const clusterGroups: Record<string, Feature<Geometry>[]> = {};
             const clusteredFeatureIds = new Set<string>();
-
+    
             clusters.features.forEach(feature => {
                 const clusterId = feature.properties!.cluster;
                 if (clusterId === undefined) return; // Skip noise points for now
-
+    
                 const idStr = String(clusterId);
                 const originalFeatureId = feature.properties!._originalFeatureId;
                 const originalFeature = allFeatures.find(f => f.getId() === originalFeatureId);
-
+    
                 if (originalFeature) {
                     if (!clusterGroups[idStr]) {
                         clusterGroups[idStr] = [];
@@ -1914,38 +1921,38 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                     clusteredFeatureIds.add(originalFeatureId as string);
                 }
             });
-
+    
             // Process actual clusters
             for (const clusterId in clusterGroups) {
                 const featuresInCluster = clusterGroups[clusterId];
-                if (featuresInCluster.length < 2) continue; // Should not happen with minPoints=2, but good practice
-
+                if (featuresInCluster.length < 2) continue;
+    
                 const directions = featuresInCluster.map(f => f.get('sentido_grados')).filter(d => typeof d === 'number') as number[];
                 const magnitudes = featuresInCluster.map(f => f.get(coherenceMagnitudeField)).filter(s => typeof s === 'number') as number[];
-
+    
                 if (directions.length === 0 || magnitudes.length === 0) continue;
-
+    
                 const avgMagnitude = magnitudes.reduce((a, b) => a + b, 0) / magnitudes.length;
                 const avgX = directions.reduce((sum, d) => sum + Math.cos(d * Math.PI / 180), 0) / directions.length;
                 const avgY = directions.reduce((sum, d) => sum + Math.sin(d * Math.PI / 180), 0) / directions.length;
                 const avgAngleRad = Math.atan2(avgY, avgX);
                 let avgDirection = (avgAngleRad * 180 / Math.PI + 360) % 360;
-
-                const stdDevDirection = Math.sqrt(directions.reduce((sum, d) => {
-                    let dirDiff = Math.abs(d - avgDirection);
+    
+                const stdDevDirection = Math.sqrt(featuresInCluster.reduce((sum, d) => {
+                    let dirDiff = Math.abs(d.get('sentido_grados') - avgDirection);
                     if (dirDiff > 180) dirDiff = 360 - dirDiff;
                     return sum + Math.pow(dirDiff, 2);
-                }, 0) / directions.length);
+                }, 0) / featuresInCluster.length);
                 const stdDevMagnitude = Math.sqrt(magnitudes.reduce((sum, s) => sum + Math.pow(s - avgMagnitude, 2), 0) / magnitudes.length);
-
+    
                 featuresInCluster.forEach(olFeature => {
                     const direction = olFeature.get('sentido_grados');
                     const magnitude = olFeature.get(coherenceMagnitudeField);
-
+    
                     let dirDiff = Math.abs(direction - avgDirection);
                     if (dirDiff > 180) dirDiff = 360 - dirDiff;
                     const magDiff = Math.abs(magnitude - avgMagnitude);
-
+    
                     let coherence = 'Coherente';
                     if (dirDiff > stdDevDirection * 2 || magDiff > stdDevMagnitude * 2) {
                         coherence = 'Atípico';
@@ -1956,7 +1963,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                     olFeature.set('cluster_id', clusterId);
                 });
             }
-
+    
             // Handle noise features
             allFeatures.forEach(f => {
                 if (!clusteredFeatureIds.has(f.getId() as string)) {
@@ -1964,22 +1971,22 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                     f.set('cluster_id', 'ruido');
                 }
             });
-
+    
         } else { // Global analysis (no clustering)
             const directions = allFeatures.map(f => f.get('sentido_grados')).filter(d => typeof d === 'number') as number[];
             const magnitudes = allFeatures.map(f => f.get(coherenceMagnitudeField)).filter(m => typeof m === 'number') as number[];
-
+    
             if (directions.length === 0 || magnitudes.length === 0) {
                 toast({ description: 'No hay datos válidos de dirección o magnitud para analizar.', variant: "destructive" });
                 return;
             }
-
+    
             const avgMagnitude = magnitudes.reduce((a, b) => a + b, 0) / magnitudes.length;
             const avgX = directions.reduce((sum, d) => sum + Math.cos(d * Math.PI / 180), 0) / directions.length;
             const avgY = directions.reduce((sum, d) => sum + Math.sin(d * Math.PI / 180), 0) / directions.length;
             const avgAngleRad = Math.atan2(avgY, avgX);
             const avgDirection = (avgAngleRad * 180 / Math.PI + 360) % 360;
-
+    
             const stdDevDirection = Math.sqrt(directions.reduce((sum, d) => {
                 let dirDiff = Math.abs(d - avgDirection);
                 if (dirDiff > 180) dirDiff = 360 - dirDiff;
@@ -1988,7 +1995,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
             const stdDevMagnitude = Math.sqrt(magnitudes.reduce((sum, s) => sum + Math.pow(s - avgMagnitude, 2), 0) / magnitudes.length);
             
             setCoherenceStats({ avgDirection, stdDevDirection, avgMagnitude, stdDevMagnitude });
-
+    
             allFeatures.forEach(feature => {
                 const direction = feature.get('sentido_grados');
                 const magnitude = feature.get(coherenceMagnitudeField);
@@ -2003,7 +2010,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                 feature.set('coherencia', coherence);
             });
             
-             if (showAverageVector) {
+            if (showAverageVector) {
                 const centerOfMass = centroid(format.writeFeaturesObject(allFeatures));
                 const avgVectorFeature = new Feature({
                     geometry: new Point(transform(centerOfMass.geometry.coordinates, 'EPSG:4326', 'EPSG:3857')),
@@ -2013,100 +2020,106 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                     avg_magnitude: avgMagnitude,
                     std_dev_direction: stdDevDirection
                 });
-
+    
                 const newLayerId = `average-vector-${nanoid()}`;
                 const newSource = new VectorSource({ features: [avgVectorFeature] });
-                const newOlLayer = new VectorLayer({
-                    source: newSource,
-                    properties: { id: newLayerId, name: 'Vector Promedio (Móvil)', type: 'analysis' },
-                    style: (feature) => {
-                        // ... style definition ...
-                        const geom = feature.getGeometry() as Point;
-                        if (!geom) return [];
-
-                        const centerCoords = geom.getCoordinates();
-                        const props = feature.getProperties();
-                        const avgDir = props.avg_direction;
-                        const avgMag = props.avg_magnitude;
-                        const stdDevDir = props.std_dev_direction;
-
-                        const center4326 = transform(centerCoords, 'EPSG:3857', 'EPSG:4326');
-                        const endPoint4326 = destination(center4326, avgMag, avgDir, { units: 'kilometers' }).geometry.coordinates;
-                        const endCoords = transform(endPoint4326, 'EPSG:4326', 'EPSG:3857');
-                        
-                        const lineGeom = new LineString([centerCoords, endCoords]);
-                        const avgAngleRad = Math.atan2(endCoords[1] - centerCoords[1], endCoords[0] - centerCoords[0]);
-
-                        const styles: Style[] = [];
-
-                        // Main vector line
-                        styles.push(new Style({
-                            geometry: lineGeom,
-                            stroke: new Stroke({ color: '#6c757d', width: 3 }),
-                        }));
-
-                        // Arrowhead
-                        styles.push(new Style({
-                            geometry: new Point(endCoords),
-                            image: new RegularShape({
-                                fill: new Fill({ color: '#6c757d' }),
-                                points: 3,
-                                radius: 10,
-                                rotation: -avgAngleRad,
-                                angle: Math.PI / 2,
-                            }),
-                        }));
-
-                        // Label
-                        styles.push(new Style({
-                            geometry: new Point(lineGeom.getCoordinateAt(0.5)),
-                            text: new TextStyle({
-                                text: `${avgMag.toFixed(1)} km/h`,
-                                font: 'bold 12px sans-serif',
-                                fill: new Fill({ color: '#333' }),
-                                stroke: new Stroke({ color: '#fff', width: 3.5 }),
-                                offsetY: -15,
-                            }),
-                        }));
-
-                        // Deviation sectors
-                        [-2, -1, 1, 2].forEach(sigmaMultiplier => {
-                            const angleOffset = sigmaMultiplier * stdDevDir;
-                            const arcRadius = avgMag * 1000 * 0.2;
-
-                            const startAngleRad = avgAngleRad - (angleOffset * Math.PI / 180);
-                            const endAngleRad = avgAngleRad;
-                            
-                            const arcPoints = [];
-                            for(let i=0; i<=20; i++) {
-                                const angle = startAngleRad + (i/20) * (endAngleRad - startAngleRad);
-                                arcPoints.push([
-                                    centerCoords[0] + arcRadius * Math.cos(angle),
-                                    centerCoords[1] + arcRadius * Math.sin(angle)
-                                ]);
-                            }
-                            
-                            const sectorCoords = [centerCoords, ...arcPoints.reverse(), centerCoords];
-                            styles.push(new Style({
-                                geometry: new OlPolygon([sectorCoords]),
-                                fill: new Fill({ color: `rgba(108, 117, 125, ${0.2 - Math.abs(sigmaMultiplier)*0.05})` }),
-                            }));
-                        });
-
-                        return styles;
-                    },
-                    zIndex: 10001,
-                });
+                if (!averageVectorLayerRef.current) {
+                    averageVectorLayerRef.current = new VectorLayer({
+                         source: newSource,
+                         properties: { id: newLayerId, name: 'Vector Promedio (Móvil)', type: 'analysis' },
+                         style: (feature) => {
+                             const geom = feature.getGeometry() as Point;
+                             if (!geom) return [];
+    
+                             const centerCoords = geom.getCoordinates();
+                             const props = feature.getProperties();
+                             const avgDir = props.avg_direction;
+                             const avgMag = props.avg_magnitude;
+                             const stdDevDir = props.std_dev_direction;
+    
+                             const center4326 = transform(centerCoords, 'EPSG:3857', 'EPSG:4326');
+                             const endPoint4326 = destination(center4326, avgMag, avgDir, { units: 'kilometers' }).geometry.coordinates;
+                             const endCoords = transform(endPoint4326, 'EPSG:4326', 'EPSG:3857');
+                             
+                             const lineGeom = new LineString([centerCoords, endCoords]);
+                             const avgAngleRad = Math.atan2(endCoords[1] - centerCoords[1], endCoords[0] - centerCoords[0]);
+    
+                             const styles: Style[] = [];
+    
+                             // Main vector line
+                             styles.push(new Style({
+                                 geometry: lineGeom,
+                                 stroke: new Stroke({ color: '#6c757d', width: 3 }),
+                             }));
+    
+                             // Arrowhead
+                             styles.push(new Style({
+                                 geometry: new Point(endCoords),
+                                 image: new RegularShape({
+                                     fill: new Fill({ color: '#6c757d' }),
+                                     points: 3,
+                                     radius: 10,
+                                     rotation: -avgAngleRad,
+                                     angle: Math.PI / 2,
+                                 }),
+                             }));
+    
+                             // Label
+                             styles.push(new Style({
+                                 geometry: new Point(lineGeom.getCoordinateAt(0.5)),
+                                 text: new TextStyle({
+                                     text: `${avgMag.toFixed(1)} km/h`,
+                                     font: 'bold 12px sans-serif',
+                                     fill: new Fill({ color: '#333' }),
+                                     stroke: new Stroke({ color: '#fff', width: 3.5 }),
+                                     offsetY: -15,
+                                 }),
+                             }));
+    
+                             // Deviation sectors
+                             [-2, -1, 1, 2].forEach(sigmaMultiplier => {
+                                 const angleOffset = sigmaMultiplier * stdDevDir;
+                                 const arcRadius = avgMag * 1000 * 0.2;
+    
+                                 const startAngleRad = avgAngleRad - (angleOffset * Math.PI / 180);
+                                 const endAngleRad = avgAngleRad;
+                                 
+                                 const arcPoints = [];
+                                 for(let i=0; i<=20; i++) {
+                                     const angle = startAngleRad + (i/20) * (endAngleRad - startAngleRad);
+                                     arcPoints.push([
+                                         centerCoords[0] + arcRadius * Math.cos(angle),
+                                         centerCoords[1] + arcRadius * Math.sin(angle)
+                                     ]);
+                                 }
+                                 
+                                 const sectorCoords = [centerCoords, ...arcPoints.reverse(), centerCoords];
+                                 styles.push(new Style({
+                                     geometry: new OlPolygon([sectorCoords]),
+                                     fill: new Fill({ color: `rgba(108, 117, 125, ${0.2 - Math.abs(sigmaMultiplier)*0.05})` }),
+                                 }));
+                             });
+    
+                             return styles;
+                         },
+                         zIndex: 10001,
+                     });
+                     onAddLayer({
+                        id: newLayerId,
+                        name: 'Vector Promedio (Móvil)',
+                        olLayer: averageVectorLayerRef.current,
+                        visible: true,
+                        opacity: 1,
+                        type: 'analysis',
+                    }, true);
+                } else {
+                     averageVectorLayerRef.current.setSource(newSource);
+                     averageVectorLayerRef.current.setVisible(true);
+                }
                 
-                onAddLayer({
-                    id: newLayerId,
-                    name: 'Vector Promedio (Móvil)',
-                    olLayer: newOlLayer,
-                    visible: true,
-                    opacity: 1,
-                    type: 'analysis',
-                }, true);
                 setAverageVectorLayerId(newLayerId);
+            } else {
+                 if (averageVectorLayerRef.current) averageVectorLayerRef.current.setVisible(false);
             }
         }
     
@@ -2136,34 +2149,36 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     useEffect(() => {
         if (!mapRef.current) return;
         const map = mapRef.current;
-        
+    
+        // Cleanup previous interactions first
         if (modifyInteractionRef.current) {
             map.removeInteraction(modifyInteractionRef.current);
             modifyInteractionRef.current = null;
         }
-
-        if (isVectorMoveActive && averageVectorLayerId) {
-             const avgVectorLayer = allLayers.find(l => l.id === averageVectorLayerId) as VectorMapLayer | undefined;
+    
+        // Add interaction if an average vector layer exists
+        if (averageVectorLayerId) {
+            const avgVectorLayer = allLayers.find(l => l.id === averageVectorLayerId) as VectorMapLayer | undefined;
             if (avgVectorLayer) {
                 const source = avgVectorLayer.olLayer.getSource();
                 if (source) {
                     const modifyInteraction = new Modify({
                         source: source,
                         style: new Style(), // Invisible style for modify interaction itself
-                        pixelTolerance: 20, // Increase click tolerance
+                        pixelTolerance: 25, // Increased click tolerance
                     });
                     map.addInteraction(modifyInteraction);
                     modifyInteractionRef.current = modifyInteraction;
                 }
             }
         }
-
+    
         return () => {
-            if (modifyInteractionRef.current) {
+            if (modifyInteractionRef.current && map) {
                 map.removeInteraction(modifyInteractionRef.current);
             }
         };
-    }, [isVectorMoveActive, averageVectorLayerId, allLayers, mapRef, toast]);
+    }, [averageVectorLayerId, allLayers, mapRef]);
 
 
     const handleRunFeatureTracking = async () => {
@@ -2255,6 +2270,11 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 
     const isAnyGoesProfile = profileData?.some(d => d.unit === '°C') ?? false;
 
+    const avgVectorLayerIsVisible = useMemo(() => {
+        if (!averageVectorLayerId) return false;
+        const layer = allLayers.find(l => l.id === averageVectorLayerId) as MapLayer | undefined;
+        return layer?.visible ?? false;
+    }, [averageVectorLayerId, allLayers]);
 
 
     return (
@@ -2986,20 +3006,11 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                         <p className="text-xs text-gray-400">Ajusta la sensibilidad del agrupamiento.</p>
                                     </div>
                                 )}
-                                <div className="flex items-center space-x-2 pt-1">
-                                    <Checkbox
-                                        id="show-avg-vector"
-                                        checked={showAverageVector}
-                                        onCheckedChange={(checked) => setShowAverageVector(!!checked)}
-                                        disabled={useClustering}
-                                    />
-                                    <Label htmlFor="show-avg-vector" className={cn("text-xs font-normal", useClustering && "text-gray-500")}>Dibujar vector promedio</Label>
-                                </div>
                                 {averageVectorLayerId && (
                                     <div className="flex items-center space-x-2 pt-1">
-                                        <Button size="sm" onClick={() => setIsVectorMoveActive(p => !p)} variant={isVectorMoveActive ? "destructive" : "secondary"} className="h-7 text-xs">
-                                            <Move className="mr-2 h-3.5 w-3.5"/>
-                                            {isVectorMoveActive ? 'Fijar Vector' : 'Mover Vector'}
+                                        <Button size="sm" onClick={() => onToggleLayerVisibility(averageVectorLayerId!)} variant="secondary" className="h-7 text-xs">
+                                            {avgVectorLayerIsVisible ? <EyeOff className="mr-2 h-3.5 w-3.5"/> : <Eye className="mr-2 h-3.5 w-3.5"/>}
+                                            {avgVectorLayerIsVisible ? 'Ocultar Vector' : 'Mostrar Vector'}
                                         </Button>
                                     </div>
                                 )}
