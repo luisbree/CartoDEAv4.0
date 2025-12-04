@@ -375,10 +375,7 @@ export const useLayerManager = ({
         });
 
         wfsSource.on('featuresloadstart', () => setIsWfsLoading(true));
-        wfsSource.on('featuresloadend', (event) => {
-            console.log(`DEBUG: WFS features loaded for ${layerName}:`, event.features?.length);
-            setIsWfsLoading(false);
-        });
+        wfsSource.on('featuresloadend', () => setIsWfsLoading(false));
         wfsSource.on('featuresloaderror', () => setIsWfsLoading(false));
 
         const wfsLayer = new VectorLayer({
@@ -400,11 +397,11 @@ export const useLayerManager = ({
             'VERSION': '1.1.1', 
             'TRANSPARENT': true, 
         };
+        // *** THE FIX IS HERE ***
+        // Ensure the styleName from GeoServer is passed to the WMS request
         if (styleName && styleName.trim() !== '') {
             wmsParams['STYLES'] = styleName;
         }
-
-        console.log(`DEBUG: Creating WMS layer for ${layerName} with URL: ${cleanedServerUrl}/wms and params:`, wmsParams);
 
         const wmsSource = new TileWMS({
             url: `${cleanedServerUrl}/wms`,
@@ -425,7 +422,7 @@ export const useLayerManager = ({
         map.addLayer(wmsLayer);
         wfsLayer.set('visualLayer', wmsLayer);
 
-        const newLayer: MapLayer = {
+        const newLayer: VectorMapLayer = {
             id: wfsId,
             name: layerTitle,
             olLayer: wfsLayer,
@@ -437,7 +434,6 @@ export const useLayerManager = ({
 
         addLayer(newLayer, true);
         
-        // Force initial data load for the current view
         wfsSource.loadFeatures(map.getView().calculateExtent());
 
         updateGeoServerDiscoveredLayerState(layerName, true, 'wfs');
@@ -1628,3 +1624,4 @@ const groupLayers = useCallback((layerIds: string[], groupName: string) => {
 
 
     
+
