@@ -94,6 +94,43 @@ interface LegendPanelProps {
   style?: React.CSSProperties;
 }
 
+const deasOrgNames: { [key: string]: string } = {
+  'ALH': 'CUENCA A° LAS HERMANAS',
+  'ARR': 'CUENCA RIOS ARRECIFES Y BARADERO',
+  'CHAS': 'CUENCA ARROYO CHASICÓ',
+  'CM': 'CANALES DE MAREA',
+  'CRZ': 'CUENCA ARROYO DE LA CRUZ',
+  'CUE': 'CUENCA DEL A° DE LOS CUEROS',
+  'DIO': 'ZONA DE DRENAJE INDEFINIDO OCCIDENTAL PERIPAMPEANO',
+  'DLP': 'DELTA DEL PARANÁ',
+  'ESP': 'CUENCA ARROYO ESPINILLO',
+  'MAR': 'CUENCA MATANZA-RIACHUELO',
+  'MCH': 'CUENCA MAR CHIQUITA',
+  'MED': 'CCA ARROYO DEL MEDIO',
+  'MVM': 'CUENCA MEDRANO-VEGA-MALDONADO',
+  'PAR': 'CUENCA CAUSES MENORES VERTIENTE PARANÁ',
+  'QQG': 'CUENCA QUEQUÉN GRANDE',
+  'QQS': 'CUENCA QUEQUÉN SALADO',
+  'RAM': 'CUENCA RAMALLO',
+  'RAR': 'CUENCA RÍO ARECO',
+  'RCO': 'CUENCA RIO COLORADO',
+  'RLU': 'CUENCA RÍO LUJAN',
+  'RNG': 'CUENCA DEL RIO NEGRO',
+  'RPI': 'VERTIENTE RIO DE LA PLATA INFERIOR',
+  'RPM': 'VERTIENTE RIO DE LA PLATA INTERMEDIA',
+  'RPS': 'VERTIENTE RIO DE LA PLATA SUPERIOR',
+  'RRQ': 'CUENCA RIO RECONQUISTA',
+  'RSA': 'CUENCA RÍO SALADO',
+  'RSAL': 'CUENCA ARROYO SALADILLO',
+  'RSB': 'CUENCA SAMBOROMBON',
+  'SCH': 'CUENCA RÍO SAUCE CHICO',
+  'SEC': 'CUENCA ARROYO SECO',
+  'SN': 'CUENCA SIN NOMBRE',
+  'VAE': 'VERTIENTE ATLANTICA ESTE',
+  'VAS': 'VERTIENTE ATLANTICA SUR',
+  'VASE': 'VERTIENTE ATLÁNTICA SE',
+};
+
 // Type definitions for the hierarchical structure
 type DeasLayerNode = GeoServerDiscoveredLayer;
 type DeasProjectNode = { [projectName: string]: DeasLayerNode[] };
@@ -128,10 +165,12 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
     const filteredLayers = discoveredDeasLayers.filter(layer => {
         if (!deasSearchTerm) return true;
         const [workspace = '', layerNameOnly = ''] = layer.name.split(':');
+        const orgFullName = deasOrgNames[workspace.toUpperCase()] || '';
         return (
             layer.title.toLowerCase().includes(lowercasedFilter) ||
             workspace.toLowerCase().includes(lowercasedFilter) ||
-            layerNameOnly.toLowerCase().includes(lowercasedFilter)
+            layerNameOnly.toLowerCase().includes(lowercasedFilter) ||
+            orgFullName.toLowerCase().includes(lowercasedFilter)
         );
     });
 
@@ -143,22 +182,24 @@ const LegendPanel: React.FC<LegendPanelProps> = ({
         const match = layerNameOnly.match(/^([a-zA-Z]+)(\d{3,})(_.*)?$/);
 
         if (match) {
-            const orgCode = match[1].toUpperCase(); // e.g., ARR
-            const projectCode = `${orgCode}${match[2]}`; // e.g., ARR001
+            const orgCode = match[1].toUpperCase();
+            const orgFullName = deasOrgNames[orgCode] || orgCode;
+            const projectCode = `${orgCode}${match[2]}`;
 
-            if (!orgs[orgCode]) orgs[orgCode] = {};
-            if (!orgs[orgCode][projectCode]) orgs[orgCode][projectCode] = [];
+            if (!orgs[orgFullName]) orgs[orgFullName] = {};
+            if (!orgs[orgFullName][projectCode]) orgs[orgFullName][projectCode] = [];
             
-            orgs[orgCode][projectCode].push(layer);
+            orgs[orgFullName][projectCode].push(layer);
         } else {
             // Fallback for layers that don't match the pattern
             const orgCode = workspace.toUpperCase() || 'OTROS';
+            const orgFullName = deasOrgNames[orgCode] || orgCode;
             const projectCode = 'General';
 
-            if (!orgs[orgCode]) orgs[orgCode] = {};
-            if (!orgs[orgCode][projectCode]) orgs[orgCode][projectCode] = [];
+            if (!orgs[orgFullName]) orgs[orgFullName] = {};
+            if (!orgs[orgFullName][projectCode]) orgs[orgFullName][projectCode] = [];
             
-            orgs[orgCode][projectCode].push(layer);
+            orgs[orgFullName][projectCode].push(layer);
         }
         
         return orgs;
