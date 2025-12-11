@@ -134,7 +134,8 @@ import {
     performBezierSmoothing,
     DATASET_DEFINITIONS,
     jenks,
-    performFeatureTracking
+    performFeatureTracking,
+    POPULATION_DATA,
 } from '@/services/spatial-analysis';
 import { getValuesForPoints } from '@/ai/flows/gee-flow';
 import { ScrollArea } from '../ui/scroll-area';
@@ -335,9 +336,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     const [dissolveOutputName, setDissolveOutputName] = useState('');
 
     // State for Population Projection
-    const [pop2001, setPop2001] = useState<string>('');
-    const [pop2010, setPop2010] = useState<string>('');
-    const [pop2022, setPop2022] = useState<string>('');
+    const [selectedPartido, setSelectedPartido] = useState<string>('');
     const [projectionYear, setProjectionYear] = useState<string>(String(new Date().getFullYear()));
     const [projectionResult, setProjectionResult] = useState<{ projectedPopulation: number; averageAnnualRate: number } | null>(null);
 
@@ -1601,18 +1600,21 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     };
 
     const handleRunProjection = () => {
-        const p1 = parseInt(pop2001, 10);
-        const p2 = parseInt(pop2010, 10);
-        const p3 = parseInt(pop2022, 10);
+        const partidoData = POPULATION_DATA.find(p => p.partido === selectedPartido);
+        if (!partidoData) {
+            toast({ title: "Entrada Inválida", description: "Por favor, seleccione un partido.", variant: "destructive" });
+            return;
+        }
+        
         const year = parseInt(projectionYear, 10);
-
-        if (isNaN(p1) || isNaN(p2) || isNaN(p3) || isNaN(year)) {
-            toast({ title: "Entrada Inválida", description: "Por favor, ingrese valores numéricos para todos los campos de población y para el año.", variant: "destructive" });
+        if (isNaN(year)) {
+            toast({ title: "Entrada Inválida", description: "Por favor, ingrese un año válido para la proyección.", variant: "destructive" });
             return;
         }
 
         try {
-            const result = projectPopulationGeometric({ p2001: p1, p2010: p2, p2022: p3, targetYear: year });
+            // The projectPopulationGeometric function now directly accepts the partidoData object
+            const result = projectPopulationGeometric({ partidoData, targetYear: year });
             setProjectionResult(result);
             toast({ description: "Cálculo de proyección completado." });
         } catch (error: any) {
@@ -2870,28 +2872,23 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                     </AccordionTrigger>
                     <AccordionContent className="p-3 pt-2 space-y-3 border-t border-white/10 bg-transparent rounded-b-md">
                         <div className="space-y-1">
-                            <Label className="text-xs font-semibold">Proyección de Población</Label>
+                            <Label className="text-xs font-semibold">Proyección de Población de Partidos (Bs. As.)</Label>
                             <div className="space-y-2 p-2 border border-white/10 rounded-md">
-                                <p className="text-xs text-gray-400">Ingrese la población total para una entidad o área seleccionada para los años censales.</p>
-                                <div className="grid grid-cols-3 gap-2">
-                                    <div>
-                                        <Label htmlFor="pop2001" className="text-xs">Población 2001</Label>
-                                        <Input id="pop2001" type="number" value={pop2001} onChange={(e) => setPop2001(e.target.value)} className="h-8 text-xs bg-black/20" />
-                                    </div>
-                                    <div>
-                                        <Label htmlFor="pop2010" className="text-xs">Población 2010</Label>
-                                        <Input id="pop2010" type="number" value={pop2010} onChange={(e) => setPop2010(e.target.value)} className="h-8 text-xs bg-black/20" />
-                                    </div>
-                                    <div>
-                                        <Label htmlFor="pop2022" className="text-xs">Población 2022</Label>
-                                        <Input id="pop2022" type="number" value={pop2022} onChange={(e) => setPop2022(e.target.value)} className="h-8 text-xs bg-black/20" />
-                                    </div>
+                                <p className="text-xs text-gray-400">Seleccione un partido para usar sus datos históricos y proyectar la población del censo 2022 al año deseado.</p>
+                                <div>
+                                    <Label htmlFor="partido-select" className="text-xs">Partido</Label>
+                                    <Select value={selectedPartido} onValueChange={setSelectedPartido}>
+                                        <SelectTrigger id="partido-select" className="h-8 text-xs bg-black/20"><SelectValue placeholder="Seleccionar partido..." /></SelectTrigger>
+                                        <SelectContent className="bg-gray-700 text-white border-gray-600">
+                                            {POPULATION_DATA.map(p => <SelectItem key={p.partido} value={p.partido} className="text-xs">{p.partido}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
                                 </div>
                                 <div>
                                     <Label htmlFor="projection-year" className="text-xs">Año a Proyectar</Label>
                                     <Input id="projection-year" type="number" value={projectionYear} onChange={(e) => setProjectionYear(e.target.value)} className="h-8 text-xs bg-black/20" />
                                 </div>
-                                <Button onClick={handleRunProjection} size="sm" className="w-full h-8 text-xs">
+                                <Button onClick={handleRunProjection} size="sm" className="w-full h-8 text-xs" disabled={!selectedPartido || !projectionYear}>
                                     <TrendingUp className="mr-2 h-3.5 w-3.5" />
                                     Calcular Proyección
                                 </Button>

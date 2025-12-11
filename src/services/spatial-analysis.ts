@@ -91,6 +91,144 @@ export const DATASET_DEFINITIONS = {
     }
 };
 
+export const POPULATION_DATA = [
+  { partido: "Adolfo Alsina", censo_2001: 16245, censo_2010: 17072, censo_2022: 17663 },
+  { partido: "Adolfo Gonzales Chaves", censo_2001: 12037, censo_2010: 12047, censo_2022: 13247 },
+  { partido: "Alberti", censo_2001: 10322, censo_2010: 10654, censo_2022: 12726 },
+  { partido: "Almirante Brown", censo_2001: 515556, censo_2010: 552902, censo_2022: 585852 },
+  { partido: "Arrecifes", censo_2001: 27279, censo_2010: 29044, censo_2022: 32414 },
+  { partido: "Avellaneda", censo_2001: 328980, censo_2010: 342677, censo_2022: 370939 },
+  { partido: "Ayacucho", censo_2001: 19688, censo_2010: 20337, censo_2022: 22238 },
+  { partido: "Azul", censo_2001: 62996, censo_2010: 65280, censo_2022: 70005 },
+  { partido: "Bahía Blanca", censo_2001: 284776, censo_2010: 301572, censo_2022: 335190 },
+  { partido: "Balcarce", censo_2001: 42824, censo_2010: 44064, censo_2022: 51736 },
+  { partido: "Baradero", censo_2001: 29562, censo_2010: 32761, censo_2022: 38813 },
+  { partido: "Benito Juárez", censo_2001: 19443, censo_2010: 20239, censo_2022: 22557 },
+  { partido: "Berazategui", censo_2001: 287913, censo_2010: 324244, censo_2022: 359461 },
+  { partido: "Berisso", censo_2001: 80092, censo_2010: 88470, censo_2022: 101263 },
+  { partido: "Bolívar", censo_2001: 32442, censo_2010: 34190, censo_2022: 38119 },
+  { partido: "Bragado", censo_2001: 40259, censo_2010: 41543, censo_2022: 44972 },
+  { partido: "Brandsen", censo_2001: 22515, censo_2010: 26367, censo_2022: 33499 },
+  { partido: "Campana", censo_2001: 77838, censo_2010: 94908, censo_2022: 110642 },
+  { partido: "Cañuelas", censo_2001: 42575, censo_2010: 51892, censo_2022: 71149 },
+  { partido: "Capitán Sarmiento", censo_2001: 12854, censo_2010: 14494, censo_2022: 17306 },
+  { partido: "Carlos Casares", censo_2001: 21125, censo_2010: 22237, censo_2022: 23204 },
+  { partido: "Carlos Tejedor", censo_2001: 11539, censo_2010: 11570, censo_2022: 13328 },
+  { partido: "Carmen de Areco", censo_2001: 13992, censo_2010: 14692, censo_2022: 17369 },
+  { partido: "Castelli", censo_2001: 7852, censo_2010: 8205, censo_2022: 10459 },
+  { partido: "Chacabuco", censo_2001: 45445, censo_2010: 48971, censo_2022: 53157 },
+  { partido: "Chascomús", censo_2001: 38647, censo_2010: 42277, censo_2022: 42721 },
+  { partido: "Chivilcoy", censo_2001: 60762, censo_2010: 64185, censo_2022: 70765 },
+  { partido: "Colón", censo_2001: 23179, censo_2010: 24890, censo_2022: 27725 },
+  { partido: "Coronel de Marina L. Rosales", censo_2001: 59746, censo_2010: 62152, censo_2022: 70503 },
+  { partido: "Coronel Dorrego", censo_2001: 16522, censo_2010: 15825, censo_2022: 16298 },
+  { partido: "Coronel Pringles", censo_2001: 23794, censo_2010: 22933, censo_2022: 24249 },
+  { partido: "Coronel Suárez", censo_2001: 36828, censo_2010: 38320, censo_2022: 42799 },
+  { partido: "Daireaux", censo_2001: 15857, censo_2010: 16889, censo_2022: 19149 },
+  { partido: "Dolores", censo_2001: 25216, censo_2010: 27042, censo_2022: 31448 },
+  { partido: "Ensenada", censo_2001: 51448, censo_2010: 56729, censo_2022: 64406 },
+  { partido: "Escobar", censo_2001: 178155, censo_2010: 213619, censo_2022: 256449 },
+  { partido: "Esteban Echeverría", censo_2001: 243974, censo_2010: 300959, censo_2022: 339030 },
+  { partido: "Exaltación de la Cruz", censo_2001: 24167, censo_2010: 29805, censo_2022: 40381 },
+  { partido: "Ezeiza", censo_2001: 118807, censo_2010: 163722, censo_2022: 203283 },
+  { partido: "Florencio Varela", censo_2001: 348970, censo_2010: 426005, censo_2022: 497818 },
+  { partido: "Florentino Ameghino", censo_2001: 8171, censo_2010: 8869, censo_2022: 9786 },
+  { partido: "General Alvarado", censo_2001: 34391, censo_2010: 39594, censo_2022: 46794 },
+  { partido: "General Alvear", censo_2001: 10897, censo_2010: 11100, censo_2022: 12569 },
+  { partido: "General Arenales", censo_2001: 14876, censo_2010: 14903, censo_2022: 15918 },
+  { partido: "General Belgrano", censo_2001: 15381, censo_2010: 17365, censo_2022: 21255 },
+  { partido: "General Guido", censo_2001: 2771, censo_2010: 2833, censo_2022: 3226 },
+  { partido: "General La Madrid", censo_2001: 10984, censo_2010: 10783, censo_2022: 11560 },
+  { partido: "General Las Heras", censo_2001: 12799, censo_2010: 14889, censo_2022: 19894 },
+  { partido: "General Lavalle", censo_2001: 3046, censo_2010: 3700, censo_2022: 4949 },
+  { partido: "General Madariaga", censo_2001: 18088, censo_2010: 19747, censo_2022: 23019 },
+  { partido: "General Paz", censo_2001: 10313, censo_2010: 11213, censo_2022: 12759 },
+  { partido: "General Pinto", censo_2001: 11129, censo_2010: 11261, censo_2022: 12224 },
+  { partido: "General Pueyrredón", censo_2001: 564056, censo_2010: 618989, censo_2022: 682605 },
+  { partido: "General Rodríguez", censo_2001: 67931, censo_2010: 87185, censo_2022: 143211 },
+  { partido: "General San Martín", censo_2001: 403107, censo_2010: 414196, censo_2022: 422542 },
+  { partido: "General Viamonte", censo_2001: 17641, censo_2010: 18078, censo_2022: 20068 },
+  { partido: "General Villegas", censo_2001: 28960, censo_2010: 30864, censo_2022: 33698 },
+  { partido: "Guaminí", censo_2001: 11257, censo_2010: 11460, censo_2022: 12005 },
+  { partido: "Hipólito Yrigoyen", censo_2001: 8819, censo_2010: 9585, censo_2022: 10563 },
+  { partido: "Hurlingham", censo_2001: 172245, censo_2010: 181241, censo_2022: 185641 },
+  { partido: "Ituzaingó", censo_2001: 158121, censo_2010: 167824, censo_2022: 179788 },
+  { partido: "José C. Paz", censo_2001: 230208, censo_2010: 265981, censo_2022: 328925 },
+  { partido: "Junín", censo_2001: 88664, censo_2010: 90305, censo_2022: 101762 },
+  { partido: "La Costa", censo_2001: 60472, censo_2010: 69633, censo_2022: 102838 },
+  { partido: "La Matanza", censo_2001: 1257638, censo_2010: 1775816, censo_2022: 1837774 },
+  { partido: "La Plata", censo_2001: 574369, censo_2010: 654324, censo_2022: 772618 },
+  { partido: "Lanús", censo_2001: 453082, censo_2010: 459263, censo_2022: 462051 },
+  { partido: "Laprida", censo_2001: 9686, censo_2010: 10210, censo_2022: 11732 },
+  { partido: "Las Flores", censo_2001: 23551, censo_2010: 23871, censo_2022: 26651 },
+  { partido: "Leandro N. Alem", censo_2001: 16358, censo_2010: 16409, censo_2022: 17409 },
+  { partido: "Lezama", censo_2001: null, censo_2010: 4223, censo_2022: 6231 },
+  { partido: "Lincoln", censo_2001: 41127, censo_2010: 41808, censo_2022: 44974 },
+  { partido: "Lobería", censo_2001: 17006, censo_2010: 17647, censo_2022: 18234 },
+  { partido: "Lomas de Zamora", censo_2001: 591345, censo_2010: 616279, censo_2022: 694330 },
+  { partido: "Luján", censo_2001: 93992, censo_2010: 106273, censo_2022: 111365 },
+  { partido: "Magdalena", censo_2001: 16603, censo_2010: 19301, censo_2022: 26734 },
+  { partido: "Maipú", censo_2001: 10188, censo_2010: 10193, censo_2022: 11571 },
+  { partido: "Malvinas Argentinas", censo_2001: 290691, censo_2010: 322375, censo_2022: 351788 },
+  { partido: "Mar Chiquita", censo_2001: 17908, censo_2010: 21279, censo_2022: 33284 },
+  { partido: "Marcos Paz", censo_2001: 43400, censo_2010: 54181, censo_2022: 67154 },
+  { partido: "Mercedes", censo_2001: 59870, censo_2010: 63279, censo_2022: 70335 },
+  { partido: "Merlo", censo_2001: 469985, censo_2010: 528494, censo_2022: 580806 },
+  { partido: "Monte", censo_2001: 17488, censo_2010: 21034, censo_2022: 24481 },
+  { partido: "Monte Hermoso", censo_2001: 5602, censo_2010: 6499, censo_2022: 8821 },
+  { partido: "Moreno", censo_2001: 380503, censo_2010: 452505, censo_2022: 574374 },
+  { partido: "Morón", censo_2001: 309380, censo_2010: 321109, censo_2022: 334178 },
+  { partido: "Navarro", censo_2001: 15797, censo_2010: 17054, censo_2022: 20380 },
+  { partido: "Necochea", censo_2001: 89096, censo_2010: 92933, censo_2022: 104977 },
+  { partido: "Nueve de Julio", censo_2001: 45998, censo_2010: 47796, censo_2022: 52942 },
+  { partido: "Olavarría", censo_2001: 103961, censo_2010: 111708, censo_2022: 126328 },
+  { partido: "Patagones", censo_2001: 27938, censo_2010: 30207, censo_2022: 37533 },
+  { partido: "Pehuajó", censo_2001: 38400, censo_2010: 39776, censo_2022: 42561 },
+  { partido: "Pellegrini", censo_2001: 6030, censo_2010: 5887, censo_2022: 6948 },
+  { partido: "Pergamino", censo_2001: 99193, censo_2010: 104985, censo_2022: 114052 },
+  { partido: "Pila", censo_2001: 3318, censo_2010: 3640, censo_2022: 4596 },
+  { partido: "Pilar", censo_2001: 232463, censo_2010: 299077, censo_2022: 395072 },
+  { partido: "Pinamar", censo_2001: 20666, censo_2010: 25728, censo_2022: 40259 },
+  { partido: "Presidente Perón", censo_2001: 60191, censo_2010: 81129, censo_2022: 102128 },
+  { partido: "Puan", censo_2001: 16369, censo_2010: 15743, censo_2022: 16429 },
+  { partido: "Punta Indio", censo_2001: 9362, censo_2010: 9851, censo_2022: 12431 },
+  { partido: "Quilmes", censo_2001: 518788, censo_2010: 582943, censo_2022: 636029 },
+  { partido: "Ramallo", censo_2001: 26868, censo_2010: 29177, censo_2022: 33042 },
+  { partido: "Rauch", censo_2001: 14434, censo_2010: 15376, censo_2022: 17234 },
+  { partido: "Rivadavia", censo_2001: 15453, censo_2010: 17143, censo_2022: 19853 },
+  { partido: "Rojas", censo_2001: 22842, censo_2010: 23413, censo_2022: 25333 },
+  { partido: "Roque Pérez", censo_2001: 9639, censo_2010: 10902, censo_2022: 13955 },
+  { partido: "Saavedra", censo_2001: 19715, censo_2010: 20749, censo_2022: 22846 },
+  { partido: "Saladillo", censo_2001: 29600, censo_2010: 32103, censo_2022: 35147 },
+  { partido: "Salliqueló", censo_2001: 8445, censo_2010: 8682, censo_2022: 9940 },
+  { partido: "Salto", censo_2001: 29189, censo_2010: 32653, censo_2022: 38249 },
+  { partido: "San Andrés de Giles", censo_2001: 20829, censo_2010: 23027, censo_2022: 26474 },
+  { partido: "San Antonio de Areco", censo_2001: 21333, censo_2010: 23138, censo_2022: 26895 },
+  { partido: "San Cayetano", censo_2001: 8119, censo_2010: 8399, censo_2022: 8686 },
+  { partido: "San Fernando", censo_2001: 151186, censo_2010: 163240, censo_2022: 170425 },
+  { partido: "San Isidro", censo_2001: 291505, censo_2010: 292878, censo_2022: 292916 },
+  { partido: "San Miguel", censo_2001: 253086, censo_2010: 276190, censo_2022: 328014 },
+  { partido: "San Nicolás", censo_2001: 137867, censo_2010: 145857, censo_2022: 160100 },
+  { partido: "San Pedro", censo_2001: 55234, censo_2010: 59036, censo_2022: 69629 },
+  { partido: "San Vicente", censo_2001: 59478, censo_2010: 98977, censo_2022: 98977 },
+  { partido: "Suipacha", censo_2001: 8904, censo_2010: 10081, censo_2022: 11843 },
+  { partido: "Tandil", censo_2001: 108109, censo_2010: 123871, censo_2022: 150162 },
+  { partido: "Tapalqué", censo_2001: 8296, censo_2010: 9161, censo_2022: 10834 },
+  { partido: "Tigre", censo_2001: 301223, censo_2010: 376381, censo_2022: 447785 },
+  { partido: "Tordillo", censo_2001: 1743, censo_2010: 1764, censo_2022: 2631 },
+  { partido: "Tornquist", censo_2001: 11756, censo_2010: 12723, censo_2022: 14810 },
+  { partido: "Trenque Lauquen", censo_2001: 40181, censo_2010: 43021, censo_2022: 48432 },
+  { partido: "Tres Arroyos", censo_2001: 57244, censo_2010: 57110, censo_2022: 62835 },
+  { partido: "Tres de Febrero", censo_2001: 336467, censo_2010: 340071, censo_2022: 366337 },
+  { partido: "Tres Lomas", censo_2001: 7439, censo_2010: 8700, censo_2022: 8825 },
+  { partido: "Veinticinco de Mayo", censo_2001: 34877, censo_2010: 35842, censo_2022: 36735 },
+  { partido: "Vicente López", censo_2001: 274082, censo_2010: 269420, censo_2022: 283396 },
+  { partido: "Villa Gesell", censo_2001: 24262, censo_2010: 31730, censo_2022: 38615 },
+  { partido: "Villarino", censo_2001: 26522, censo_2010: 31014, censo_2022: 32677 },
+  { partido: "Zárate", censo_2001: 101271, censo_2010: 114269, censo_2022: 132483 }
+];
+
+
 
 /**
  * Calculates both a surface-weighted average and a proportional sum of a numeric field 
@@ -401,43 +539,50 @@ export async function calculateOptimalConcavity({ features }: HullParams): Promi
 
 
 /**
- * Projects population using the geometric growth rate method based on three census points.
- * @param params - The population data and target year.
+ * Projects population using the geometric growth rate method based on historical census data.
+ * @param params - The population data for a specific 'partido' and the target year.
  * @returns An object with the projected population and the average annual growth rate.
  */
 export function projectPopulationGeometric({
-    p2001,
-    p2010,
-    p2022,
+    partidoData,
     targetYear
 }: {
-    p2001: number;
-    p2010: number;
-    p2022: number;
+    partidoData: typeof POPULATION_DATA[0];
     targetYear: number;
 }): { projectedPopulation: number; averageAnnualRate: number } {
 
-    if (p2001 <= 0 || p2010 <= 0 || p2022 <= 0) {
-        throw new Error("Los valores de población deben ser positivos.");
+    const { censo_2001, censo_2010, censo_2022 } = partidoData;
+
+    if (!censo_2010 || !censo_2022) {
+        throw new Error("Los datos de los censos 2010 y 2022 son obligatorios.");
     }
-    if (targetYear < 2022) {
+     if (targetYear < 2022) {
         throw new Error("El año de proyección debe ser posterior al último censo (2022).");
     }
 
-    // Calculate annual geometric growth rate for the first period (2001-2010)
-    const years1 = 2010 - 2001;
-    const rate1 = Math.pow(p2010 / p2001, 1 / years1) - 1;
+    let averageAnnualRate;
 
-    // Calculate annual geometric growth rate for the second period (2010-2022)
-    const years2 = 2022 - 2010;
-    const rate2 = Math.pow(p2022 / p2010, 1 / years2) - 1;
+    // Special case for Lezama (or other partidos without 2001 data)
+    if (censo_2001 === null) {
+        if (targetYear <= 2022) throw new Error("El año debe ser posterior a 2022 para Lezama.");
+        const years = 2022 - 2010;
+        averageAnnualRate = Math.pow(censo_2022 / censo_2010, 1 / years) - 1;
+    } else {
+        const years1 = 2010 - 2001;
+        const rate1 = Math.pow(censo_2010 / censo_2001, 1 / years1) - 1;
 
-    // Calculate the average annual growth rate
-    const averageAnnualRate = (rate1 + rate2) / 2;
+        const years2 = 2022 - 2010;
+        const rate2 = Math.pow(censo_2022 / censo_2010, 1 / years2) - 1;
+        
+        averageAnnualRate = (rate1 + rate2) / 2;
+    }
 
-    // Project the population to the target year from the last census
+    if (isNaN(averageAnnualRate)) {
+        throw new Error("No se pudo calcular una tasa de crecimiento válida. Verifique los datos de entrada.");
+    }
+
     const yearsToProject = targetYear - 2022;
-    const projectedPopulation = p2022 * Math.pow(1 + averageAnnualRate, yearsToProject);
+    const projectedPopulation = censo_2022 * Math.pow(1 + averageAnnualRate, yearsToProject);
 
     return {
         projectedPopulation: Math.round(projectedPopulation),
