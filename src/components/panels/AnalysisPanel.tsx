@@ -392,7 +392,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     // State for clicked profile points
     const [profilePoints, setProfilePoints] = useState<Feature<Point>[]>([]);
     const profilePointsLayerRef = useRef<VectorLayer<VectorSource<Point>> | null>(null);
-    const profilePointsSourceRef = useRef<VectorSource<Point>> | null>(null);
+    const profilePointsSourceRef = useRef<VectorSource<Point> | null>(null);
     const [averageVectorLayerId, setAverageVectorLayerId] = useState<string | null>(null);
 
 
