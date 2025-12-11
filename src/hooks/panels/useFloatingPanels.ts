@@ -25,7 +25,6 @@ interface UseFloatingPanelsProps {
   statisticsPanelRef: React.RefObject<HTMLDivElement>;
   analysisPanelRef: React.RefObject<HTMLDivElement>;
   climaPanelRef: React.RefObject<HTMLDivElement>;
-  gamePanelRef: React.RefObject<HTMLDivElement>; 
   mapAreaRef: React.RefObject<HTMLDivElement>;
   panelWidth: number;
   panelPadding: number;
@@ -62,7 +61,6 @@ export const useFloatingPanels = ({
   statisticsPanelRef,
   analysisPanelRef,
   climaPanelRef,
-  gamePanelRef,
   mapAreaRef,
   panelWidth,
   panelPadding
@@ -81,8 +79,7 @@ export const useFloatingPanels = ({
     statistics: statisticsPanelRef,
     analysis: analysisPanelRef,
     clima: climaPanelRef,
-    game: gamePanelRef,
-  }), [attributesPanelRef, aiPanelRef, legendPanelRef, toolsPanelRef, trelloPanelRef, wfsLibraryPanelRef, helpPanelRef, printComposerPanelRef, geePanelRef, statisticsPanelRef, analysisPanelRef, climaPanelRef, gamePanelRef]);
+  }), [attributesPanelRef, aiPanelRef, legendPanelRef, toolsPanelRef, trelloPanelRef, wfsLibraryPanelRef, helpPanelRef, printComposerPanelRef, geePanelRef, statisticsPanelRef, analysisPanelRef, climaPanelRef]);
   
   const [panels, setPanels] = useState<Record<PanelId, PanelState>>({
       // Start with minimized panels off-screen or at a default position to avoid hydration errors.
@@ -99,7 +96,6 @@ export const useFloatingPanels = ({
       clima: { isMinimized: true, isCollapsed: false, position: { x: -9999, y: -9999 }, zIndex: initialZIndex },
       ai: { isMinimized: false, isCollapsed: false, position: { x: -9999, y: -9999 }, zIndex: initialZIndex + 3 },
       help: { isMinimized: true, isCollapsed: false, position: { x: -9999, y: -9999 }, zIndex: initialZIndex },
-      game: { isMinimized: true, isCollapsed: false, position: { x: -9999, y: -9999 }, zIndex: initialZIndex },
   });
 
 
@@ -125,7 +121,6 @@ export const useFloatingPanels = ({
             statistics: { ...prev.statistics, position: { x: panelPadding, y: panelPadding } },
             analysis: { ...prev.analysis, position: { x: panelPadding, y: panelPadding } },
             clima: { ...prev.clima, position: { x: panelPadding, y: panelPadding } },
-            game: { ...prev.game, position: { x: panelPadding, y: panelPadding } },
             ai: { ...prev.ai, position: { x: aiPanelX, y: panelPadding } },
             help: { ...prev.help, position: { x: aiPanelX, y: panelPadding } },
         }));

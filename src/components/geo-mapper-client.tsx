@@ -85,7 +85,6 @@ import GeeProcessingPanel from '@/components/panels/GeeProcessingPanel';
 import StatisticsPanel from '@/components/panels/StatisticsPanel';
 import AnalysisPanel from '@/components/panels/AnalysisPanel';
 import ClimaPanel from '@/components/panels/ClimaPanel';
-import GamePanel from '@/components/panels/GamePanel'; // Import GamePanel
 import WfsLoadingIndicator from '@/components/feedback/WfsLoadingIndicator';
 import LocationSearch from '@/components/location-search/LocationSearch';
 import BaseLayerSelector from '@/components/layer-manager/BaseLayerSelector';
@@ -111,8 +110,7 @@ import { useOsmQuery } from '@/hooks/osm-integration/useOsmQuery';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { saveMapState, debugReadDocument } from '@/services/sharing-service';
-import { useAuth, useUser, useFirestore } from '@/firebase';
-import { GoogleAuthProvider, signInWithPopup, signOut, getRedirectResult, signInWithRedirect } from 'firebase/auth';
+import { useFirestore } from '@/firebase';
 import GeoJSON from 'ol/format/GeoJSON';
 
 import type {
@@ -268,9 +266,7 @@ interface GeoMapperClientProps {
 }
 
 export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
-  const auth = useAuth();
   const firestore = useFirestore();
-  const user = useUser();
   const mapAreaRef = useRef<HTMLDivElement>(null);
   const toolsPanelRef = useRef<HTMLDivElement>(null);
   const legendPanelRef = useRef<HTMLDivElement>(null);
@@ -284,7 +280,6 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
   const statisticsPanelRef = useRef<HTMLDivElement>(null);
   const analysisPanelRef = useRef<HTMLDivElement>(null);
   const climaPanelRef = useRef<HTMLDivElement>(null);
-  const gamePanelRef = useRef<HTMLDivElement>(null);
   const trelloPopupRef = useRef<Window | null>(null);
   const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
   const [mapSubject, setMapSubject] = useState('');
@@ -327,7 +322,6 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
       statisticsPanelRef,
       analysisPanelRef,
       climaPanelRef,
-      gamePanelRef,
       mapAreaRef,
       panelWidth: PANEL_WIDTH,
       panelPadding: PANEL_PADDING,
@@ -397,7 +391,6 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
     useState<TrelloCardInfo | null>(null);
   const [statisticsLayer, setStatisticsLayer] =
     useState<VectorMapLayer | null>(null);
-  const [isAuthLoading, setIsAuthLoading] = useState(false);
 
   const updateDiscoveredLayerState = useCallback(
     (layerName: string, added: boolean, type: 'wms' | 'wfs') => {
@@ -1142,38 +1135,6 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
     loadSharedMap();
   }, [initialMapState, isMapReady, mapRef, toast]);
 
-  const handleSignIn = async () => {
-    setIsAuthLoading(true);
-    // This will redirect the user to the sign-in page
-    window.location.href = '/api/auth/signin';
-  };
-  
-  // This will now be handled by the server-side callback
-  // No need for getRedirectResult on the client
-  useEffect(() => {
-    if (user) {
-      setIsAuthLoading(false);
-    }
-  }, [user]);
-
-  const handleSignOut = async () => {
-    setIsAuthLoading(true);
-    try {
-      await fetch('/api/auth/signout');
-      // This will trigger a re-render as the `useUser` hook will update
-      toast({ description: 'Sesión cerrada correctamente.' });
-    } catch (error: any) {
-      console.error('Error signing out:', error);
-      toast({
-        title: 'Error al Cerrar Sesión',
-        description: error.message || 'No se pudo cerrar la sesión.',
-        variant: 'destructive',
-      });
-    } finally {
-        // A page reload might be necessary to fully clear client-side state
-        window.location.reload();
-    }
-  };
 
   const handleRecalculateTrajectoryAttributes = (layerId: string) => {
     layerManagerHook.recalculateTrajectoryAttributes(layerId);
@@ -1372,65 +1333,6 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
                 );
               })}
 
-              {isClientMounted && user ? (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="h-8 w-8 flex-shrink-0 bg-green-600/30 hover:bg-green-600/50 border-0 text-white/90"
-                      title="Menú de usuario"
-                    >
-                      <User className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent
-                    className="bg-gray-700 text-white border-gray-600"
-                    align="end"
-                  >
-                    <DropdownMenuLabel className="font-normal">
-                      <div className="flex flex-col space-y-1">
-                        <p className="text-sm font-medium leading-none">
-                          {user.displayName}
-                        </p>
-                        <p className="text-xs leading-none text-muted-foreground">
-                          {user.email}
-                        </p>
-                      </div>
-                    </DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onSelect={handleSignOut} disabled={isAuthLoading}>
-                      <LogOut className="mr-2 h-4 w-4" />
-                      <span>Cerrar sesión</span>
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              ) : (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={handleSignIn}
-                      disabled={isAuthLoading}
-                      className="h-8 w-8 flex-shrink-0 bg-gray-700/80 text-white hover:bg-gray-600/90 border-0"
-                      aria-label="Iniciar Sesión"
-                    >
-                      {isAuthLoading ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <User className="h-4 w-4" />
-                      )}
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent
-                    side="bottom"
-                    className="bg-gray-700 text-white border-gray-600"
-                  >
-                    <p className="text-xs">Iniciar Sesión</p>
-                  </TooltipContent>
-                </Tooltip>
-              )}
             </div>
           </TooltipProvider>
         </div>
@@ -1737,20 +1639,6 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
           />
         )}
 
-        {isClientMounted && !initialMapState && panels.game && !panels.game.isMinimized && (
-          <GamePanel
-            panelRef={gamePanelRef}
-            isCollapsed={panels.game.isCollapsed}
-            onToggleCollapse={() => togglePanelCollapse('game')}
-            onClosePanel={() => togglePanelMinimize('game')}
-            onMouseDownHeader={(e) => handlePanelMouseDown(e, 'game')}
-            style={{
-              top: `${panels.game.position.y}px`,
-              left: `${panels.game.position.x}px`,
-              zIndex: panels.game.zIndex,
-            }}
-          />
-        )}
 
         {isClientMounted &&
           !initialMapState &&
