@@ -91,7 +91,7 @@ export const DATASET_DEFINITIONS = {
     }
 };
 
-export const POPULATION_DATA = [
+export const POPULATION_DATA: { partido: string; censo_2001: number | null; censo_2010: number; censo_2022: number }[] = [
   { partido: "25 de Mayo", censo_2001: 34877, censo_2010: 35842, censo_2022: 35411 },
   { partido: "9 de Julio", censo_2001: 45998, censo_2010: 47722, censo_2022: 52366 },
   { partido: "Adolfo Alsina", censo_2001: 16245, censo_2010: 17072, censo_2022: 17344 },
@@ -341,7 +341,7 @@ export async function calculateSpatialStats({
 }
 
 
-export function projectPopulationGeometric({ partidoData, targetYear }: { partidoData: typeof POPULATION_DATA[0], targetYear: number }): { projectedPopulation: number, averageAnnualRate: number } {
+export function projectPopulationGeometric({ partidoData, initialPopulation, targetYear }: { partidoData: typeof POPULATION_DATA[0], initialPopulation: number, targetYear: number }): { projectedPopulation: number, averageAnnualRate: number } {
     
     let P1, P2, T1, T2;
 
@@ -372,8 +372,9 @@ export function projectPopulationGeometric({ partidoData, targetYear }: { partid
     
     const r = Math.pow(P2 / P1, 1 / timeDiff) - 1;
     
-    const n = targetYear - T2;
-    const projectedPopulation = P2 * Math.pow(1 + r, n);
+    // Project from the latest census data (2022) using the partial population
+    const n = targetYear - 2022;
+    const projectedPopulation = initialPopulation * Math.pow(1 + r, n);
     
     return { projectedPopulation, averageAnnualRate: r };
 }

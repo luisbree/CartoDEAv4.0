@@ -336,7 +336,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 
     // State for Population Projection
     const [selectedPartido, setSelectedPartido] = useState<string>('');
-    const [projectionYear, setProjectionYear] = useState<string>(String(new Date().getFullYear()));
+    const [partialPopulation, setPartialPopulation] = useState<string>('');
     const [projectionResult, setProjectionResult] = useState<{ projectedPopulation: number; averageAnnualRate: number } | null>(null);
 
     // State for Cross-sections tool
@@ -1600,20 +1600,20 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 
     const handleRunProjection = () => {
         const partidoData = POPULATION_DATA.find(p => p.partido === selectedPartido);
+        const populationToProject = parseFloat(partialPopulation);
+
         if (!partidoData) {
             toast({ title: "Entrada Inválida", description: "Por favor, seleccione un partido.", variant: "destructive" });
             return;
         }
-        
-        const year = parseInt(projectionYear, 10);
-        if (isNaN(year)) {
-            toast({ title: "Entrada Inválida", description: "Por favor, ingrese un año válido para la proyección.", variant: "destructive" });
+        if (isNaN(populationToProject) || populationToProject <= 0) {
+            toast({ title: "Entrada Inválida", description: "Por favor, ingrese un número de población parcial válido.", variant: "destructive" });
             return;
         }
 
         try {
-            // The projectPopulationGeometric function now directly accepts the partidoData object
-            const result = projectPopulationGeometric({ partidoData, targetYear: year });
+            const currentYear = new Date().getFullYear();
+            const result = projectPopulationGeometric({ partidoData, initialPopulation: populationToProject, targetYear: currentYear });
             setProjectionResult(result);
             toast({ description: "Cálculo de proyección completado." });
         } catch (error: any) {
@@ -2871,11 +2871,11 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                     </AccordionTrigger>
                     <AccordionContent className="p-3 pt-2 space-y-3 border-t border-white/10 bg-transparent rounded-b-md">
                         <div className="space-y-1">
-                            <Label className="text-xs font-semibold">Proyección de Población de Partidos (Bs. As.)</Label>
+                            <Label className="text-xs font-semibold">Proyección de Población (Bs. As.)</Label>
                             <div className="space-y-2 p-2 border border-white/10 rounded-md">
-                                <p className="text-xs text-gray-400">Seleccione un partido para usar sus datos históricos y proyectar la población del censo 2022 al año deseado.</p>
+                                <p className="text-xs text-gray-400">Proyecta una población parcial (ej. radios censales) al año actual usando la tasa de crecimiento del partido seleccionado.</p>
                                 <div>
-                                    <Label htmlFor="partido-select" className="text-xs">Partido</Label>
+                                    <Label htmlFor="partido-select" className="text-xs">Partido de Referencia</Label>
                                     <Select value={selectedPartido} onValueChange={setSelectedPartido}>
                                         <SelectTrigger id="partido-select" className="h-8 text-xs bg-black/20"><SelectValue placeholder="Seleccionar partido..." /></SelectTrigger>
                                         <SelectContent className="bg-gray-700 text-white border-gray-600">
@@ -2884,10 +2884,10 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                     </Select>
                                 </div>
                                 <div>
-                                    <Label htmlFor="projection-year" className="text-xs">Año a Proyectar</Label>
-                                    <Input id="projection-year" type="number" value={projectionYear} onChange={(e) => setProjectionYear(e.target.value)} className="h-8 text-xs bg-black/20" />
+                                    <Label htmlFor="partial-population" className="text-xs">Población Parcial a Proyectar</Label>
+                                    <Input id="partial-population" type="number" value={partialPopulation} onChange={(e) => setPartialPopulation(e.target.value)} placeholder="Ej: 1500" className="h-8 text-xs bg-black/20" />
                                 </div>
-                                <Button onClick={handleRunProjection} size="sm" className="w-full h-8 text-xs" disabled={!selectedPartido || !projectionYear}>
+                                <Button onClick={handleRunProjection} size="sm" className="w-full h-8 text-xs" disabled={!selectedPartido || !partialPopulation}>
                                     <TrendingUp className="mr-2 h-3.5 w-3.5" />
                                     Calcular Proyección
                                 </Button>
@@ -2896,7 +2896,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                                         <Table>
                                             <TableBody>
                                                 <TableRow>
-                                                    <TableCell className="text-xs text-gray-300 p-1.5 font-semibold">Población Proyectada ({projectionYear})</TableCell>
+                                                    <TableCell className="text-xs text-gray-300 p-1.5 font-semibold">Población Proyectada ({new Date().getFullYear()})</TableCell>
                                                     <TableCell className="text-xs text-white p-1.5 text-right font-mono">{Math.round(projectionResult.projectedPopulation).toLocaleString()}</TableCell>
                                                 </TableRow>
                                                 <TableRow>
@@ -3081,6 +3081,6 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
             </Accordion>
         </DraggablePanel>
     );
-};
+}
 
 export default AnalysisPanel;
