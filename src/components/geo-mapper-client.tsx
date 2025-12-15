@@ -510,7 +510,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
         if (discovered) {
           setDiscoveredGeoServerLayers(discovered);
           // Auto-load the "Cuencas_dph" layer
-          const basinsLayer = discovered.find(l => l.name === 'deas:cuencas_dph');
+          const basinsLayer = discovered.find(l => l.name.toLowerCase() === 'deas:cuencas_dph');
           if (basinsLayer) {
               layerManagerHook.handleAddHybridLayer(
                 basinsLayer.name,
@@ -1184,8 +1184,8 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
     // 1. Clean up layers from the previous project, if any.
     if (projectLayerIds.length > 0) {
       layerManagerHook.removeLayers(projectLayerIds);
-      setProjectLayerIds([]); // Clear the stored IDs
     }
+    setProjectLayerIds([]); // Clear the stored IDs immediately
 
     // 2. Find layers for the new project.
     const layersToAdd = discoveredGeoServerLayers.filter(layer => {
