@@ -1,3 +1,4 @@
+
 "use client";
 
 import React from 'react';
@@ -14,9 +15,9 @@ const WfsLoadingIndicator: React.FC<WfsLoadingIndicatorProps> = ({ isVisible }) 
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
-        <div className="flex flex-col items-center justify-center gap-2 p-4 rounded-lg bg-black/30 backdrop-blur-sm">
-            <Compass className="h-10 w-10 animate-spin text-primary-foreground/90" />
-            <span className="font-semibold text-primary-foreground/90">Cargando datos...</span>
+        <div className="flex flex-col items-center justify-center gap-4">
+            <Compass className="h-16 w-16 animate-spin text-primary" />
+            <span className="text-xl font-semibold text-black">Cargando datos...</span>
         </div>
     </div>
   );
