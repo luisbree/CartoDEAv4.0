@@ -1143,10 +1143,14 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
   };
 
   const handleProjectCardSelection = useCallback((projectCode: string) => {
+    // Corrected filter logic
     const layersToAdd = discoveredGeoServerLayers.filter(layer => {
-        // Match pattern like 'deas:rsa063_...'
-        const prefix = `deas:${projectCode.toLowerCase()}_`;
-        return layer.name.toLowerCase().startsWith(prefix);
+      const parts = layer.name.split(':');
+      if (parts.length < 2) return false;
+      const layerNameOnly = parts[1];
+      // Check if the layer name contains the project code, followed by an underscore or the end of the string
+      const regex = new RegExp(`${projectCode.toLowerCase()}(_|$)`);
+      return regex.test(layerNameOnly.toLowerCase());
     });
 
     if (layersToAdd.length > 0) {
