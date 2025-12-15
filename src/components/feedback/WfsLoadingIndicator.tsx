@@ -13,11 +13,9 @@ const WfsLoadingIndicator: React.FC<WfsLoadingIndicatorProps> = ({ isVisible }) 
   }
 
   return (
-    <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-black/30 backdrop-blur-sm pointer-events-auto">
-      <div className="flex flex-col items-center justify-center bg-background/90 p-6 rounded-lg shadow-2xl">
-        <Compass className="h-16 w-16 animate-spin text-primary mb-4" />
-        <p className="text-foreground text-lg font-semibold">Cargando datos...</p>
-      </div>
+    <div className="fixed bottom-4 right-4 z-50 flex items-center gap-3 rounded-md border bg-background/80 px-4 py-2 text-sm shadow-lg backdrop-blur-sm">
+      <Compass className="h-5 w-5 animate-spin text-primary" />
+      <span className="font-medium text-foreground">Cargando datos...</span>
     </div>
   );
 };
