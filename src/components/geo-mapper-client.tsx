@@ -510,7 +510,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
         if (discovered) {
           setDiscoveredGeoServerLayers(discovered);
           // Auto-load the "Cuencas_dph" layer
-          const basinsLayer = discovered.find(l => l.name.toLowerCase() === 'deas:cuencas_dph');
+          const basinsLayer = discovered.find(l => l.name.toLowerCase() === 'dea:cuencas_dph');
           if (basinsLayer) {
               layerManagerHook.handleAddHybridLayer(
                 basinsLayer.name,
@@ -845,7 +845,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
   );
 
   const handleDeasAddLayer = useCallback(
-    (layer: GeoServerDiscoveredLayer) => {
+    (layer: GeoServerDiscoveredLayer): Promise<MapLayer | null> => {
       return layerManagerHook.handleAddHybridLayer(
         layer.name,
         layer.title,
