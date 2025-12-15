@@ -509,12 +509,24 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
       .then((discovered) => {
         if (discovered) {
           setDiscoveredGeoServerLayers(discovered);
+          // Auto-load the "Cuencas_dph" layer
+          const basinsLayer = discovered.find(l => l.name === 'deas:Cuencas_dph');
+          if (basinsLayer) {
+              layerManagerHook.handleAddHybridLayer(
+                basinsLayer.name,
+                basinsLayer.title,
+                initialGeoServerUrl,
+                basinsLayer.bbox,
+                basinsLayer.styleName
+              );
+          }
         }
       })
       .catch((error) => {
         console.error('Fallo al cargar las capas iniciales de DEAS:', error);
       });
-  }, [isMapReady, toast, handleFetchGeoServerLayers, initialMapState]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMapReady, initialMapState]);
 
   const handleReloadDeasLayers = useCallback(async () => {
     toast({ description: 'Recargando capas desde el servidor de DEAS...' });
