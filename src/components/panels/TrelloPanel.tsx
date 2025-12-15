@@ -17,8 +17,13 @@ interface TrelloPanelProps {
   onClosePanel: () => void;
   onMouseDownHeader: (e: React.MouseEvent<HTMLDivElement>) => void;
   onSetSelectedCard: (card: TrelloCardInfo) => void;
+  onProjectCardSelect: (projectCode: string) => void; // New prop
   style?: React.CSSProperties;
 }
+
+// Regex to detect a project code like 'RSA063'
+const PROJECT_CODE_REGEX = /([A-Z]{3}\d{3,})/;
+
 
 const TrelloPanel: React.FC<TrelloPanelProps> = ({
   panelRef,
@@ -27,6 +32,7 @@ const TrelloPanel: React.FC<TrelloPanelProps> = ({
   onClosePanel,
   onMouseDownHeader,
   onSetSelectedCard,
+  onProjectCardSelect, // Destructure new prop
   style,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -72,7 +78,16 @@ const TrelloPanel: React.FC<TrelloPanelProps> = ({
   }, [searchTerm, handleSearch]);
 
   const handleCardClick = (card: TrelloCard) => {
+    // Show the notification for any selected card
     onSetSelectedCard({ name: card.name, url: card.url });
+    
+    // Check if the card name contains a project code
+    const match = card.name.match(PROJECT_CODE_REGEX);
+    if (match && match[0]) {
+      const projectCode = match[0];
+      // If found, call the new prop function to trigger layer loading
+      onProjectCardSelect(projectCode);
+    }
   };
 
   const clearSearch = () => {

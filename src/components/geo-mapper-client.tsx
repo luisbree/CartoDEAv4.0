@@ -25,9 +25,6 @@ import {
   Share2,
   CloudRain,
   Ellipsis,
-  User,
-  LogOut,
-  Sigma,
 } from 'lucide-react';
 import { Style, Fill, Stroke, Circle as CircleStyle, Text as TextStyle } from 'ol/style';
 import { transform, transformExtent } from 'ol/proj';
@@ -1145,6 +1142,24 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
     }
   };
 
+  const handleProjectCardSelection = useCallback((projectCode: string) => {
+    const layersToAdd = discoveredGeoServerLayers.filter(layer => {
+        // Match pattern like 'deas:rsa063_...'
+        const prefix = `deas:${projectCode.toLowerCase()}_`;
+        return layer.name.toLowerCase().startsWith(prefix);
+    });
+
+    if (layersToAdd.length > 0) {
+        toast({ description: `Cargando ${layersToAdd.length} capas para el proyecto ${projectCode}...` });
+        layersToAdd.forEach(layer => {
+            handleDeasAddLayer(layer);
+        });
+    } else {
+        toast({ description: `No se encontraron capas en DEAS para el proyecto ${projectCode}.`, variant: 'destructive' });
+    }
+  }, [discoveredGeoServerLayers, handleDeasAddLayer, toast]);
+
+
   return (
     <div className="flex h-screen w-screen flex-col bg-background text-foreground">
       <FirebaseErrorListener />
@@ -1651,6 +1666,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
               onClosePanel={() => togglePanelMinimize('trello')}
               onMouseDownHeader={(e) => handlePanelMouseDown(e, 'trello')}
               onSetSelectedCard={handleSetTrelloCard}
+              onProjectCardSelect={handleProjectCardSelection}
               style={{
                 top: `${panels.trello.position.y}px`,
                 left: `${panels.trello.position.x}px`,
