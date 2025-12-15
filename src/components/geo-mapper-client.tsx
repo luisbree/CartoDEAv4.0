@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
@@ -280,6 +279,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
   const climaPanelRef = useRef<HTMLDivElement>(null);
   const trelloPopupRef = useRef<Window | null>(null);
   const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
+  const [isConfirmCloseProjectOpen, setIsConfirmCloseProjectOpen] = useState(false);
   const [mapSubject, setMapSubject] = useState('');
   const [projectLayerIds, setProjectLayerIds] = useState<string[]>([]);
 
@@ -834,7 +834,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
 
   const handleDeasAddLayer = useCallback(
     (layer: GeoServerDiscoveredLayer) => {
-      layerManagerHook.handleAddHybridLayer(
+      return layerManagerHook.handleAddHybridLayer(
         layer.name,
         layer.title,
         initialGeoServerUrl,
@@ -1068,29 +1068,39 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
   const handleTrelloNotificationOpen = (popup: Window | null) => {
     trelloPopupRef.current = popup;
   };
-
-  const handleTrelloNotificationClose = () => {
+  
+  const closeAndResetProject = useCallback((removeLayers: boolean) => {
+    if (removeLayers && projectLayerIds.length > 0) {
+      layerManagerHook.removeLayers(projectLayerIds);
+      toast({ description: `Capas del proyecto eliminadas.` });
+      // Reset view after removing layers
+      if (mapRef.current) {
+        mapRef.current.getView().animate({
+          center: transform([-60.0, -36.5], 'EPSG:4326', 'EPSG:3857'),
+          zoom: 7,
+          duration: 1000,
+        });
+      }
+    }
+    setProjectLayerIds([]);
+    setTrelloCardInfo(null);
     if (trelloPopupRef.current && !trelloPopupRef.current.closed) {
       trelloPopupRef.current.close();
     }
-    setTrelloCardInfo(null);
     trelloPopupRef.current = null;
-    
-    // Reset logic: remove project layers and reset view
-    if (projectLayerIds.length > 0) {
-        layerManagerHook.removeLayers(projectLayerIds);
-        setProjectLayerIds([]);
-        if (mapRef.current) {
-            mapRef.current.getView().animate({
-                center: transform([-60.0, -36.5], 'EPSG:4326', 'EPSG:3857'),
-                zoom: 7,
-                duration: 1000
-            });
-        }
-        toast({ description: "Proyecto cerrado y vista restablecida." });
-    }
-  };
+    setIsConfirmCloseProjectOpen(false); // Close confirmation dialog
+  }, [projectLayerIds, layerManagerHook, mapRef, toast]);
 
+
+  const handleTrelloNotificationClose = useCallback(() => {
+    if (projectLayerIds.length > 0) {
+        setIsConfirmCloseProjectOpen(true);
+    } else {
+        // If there are no project layers, just close the notification directly
+        closeAndResetProject(false);
+    }
+  }, [projectLayerIds, closeAndResetProject]);
+  
   const handleShowStatistics = useCallback(
     (layerId: string) => {
       const layer = layerManagerHook.layers
@@ -1158,7 +1168,14 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
     }
   };
 
-  const handleProjectCardSelection = useCallback(async (projectCode: string) => {
+ const handleProjectCardSelection = useCallback(async (projectCode: string) => {
+    // 1. Clean up layers from the previous project, if any.
+    if (projectLayerIds.length > 0) {
+        layerManagerHook.removeLayers(projectLayerIds);
+        setProjectLayerIds([]); // Clear the stored IDs
+    }
+
+    // 2. Find layers for the new project.
     const layersToAdd = discoveredGeoServerLayers.filter(layer => {
       const parts = layer.name.split(':');
       if (parts.length < 2) return false;
@@ -1175,6 +1192,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
         let combinedExtent: Extent | null = null;
         const addedLayerIds: string[] = [];
         
+        // 3. Add new layers and calculate combined extent.
         for (const layer of layersToAdd) {
             const addedLayer = await handleDeasAddLayer(layer);
             if (addedLayer) {
@@ -1194,9 +1212,11 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
                 }
             }
         }
+        
+        // 4. Store the new project's layer IDs.
+        setProjectLayerIds(addedLayerIds);
 
-        setProjectLayerIds(addedLayerIds); // Store the IDs of the added layers
-
+        // 5. Zoom to the combined extent.
         if (combinedExtent) {
             setTimeout(() => {
                 zoomToBoundingBox(combinedExtent as [number, number, number, number]);
@@ -1206,7 +1226,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
     } else {
         toast({ description: `No se encontraron capas en DEAS para el proyecto ${projectCode}.`, variant: 'destructive' });
     }
-  }, [discoveredGeoServerLayers, handleDeasAddLayer, toast, zoomToBoundingBox]);
+  }, [discoveredGeoServerLayers, handleDeasAddLayer, toast, zoomToBoundingBox, projectLayerIds, layerManagerHook]);
 
 
   return (
@@ -1408,6 +1428,20 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
           activeBaseLayerId={activeBaseLayerId}
           baseLayerSettings={baseLayerSettings}
         />
+        <AlertDialog open={isConfirmCloseProjectOpen} onOpenChange={setIsConfirmCloseProjectOpen}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Cerrar Proyecto</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        ¿Desea también quitar las capas cargadas para este proyecto del mapa?
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel onClick={() => closeAndResetProject(false)}>No, mantener capas</AlertDialogCancel>
+                    <AlertDialogAction onClick={() => closeAndResetProject(true)}>Sí, quitar capas</AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
 
         {trelloCardNotification && (
           <TrelloCardNotification
