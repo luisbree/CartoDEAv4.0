@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
@@ -1155,18 +1156,42 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
 
     if (layersToAdd.length > 0) {
         toast({ description: `Cargando ${layersToAdd.length} capas para el proyecto ${projectCode}...` });
+        
+        let combinedExtent: Extent | null = null;
+        
         layersToAdd.forEach(layer => {
             handleDeasAddLayer(layer);
+            if (layer.bbox) {
+                const layerExtent = layer.bbox;
+                if (!combinedExtent) {
+                    combinedExtent = layerExtent;
+                } else {
+                    combinedExtent = [
+                        Math.min(combinedExtent[0], layerExtent[0]),
+                        Math.min(combinedExtent[1], layerExtent[1]),
+                        Math.max(combinedExtent[2], layerExtent[2]),
+                        Math.max(combinedExtent[3], layerExtent[3]),
+                    ];
+                }
+            }
         });
+
+        if (combinedExtent) {
+            // Add a slight delay to allow layers to start loading before zooming
+            setTimeout(() => {
+                zoomToBoundingBox(combinedExtent as [number, number, number, number]);
+            }, 500);
+        }
+
     } else {
         toast({ description: `No se encontraron capas en DEAS para el proyecto ${projectCode}.`, variant: 'destructive' });
     }
-  }, [discoveredGeoServerLayers, handleDeasAddLayer, toast]);
+  }, [discoveredGeoServerLayers, handleDeasAddLayer, toast, zoomToBoundingBox]);
 
 
   return (
     <div className="flex h-screen w-screen flex-col bg-background text-foreground">
-      <FirebaseErrorListener />
+      {!initialMapState && <FirebaseErrorListener />}
       {!initialMapState && (
         <div className="bg-gray-700/90 backdrop-blur-sm shadow-md p-2 z-20 flex items-center gap-2">
           <DphLogoIcon className="h-8 w-8 flex-shrink-0" />
@@ -1720,3 +1745,4 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
     </div>
   );
 }
+
