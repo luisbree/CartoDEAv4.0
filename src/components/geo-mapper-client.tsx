@@ -281,6 +281,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
   const trelloPopupRef = useRef<Window | null>(null);
   const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
   const [mapSubject, setMapSubject] = useState('');
+  const [projectLayerIds, setProjectLayerIds] = useState<string[]>([]);
 
   const layerManagerHookRef = useRef<ReturnType<typeof useLayerManager> | null>(
     null
@@ -1074,6 +1075,20 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
     }
     setTrelloCardInfo(null);
     trelloPopupRef.current = null;
+    
+    // Reset logic: remove project layers and reset view
+    if (projectLayerIds.length > 0) {
+        layerManagerHook.removeLayers(projectLayerIds);
+        setProjectLayerIds([]);
+        if (mapRef.current) {
+            mapRef.current.getView().animate({
+                center: transform([-60.0, -36.5], 'EPSG:4326', 'EPSG:3857'),
+                zoom: 7,
+                duration: 1000
+            });
+        }
+        toast({ description: "Proyecto cerrado y vista restablecida." });
+    }
   };
 
   const handleShowStatistics = useCallback(
@@ -1143,24 +1158,28 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
     }
   };
 
-  const handleProjectCardSelection = useCallback((projectCode: string) => {
-    // Corrected filter logic
+  const handleProjectCardSelection = useCallback(async (projectCode: string) => {
     const layersToAdd = discoveredGeoServerLayers.filter(layer => {
       const parts = layer.name.split(':');
       if (parts.length < 2) return false;
-      const layerNameOnly = parts[1];
-      // Check if the layer name contains the project code, followed by an underscore or the end of the string
-      const regex = new RegExp(`${projectCode.toLowerCase()}(_|$)`);
-      return regex.test(layerNameOnly.toLowerCase());
+      const layerNameOnly = parts[1].toLowerCase();
+      const codeToSearch = projectCode.toLowerCase();
+      // Match if the layer name contains the project code, surrounded by non-alphanumeric characters or start/end of string.
+      const regex = new RegExp(`(^|[^a-z0-9])${codeToSearch}([^a-z0-9]|$)`);
+      return regex.test(layerNameOnly);
     });
 
     if (layersToAdd.length > 0) {
         toast({ description: `Cargando ${layersToAdd.length} capas para el proyecto ${projectCode}...` });
         
         let combinedExtent: Extent | null = null;
+        const addedLayerIds: string[] = [];
         
-        layersToAdd.forEach(layer => {
-            handleDeasAddLayer(layer);
+        for (const layer of layersToAdd) {
+            const addedLayer = await handleDeasAddLayer(layer);
+            if (addedLayer) {
+                addedLayerIds.push(addedLayer.id);
+            }
             if (layer.bbox) {
                 const layerExtent = layer.bbox;
                 if (!combinedExtent) {
@@ -1174,10 +1193,11 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
                     ];
                 }
             }
-        });
+        }
+
+        setProjectLayerIds(addedLayerIds); // Store the IDs of the added layers
 
         if (combinedExtent) {
-            // Add a slight delay to allow layers to start loading before zooming
             setTimeout(() => {
                 zoomToBoundingBox(combinedExtent as [number, number, number, number]);
             }, 500);
@@ -1745,4 +1765,3 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
     </div>
   );
 }
-
