@@ -510,7 +510,7 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
         if (discovered) {
           setDiscoveredGeoServerLayers(discovered);
           // Auto-load the "Cuencas_dph" layer
-          const basinsLayer = discovered.find(l => l.name === 'deas:Cuencas_dph');
+          const basinsLayer = discovered.find(l => l.name === 'deas:cuencas_dph');
           if (basinsLayer) {
               layerManagerHook.handleAddHybridLayer(
                 basinsLayer.name,
@@ -1183,16 +1183,18 @@ export function GeoMapperClient({ initialMapState }: GeoMapperClientProps) {
  const handleProjectCardSelection = useCallback(async (projectCode: string) => {
     // 1. Clean up layers from the previous project, if any.
     if (projectLayerIds.length > 0) {
-        layerManagerHook.removeLayers(projectLayerIds);
-        setProjectLayerIds([]); // Clear the stored IDs
+      layerManagerHook.removeLayers(projectLayerIds);
+      setProjectLayerIds([]); // Clear the stored IDs
     }
 
     // 2. Find layers for the new project.
     const layersToAdd = discoveredGeoServerLayers.filter(layer => {
       const parts = layer.name.split(':');
       if (parts.length < 2) return false;
+      
       const layerNameOnly = parts[1].toLowerCase();
       const codeToSearch = projectCode.toLowerCase();
+      
       // Match if the layer name contains the project code, surrounded by non-alphanumeric characters or start/end of string.
       const regex = new RegExp(`(^|[^a-z0-9])${codeToSearch}([^a-z0-9]|$)`);
       return regex.test(layerNameOnly);
